@@ -1,0 +1,17 @@
+{
+  "name": "ableton-agent-toolkit",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Agentic tooling platform for Ableton Live: Extensions SDK tools and Max for Live devices sharing one music-theory backend and one UI kit.",
+  "workspaces": [
+    "packages/*",
+    "extensions/*",
+    "devices/*"
+  ],
+  "engines": {
+    "node": ">=24.14.1"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present"
+  }
+}

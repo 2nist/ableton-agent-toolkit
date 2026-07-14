@@ -1,0 +1,30 @@
+{
+  "$schema": "./docs/platform.config.schema.json",
+  "sharedPackages": [
+    { "name": "@music-theory/core", "path": "packages/music-theory" },
+    { "name": "@music-theory/song-structure", "path": "packages/song-structure" },
+    { "name": "@platform/ui-kit", "path": "packages/ui-kit" },
+    { "name": "@platform/test-harness", "path": "packages/test-harness" },
+    { "name": "@platform/osc-bridge", "path": "packages/osc-bridge" }
+  ],
+  "templates": [
+    {
+      "id": "extension-basic",
+      "targetDir": "extensions",
+      "path": "templates/extension-basic",
+      "description": "Ableton Extension, no webview UI."
+    },
+    {
+      "id": "extension-with-ui",
+      "targetDir": "extensions",
+      "path": "templates/extension-with-ui",
+      "description": "Ableton Extension with a webview modal dialog UI."
+    },
+    {
+      "id": "m4l-device-basic",
+      "targetDir": "devices",
+      "path": "templates/m4l-device-basic",
+      "description": "Max for Live device with a jweb-hosted UI, built from the one hand-authored reference.maxpat."
+    }
+  ]
+}
