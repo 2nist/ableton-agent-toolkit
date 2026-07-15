@@ -11,20 +11,14 @@
     {
       "id": "extension-basic",
       "targetDir": "extensions",
-      "path": "templates/extension-basic",
-      "description": "Ableton Extension, no webview UI."
-    },
-    {
-      "id": "extension-with-ui",
-      "targetDir": "extensions",
-      "path": "templates/extension-with-ui",
-      "description": "Ableton Extension with a webview modal dialog UI."
+      "path": "templates/extension-basic/templates",
+      "description": "Ableton Extension, copied verbatim from the vendored ableton-create-extension tarball. The --ui flag on `platform create extension` toggles the modal-dialog variant — there is no separate template for it, matching the official tool's own single-template-set-with-conditionals design."
     },
     {
       "id": "m4l-device-basic",
       "targetDir": "devices",
       "path": "templates/m4l-device-basic",
-      "description": "Max for Live device with a jweb-hosted UI, built from the one hand-authored reference.maxpat."
+      "description": "Max for Live device with a jweb-hosted UI, built from the one hand-authored reference.maxpat. Not usable yet — see docs/m4l-scaffolding-risk.md."
     }
   ]
 }
