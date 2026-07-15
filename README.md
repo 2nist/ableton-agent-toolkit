@@ -7,7 +7,7 @@ See `docs/architecture.md` for the design and `docs/m4l-scaffolding-risk.md` bef
 ## Status
 
 - [x] **Phase 0** — repo scaffold, `extensions/hello-world` dev-loop validation
-- [ ] **Phase 1** — `packages/test-harness`
+- [x] **Phase 1** — `packages/test-harness`: fakes only `initializeExtensionHost`, real SDK does the rest
 - [ ] **Phase 2** — port `@music-theory/core` and `@music-theory/song-structure`, headless `ui-kit`
 - [ ] **Phase 3** — `extensions/chord-assistant`, the first real deliverable
 - [ ] **Phase 4** — `packages/cli` (`create extension` / `create device`)
