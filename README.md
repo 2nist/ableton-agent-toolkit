@@ -9,7 +9,7 @@ See `docs/architecture.md` for the design and `docs/m4l-scaffolding-risk.md` bef
 - [x] **Phase 0** — repo scaffold, `extensions/hello-world` dev-loop validation
 - [x] **Phase 1** — `packages/test-harness`: fakes only `initializeExtensionHost`, real SDK does the rest
 - [x] **Phase 2** — `@music-theory/core` + `@music-theory/song-structure` ported verbatim (with baseline tests — none existed upstream), `ui-kit` bridge + design tokens
-- [ ] **Phase 3** — `extensions/chord-assistant`, the first real deliverable
+- [x] **Phase 3** — `extensions/chord-assistant`: right-click a MIDI Arrangement selection → inserts a chord progression as one MIDI clip per lane. Logically verified (61 tests passing repo-wide); real-Live manual QA still outstanding
 - [ ] **Phase 4** — `packages/cli` (`create extension` / `create device`)
 - [ ] **Phase 5** — M4L device scaffolding
 - [ ] **Phase 6+** — `osc-bridge`, on-demand `ui-kit` components, master-Set consolidation tooling
