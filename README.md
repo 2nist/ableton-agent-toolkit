@@ -13,7 +13,7 @@ See `docs/architecture.md` for the design and `docs/m4l-scaffolding-risk.md` bef
 - [x] **Phase 2** — `@music-theory/core` + `@music-theory/song-structure` ported verbatim (with baseline tests — none existed upstream), `ui-kit` bridge + design tokens
 - [x] **Phase 3** — `extensions/chord-assistant`: right-click a MIDI Arrangement selection → inserts a chord progression as one MIDI clip per lane. Logically verified; real-Live manual QA still outstanding
 - [x] **Phase 4** — `packages/cli`: `create extension` is real and non-interactive (agents can't answer prompts), end-to-end verified — built a throwaway extension, installed it, built it, deleted it
-- [x] **Phase 5** — `create device`: hand-authored `reference.amxd` in Live, reverse-engineered the (undocumented) `.amxd` binary format byte-by-byte to patch it programmatically, verified end-to-end (scaffolded a throwaway device, independently re-parsed the output with a fresh Python script). One thing still needs a real Live session: confirming Max's own parser accepts JS's re-serialized JSON formatting — see `docs/m4l-scaffolding-risk.md`
+- [x] **Phase 5** — `create device`: hand-authored `reference.amxd` in Live, reverse-engineered the (undocumented) `.amxd` binary format byte-by-byte to patch it programmatically. Fully verified end-to-end in real Live, including a genuine gotcha found along the way — `jweb` silently drops custom JS→Max messages without an undocumented `nonstandardoutletcalls 1` attribute, which doesn't survive a save and has to be re-asserted via `loadbang` on every load. See `docs/m4l-scaffolding-risk.md`
 - [ ] **Phase 6+** — `osc-bridge`, on-demand `ui-kit` components, master-Set consolidation tooling
 
 ## Dev loop (Phase 0)
@@ -52,7 +52,7 @@ npm run build --workspace=@platform/cli
 npm run cli -- create device <name>
 ```
 
-Open `devices/<name>/<name>.amxd` in Live's Max for Live device browser. Edit `devices/<name>/ui/interface.html` for the webview UI — no build step, `jweb` loads it straight off disk. See `docs/m4l-scaffolding-risk.md` for the `.amxd` format and the one manual verification step still outstanding.
+Open `devices/<name>/<name>.amxd` in Live's Max for Live device browser. Edit `devices/<name>/ui/interface.html` for the webview UI — no build step, `jweb` loads it straight off disk. See `docs/m4l-scaffolding-risk.md` for the `.amxd` format and a real gotcha worth knowing before touching the reference patch.
 
 ## Layout
 

@@ -29,7 +29,17 @@ Max for Live itself authorizes through **Live's own Preferences → Licenses/Mai
 
 ## The reference device
 
-Built by hand in Live 12 Suite: Max MIDI Effect device → Edit → `inlet` → `jweb` → `outlet`, plus `loadbang` → a `read file://...` message box → `jweb`, wired and tested round-trip (a button in the loaded page calls `window.max.outlet`, confirmed arriving in the Max Console). Saved via Live's device editor, which produces `.amxd` (not `.maxpat`) — that's what led to reverse-engineering the wrapper format above.
+Built by hand in Live 12 Suite: Max MIDI Effect device → Edit → `inlet` → `jweb` → `outlet`, plus `loadbang` fanning out to two message boxes feeding `jweb`: `read file://...` (loads the page) and `nonstandardoutletcalls 1` (see below — required for the JS→Max bridge to actually work, not optional). A `print` object taps `jweb`'s outlet for debugging. Saved via Live's device editor, which produces `.amxd` (not `.maxpat`) — that's what led to reverse-engineering the wrapper format above.
+
+### `jweb`'s outlet silently drops custom messages without `@nonstandardoutletcalls 1` — and this attribute doesn't survive a save
+
+Cycling '74's own reference docs list this attribute with the digest and description both left as the literal placeholder `TEXT_HERE` — genuinely undocumented. Found the hard way: the reference device's `jweb` object emitted its own built-in status messages fine (`onloadstart`, `url`, `title`, `onloadend`) but silently dropped every custom message sent via `window.max.outlet()` from the page's JS — confirmed by wiring a `[print]` directly to `jweb`'s outlet and reloading: built-in messages appeared, custom ones never did, with zero errors on either side.
+
+Setting `nonstandardoutletcalls 1` on the live object (via a message, or by recreating the object with `@nonstandardoutletcalls 1` as a creation argument) fixes it *immediately* for that running instance. But saving and re-parsing the file afterward showed **no trace of the attribute at all** — unlike other `jweb` attributes (e.g. `disablefind`, which explicitly declares `"save": 1` in its own definition), this one appears to not be configured as persistent. It resets to its default (dropping custom messages) every time the object is freshly instantiated — including every time the device loads.
+
+**The fix that actually persists**: don't rely on the attribute being saved at all. Set it via a message sent from `loadbang`, the same mechanism that already triggers `read` — `loadbang` fans out to both. This re-establishes the setting on every fresh load, which is the only thing that actually matters; whether the underlying attribute itself survives serialization is irrelevant once the patch re-asserts it every time regardless.
+
+Confirmed working end-to-end from a genuinely fresh load (device closed and reopened, not just re-clicked): all four built-in status messages fire, followed by the custom `message {"ping":...}` — no manual intervention required.
 
 Two files came out of this:
 - `templates/m4l-device-basic/reference.amxd` — the real binary fixture. This is what `create device` and the test suite actually read.
@@ -44,15 +54,15 @@ Implemented in `packages/cli/src/scaffold-device.ts`:
 
 1. Reads and parses `reference.amxd`.
 2. Finds the `jweb` box and rewrites its `url` attribute to `file://<repo>/devices/<name>/ui/interface.html`.
-3. Finds the `message` box whose text starts with `read file://` and rewrites it to match.
-4. Throws (refuses to scaffold) if either box isn't found — a signal the reference file's shape changed since this was written, not something to silently paper over.
+3. Finds the `message` box whose text starts with `read ` and rewrites it to match — there are now **two** message boxes in the reference (the other sets `nonstandardoutletcalls 1` and must be left completely untouched), so the finder specifically matches on the `read ` prefix, not just `maxclass === "message"`.
+4. Throws (refuses to scaffold) if the `jweb` box or the `read` message box isn't found — a signal the reference file's shape changed since this was written, not something to silently paper over.
 5. Serializes the result and writes `devices/<name>/<name>.amxd`.
 6. Copies `templates/m4l-device-basic/ui/interface.html` to `devices/<name>/ui/interface.html`.
 
 No build step for the device's UI — `jweb` loads the HTML file directly off disk, same as the reference device does. Add a bundler if a real device's UI ever needs `@platform/ui-kit`/`@music-theory/core` inside it (same "build it when something needs it" approach as `extensions/*`'s webview pipeline).
 
-Verified end-to-end: scaffolded a throwaway device via the built CLI, independently re-parsed the output `.amxd` with a fresh Python script (not the project's own parser, to catch any bug that would be self-consistent but still wrong), confirmed both patched paths point at the new device's own files with no leftover reference to the template.
+## Verified fully end-to-end — nothing outstanding
 
-## What's still NOT confirmed
+Scaffolded a throwaway device via the built CLI, independently re-parsed the output `.amxd` with a fresh Python script (not the project's own parser, to catch any bug that would be self-consistent but still wrong) — both patched paths correctly point at the new device's own files, `loadbang` fans out to both message boxes, no leftover reference to the template.
 
-**Whether Live/Max's own parser is fully happy with the re-serialized JSON's number formatting.** `JSON.stringify` can't reproduce Max's `439.0`-style whole-number floats — it always emits `439`. Both are the identical value per the JSON spec, and any spec-compliant parser treats them identically, but this hasn't been confirmed against Max's actual parser by opening a scaffolded device in a real Live session. That's the one remaining manual step: open a `create device`-scaffolded `.amxd` in Live and confirm it loads without complaint. Do this before relying on `create device` for anything real.
+Beyond the structural check, the actual custom-message round-trip was confirmed working in real Live, from a genuinely fresh device load, with the JSON having been re-serialized through `JSON.stringify` (different number formatting than Max's own writer, per `amxd.ts`'s documented limitation) — Max's parser accepted it without complaint. That closes out the one thing that couldn't be verified without a real Live session.

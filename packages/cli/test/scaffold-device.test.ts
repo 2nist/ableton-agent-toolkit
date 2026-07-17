@@ -58,18 +58,48 @@ describe("scaffoldDevice", () => {
     expect(jweb.url).toBe(`file://${expectedPath}`);
     expect(jweb.url).not.toContain("m4l-device-basic"); // must not still point at the template
 
-    const messageBox = patcher.patcher.boxes.find((b) => b.box.maxclass === "message")!.box;
+    // Two message boxes exist now (see below) — find the one that actually
+    // triggers `read`, not the unrelated `nonstandardoutletcalls 1` one that
+    // also has maxclass "message".
+    const messageBox = patcher.patcher.boxes.find(
+      (b) => b.box.maxclass === "message" && typeof b.box.text === "string" && b.box.text.startsWith("read "),
+    )!.box;
     expect(messageBox.text).toBe(`read file://${expectedPath}`);
+
+    // The OTHER message box sets jweb's non-persistent nonstandardoutletcalls
+    // attribute on every fresh load (see docs/m4l-scaffolding-risk.md) — it
+    // must survive scaffolding completely untouched, same text every time.
+    const attrBox = patcher.patcher.boxes.find(
+      (b) => b.box.maxclass === "message" && typeof b.box.text === "string" && b.box.text.startsWith("nonstandardoutletcalls"),
+    )!.box;
+    expect(attrBox.text).toBe("nonstandardoutletcalls 1");
   });
 
-  it("preserves every other box untouched (inlet, outlet, loadbang, midiin/midiout, comments)", () => {
+  it("preserves every other box untouched (inlet, outlet, loadbang, print, midiin/midiout, comments)", () => {
     const buffer = fs.readFileSync(path.join(targetDir, "my-device.amxd"));
     const { patcher } = parseAmxd(buffer) as unknown as { patcher: PatcherRoot };
     const classes = patcher.patcher.boxes.map((b) => b.box.maxclass).sort();
-    // 11 boxes total: the hidden "Device vertical limit" comment (maxclass
-    // "comment") is distinct from the 3 visible "live.comment" boxes —
-    // easy to undercount from a quick read, so pinned here explicitly.
-    expect(classes).toEqual(["comment", "inlet", "jweb", "live.comment", "live.comment", "live.comment", "message", "newobj", "newobj", "newobj", "outlet"]);
+    // 13 boxes total: two "message" boxes now (read + nonstandardoutletcalls),
+    // and a "print" object (both newobj) alongside loadbang/midiin/midiout
+    // (also newobj) — 4 newobj total. The hidden "Device vertical limit"
+    // comment (maxclass "comment") is distinct from the 3 visible
+    // "live.comment" boxes — easy to undercount from a quick read, so pinned
+    // here explicitly.
+    expect(classes).toEqual([
+      "comment",
+      "inlet",
+      "jweb",
+      "live.comment",
+      "live.comment",
+      "live.comment",
+      "message",
+      "message",
+      "newobj",
+      "newobj",
+      "newobj",
+      "newobj",
+      "outlet",
+    ]);
   });
 
   it("copies the actual reference HTML content, not an empty file", () => {

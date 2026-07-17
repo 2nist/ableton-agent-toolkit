@@ -9,14 +9,49 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 37.0, 283.0, 1347.0, 602.0 ],
+        "rect": [ -1541.0, 454.0, 1459.0, 603.0 ],
         "openrect": [ 0.0, 0.0, 0.0, 169.0 ],
         "openrectmode": 0,
         "default_fontsize": 10.0,
         "default_fontname": "Arial Bold",
         "gridsize": [ 8.0, 8.0 ],
+        "toolbars_unpinned_last_save": 4,
         "boxanimatetime": 500,
         "boxes": [
+            {
+                "box": {
+                    "id": "obj-22",
+                    "maxclass": "message",
+                    "numinlets": 2,
+                    "numoutlets": 1,
+                    "outlettype": [ "" ],
+                    "patching_rect": [ 412.0, 198.0, 127.0, 20.0 ],
+                    "text": "nonstandardoutletcalls 1"
+                }
+            },
+            {
+                "box": {
+                    "disablefind": 0,
+                    "id": "obj-17",
+                    "maxclass": "jweb",
+                    "numinlets": 1,
+                    "numoutlets": 1,
+                    "outlettype": [ "" ],
+                    "patching_rect": [ 137.0, 259.0, 461.0, 214.0 ],
+                    "rendermode": 0,
+                    "url": "file:///Users/Matthew/ableton-agent-toolkit/devices/test-device/ui/interface.html"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-10",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 0,
+                    "patching_rect": [ 249.0, 500.0, 31.0, 20.0 ],
+                    "text": "print"
+                }
+            },
             {
                 "box": {
                     "id": "obj-33",
@@ -24,8 +59,8 @@
                     "numinlets": 2,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 439.0, 346.0, 444.0, 20.0 ],
-                    "text": "read file:///Users/Matthew/ableton-agent-toolkit/templates/m4l-device-basic/ui/interface.html"
+                    "patching_rect": [ 625.0, 215.0, 444.0, 20.0 ],
+                    "text": "read file:///Users/Matthew/ableton-agent-toolkit/devices/test-device/ui/interface.html"
                 }
             },
             {
@@ -35,7 +70,7 @@
                     "numinlets": 1,
                     "numoutlets": 1,
                     "outlettype": [ "bang" ],
-                    "patching_rect": [ 691.0, 279.0, 53.0, 20.0 ],
+                    "patching_rect": [ 754.0, 174.0, 53.0, 20.0 ],
                     "text": "loadbang"
                 }
             },
@@ -47,20 +82,7 @@
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 324.0, 451.0, 30.0, 30.0 ]
-                }
-            },
-            {
-                "box": {
-                    "disablefind": 0,
-                    "id": "obj-7",
-                    "maxclass": "jweb",
-                    "numinlets": 1,
-                    "numoutlets": 1,
-                    "outlettype": [ "" ],
-                    "patching_rect": [ 282.0, 296.0, 129.0, 130.0 ],
-                    "rendermode": 0,
-                    "url": "file:///Users/Matthew/ableton-agent-toolkit/templates/m4l-device-basic/ui/interface.html"
+                    "patching_rect": [ 194.0, 513.0, 30.0, 30.0 ]
                 }
             },
             {
@@ -72,7 +94,7 @@
                     "numinlets": 0,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 282.0, 219.0, 44.0, 44.0 ]
+                    "patching_rect": [ 236.0, 174.0, 44.0, 44.0 ]
                 }
             },
             {
@@ -156,26 +178,48 @@
             },
             {
                 "patchline": {
-                    "destination": [ "obj-33", 0 ],
-                    "source": [ "obj-24", 0 ]
-                }
-            },
-            {
-                "patchline": {
-                    "destination": [ "obj-7", 0 ],
-                    "source": [ "obj-33", 0 ]
-                }
-            },
-            {
-                "patchline": {
-                    "destination": [ "obj-7", 0 ],
-                    "source": [ "obj-6", 0 ]
+                    "destination": [ "obj-10", 0 ],
+                    "order": 0,
+                    "source": [ "obj-17", 0 ]
                 }
             },
             {
                 "patchline": {
                     "destination": [ "obj-8", 0 ],
-                    "source": [ "obj-7", 0 ]
+                    "order": 1,
+                    "source": [ "obj-17", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-17", 0 ],
+                    "source": [ "obj-22", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-22", 0 ],
+                    "order": 1,
+                    "source": [ "obj-24", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-33", 0 ],
+                    "order": 0,
+                    "source": [ "obj-24", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-17", 0 ],
+                    "source": [ "obj-33", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-17", 0 ],
+                    "source": [ "obj-6", 0 ]
                 }
             }
         ],
