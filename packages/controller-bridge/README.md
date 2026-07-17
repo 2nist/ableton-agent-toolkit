@@ -8,6 +8,8 @@ Ported verbatim from `/Users/Matthew/unified-music-platform/packages/controller-
 
 If you're consuming `validate()`, treat it as diagnostic output about resolvable single-element mappings, not a pass/fail gate — or extend `getMidi`/`validate` to understand whole-matrix targets (e.g. by resolving to the matrix's per-cell MIDI list) before relying on `valid === true` for controllers that map whole matrices.
 
+**Confirmed against the real source**: this isn't a porting mistake. `reference/scripts/APC_mini_mk2/mappings.py` maps properties to whole matrices the same way (e.g. `volume_controls="faders"`) — Ableton's actual `ableton.v3.control_surface` framework resolves that to a whole `ButtonMatrixElement` object and hands it to the target component, which is written to accept either a single element or a matrix. `getMidi()`'s single-MIDI-number return type has no way to represent that. See `reference/README.md` for the full writeup.
+
 ## `toReaLearnPreset()` silently drops anything `getMidi` can't resolve
 
 Because of the above, `toReaLearnPreset()` also silently skips any mapping entry whose element resolves to `null` (the whole-matrix cases) — the exported ReaLearn preset today only contains the subset of mappings that reference direct controls or indexed matrix cells, not full matrices. Exported presets for APC mini mk2 / ATOM SQ are therefore currently incomplete relative to what the mapping tables describe.
