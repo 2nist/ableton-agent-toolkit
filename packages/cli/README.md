@@ -24,7 +24,13 @@ Dependencies point at the repo's one shared `vendor/` directory, not a per-exten
 
 ### `create device <name>`
 
-**Not implemented yet.** `templates/m4l-device-basic/reference.maxpat` doesn't exist — it has to be hand-authored inside Max itself before any copy/patch logic can work against it. Running this command explains why and points at `docs/m4l-scaffolding-risk.md`. This is Phase 5.
+1. Reads and parses `templates/m4l-device-basic/reference.amxd` — a real Max for Live device file, which turned out to be a small binary wrapper around plain-JSON `.maxpat` content, reverse-engineered byte-by-byte (see `src/amxd.ts` and `docs/m4l-scaffolding-risk.md`).
+2. Rewrites the `jweb` object's `url` attribute and the `read file://...` message box to point at the new device's own `devices/<name>/ui/interface.html`, instead of the reference template's path.
+3. Writes `devices/<name>/<name>.amxd` and copies the placeholder `ui/interface.html`.
+
+No build step for the device UI — `jweb` loads the HTML file directly off disk. Open `devices/<name>/<name>.amxd` in Live's Max for Live device browser to load it.
+
+If `reference.amxd` doesn't exist (e.g. in a fresh clone before it's been hand-authored), this fails with a clear message pointing at `docs/m4l-scaffolding-risk.md` instead of silently doing nothing.
 
 ## What's deliberately NOT copied from the official tool
 

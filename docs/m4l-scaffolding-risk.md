@@ -1,17 +1,25 @@
-# M4L device scaffolding — known risk
+# M4L device scaffolding
 
-This is the least-verified part of the platform. Stated plainly rather than smoothed over.
+Was the platform's biggest unknown. Now built and tested — this file records what's actually confirmed, and the one thing that still needs a real Live session to fully close out.
 
-## What's confirmed
+## The `.amxd` format — reverse-engineered, not documented anywhere
 
-- `jweb` is a real Max object that embeds a Chromium (CEF) web view in a patcher — confirmed from Cycling '74's own shipped docs (`/Applications/Max.app/Contents/Resources/C74/docs/refpages/max-ref/jweb.maxref.xml`, `.../help/max/jweb.maxhelp`, `.../userguide/content/web_browser.json`).
-- The JS-to-Max / Max-to-JS bridge (`window.max.outlet`, `window.max.bindInlet`, `window.max.getDict`/`setDict`) is confirmed from the same source.
-- The jweb help patch itself uses plain `jweb` + `inlet`/`outlet` + basic routing objects — nothing exotic pairs with it.
+`.amxd` (Ableton's Max for Live device file) is **not** plain JSON, despite `.maxpat` (the underlying Max patcher format) being plain JSON. Cycling '74 and Ableton don't publicly document the wrapper. Figured out by byte-level inspection of a real file saved from Live's own device editor:
 
-## What's NOT confirmed
+```
+offset 0   (4 bytes)  magic: "ampf"
+offset 4   (4 bytes)  uint32 LE, always seen as 4 — purpose unconfirmed
+offset 8   (8 bytes)  literal marker: "mmmmmeta"
+offset 16  (4 bytes)  uint32 LE, always seen as 4 — purpose unconfirmed
+offset 20  (4 bytes)  uint32 LE, always seen as 0 — purpose unconfirmed
+offset 24  (4 bytes)  literal marker: "ptch"
+offset 28  (4 bytes)  uint32 LE — length of the payload that follows
+offset 32  (N bytes)  UTF-8 JSON text + one trailing 0x00 byte
+```
 
-- No `.maxpat` file exists anywhere on this machine to use as a real starting point. `/Users/Matthew/m4l-chord-progression-device` is JS logic only (`hexagon_chord_logic.js`), never wired into an actual device — there is no working reference device to copy from.
-- The exact JSON schema Cycling '74 uses for `.maxpat` files has not been independently verified beyond what's needed to hand-edit one (it's known to be JSON, but its full structure, required keys, and versioning quirks are not documented here).
+Implemented in `packages/cli/src/amxd.ts` (`parseAmxd`/`serializeAmxd`), verified against the real reference file in `packages/cli/test/amxd.test.ts` — parse → serialize → re-parse produces semantically identical output (not byte-identical: Max writes whole-number floats as `439.0`, JavaScript's `JSON.stringify` can't reproduce that and always emits `439` — an inherent JSON-serialization limitation, not a gap in understanding the format).
+
+**Scope**: only confirmed for a minimal device (no exposed Live-mappable parameters, no factory patcher preview, no automation state). A real, more complex device might have additional trailing sections this hasn't encountered. That's fine for what `create device` itself produces — every scaffolded device is a direct derivative of the same minimal reference, never more complex than it.
 
 ## Launching Max: through Live, never standalone
 
@@ -19,13 +27,32 @@ This is the least-verified part of the platform. Stated plainly rather than smoo
 
 Max for Live itself authorizes through **Live's own Preferences → Licenses/Maintenance → "Authorize at Ableton.com"** — tied to the Ableton account, no Cycling '74 login involved for this path.
 
-## The chosen approach — do not deviate without re-reading this file
+## The reference device
 
-**Hand-author exactly one reference patcher, launching Max through Live.** In Live: create a Max MIDI Effect (or Max Instrument/Audio Effect) device on a track, click its **Edit** button to open Max already authorized in the Max-for-Live context. Drop a `jweb` object, an `inlet`, an `outlet`, wire them together (optionally through a `[route]`), point `jweb`'s page-source at a placeholder HTML file, save as `templates/m4l-device-basic/reference.maxpat`.
+Built by hand in Live 12 Suite: Max MIDI Effect device → Edit → `inlet` → `jweb` → `outlet`, plus `loadbang` → a `read file://...` message box → `jweb`, wired and tested round-trip (a button in the loaded page calls `window.max.outlet`, confirmed arriving in the Max Console). Saved via Live's device editor, which produces `.amxd` (not `.maxpat`) — that's what led to reverse-engineering the wrapper format above.
 
-The CLI's `create device <name>` then only:
-1. Copies `reference.maxpat` to `devices/<name>/<name>.maxpat`.
-2. Parses it as JSON and patches two things: the jweb object's page-source argument (to point at the new device's built `ui/dist/index.html`) and the patcher's title/name string.
-3. Scaffolds `devices/<name>/ui/` (src/main.ts, interface.html, build.ts) and `package.json`.
+Two files came out of this:
+- `templates/m4l-device-basic/reference.amxd` — the real binary fixture. This is what `create device` and the test suite actually read.
+- `templates/m4l-device-basic/reference.maxpat` — the same content, extracted as plain JSON text, for human readability/diffing only. **Not read by any code** — regenerating it after a `reference.amxd` change is a manual, optional step, not a sync requirement.
+- `templates/m4l-device-basic/ui/interface.html` — the placeholder page the reference device loads, also copied into every scaffolded device's `ui/` folder as a starting point.
 
-**Never attempt to synthesize `.maxpat` JSON from nothing.** If a future template needs a materially different patcher shape (more inlets, DSP objects, etc.), hand-author a new reference patcher the same way — don't try to generate the delta programmatically without opening Max to verify the result.
+Inspecting the parsed JSON found no patcher-level title/name field anywhere — a device's displayed name in Live comes from its filename, not embedded metadata. So `create device` doesn't need to patch anything beyond the two places that reference the placeholder page's path.
+
+## What `create device <name>` actually does
+
+Implemented in `packages/cli/src/scaffold-device.ts`:
+
+1. Reads and parses `reference.amxd`.
+2. Finds the `jweb` box and rewrites its `url` attribute to `file://<repo>/devices/<name>/ui/interface.html`.
+3. Finds the `message` box whose text starts with `read file://` and rewrites it to match.
+4. Throws (refuses to scaffold) if either box isn't found — a signal the reference file's shape changed since this was written, not something to silently paper over.
+5. Serializes the result and writes `devices/<name>/<name>.amxd`.
+6. Copies `templates/m4l-device-basic/ui/interface.html` to `devices/<name>/ui/interface.html`.
+
+No build step for the device's UI — `jweb` loads the HTML file directly off disk, same as the reference device does. Add a bundler if a real device's UI ever needs `@platform/ui-kit`/`@music-theory/core` inside it (same "build it when something needs it" approach as `extensions/*`'s webview pipeline).
+
+Verified end-to-end: scaffolded a throwaway device via the built CLI, independently re-parsed the output `.amxd` with a fresh Python script (not the project's own parser, to catch any bug that would be self-consistent but still wrong), confirmed both patched paths point at the new device's own files with no leftover reference to the template.
+
+## What's still NOT confirmed
+
+**Whether Live/Max's own parser is fully happy with the re-serialized JSON's number formatting.** `JSON.stringify` can't reproduce Max's `439.0`-style whole-number floats — it always emits `439`. Both are the identical value per the JSON spec, and any spec-compliant parser treats them identically, but this hasn't been confirmed against Max's actual parser by opening a scaffolded device in a real Live session. That's the one remaining manual step: open a `create device`-scaffolded `.amxd` in Live and confirm it loads without complaint. Do this before relying on `create device` for anything real.

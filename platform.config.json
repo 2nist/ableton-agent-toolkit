@@ -18,7 +18,7 @@
       "id": "m4l-device-basic",
       "targetDir": "devices",
       "path": "templates/m4l-device-basic",
-      "description": "Max for Live device with a jweb-hosted UI, built from the one hand-authored reference.maxpat. Not usable yet — see docs/m4l-scaffolding-risk.md."
+      "description": "Max for Live device with a jweb-hosted UI, derived from the one hand-authored reference.amxd. Working — see docs/m4l-scaffolding-risk.md for format details and the one remaining manual verification step."
     }
   ]
 }

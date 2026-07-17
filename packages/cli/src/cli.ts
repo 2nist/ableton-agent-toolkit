@@ -12,6 +12,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { discoverLiveInstallations } from "./discover-live.js";
 import { getGitUserName } from "./git-user.js";
+import { scaffoldDevice } from "./scaffold-device.js";
 import { scaffoldExtension } from "./scaffold-extension.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -77,19 +78,26 @@ function createExtension(name: string, rest: string[]): void {
 }
 
 function createDevice(name: string): void {
-  const referencePatcher = path.join(REPO_ROOT, "templates", "m4l-device-basic", "reference.maxpat");
-  if (!fs.existsSync(referencePatcher)) {
+  const referenceAmxdPath = path.join(REPO_ROOT, "templates", "m4l-device-basic", "reference.amxd");
+  const referenceHtmlPath = path.join(REPO_ROOT, "templates", "m4l-device-basic", "ui", "interface.html");
+
+  if (!fs.existsSync(referenceAmxdPath)) {
     console.error(
-      `No reference.maxpat at templates/m4l-device-basic/reference.maxpat.\n\n` +
-        `M4L device scaffolding needs a hand-authored reference patcher — it can't be generated from nothing.\n` +
-        `See docs/m4l-scaffolding-risk.md for exactly what to build in Max and where to save it.\n` +
-        `(This is Phase 5 in the project's plan — deliberately not yet done.)`,
+      `No reference.amxd at templates/m4l-device-basic/reference.amxd.\n\n` +
+        `M4L device scaffolding needs a hand-authored reference device — it can't be generated from nothing.\n` +
+        `See docs/m4l-scaffolding-risk.md for exactly what to build in Max and where to save it.`,
     );
     process.exit(1);
   }
-  // Copy/JSON-patch logic lands here once reference.maxpat exists — see docs/m4l-scaffolding-risk.md.
-  console.error(`reference.maxpat exists, but 'create device' isn't wired up yet (Phase 5 in progress). Would have created devices/${name}.`);
-  process.exit(1);
+
+  const targetDir = path.join(REPO_ROOT, "devices", name);
+  scaffoldDevice({ targetDir, deviceName: name, referenceAmxdPath, referenceHtmlPath });
+
+  console.log(
+    `\nCreated devices/${name}.\n\n` +
+      `  Open devices/${name}/${name}.amxd in Live's Max for Live device browser to load it.\n` +
+      `  Edit devices/${name}/ui/interface.html for the webview UI — no build step needed, jweb loads it directly off disk.\n`,
+  );
 }
 
 const [, , command, kind, name, ...rest] = process.argv;
