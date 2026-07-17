@@ -5,7 +5,11 @@
     { "name": "@music-theory/song-structure", "path": "packages/song-structure" },
     { "name": "@platform/ui-kit", "path": "packages/ui-kit" },
     { "name": "@platform/test-harness", "path": "packages/test-harness" },
-    { "name": "@platform/osc-bridge", "path": "packages/osc-bridge" }
+    { "name": "@platform/osc-bridge", "path": "packages/osc-bridge" },
+    { "name": "@groove/capture", "path": "packages/groove-capture" },
+    { "name": "@daw/virtual-reaper", "path": "packages/virtual-reaper" },
+    { "name": "@daw/routing-matrix", "path": "packages/routing-matrix" },
+    { "name": "@hardware/controller-bridge", "path": "packages/controller-bridge" }
   ],
   "templates": [
     {
