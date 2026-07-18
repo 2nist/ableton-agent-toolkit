@@ -6,7 +6,8 @@
   "workspaces": [
     "packages/*",
     "extensions/*",
-    "devices/*"
+    "devices/*",
+    "apps/*"
   ],
   "engines": {
     "node": ">=24.14.1"
