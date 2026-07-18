@@ -33,25 +33,37 @@ export interface BlueprintSong {
   notes?: BlueprintSongNotes;
 }
 
+export interface SectionSpan {
+  section: BlueprintSection;
+  startBeat: number;
+  durationBeats: number;
+}
+
+/**
+ * Cumulative section start/duration offsets in beats, shared by every
+ * "one clip/cue point per section" generator (CuePoints, chord/drum/bass
+ * clips). A section's beat length is bars * its own numerator (Live's
+ * arrangement time is beats, not bars, so a numerator change mid-song
+ * changes how many beats each of its bars contributes).
+ */
+export function sectionSpans(song: BlueprintSong): SectionSpan[] {
+  const spans: SectionSpan[] = [];
+  let startBeat = 0;
+  for (const section of song.sections) {
+    const durationBeats = section.bars * section.timeSignatureNumerator;
+    spans.push({ section, startBeat, durationBeats });
+    startBeat += durationBeats;
+  }
+  return spans;
+}
+
 export interface CuePointPlan {
   name: string;
   beat: number;
 }
 
-/**
- * Cumulative section start offsets in beats. A section's beat length is
- * bars * its own numerator (Live's arrangement time is beats, not bars,
- * so a numerator change mid-song changes how many beats each of its bars
- * contributes).
- */
 export function planCuePoints(song: BlueprintSong): CuePointPlan[] {
-  const plan: CuePointPlan[] = [];
-  let beat = 0;
-  for (const section of song.sections) {
-    plan.push({ name: section.name, beat });
-    beat += section.bars * section.timeSignatureNumerator;
-  }
-  return plan;
+  return sectionSpans(song).map(({ section, startBeat }) => ({ name: section.name, beat: startBeat }));
 }
 
 /**

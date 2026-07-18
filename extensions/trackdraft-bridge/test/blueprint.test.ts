@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cuePointNamesFor, planCuePoints, type BlueprintSong } from "../src/blueprint.js";
+import { cuePointNamesFor, planCuePoints, sectionSpans, type BlueprintSong } from "../src/blueprint.js";
 
 const twinFish: BlueprintSong = {
   id: "lalo-chezia-03_twin_fish",
@@ -47,6 +47,15 @@ describe("planCuePoints", () => {
 
   it("returns an empty plan for a song with no sections", () => {
     expect(planCuePoints({ id: "x", title: "x", bpm: 120, sections: [] })).toEqual([]);
+  });
+});
+
+describe("sectionSpans", () => {
+  it("carries both start and duration alongside the section itself", () => {
+    const spans = sectionSpans(twinFish);
+    expect(spans[0]).toEqual({ section: twinFish.sections[0], startBeat: 0, durationBeats: 32 });
+    expect(spans[1]).toEqual({ section: twinFish.sections[1], startBeat: 32, durationBeats: 64 });
+    expect(spans[spans.length - 1].startBeat + spans[spans.length - 1].durationBeats).toBe(352);
   });
 });
 

@@ -1,6 +1,7 @@
 import { chordToMidiNotes, pitchClass, type ChordQuality } from "@music-theory/core";
 import type { NoteDescription } from "@ableton-extensions/sdk";
-import type { BlueprintSong } from "./blueprint.js";
+import { sectionSpans, type BlueprintSong } from "./blueprint.js";
+import { loopChordsToFill } from "./chordCycle.js";
 
 export interface ChordClipPlan {
   name: string;
@@ -22,43 +23,19 @@ const DEFAULT_VELOCITY = 96;
  * arpeggiation/voice-leading — the simplest useful v1 voicing, matching
  * chord-assistant's own precedent). A clip's duration is bars *
  * timeSignatureNumerator, same math as planCuePoints, so clips land at
- * the same offsets as the CuePoints "Apply Song Blueprint" creates.
- *
- * A section's `chords` list is one pass through its progression, not the
- * whole section — a 16-bar verse built from a 4-bar/4-chord progression
- * lists only those 4 chords, the same way the original REAPER pipeline
- * paired a section's `bars` with its `beatsPerChord`. The progression
- * loops to fill the section's full duration; the final repeat is
- * truncated (not skipped) if it doesn't divide evenly.
+ * the same offsets as the CuePoints "Apply Song Blueprint" creates. See
+ * loopChordsToFill for how a section's one-pass chord list becomes a
+ * full-length progression.
  */
 export function planChordClips(song: BlueprintSong, octave: number = DEFAULT_OCTAVE): ChordClipPlan[] {
-  const plan: ChordClipPlan[] = [];
-  let sectionStart = 0;
-
-  for (const section of song.sections) {
-    const durationBeats = section.bars * section.timeSignatureNumerator;
-    const chords = section.chords ?? [];
+  return sectionSpans(song).map(({ section, startBeat, durationBeats }) => {
     const notes: NoteDescription[] = [];
-    const cycleBeats = chords.reduce((sum, chord) => sum + chord.beats, 0);
-
-    if (cycleBeats > 0) {
-      let cursor = 0;
-      while (cursor < durationBeats) {
-        for (const chord of chords) {
-          if (cursor >= durationBeats) break;
-          const duration = Math.min(chord.beats, durationBeats - cursor);
-          const rootPc = pitchClass(chord.root);
-          for (const pitch of chordToMidiNotes(rootPc, chord.quality as ChordQuality, octave)) {
-            notes.push({ pitch, startTime: cursor, duration, velocity: DEFAULT_VELOCITY });
-          }
-          cursor += chord.beats;
-        }
+    for (const occurrence of loopChordsToFill(section.chords ?? [], durationBeats)) {
+      const rootPc = pitchClass(occurrence.chord.root);
+      for (const pitch of chordToMidiNotes(rootPc, occurrence.chord.quality as ChordQuality, octave)) {
+        notes.push({ pitch, startTime: occurrence.startTime, duration: occurrence.duration, velocity: DEFAULT_VELOCITY });
       }
     }
-
-    plan.push({ name: section.name, startBeat: sectionStart, durationBeats, notes });
-    sectionStart += durationBeats;
-  }
-
-  return plan;
+    return { name: section.name, startBeat, durationBeats, notes };
+  });
 }

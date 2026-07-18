@@ -1,14 +1,26 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { initialize, MidiTrack, type ActivationContext, type Handle } from "@ableton-extensions/sdk";
-import { cuePointNamesFor, planCuePoints, type BlueprintSong } from "./blueprint.js";
+import { initialize, MidiTrack, type ActivationContext, type Handle, type NoteDescription } from "@ableton-extensions/sdk";
+import { cuePointNamesFor, planCuePoints, sectionSpans, type BlueprintSong } from "./blueprint.js";
 import { planChordClips } from "./chordClips.js";
+import { planDrumClips } from "./drumClips.js";
+import { planBassLine } from "./bassLine.js";
 import { buildPickerHtml } from "./picker.js";
 import { buildViewerHtml } from "./viewer.js";
 
 const APPLY_COMMAND_ID = "trackdraftBridge.applySongBlueprint";
 const VIEW_COMMAND_ID = "trackdraftBridge.viewSongBlueprint";
 const GENERATE_CHORDS_COMMAND_ID = "trackdraftBridge.generateChordClips";
+const GENERATE_DRUMS_COMMAND_ID = "trackdraftBridge.generateDrumClips";
+const GENERATE_BASS_COMMAND_ID = "trackdraftBridge.generateBassLine";
+const GENERATE_BLANK_COMMAND_ID = "trackdraftBridge.generateBlankClips";
+
+interface ClipPlanEntry {
+  name: string;
+  startBeat: number;
+  durationBeats: number;
+  notes: NoteDescription[];
+}
 
 // Extensions run under a restricted filesystem permission model and may
 // only read/write context.environment.storageDirectory/tempDirectory —
@@ -38,6 +50,9 @@ export function activate(activation: ActivationContext) {
   context.ui.registerContextMenuAction("MidiTrack", "View Song Blueprint", VIEW_COMMAND_ID);
   context.ui.registerContextMenuAction("AudioTrack", "View Song Blueprint", VIEW_COMMAND_ID);
   context.ui.registerContextMenuAction("MidiTrack", "Generate Chord Clips", GENERATE_CHORDS_COMMAND_ID);
+  context.ui.registerContextMenuAction("MidiTrack", "Generate Drum Clips", GENERATE_DRUMS_COMMAND_ID);
+  context.ui.registerContextMenuAction("MidiTrack", "Generate Bass Line", GENERATE_BASS_COMMAND_ID);
+  context.ui.registerContextMenuAction("MidiTrack", "Generate Blank Section Clips", GENERATE_BLANK_COMMAND_ID);
 
   // A thrown/rejected command handler kills the whole extension host
   // process (observed directly: one bad fs call took both registered
@@ -53,14 +68,46 @@ export function activate(activation: ActivationContext) {
       }
     };
 
-  // Shared by Apply and Generate: show the song picker, return the chosen
-  // blueprint or undefined if the dialog was cancelled/closed.
+  // Shared by every command that needs a song: show the picker, return the
+  // chosen blueprint or undefined if the dialog was cancelled/closed.
   async function pickBlueprint(blueprints: BlueprintSong[]): Promise<BlueprintSong | undefined> {
     const picker = blueprints.map((b) => ({ id: b.id, title: b.title }));
     const dataUrl = `data:text/html,${encodeURIComponent(buildPickerHtml(picker))}`;
     const picked = await context.ui.showModalDialog(dataUrl, 420, 480);
     if (!picked) return undefined;
     return blueprints.find((b) => b.id === picked);
+  }
+
+  // Shared by every "one clip per section" command (chords/drums/bass/
+  // blank): clears the track's span first so re-running replaces the
+  // previous result instead of piling up overlapping clips — clips don't
+  // carry a stable identity to dedupe by name the way CuePoints do, so
+  // the whole range is cleared instead.
+  async function applyClipPlan(track: MidiTrack<"1.0.0">, plan: ClipPlanEntry[]) {
+    if (plan.length === 0) return;
+    const last = plan[plan.length - 1];
+    const totalBeats = last.startBeat + last.durationBeats;
+
+    await context.withinTransaction(() => track.clearClipsInRange(0, totalBeats));
+
+    // Two sequential transactions, per the SDK's documented guidance: an
+    // object can't be created and have its properties modified in the
+    // same transaction block.
+    const clips = await context.withinTransaction(() => {
+      return Promise.all(plan.map((entry) => track.createMidiClip(entry.startBeat, entry.durationBeats)));
+    });
+
+    await context.withinTransaction(() => {
+      clips.forEach((clip, i) => {
+        clip.name = plan[i].name;
+        clip.notes = plan[i].notes;
+      });
+    });
+  }
+
+  function resolveMidiTrack(args: unknown[]): MidiTrack<"1.0.0"> | undefined {
+    const [trackHandle] = args;
+    return context.getObjectFromHandle(trackHandle as Handle, MidiTrack) ?? undefined;
   }
 
   context.commands.registerCommand(
@@ -111,39 +158,54 @@ export function activate(activation: ActivationContext) {
   context.commands.registerCommand(
     GENERATE_CHORDS_COMMAND_ID,
     guard(async (...args: unknown[]) => {
-      const [trackHandle] = args;
-      const track = context.getObjectFromHandle(trackHandle as Handle, MidiTrack);
+      const track = resolveMidiTrack(args);
       if (!track) return;
-
       const blueprints = loadBlueprints(context.environment.storageDirectory);
       const blueprint = await pickBlueprint(blueprints);
       if (!blueprint) return;
+      await applyClipPlan(track, planChordClips(blueprint));
+    }),
+  );
 
-      const clipPlan = planChordClips(blueprint);
-      if (clipPlan.length === 0) return;
-      const lastClip = clipPlan[clipPlan.length - 1];
-      const totalBeats = lastClip.startBeat + lastClip.durationBeats;
+  context.commands.registerCommand(
+    GENERATE_DRUMS_COMMAND_ID,
+    guard(async (...args: unknown[]) => {
+      const track = resolveMidiTrack(args);
+      if (!track) return;
+      const blueprints = loadBlueprints(context.environment.storageDirectory);
+      const blueprint = await pickBlueprint(blueprints);
+      if (!blueprint) return;
+      await applyClipPlan(track, planDrumClips(blueprint));
+    }),
+  );
 
-      // Re-running on the same track replaces whatever was in the
-      // song's time span rather than piling up overlapping clips —
-      // same idempotency goal as Apply Song Blueprint's CuePoint dedup,
-      // but clips don't carry a stable identity to match by name, so
-      // this clears the whole range instead.
-      await context.withinTransaction(() => track.clearClipsInRange(0, totalBeats));
+  context.commands.registerCommand(
+    GENERATE_BASS_COMMAND_ID,
+    guard(async (...args: unknown[]) => {
+      const track = resolveMidiTrack(args);
+      if (!track) return;
+      const blueprints = loadBlueprints(context.environment.storageDirectory);
+      const blueprint = await pickBlueprint(blueprints);
+      if (!blueprint) return;
+      await applyClipPlan(track, planBassLine(blueprint));
+    }),
+  );
 
-      // Two sequential transactions, per the SDK's documented guidance: an
-      // object can't be created and have its properties modified in the
-      // same transaction block.
-      const clips = await context.withinTransaction(() => {
-        return Promise.all(clipPlan.map((entry) => track.createMidiClip(entry.startBeat, entry.durationBeats)));
-      });
-
-      await context.withinTransaction(() => {
-        clips.forEach((clip, i) => {
-          clip.name = clipPlan[i].name;
-          clip.notes = clipPlan[i].notes;
-        });
-      });
+  context.commands.registerCommand(
+    GENERATE_BLANK_COMMAND_ID,
+    guard(async (...args: unknown[]) => {
+      const track = resolveMidiTrack(args);
+      if (!track) return;
+      const blueprints = loadBlueprints(context.environment.storageDirectory);
+      const blueprint = await pickBlueprint(blueprints);
+      if (!blueprint) return;
+      const plan = sectionSpans(blueprint).map(({ section, startBeat, durationBeats }) => ({
+        name: section.name,
+        startBeat,
+        durationBeats,
+        notes: [],
+      }));
+      await applyClipPlan(track, plan);
     }),
   );
 }
