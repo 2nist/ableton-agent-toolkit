@@ -9,6 +9,11 @@ const DRUM_PATTERNS: DrumPattern[] = [
   "none", "kick_only", "standard", "half_time", "driving", "bridge_sparse", "intense", "dnb", "78", "68", "54",
 ];
 const VELOCITIES: VelocityPreset[] = ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"];
+// song-structure's SongSection stores the denominator as a power of two
+// (denPower 2 == denominator 4, i.e. 4/4) rather than the raw number --
+// matches the S() DSL's ts_den_power convention. Converted to/from a
+// real denominator here so the UI shows "4" not "2".
+const DENOMINATOR_OPTIONS = [2, 4, 8, 16];
 
 interface SectionCardProps {
   section: BlueprintSection;
@@ -65,6 +70,31 @@ export default function SectionCard({ section, onChange, onDelete }: SectionCard
       </div>
 
       <div className="flex flex-wrap gap-3 text-xs text-inkMuted">
+        <label className="flex items-center gap-1">
+          Time sig
+          <input
+            type="number"
+            min={1}
+            max={32}
+            className="w-10 bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink"
+            value={section.timeSignatureNumerator}
+            onChange={(e) =>
+              onChange((s) => ({ ...s, timeSignatureNumerator: Number(e.target.value) || 1 }))
+            }
+          />
+          <span>/</span>
+          <select
+            className="bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink"
+            value={2 ** section.timeSignatureDenPower}
+            onChange={(e) =>
+              onChange((s) => ({ ...s, timeSignatureDenPower: Math.log2(Number(e.target.value)) }))
+            }
+          >
+            {DENOMINATOR_OPTIONS.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </label>
         <label className="flex items-center gap-1">
           Bars
           <input

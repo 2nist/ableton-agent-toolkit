@@ -329,7 +329,11 @@ async function ingestSong(songDir: string, songId: string): Promise<{ song: Blue
 
   const now = new Date().toISOString();
   const song: BlueprintSong = {
-    id: crypto.randomUUID(),
+    // Deterministic, not crypto.randomUUID(): the song id must stay
+    // stable across re-runs so re-importing after fixing the script
+    // overwrites the same Dashboard entry (via songStore.importSong's
+    // id-match replace) instead of piling up a duplicate every time.
+    id: `lalo-chezia-${songId}`,
     title: arrangement.title ?? songId.replace(/^\d+_/, "").replace(/_/g, " "),
     key: arrangement.key ?? "C",
     scale: arrangement.mode === "minor" ? "aeolian" : "ionian",
