@@ -32,3 +32,15 @@ export function planCuePoints(song: BlueprintSong): CuePointPlan[] {
   }
   return plan;
 }
+
+/**
+ * Section names for this blueprint, used to find and clear cue points left
+ * by a previous "Apply Song Blueprint" run before creating fresh ones — so
+ * re-applying after an edit replaces the old markers instead of piling up
+ * duplicates. A cue point only gets cleared if its name still exactly
+ * matches one of the blueprint's current section names, so a marker the
+ * user has since renamed away is left alone.
+ */
+export function cuePointNamesFor(song: BlueprintSong): Set<string> {
+  return new Set(song.sections.map((section) => section.name));
+}

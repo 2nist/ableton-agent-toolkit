@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planCuePoints, type BlueprintSong } from "../src/blueprint.js";
+import { cuePointNamesFor, planCuePoints, type BlueprintSong } from "../src/blueprint.js";
 
 const twinFish: BlueprintSong = {
   id: "lalo-chezia-03_twin_fish",
@@ -47,5 +47,26 @@ describe("planCuePoints", () => {
 
   it("returns an empty plan for a song with no sections", () => {
     expect(planCuePoints({ id: "x", title: "x", bpm: 120, sections: [] })).toEqual([]);
+  });
+});
+
+describe("cuePointNamesFor", () => {
+  it("returns the set of a blueprint's section names", () => {
+    expect(cuePointNamesFor(twinFish)).toEqual(
+      new Set(["Intro", "Verse 1", "Chorus", "Verse 2", "Bridge", "Chorus 2", "Outro"]),
+    );
+  });
+
+  it("collapses duplicate section names (e.g. two sections both named 'Chorus')", () => {
+    const song: BlueprintSong = {
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        { id: "1", name: "Chorus", bars: 8, timeSignatureNumerator: 4 },
+        { id: "2", name: "Chorus", bars: 8, timeSignatureNumerator: 4 },
+      ],
+    };
+    expect(cuePointNamesFor(song)).toEqual(new Set(["Chorus"]));
   });
 });
