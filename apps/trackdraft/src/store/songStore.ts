@@ -15,6 +15,7 @@ interface SongStoreState {
   currentSong: () => BlueprintSong | null;
 
   createNewSong: (title: string) => BlueprintSong;
+  importSong: (song: BlueprintSong) => void;
   openSong: (id: string) => void;
   deleteSong: (id: string) => void;
   updateCurrentSong: (updater: (song: BlueprintSong) => BlueprintSong) => void;
@@ -64,6 +65,16 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
     }));
     get().autoSave();
     return song;
+  },
+
+  importSong: (song: BlueprintSong) => {
+    set((state) => ({
+      songs: [...state.songs.filter((s) => s.id !== song.id), song],
+      currentSongId: song.id,
+      history: [song],
+      historyIndex: 0,
+    }));
+    get().autoSave();
   },
 
   openSong: (id: string) => {

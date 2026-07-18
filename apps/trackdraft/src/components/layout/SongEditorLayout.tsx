@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useSongStore } from "../../store/songStore";
 
 const TABS = [
+  { to: "details", label: "Details" },
   { to: "structure", label: "Structure" },
   { to: "harmony", label: "Harmony" },
   { to: "lyrics", label: "Lyrics" },
