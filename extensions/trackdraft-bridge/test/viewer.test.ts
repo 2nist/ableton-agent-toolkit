@@ -22,7 +22,10 @@ const twinFish: BlueprintSong = {
       bars: 8,
       timeSignatureNumerator: 4,
       role: "intro",
-      chords: [{ romanNumeral: "I" }, { romanNumeral: "vi" }],
+      chords: [
+        { romanNumeral: "I", root: "E", quality: "maj", beats: 4 },
+        { romanNumeral: "vi", root: "C#", quality: "min", beats: 4 },
+      ],
       transitionNote: "Fades in from silence",
     },
   ],

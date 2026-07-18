@@ -1,5 +1,8 @@
 export interface BlueprintChord {
   romanNumeral: string;
+  root: string;
+  quality: string;
+  beats: number;
 }
 
 export interface BlueprintSection {
