@@ -1,8 +1,22 @@
+export interface BlueprintChord {
+  romanNumeral: string;
+}
+
 export interface BlueprintSection {
   id: string;
   name: string;
   bars: number;
   timeSignatureNumerator: number;
+  role?: string;
+  chords?: BlueprintChord[];
+  transitionNote?: string;
+}
+
+export interface BlueprintSongNotes {
+  vocalDelivery?: string;
+  dynamics?: string;
+  instrumentation?: string[];
+  lyricalContent?: string;
 }
 
 export interface BlueprintSong {
@@ -10,6 +24,10 @@ export interface BlueprintSong {
   title: string;
   bpm: number;
   sections: BlueprintSection[];
+  key?: string;
+  scale?: string;
+  concept?: string;
+  notes?: BlueprintSongNotes;
 }
 
 export interface CuePointPlan {
