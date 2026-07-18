@@ -4,6 +4,7 @@ import { updateSection } from "../../lib/sections";
 import LyricsEditor from "./LyricsEditor";
 import MetricalTable from "./MetricalTable";
 import RhymeSuggestions from "./RhymeSuggestions";
+import WritingContext from "./WritingContext";
 
 export default function LyricsView() {
   const currentSong = useSongStore((s) => s.currentSong());
@@ -33,7 +34,7 @@ export default function LyricsView() {
   }
 
   return (
-    <div className="p-6 max-w-4xl space-y-4">
+    <div className="p-6 max-w-5xl space-y-4">
       <div className="flex gap-2 flex-wrap">
         {song.sections.map((section) => (
           <button
@@ -51,7 +52,7 @@ export default function LyricsView() {
       </div>
 
       {activeSection && (
-        <div className="grid grid-cols-[1fr_260px] gap-4">
+        <div className="grid grid-cols-[1fr_280px] gap-4">
           <div className="space-y-4">
             <LyricsEditor
               value={activeSection.lyrics ?? ""}
@@ -66,7 +67,10 @@ export default function LyricsView() {
               }
             />
           </div>
-          <RhymeSuggestions vocabulary={vocabulary} />
+          <div className="space-y-4">
+            <WritingContext song={song} />
+            <RhymeSuggestions vocabulary={vocabulary} />
+          </div>
         </div>
       )}
     </div>
