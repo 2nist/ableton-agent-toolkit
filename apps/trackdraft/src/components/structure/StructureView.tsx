@@ -1,0 +1,70 @@
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { useSongStore } from "../../store/songStore";
+import { addSection, removeSection, updateSection, applySongMap } from "../../lib/sections";
+import { getSongMap } from "../../data/songMaps";
+import SectionCard from "./SectionCard";
+import MapPicker from "./MapPicker";
+
+export default function StructureView() {
+  const currentSong = useSongStore((s) => s.currentSong());
+  const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  if (!currentSong) return null;
+  const song = currentSong;
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const fromIndex = song.sections.findIndex((s) => s.id === active.id);
+    const toIndex = song.sections.findIndex((s) => s.id === over.id);
+    if (fromIndex === -1 || toIndex === -1) return;
+    updateCurrentSong((s) => ({ ...s, sections: arrayMove(s.sections, fromIndex, toIndex) }));
+  }
+
+  return (
+    <div className="p-6 max-w-3xl space-y-4">
+      <MapPicker
+        hasSections={song.sections.length > 0}
+        onApply={(mapId) => {
+          const map = getSongMap(mapId);
+          if (map) updateCurrentSong((s) => applySongMap(s, map));
+        }}
+      />
+
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={song.sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-2">
+            {song.sections.map((section) => (
+              <SectionCard
+                key={section.id}
+                section={section}
+                onChange={(updater) => updateCurrentSong((s) => updateSection(s, section.id, updater))}
+                onDelete={() => updateCurrentSong((s) => removeSection(s, section.id))}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+
+      {song.sections.length === 0 && (
+        <p className="text-inkMuted text-sm">No sections yet — apply a template above or add one.</p>
+      )}
+
+      <button
+        className="border border-edge rounded px-3 py-2 text-sm text-inkMuted hover:text-ink hover:bg-panelAlt"
+        onClick={() => updateCurrentSong((s) => addSection(s))}
+      >
+        + Add section
+      </button>
+    </div>
+  );
+}

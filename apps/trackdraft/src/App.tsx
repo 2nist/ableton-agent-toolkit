@@ -2,9 +2,11 @@ import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useSongStore } from "./store/songStore";
 import Dashboard from "./components/dashboard/Dashboard";
+import SongEditorLayout from "./components/layout/SongEditorLayout";
+import StructureView from "./components/structure/StructureView";
+import HarmonyView from "./components/harmony/HarmonyView";
+import LyricsView from "./components/lyrics/LyricsView";
 
-// Structure/Harmony/Lyrics views land here in later phases as additional
-// <Route> entries, matching this same shell.
 function App() {
   const loadFromStorage = useSongStore((s) => s.loadFromStorage);
 
@@ -17,6 +19,12 @@ function App() {
       <div className="min-h-screen bg-canvas text-ink">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/song/:songId" element={<SongEditorLayout />}>
+            <Route index element={<Navigate to="structure" replace />} />
+            <Route path="structure" element={<StructureView />} />
+            <Route path="harmony" element={<HarmonyView />} />
+            <Route path="lyrics" element={<LyricsView />} />
+          </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

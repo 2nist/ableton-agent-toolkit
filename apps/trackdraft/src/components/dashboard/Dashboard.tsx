@@ -1,12 +1,13 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useSongStore } from "../../store/songStore";
 
 export default function Dashboard() {
   const songs = useSongStore((s) => s.songs);
   const createNewSong = useSongStore((s) => s.createNewSong);
-  const openSong = useSongStore((s) => s.openSong);
   const deleteSong = useSongStore((s) => s.deleteSong);
   const currentSongId = useSongStore((s) => s.currentSongId);
+  const navigate = useNavigate();
 
   const [newTitle, setNewTitle] = useState("");
 
@@ -20,8 +21,9 @@ export default function Dashboard() {
           e.preventDefault();
           const title = newTitle.trim();
           if (!title) return;
-          createNewSong(title);
+          const song = createNewSong(title);
           setNewTitle("");
+          navigate(`/song/${song.id}`);
         }}
       >
         <input
@@ -51,7 +53,7 @@ export default function Dashboard() {
           >
             <button
               className="text-left flex-1"
-              onClick={() => openSong(song.id)}
+              onClick={() => navigate(`/song/${song.id}`)}
             >
               <div className="font-medium">{song.title}</div>
               <div className="text-xs text-inkMuted">
