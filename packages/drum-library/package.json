@@ -1,0 +1,31 @@
+{
+  "name": "@drum/library",
+  "version": "0.1.0",
+  "description": "Groove library built from E-GMD (Magenta Expanded Groove MIDI Dataset) — limb-decomposed segments indexed by measured feel, not genre. Notes live once per take; segments are views.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "extract": "tsx scripts/build-library.ts"
+  },
+  "dependencies": {
+    "midi-file": "^1.2.4"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.0.0"
+  }
+}

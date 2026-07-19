@@ -1,37 +1,11 @@
-export interface BlueprintChord {
-  romanNumeral: string;
-  root: string;
-  quality: string;
-  beats: number;
-}
+export type {
+  BlueprintSong,
+  BlueprintSection,
+  Chord as BlueprintChord,
+  SongNotes as BlueprintSongNotes,
+} from "@music-theory/song-blueprint";
 
-export interface BlueprintSection {
-  id: string;
-  name: string;
-  bars: number;
-  timeSignatureNumerator: number;
-  role?: string;
-  chords?: BlueprintChord[];
-  transitionNote?: string;
-}
-
-export interface BlueprintSongNotes {
-  vocalDelivery?: string;
-  dynamics?: string;
-  instrumentation?: string[];
-  lyricalContent?: string;
-}
-
-export interface BlueprintSong {
-  id: string;
-  title: string;
-  bpm: number;
-  sections: BlueprintSection[];
-  key?: string;
-  scale?: string;
-  concept?: string;
-  notes?: BlueprintSongNotes;
-}
+import type { BlueprintSong, BlueprintSection } from "@music-theory/song-blueprint";
 
 export interface SectionSpan {
   section: BlueprintSection;

@@ -1,5 +1,30 @@
 import { useSongStore } from "../../store/songStore";
-import type { AlternateDraft, ProductionStatus } from "../../types/blueprint";
+import type { AlternateDraft, ProductionStatus, Provenance } from "../../types/blueprint";
+
+const SOURCE_LABEL: Record<Provenance["source"], string> = {
+  manual: "Manual entry",
+  "docx-ingest": "Ingested from docx/xlsx source material",
+  "audio-extract": "Extracted from audio",
+  "midi-import": "Imported from MIDI",
+};
+
+function ProvenanceBanner({ provenance }: { provenance: Provenance }) {
+  if (provenance.source === "manual") return null;
+  return (
+    <div className="border border-amber-700/40 bg-amber-950/20 rounded p-3 space-y-1.5">
+      <p className="text-xs font-medium text-amber-400">
+        {SOURCE_LABEL[provenance.source]} — draft, review before finalizing
+      </p>
+      {provenance.warnings && provenance.warnings.length > 0 && (
+        <ul className="text-[11px] text-amber-200/80 list-disc list-inside space-y-0.5">
+          {provenance.warnings.map((w, i) => (
+            <li key={i}>{w}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function TextField({
   label,
@@ -86,6 +111,8 @@ export default function DetailsView() {
 
   return (
     <div className="p-6 max-w-2xl space-y-6">
+      {song.provenance && <ProvenanceBanner provenance={song.provenance} />}
+
       <TextField
         label="Concept"
         value={song.concept ?? ""}

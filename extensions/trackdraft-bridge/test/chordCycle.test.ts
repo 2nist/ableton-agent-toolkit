@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { loopChordsToFill } from "../src/chordCycle.js";
-import type { BlueprintChord } from "../src/blueprint.js";
+import { makeChord } from "./helpers.js";
 
-const twoChordCycle: BlueprintChord[] = [
-  { romanNumeral: "I", root: "C", quality: "maj", beats: 4 },
-  { romanNumeral: "V", root: "G", quality: "maj", beats: 4 },
+const twoChordCycle = [
+  makeChord({ romanNumeral: "I", root: "C", quality: "maj", beats: 4 }),
+  makeChord({ romanNumeral: "V", root: "G", quality: "maj", beats: 4 }),
 ];
 
 describe("loopChordsToFill", () => {
@@ -23,6 +23,6 @@ describe("loopChordsToFill", () => {
 
   it("returns empty for no chords or a zero-length cycle", () => {
     expect(loopChordsToFill([], 16)).toEqual([]);
-    expect(loopChordsToFill([{ romanNumeral: "I", root: "C", quality: "maj", beats: 0 }], 16)).toEqual([]);
+    expect(loopChordsToFill([makeChord({ romanNumeral: "I", root: "C", quality: "maj", beats: 0 })], 16)).toEqual([]);
   });
 });

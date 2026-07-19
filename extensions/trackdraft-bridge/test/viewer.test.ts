@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { buildViewerHtml } from "../src/viewer.js";
-import type { BlueprintSong } from "../src/blueprint.js";
+import { makeChord, makeSection, makeSong } from "./helpers.js";
 
-const twinFish: BlueprintSong = {
+const twinFish = makeSong({
   id: "lalo-chezia-03_twin_fish",
   title: "Twin Fish",
   bpm: 60,
   key: "E",
-  scale: "major",
+  scale: "ionian",
   concept: "A song about a fish with a twin.",
   notes: {
     vocalDelivery: "Breathy, close-mic'd",
@@ -16,20 +16,20 @@ const twinFish: BlueprintSong = {
     lyricalContent: "Water imagery throughout",
   },
   sections: [
-    {
+    makeSection({
       id: "1",
       name: "Intro",
       bars: 8,
       timeSignatureNumerator: 4,
       role: "intro",
       chords: [
-        { romanNumeral: "I", root: "E", quality: "maj", beats: 4 },
-        { romanNumeral: "vi", root: "C#", quality: "min", beats: 4 },
+        makeChord({ romanNumeral: "I", root: "E", quality: "maj", beats: 4 }),
+        makeChord({ romanNumeral: "vi", root: "C#", quality: "min", beats: 4 }),
       ],
       transitionNote: "Fades in from silence",
-    },
+    }),
   ],
-};
+});
 
 describe("buildViewerHtml", () => {
   it("embeds the song's concept, notes, and section chord data", () => {
@@ -43,7 +43,7 @@ describe("buildViewerHtml", () => {
   });
 
   it("never contains a literal closing script tag, even if prose text tries to inject one", () => {
-    const malicious: BlueprintSong = {
+    const malicious = {
       ...twinFish,
       concept: "</script><script>alert(1)</script>",
     };
@@ -53,7 +53,7 @@ describe("buildViewerHtml", () => {
   });
 
   it("handles a song with no concept/notes/sections without emitting 'undefined'", () => {
-    const bare: BlueprintSong = { id: "x", title: "Bare Song", bpm: 100, sections: [] };
+    const bare = makeSong({ id: "x", title: "Bare Song", bpm: 100, sections: [] });
     const html = buildViewerHtml([bare]);
     expect(html).toContain("Bare Song");
     expect(html).not.toContain("undefined");

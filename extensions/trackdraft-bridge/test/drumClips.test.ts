@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { planDrumClips } from "../src/drumClips.js";
-import type { BlueprintSong } from "../src/blueprint.js";
+import { makeSection, makeSong } from "./helpers.js";
 
 function noteAt(notes: ReturnType<typeof planDrumClips>[number]["notes"], startTime: number) {
   return notes.filter((n) => n.startTime === startTime);
@@ -8,12 +8,12 @@ function noteAt(notes: ReturnType<typeof planDrumClips>[number]["notes"], startT
 
 describe("planDrumClips", () => {
   it("puts kick on beats 1&3 and snare on 2&4 for a plain verse", () => {
-    const song: BlueprintSong = {
+    const song = makeSong({
       id: "x",
       title: "x",
       bpm: 120,
-      sections: [{ id: "1", name: "Verse 1", bars: 2, timeSignatureNumerator: 4, role: "verse" }],
-    };
+      sections: [makeSection({ id: "1", name: "Verse 1", bars: 2, timeSignatureNumerator: 4, role: "verse" })],
+    });
     const [clip] = planDrumClips(song);
     expect(clip.durationBeats).toBe(8);
 
@@ -28,48 +28,48 @@ describe("planDrumClips", () => {
   });
 
   it("uses 16th-note hats (4 per beat) outside bridge/chorus", () => {
-    const song: BlueprintSong = {
+    const song = makeSong({
       id: "x",
       title: "x",
       bpm: 120,
-      sections: [{ id: "1", name: "Verse 1", bars: 1, timeSignatureNumerator: 4, role: "verse" }],
-    };
+      sections: [makeSection({ id: "1", name: "Verse 1", bars: 1, timeSignatureNumerator: 4, role: "verse" })],
+    });
     const [clip] = planDrumClips(song);
     const hats = clip.notes.filter((n) => n.pitch === 42);
     expect(hats).toHaveLength(16); // 4 beats * 4 hats/beat
   });
 
   it("thins hats to 8th notes on a bridge", () => {
-    const song: BlueprintSong = {
+    const song = makeSong({
       id: "x",
       title: "x",
       bpm: 120,
-      sections: [{ id: "1", name: "Bridge", bars: 1, timeSignatureNumerator: 4, role: "bridge" }],
-    };
+      sections: [makeSection({ id: "1", name: "Bridge", bars: 1, timeSignatureNumerator: 4, role: "bridge" })],
+    });
     const [clip] = planDrumClips(song);
     const hats = clip.notes.filter((n) => n.pitch === 42);
     expect(hats).toHaveLength(8); // 4 beats * 2 hats/beat
   });
 
   it("doubles hats to 32nd notes on a chorus", () => {
-    const song: BlueprintSong = {
+    const song = makeSong({
       id: "x",
       title: "x",
       bpm: 120,
-      sections: [{ id: "1", name: "Chorus", bars: 1, timeSignatureNumerator: 4, role: "chorus" }],
-    };
+      sections: [makeSection({ id: "1", name: "Chorus", bars: 1, timeSignatureNumerator: 4, role: "chorus" })],
+    });
     const [clip] = planDrumClips(song);
     const hats = clip.notes.filter((n) => n.pitch === 42);
     expect(hats).toHaveLength(32); // 4 beats * 8 hats/beat
   });
 
   it("still produces a clip for a section with no chord data (drums don't need chords)", () => {
-    const song: BlueprintSong = {
+    const song = makeSong({
       id: "x",
       title: "x",
       bpm: 120,
-      sections: [{ id: "1", name: "Intro", bars: 1, timeSignatureNumerator: 4 }],
-    };
+      sections: [makeSection({ id: "1", name: "Intro", bars: 1, timeSignatureNumerator: 4 })],
+    });
     const [clip] = planDrumClips(song);
     expect(clip.notes.length).toBeGreaterThan(0);
   });

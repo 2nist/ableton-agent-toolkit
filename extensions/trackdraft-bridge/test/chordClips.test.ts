@@ -1,26 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { planChordClips } from "../src/chordClips.js";
-import type { BlueprintSong } from "../src/blueprint.js";
+import { makeChord, makeSection, makeSong } from "./helpers.js";
 
-const twinFishVerse1: BlueprintSong = {
+const twinFishVerse1 = makeSong({
   id: "lalo-chezia-03_twin_fish",
   title: "Twin Fish",
   bpm: 60,
   sections: [
-    {
+    makeSection({
       id: "1",
       name: "Verse 1",
       bars: 16,
       timeSignatureNumerator: 4,
       chords: [
-        { romanNumeral: "i", root: "E", quality: "min", beats: 4 },
-        { romanNumeral: "VII", root: "D", quality: "maj", beats: 4 },
-        { romanNumeral: "VI", root: "C", quality: "maj", beats: 4 },
-        { romanNumeral: "V", root: "B", quality: "maj", beats: 4 },
+        makeChord({ romanNumeral: "i", root: "E", quality: "min", beats: 4 }),
+        makeChord({ romanNumeral: "VII", root: "D", quality: "maj", beats: 4 }),
+        makeChord({ romanNumeral: "VI", root: "C", quality: "maj", beats: 4 }),
+        makeChord({ romanNumeral: "V", root: "B", quality: "maj", beats: 4 }),
       ],
-    },
+    }),
   ],
-};
+});
 
 describe("planChordClips", () => {
   it("builds a sustained block-chord voicing for each chord in a section", () => {
@@ -59,23 +59,23 @@ describe("planChordClips", () => {
   });
 
   it("truncates the final repeat instead of overshooting the section", () => {
-    const song: BlueprintSong = {
+    const song = makeSong({
       id: "x",
       title: "x",
       bpm: 120,
       sections: [
-        {
+        makeSection({
           id: "1",
           name: "Odd Verse",
           bars: 3, // 12 beats — not a clean multiple of the 8-beat cycle below
           timeSignatureNumerator: 4,
           chords: [
-            { romanNumeral: "I", root: "C", quality: "maj", beats: 4 },
-            { romanNumeral: "V", root: "G", quality: "maj", beats: 4 },
+            makeChord({ romanNumeral: "I", root: "C", quality: "maj", beats: 4 }),
+            makeChord({ romanNumeral: "V", root: "G", quality: "maj", beats: 4 }),
           ],
-        },
+        }),
       ],
-    };
+    });
     const [clip] = planChordClips(song);
     expect(clip.durationBeats).toBe(12);
 
@@ -87,15 +87,15 @@ describe("planChordClips", () => {
   });
 
   it("chains clips at cumulative bar offsets, same math as planCuePoints", () => {
-    const song: BlueprintSong = {
+    const song = makeSong({
       id: "x",
       title: "x",
       bpm: 120,
       sections: [
-        { id: "1", name: "Intro", bars: 8, timeSignatureNumerator: 4, chords: [] },
-        { id: "2", name: "Verse 1", bars: 16, timeSignatureNumerator: 4, chords: [] },
+        makeSection({ id: "1", name: "Intro", bars: 8, timeSignatureNumerator: 4, chords: [] }),
+        makeSection({ id: "2", name: "Verse 1", bars: 16, timeSignatureNumerator: 4, chords: [] }),
       ],
-    };
+    });
     const plan = planChordClips(song);
     expect(plan[0].startBeat).toBe(0);
     expect(plan[0].durationBeats).toBe(32);
@@ -104,12 +104,12 @@ describe("planChordClips", () => {
   });
 
   it("produces an empty-notes clip for a section with no chord data, not skipping it", () => {
-    const song: BlueprintSong = {
+    const song = makeSong({
       id: "x",
       title: "x",
       bpm: 120,
-      sections: [{ id: "1", name: "Instrumental", bars: 4, timeSignatureNumerator: 4 }],
-    };
+      sections: [makeSection({ id: "1", name: "Instrumental", bars: 4, timeSignatureNumerator: 4 })],
+    });
     const plan = planChordClips(song);
     expect(plan).toHaveLength(1);
     expect(plan[0].notes).toEqual([]);
@@ -117,20 +117,20 @@ describe("planChordClips", () => {
   });
 
   it("respects an explicit octave override", () => {
-    const song: BlueprintSong = {
+    const song = makeSong({
       id: "x",
       title: "x",
       bpm: 120,
       sections: [
-        {
+        makeSection({
           id: "1",
           name: "A",
           bars: 1,
           timeSignatureNumerator: 4,
-          chords: [{ romanNumeral: "I", root: "C", quality: "maj", beats: 4 }],
-        },
+          chords: [makeChord({ romanNumeral: "I", root: "C", quality: "maj", beats: 4 })],
+        }),
       ],
-    };
+    });
     const octave4 = planChordClips(song, 4);
     const octave5 = planChordClips(song, 5);
     expect(Math.min(...octave5[0].notes.map((n) => n.pitch))).toBe(

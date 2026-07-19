@@ -1,0 +1,4 @@
+# Extraction output — regenerate with `npm run extract`. Kept out of git
+# because a full pass over E-GMD produces a large artifact, and it is derived
+# data: the source of truth is the E-GMD corpus plus this package's code.
+data/

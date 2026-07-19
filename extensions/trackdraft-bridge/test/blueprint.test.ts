@@ -1,20 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { cuePointNamesFor, planCuePoints, sectionSpans, type BlueprintSong } from "../src/blueprint.js";
+import { cuePointNamesFor, planCuePoints, sectionSpans } from "../src/blueprint.js";
+import { makeSection, makeSong } from "./helpers.js";
 
-const twinFish: BlueprintSong = {
+const twinFish = makeSong({
   id: "lalo-chezia-03_twin_fish",
   title: "Twin Fish",
   bpm: 60,
   sections: [
-    { id: "1", name: "Intro", bars: 8, timeSignatureNumerator: 4 },
-    { id: "2", name: "Verse 1", bars: 16, timeSignatureNumerator: 4 },
-    { id: "3", name: "Chorus", bars: 16, timeSignatureNumerator: 4 },
-    { id: "4", name: "Verse 2", bars: 16, timeSignatureNumerator: 4 },
-    { id: "5", name: "Bridge", bars: 8, timeSignatureNumerator: 4 },
-    { id: "6", name: "Chorus 2", bars: 16, timeSignatureNumerator: 4 },
-    { id: "7", name: "Outro", bars: 8, timeSignatureNumerator: 4 },
+    makeSection({ id: "1", name: "Intro", bars: 8, timeSignatureNumerator: 4 }),
+    makeSection({ id: "2", name: "Verse 1", bars: 16, timeSignatureNumerator: 4 }),
+    makeSection({ id: "3", name: "Chorus", bars: 16, timeSignatureNumerator: 4 }),
+    makeSection({ id: "4", name: "Verse 2", bars: 16, timeSignatureNumerator: 4 }),
+    makeSection({ id: "5", name: "Bridge", bars: 8, timeSignatureNumerator: 4 }),
+    makeSection({ id: "6", name: "Chorus 2", bars: 16, timeSignatureNumerator: 4 }),
+    makeSection({ id: "7", name: "Outro", bars: 8, timeSignatureNumerator: 4 }),
   ],
-};
+});
 
 describe("planCuePoints", () => {
   it("places Twin Fish's sections at the correct cumulative beat offsets", () => {
@@ -30,15 +31,15 @@ describe("planCuePoints", () => {
   });
 
   it("accounts for a mid-song time signature change", () => {
-    const song: BlueprintSong = {
+    const song = makeSong({
       id: "x",
       title: "x",
       bpm: 120,
       sections: [
-        { id: "1", name: "Intro", bars: 4, timeSignatureNumerator: 4 },
-        { id: "2", name: "Waltz Verse", bars: 4, timeSignatureNumerator: 3 },
+        makeSection({ id: "1", name: "Intro", bars: 4, timeSignatureNumerator: 4 }),
+        makeSection({ id: "2", name: "Waltz Verse", bars: 4, timeSignatureNumerator: 3 }),
       ],
-    };
+    });
     expect(planCuePoints(song)).toEqual([
       { name: "Intro", beat: 0 },
       { name: "Waltz Verse", beat: 16 },
@@ -46,7 +47,7 @@ describe("planCuePoints", () => {
   });
 
   it("returns an empty plan for a song with no sections", () => {
-    expect(planCuePoints({ id: "x", title: "x", bpm: 120, sections: [] })).toEqual([]);
+    expect(planCuePoints(makeSong({ id: "x", title: "x", bpm: 120, sections: [] }))).toEqual([]);
   });
 });
 
@@ -67,15 +68,15 @@ describe("cuePointNamesFor", () => {
   });
 
   it("collapses duplicate section names (e.g. two sections both named 'Chorus')", () => {
-    const song: BlueprintSong = {
+    const song = makeSong({
       id: "x",
       title: "x",
       bpm: 120,
       sections: [
-        { id: "1", name: "Chorus", bars: 8, timeSignatureNumerator: 4 },
-        { id: "2", name: "Chorus", bars: 8, timeSignatureNumerator: 4 },
+        makeSection({ id: "1", name: "Chorus", bars: 8, timeSignatureNumerator: 4 }),
+        makeSection({ id: "2", name: "Chorus", bars: 8, timeSignatureNumerator: 4 }),
       ],
-    };
+    });
     expect(cuePointNamesFor(song)).toEqual(new Set(["Chorus"]));
   });
 });
