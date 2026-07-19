@@ -59,12 +59,24 @@ export default function StructureView() {
         <p className="text-inkMuted text-sm">No sections yet — apply a template above or add one.</p>
       )}
 
-      <button
-        className="border border-edge rounded px-3 py-2 text-sm text-inkMuted hover:text-ink hover:bg-panelAlt"
-        onClick={() => updateCurrentSong((s) => addSection(s))}
-      >
-        + Add section
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          className="border border-edge rounded px-3 py-2 text-sm text-inkMuted hover:text-ink hover:bg-panelAlt"
+          onClick={() => updateCurrentSong((s) => addSection(s))}
+        >
+          + Add section
+        </button>
+        {/* Agent-handoff affordance: the current song, as canonical
+            blueprint JSON, straight to the clipboard — the same shape the
+            *.trackdraft.json exports and the Ableton extension consume. */}
+        <button
+          className="border border-edge rounded px-3 py-2 text-sm text-inkMuted hover:text-ink hover:bg-panelAlt"
+          title="Copy this song as blueprint JSON (the schema the Ableton extension reads)"
+          onClick={() => void navigator.clipboard.writeText(JSON.stringify(song, null, 2))}
+        >
+          Copy song JSON
+        </button>
+      </div>
     </div>
   );
 }

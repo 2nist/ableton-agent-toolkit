@@ -24,7 +24,12 @@ export function sectionSpans(song: BlueprintSong): SectionSpan[] {
   const spans: SectionSpan[] = [];
   let startBeat = 0;
   for (const section of song.sections) {
-    const durationBeats = section.bars * section.timeSignatureNumerator;
+    // Beats here are quarter notes (Ableton's beat-time unit), so the
+    // denominator matters: a 7/8 bar is 3.5 beats, not 7. `bars *
+    // numerator` alone doubled every x/8 section's span — first caught
+    // when an 8-bar 7/8 template produced a 56-beat drum clip.
+    const denominator = 2 ** section.timeSignatureDenPower;
+    const durationBeats = section.bars * section.timeSignatureNumerator * (4 / denominator);
     spans.push({ section, startBeat, durationBeats });
     startBeat += durationBeats;
   }

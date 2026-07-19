@@ -45,11 +45,33 @@ export function reorderSections(song: BlueprintSong, fromIndex: number, toIndex:
 /** Replaces the song's sections wholesale with a MAP template's slots.
  *  Destructive by design (confirmed in the UI before calling this) —
  *  applying a template is meant to set the initial shape of a song, not
- *  merge with whatever's already there. */
+ *  merge with whatever's already there.
+ *
+ *  Slot musical fields (bars/velocity/meter/beatsPerChord) override the
+ *  blank-section defaults; ids are always minted fresh (they seed
+ *  deterministic generation in the Ableton extension, so a template must
+ *  never ship them). Song-level defaults apply only where the map sets
+ *  them — a map with no `concept` leaves the song's own concept alone. */
 export function applySongMap(song: BlueprintSong, map: SongMap): BlueprintSong {
-  const sections = map.slots.map((slot) => ({
-    ...newSection(slot.label, slot.role),
-    transitionNote: slot.purpose,
-  }));
-  return { ...song, sections };
+  const sections = map.slots.map((slot) => {
+    const section = newSection(slot.label, slot.role);
+    return {
+      ...section,
+      bars: slot.bars ?? section.bars,
+      velocity: slot.velocity ?? section.velocity,
+      beatsPerChord: slot.beatsPerChord ?? section.beatsPerChord,
+      timeSignatureNumerator: slot.timeSignatureNumerator ?? section.timeSignatureNumerator,
+      timeSignatureDenPower: slot.timeSignatureDenPower ?? section.timeSignatureDenPower,
+      transitionNote: slot.purpose,
+    };
+  });
+  const defaults = map.defaults ?? {};
+  return {
+    ...song,
+    bpm: defaults.bpm ?? song.bpm,
+    key: defaults.key ?? song.key,
+    scale: defaults.scale ?? song.scale,
+    concept: defaults.concept ?? song.concept,
+    sections,
+  };
 }
