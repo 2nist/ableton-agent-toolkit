@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { tritoneSubstitution, secondaryDominant, getBorrowedChordCandidates } from "./substitutions";
+import {
+  tritoneSubstitution,
+  secondaryDominant,
+  getBorrowedChordCandidates,
+  getModeAwareSubstitutions,
+  getSubstitutionMenu,
+} from "./substitutions";
 
 describe("tritoneSubstitution", () => {
   it("G7 (pc 7) subs to Db7 (pc 1)", () => {
@@ -49,5 +55,57 @@ describe("getBorrowedChordCandidates", () => {
   it("generalizes to non-Ionian modes (dorian gets real candidates too)", () => {
     const candidates = getBorrowedChordCandidates("dorian");
     expect(candidates.length).toBeGreaterThan(0);
+  });
+});
+
+describe("getModeAwareSubstitutions", () => {
+  it("ionian V resolves to 3 concrete chords: vii°, iii, vi", () => {
+    const subs = getModeAwareSubstitutions("ionian", "V");
+    expect(subs.map((s) => s.degreeLabel).sort()).toEqual(["iii", "vi", "vii°"].sort());
+
+    const viiDim = subs.find((s) => s.degreeLabel === "vii°")!;
+    expect(viiDim.root).toBe(11);
+    expect(viiDim.quality).toBe("dim");
+    expect(viiDim.explanation).toMatch(/leading tone/i);
+
+    const iii = subs.find((s) => s.degreeLabel === "iii")!;
+    expect(iii.root).toBe(4);
+    expect(iii.quality).toBe("min");
+
+    const vi = subs.find((s) => s.degreeLabel === "vi")!;
+    expect(vi.root).toBe(9);
+    expect(vi.quality).toBe("min");
+  });
+
+  it("returns [] for a numeral the scale doesn't recognize (borrowed/non-diatonic)", () => {
+    expect(getModeAwareSubstitutions("ionian", "♭VI")).toEqual([]);
+    expect(getModeAwareSubstitutions("ionian", "nonsense")).toEqual([]);
+  });
+
+  it("resolves in a non-Ionian mode too (dorian i)", () => {
+    const subs = getModeAwareSubstitutions("dorian", "i");
+    expect(subs.length).toBeGreaterThan(0);
+    for (const sub of subs) {
+      expect(sub.degreeLabel).toBeTruthy();
+      expect(sub.explanation).toBeTruthy();
+    }
+  });
+});
+
+describe("getSubstitutionMenu", () => {
+  it("groups mode-aware, chromatic and borrowed subs together", () => {
+    const menu = getSubstitutionMenu("ionian", "V", 7);
+    expect(menu.modeAware.length).toBe(3);
+    expect(menu.chromatic).toHaveLength(2);
+    expect(menu.chromatic[0].label).toBe("Tritone sub");
+    expect(menu.chromatic[1].label).toBe("Secondary dominant");
+    expect(menu.borrowed.length).toBeGreaterThan(0);
+  });
+
+  it("modeAware is empty for a non-diatonic numeral, other groups still populate", () => {
+    const menu = getSubstitutionMenu("ionian", "♭VI", 8);
+    expect(menu.modeAware).toEqual([]);
+    expect(menu.chromatic).toHaveLength(2);
+    expect(menu.borrowed.length).toBeGreaterThan(0);
   });
 });

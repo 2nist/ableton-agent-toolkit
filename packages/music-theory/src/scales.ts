@@ -219,6 +219,12 @@ export const MODE_DATA: Record<ScaleType, ModeData> = {
         seventh: "7",
         func: "D",
       },
+      // Harmonic-minor borrowed dominant: raises aeolian's minor v to a
+      // major/dominant-7 V, the raised-leading-tone chord that gives the
+      // Andalusian cadence (i-♭VII-♭VI-V) its pull. Without this entry,
+      // PRESET_PROGRESSIONS.andalusian's own "V" degree resolved to
+      // nothing and the preset silently dropped its final chord.
+      V: { pc: 7, triad: "maj", seventh: "7", func: "D", isBorrowed: true },
     },
   },
   locrian: {

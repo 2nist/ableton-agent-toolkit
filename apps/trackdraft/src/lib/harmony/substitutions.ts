@@ -1,4 +1,4 @@
-import { MODE_DATA, SCALE_ORDER } from "@music-theory/core";
+import { MODE_DATA, SCALE_ORDER, getSubstitutionOptions } from "@music-theory/core";
 import type { ScaleType, ChordQuality } from "@music-theory/core";
 
 /** Real chord-generation logic, filling the gap in
@@ -76,4 +76,59 @@ export function getBorrowedChordCandidates(currentMode: ScaleType): BorrowedChor
   }
 
   return candidates.sort((a, b) => a.root - b.root);
+}
+
+/** A mode-aware substitution resolved to a concrete chord: unlike
+ *  `CHORD_SUBSTITUTIONS`'s bare {degree, explanation} text pairs, this
+ *  carries the target's own root/quality (resolved via `MODE_DATA`,
+ *  key-relative like `getDiatonicOptions`) plus its roman numeral, so a UI
+ *  can apply it in one click instead of just displaying the suggestion. */
+export interface ModeAwareSubstitution extends GeneratedSubstitution {
+  degreeLabel: string;
+}
+
+/** Resolve `CHORD_SUBSTITUTIONS`' degree-based suggestions for one roman
+ *  numeral into applicable chords. Returns `[]` for a numeral the scale
+ *  doesn't recognize — a borrowed or already-substituted chord has no
+ *  scale degree to look suggestions up by, so it gets no mode-aware subs
+ *  (chromatic and borrowed subs still apply to it; see `getSubstitutionMenu`). */
+export function getModeAwareSubstitutions(scale: ScaleType, romanNumeral: string): ModeAwareSubstitution[] {
+  const degreeIndex = MODE_DATA[scale].degrees.indexOf(romanNumeral);
+  if (degreeIndex === -1) return [];
+
+  return getSubstitutionOptions(scale, degreeIndex + 1).flatMap((option) => {
+    const targetLabel = MODE_DATA[scale].degrees[option.degree - 1];
+    const entry = targetLabel ? MODE_DATA[scale].map[targetLabel] : undefined;
+    if (!entry) return [];
+    return [
+      {
+        label: targetLabel,
+        degreeLabel: targetLabel,
+        explanation: option.explanation,
+        root: entry.pc,
+        quality: entry.triad,
+      },
+    ];
+  });
+}
+
+export interface SubstitutionMenu {
+  modeAware: ModeAwareSubstitution[];
+  chromatic: GeneratedSubstitution[];
+  borrowed: BorrowedChordCandidate[];
+}
+
+/** The full substitution menu for one chord: mode-aware suggestions (only
+ *  for diatonic numerals), the two chromatic transforms (always available,
+ *  computed from the chord's absolute root), and every borrowed-chord
+ *  candidate for the scale. Callers apply mode-aware/borrowed roots as
+ *  key-relative and chromatic roots as absolute — the two families use
+ *  different pitch-class origins, matching how `getDiatonicOptions` and
+ *  `tritoneSubstitution`/`secondaryDominant` already work. */
+export function getSubstitutionMenu(scale: ScaleType, romanNumeral: string, absoluteRootPc: number): SubstitutionMenu {
+  return {
+    modeAware: getModeAwareSubstitutions(scale, romanNumeral),
+    chromatic: [tritoneSubstitution(absoluteRootPc), secondaryDominant(absoluteRootPc)],
+    borrowed: getBorrowedChordCandidates(scale),
+  };
 }

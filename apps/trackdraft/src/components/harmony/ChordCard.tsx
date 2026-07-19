@@ -1,84 +1,121 @@
-import { useState } from "react";
-import { pitchClass, noteName } from "@music-theory/core";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { pitchClass } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
-import { tritoneSubstitution, secondaryDominant } from "../../lib/harmony/substitutions";
-import { chordDisplayName } from "../../lib/harmony/chordBuilder";
-import type { NoteName } from "@music-theory/core";
+import { chordDisplayName, chordFunction, CHORD_QUALITIES, functionColorHex } from "../../lib/harmony/chordBuilder";
+import { getPreviewPlayer, chordToFreqs } from "../../lib/harmony/audioPreview";
+import type { NoteName, ScaleType } from "@music-theory/core";
 
 interface ChordCardProps {
   chord: Chord;
   keyName: NoteName;
+  scale: ScaleType;
+  isSounding: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
   onChange: (chord: Chord) => void;
   onRemove: () => void;
 }
 
-export default function ChordCard({ chord, keyName, onChange, onRemove }: ChordCardProps) {
-  const [showSubs, setShowSubs] = useState(false);
+/** One chord in the progression: draggable to reorder, editable in place
+ *  (beats, quality), color-coded by harmonic function, and clickable to
+ *  audition. Substitution is handled by ChordInspector now, not a popover
+ *  here — a chord this small has no room for a real substitution menu. */
+export default function ChordCard({
+  chord,
+  keyName,
+  scale,
+  isSounding,
+  isSelected,
+  onSelect,
+  onChange,
+  onRemove,
+}: ChordCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: chord.id });
   const rootPc = pitchClass(chord.root);
-
-  function applySub(_label: string, root: number, quality: Chord["quality"]) {
-    onChange({
-      ...chord,
-      root: noteName(root, keyName),
-      quality,
-      isSubstitution: true,
-      substitutedFrom: chord.romanNumeral,
-    });
-    setShowSubs(false);
-  }
-
   const displayName = chordDisplayName(rootPc, chord.quality, keyName);
 
-  return (
-    <div className="relative border border-edge rounded bg-panelAlt px-3 py-2 min-w-[84px] text-center">
-      <div className="text-xs text-inkMuted">{chord.romanNumeral}</div>
-      <div className="font-medium">{displayName}</div>
-      <div className="text-[10px] text-inkMuted">{chord.beats} beats</div>
-      {chord.isSubstitution && (
-        <div className="text-[10px] text-accent">sub of {chord.substitutedFrom}</div>
-      )}
+  // A substituted chord's roman numeral no longer necessarily matches its
+  // root/quality, so its computed function would be misleading — it keeps
+  // the accent "sub of X" treatment instead of a function tint.
+  const func = chord.isSubstitution ? null : chordFunction(chord, scale);
+  const hex = functionColorHex(func);
 
-      <div className="flex justify-center gap-1 mt-1">
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    ...(hex ? { borderColor: hex, backgroundColor: `${hex}1a` } : {}),
+  };
+
+  function audition() {
+    getPreviewPlayer().playChord(chordToFreqs(chord), 1);
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`relative border rounded px-2 py-2 min-w-[96px] text-center cursor-pointer ${
+        hex ? "" : "border-edge bg-panelAlt"
+      } ${isSelected ? "ring-2 ring-accent" : ""} ${isSounding ? "ring-2 ring-accent/70" : ""}`}
+      onClick={() => {
+        onSelect();
+        audition();
+      }}
+    >
+      <div className="flex items-center justify-center gap-1">
         <button
-          className="text-[10px] text-inkMuted hover:text-ink"
-          onClick={() => setShowSubs((v) => !v)}
+          {...attributes}
+          {...listeners}
+          className="text-inkMuted/60 hover:text-inkMuted cursor-grab select-none text-xs"
+          aria-label="Drag to reorder"
+          onClick={(e) => e.stopPropagation()}
         >
-          subs
+          ⠿
         </button>
-        <button
-          className="text-[10px] text-inkMuted hover:text-red-400"
-          onClick={onRemove}
-        >
-          ✕
-        </button>
+        <div className="text-xs" style={hex ? { color: hex } : undefined}>
+          {chord.romanNumeral}
+        </div>
+      </div>
+      <div className="font-medium">{displayName}</div>
+
+      <div className="flex items-center justify-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="number"
+          min={0.5}
+          step={0.5}
+          value={chord.beats}
+          className="w-10 bg-transparent border border-edge rounded text-[10px] text-center text-inkMuted"
+          onChange={(e) => onChange({ ...chord, beats: Math.max(0.5, Number(e.target.value) || chord.beats) })}
+        />
+        <span className="text-[10px] text-inkMuted">beats</span>
       </div>
 
-      {showSubs && (
-        <div className="absolute z-10 top-full left-0 mt-1 bg-panel border border-edge rounded shadow-lg p-2 text-xs text-left w-52 space-y-1">
-          {(() => {
-            const tritone = tritoneSubstitution(rootPc);
-            const secDom = secondaryDominant(rootPc);
-            return (
-              <>
-                <button
-                  className="block w-full text-left hover:bg-panelAlt px-1 py-1 rounded"
-                  onClick={() => applySub(tritone.label, tritone.root, tritone.quality)}
-                >
-                  <span className="font-medium">{tritone.label}</span>
-                  <span className="text-inkMuted"> — {chordDisplayName(tritone.root, tritone.quality, keyName)}</span>
-                </button>
-                <button
-                  className="block w-full text-left hover:bg-panelAlt px-1 py-1 rounded"
-                  onClick={() => applySub(secDom.label, secDom.root, secDom.quality)}
-                >
-                  <span className="font-medium">{secDom.label}</span>
-                  <span className="text-inkMuted"> — {chordDisplayName(secDom.root, secDom.quality, keyName)}</span>
-                </button>
-              </>
-            );
-          })()}
-        </div>
+      <select
+        className="mt-1 w-full bg-transparent border border-edge rounded text-[10px] text-inkMuted text-center"
+        value={chord.quality}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => onChange({ ...chord, quality: e.target.value as Chord["quality"] })}
+      >
+        {CHORD_QUALITIES.map((q) => (
+          <option key={q} value={q}>{q}</option>
+        ))}
+      </select>
+
+      {chord.isSubstitution && (
+        <div className="text-[10px] text-accent mt-1">sub of {chord.substitutedFrom}</div>
       )}
+
+      <button
+        className="absolute top-0.5 right-1 text-[10px] text-inkMuted hover:text-red-400"
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+      >
+        ✕
+      </button>
     </div>
   );
 }

@@ -1,18 +1,20 @@
 import { MODE_DATA, pitchClass } from "@music-theory/core";
 import type { ScaleType, NoteName } from "@music-theory/core";
 import { getDiatonicHexCells, hexToPixel, hexPoints } from "../../lib/harmony/hexGrid";
-import { chordDisplayName } from "../../lib/harmony/chordBuilder";
+import { chordDisplayName, functionColorHex } from "../../lib/harmony/chordBuilder";
 
 const HEX_SIZE = 34;
 const PADDING = 60;
+const ACCENT = "#ffa500";
 
 interface HexWheelProps {
   keyName: NoteName;
   scale: ScaleType;
+  usedDegrees: ReadonlySet<string>;
   onSelectDegree: (degree: string, root: number, quality: string) => void;
 }
 
-export default function HexWheel({ keyName, scale, onSelectDegree }: HexWheelProps) {
+export default function HexWheel({ keyName, scale, usedDegrees, onSelectDegree }: HexWheelProps) {
   const keyPc = pitchClass(keyName);
   const cells = getDiatonicHexCells();
   const degreeLabels = MODE_DATA[scale].degrees;
@@ -35,18 +37,20 @@ export default function HexWheel({ keyName, scale, onSelectDegree }: HexWheelPro
         if (!entry) return null;
         const absRoot = (keyPc + entry.pc) % 12;
         const name = chordDisplayName(absRoot, entry.triad, keyName);
+        const isUsed = usedDegrees.has(label);
+        const hex = functionColorHex(entry.func) ?? "#8a8a92";
+        const stroke = isUsed || entry.isBorrowed ? ACCENT : hex;
 
         return (
           <g
             key={`${pos.q},${pos.r}`}
             transform={`translate(${pos.x + offsetX}, ${pos.y + offsetY})`}
-            className="cursor-pointer"
+            className="cursor-pointer transition-opacity hover:opacity-80"
             onClick={() => onSelectDegree(label, entry.pc, entry.triad)}
           >
             <polygon
               points={hexPoints(HEX_SIZE)}
-              className="fill-panelAlt stroke-edge hover:fill-accent/20 transition-colors"
-              strokeWidth={1.5}
+              style={{ fill: hex, fillOpacity: isUsed ? 0.35 : 0.12, stroke, strokeWidth: isUsed ? 2.5 : 1.5 }}
             />
             <text
               y={-6}
