@@ -54,11 +54,36 @@ to an unrelated groove.
 are windowed. Bar length always comes from the take's time signature — ~1.1% of the corpus is 6/8,
 3/4, 5/4 or 5/8, and assuming 4 would misalign every bar in them.
 
+**Corpus and synthesis are complementary, not rivals.** The corpus supplies what only humans can:
+pocket, ghost notes, real microtiming. `synthesize.ts` supplies what humans *don't* play: house
+four-on-the-floor, trap hat grids, dnb two-step, breakbeat chops — genres that were born programmed
+and should be grid-tight — plus 7/8 (zero corpus takes) and extra 5/4 / 6/8 variants (corpus is
+thin there). The merge policy lives in `presetData.ts`: machine idioms are synth-only, odd meters
+mix both, acoustic staples stay corpus-only.
+
+**Selection is heuristic, on purpose.** TrackDraft's per-section drum dropdown is gone. `infer.ts`
+maps section role + dynamics + meter + song tempo + the song's own self-description (concept /
+instrumentation text decides acoustic vs. electronic) to an engine pattern. Users who want
+different drums edit the generated clip in Live — the right tool for beat editing.
+
+**Provenance is part of the format.** Every baked variant records where it came from: per-limb
+`SegmentRef`s into specific corpus takes for `egmd` variants, a generator name for `synth` ones,
+plus corpus id and bake timestamp in `meta`. The predecessor library shipped corrupt data that
+reported itself clean; traceability is the antidote.
+
+**Runtime helpers.** `vary.ts` tiles a groove with seeded per-bar micro-variation (velocity breath,
+occasional dropped hat — never the first tile, never kick/snare). `groove.ts` extracts a variant's
+timing/velocity pocket as a `GrooveMap` and applies it to other parts (bass, comping) so the whole
+arrangement sits together. Fills come from E-GMD's own `beatType: "fill"` takes (acoustic family)
+and `synthesize.ts` (electronic family), keyed by bar length; `trackdraft-bridge` swaps the last
+bar of a section for one at every handoff and opens the next section on a crash.
+
 ## Usage
 
 ```bash
 npm run extract -- --limit 200      # subset, for review
 npm run extract -- --all            # full corpus
+npx tsx scripts/build-presets.ts    # bake presets-data.json (format 2, with provenance)
 npx tsx scripts/inspect.ts --style funk --bars 2
 ```
 

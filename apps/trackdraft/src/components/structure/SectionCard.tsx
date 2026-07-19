@@ -1,12 +1,9 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { BlueprintSection, SectionRole, DrumPattern, VelocityPreset } from "../../types/blueprint";
+import type { BlueprintSection, SectionRole, VelocityPreset } from "../../types/blueprint";
 
 const ROLES: SectionRole[] = [
   "intro", "verse", "pre_chorus", "chorus", "bridge", "solo", "breakdown", "outro", "custom",
-];
-const DRUM_PATTERNS: DrumPattern[] = [
-  "none", "kick_only", "standard", "half_time", "driving", "bridge_sparse", "intense", "dnb", "78", "68", "54",
 ];
 const VELOCITIES: VelocityPreset[] = ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"];
 // song-structure's SongSection stores the denominator as a power of two
@@ -115,19 +112,10 @@ export default function SectionCard({ section, onChange, onDelete }: SectionCard
             onChange={(e) => onChange((s) => ({ ...s, beatsPerChord: Number(e.target.value) || 1 }))}
           />
         </label>
-        <label className="flex items-center gap-1">
-          Drums
-          <select
-            className="bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink"
-            value={section.drumPattern}
-            onChange={(e) => onChange((s) => ({ ...s, drumPattern: e.target.value as DrumPattern }))}
-          >
-            {DRUM_PATTERNS.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-1">
+        {/* No drum control on purpose: drums are generated heuristically in
+            the Ableton extension from role, velocity, meter and tempo, and
+            edited in Live after export — the right place for beat editing. */}
+        <label className="flex items-center gap-1" title="Also drives the generated drums: quiet sections get sparse patterns, loud ones get intense patterns.">
           Velocity
           <select
             className="bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink"

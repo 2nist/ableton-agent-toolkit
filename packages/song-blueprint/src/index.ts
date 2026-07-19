@@ -60,7 +60,11 @@ export interface BlueprintSection {
   bars: number;
   chords: Chord[];
   beatsPerChord: number;
-  drumPattern: DrumPattern;
+  /** @deprecated Legacy field from the removed per-section drum dropdown.
+   *  Drums are now inferred heuristically by the Ableton extension (role +
+   *  velocity + meter + tempo); this is kept only so old blueprints and the
+   *  lalo-chezia S() format still parse, and nothing reads it anymore. */
+  drumPattern?: DrumPattern;
   velocity: VelocityPreset;
   timeSignatureNumerator: number;
   timeSignatureDenPower: number;

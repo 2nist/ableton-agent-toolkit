@@ -1,5 +1,15 @@
 import type { NoteDescription } from "@ableton-extensions/sdk";
-import { PRESET_DATA, tileGroove, type DrumPattern, type PackedNote, type PackedPreset } from "@drum/library";
+import {
+  PRESET_DATA,
+  FILL_DATA,
+  CRASH_PITCH,
+  inferDrumPattern,
+  tileGrooveVaried,
+  type DrumPattern,
+  type PackedNote,
+  type PackedPreset,
+  type PackedVariant,
+} from "@drum/library";
 import { getVelocity } from "@music-theory/song-structure";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
 
@@ -38,53 +48,133 @@ function scaleToVelocityPreset(notes: PackedNote[], targetPeak: number): PackedN
   return notes.map(([beat, pitch, velocity]) => [beat, pitch, Math.max(1, Math.min(127, Math.round(velocity * scale)))]);
 }
 
+export interface FillLibrary {
+  acoustic: Record<string, PackedVariant[]>;
+  synth: Record<string, PackedVariant[]>;
+}
+
 /**
- * One clip per section, built from real E-GMD grooves rather than a fixed
- * kick-on-1&3 pattern. `section.drumPattern` and `section.velocity` were
- * already part of the blueprint schema and TrackDraft's own UI — this is
- * what makes them do something: `PRESET_DATA` (curated offline by
- * `@drum/library`'s build-presets script from the full corpus) supplies a
- * handful of real, Ableton-safe groove variants per pattern, one is picked
- * deterministically per section so re-applying a blueprint reproduces the
- * same drums, and it's tiled to the section's length and scaled to its
- * velocity preset.
+ * The fill pool for a groove: matched to the groove's bar length, and to
+ * its family first — a trap section gets a programmed roll, an acoustic
+ * verse gets a played fill — falling back to the other family rather than
+ * to silence when only one has material for this meter.
+ */
+function fillPool(variant: PackedVariant, fills: FillLibrary): PackedVariant[] {
+  const key = String(variant.beatsPerBar);
+  const preferred = variant.source.origin === "synth" ? fills.synth : fills.acoustic;
+  const fallback = variant.source.origin === "synth" ? fills.acoustic : fills.synth;
+  const pool = preferred[key] ?? [];
+  return pool.length > 0 ? pool : (fallback[key] ?? []);
+}
+
+/**
+ * One clip per section. Everything about the drums is decided here, behind
+ * the scenes — there is no drum control anywhere in TrackDraft by design:
  *
- * `drumPattern: "none"` and `"78"` have no variants — `"78"` because the
- * source corpus (E-GMD) contains no 7/8 material at all, not because of a
- * gap in this generator — so those sections get an empty clip, same as any
- * preset that happens to have no surviving variants.
+ * - `inferDrumPattern` maps each section's role, dynamics, meter and the
+ *   song's tempo/self-description to an engine pattern (the old
+ *   `section.drumPattern` field is legacy and no longer consulted).
+ * - A variant is picked deterministically per section id, scaled so its
+ *   peak lands on the section's velocity preset, and tiled with seeded
+ *   per-bar micro-variation (`tileGrooveVaried`) so long sections don't
+ *   loop identically.
+ * - When a section leads into another, its last bar is replaced by a fill
+ *   from the matching family, scaled toward the *louder* of the two
+ *   sections when building up and pulled back when settling down — and the
+ *   following section opens with a crash.
  *
- * `presetData` defaults to the real, corpus-derived `PRESET_DATA` and only
- * needs overriding in tests, which use small fixture presets instead of
- * asserting against actual E-GMD content — real preset data can legitimately
- * change shape when the extraction pipeline is re-run with a different seed
- * or pool size, and tests shouldn't be coupled to that.
+ * Anyone who wants different drums edits the generated clip in Live, which
+ * is the right tool for that job anyway.
+ *
+ * `presetData`/`fillData` default to the real library and only need
+ * overriding in tests, which use small fixture presets instead of asserting
+ * against actual baked content — that content legitimately changes shape
+ * when the pipeline is re-run.
  */
 export function planDrumClips(
   song: BlueprintSong,
   presetData: Partial<Record<DrumPattern, PackedPreset>> = PRESET_DATA,
+  fillData: FillLibrary = FILL_DATA,
 ): DrumClipPlan[] {
-  return sectionSpans(song).map(({ section, startBeat, durationBeats }) => {
-    const preset = presetData[section.drumPattern as DrumPattern];
-    if (!preset || preset.variants.length === 0) {
+  const spans = sectionSpans(song);
+  const songSignals = { bpm: song.bpm, title: song.title, concept: song.concept, notes: song.notes };
+
+  // First pass: choose pattern + variant per section, so fill/crash
+  // decisions can look at the *next* section's resolved target too.
+  const resolved = spans.map(({ section }) => {
+    const pattern = inferDrumPattern(
+      {
+        role: section.role,
+        velocity: section.velocity,
+        name: section.name,
+        timeSignatureNumerator: section.timeSignatureNumerator,
+        timeSignatureDenominator: 2 ** section.timeSignatureDenPower,
+      },
+      songSignals,
+    );
+    const preset = presetData[pattern];
+    if (!preset || preset.variants.length === 0) return null;
+    return preset.variants[hashSeed(section.id) % preset.variants.length];
+  });
+
+  let previousEndedWithFill = false;
+
+  return spans.map(({ section, startBeat, durationBeats }, i) => {
+    const variant = resolved[i];
+    if (!variant) {
+      previousEndedWithFill = false;
       return { name: section.name, startBeat, durationBeats, notes: [] };
     }
 
-    const variantIndex = hashSeed(section.id) % preset.variants.length;
-    const variant = scaleToVelocityPreset(preset.variants[variantIndex], getVelocity(section.velocity));
+    const velocityTarget = getVelocity(section.velocity);
+    const scaled = scaleToVelocityPreset(variant.notes, velocityTarget);
 
-    const tiled = tileGroove(
-      variant.map(([beat, pitch, velocity]) => ({ beat, pitch, velocity })),
-      preset.lengthBeats,
+    let tiled = tileGrooveVaried(
+      scaled.map(([beat, pitch, velocity]) => ({ beat, pitch, velocity })),
+      variant.lengthBeats,
       durationBeats,
+      { seed: section.id },
     );
 
-    const notes: NoteDescription[] = tiled.map(({ beat, pitch, velocity }) => ({
-      pitch,
-      startTime: beat,
-      duration: HIT_DURATION,
-      velocity,
-    }));
+    // Section transition: swap the final bar for a fill when this section
+    // hands off to another one and is long enough that losing a groove bar
+    // reads as a fill rather than as the whole section.
+    const next = i + 1 < spans.length ? spans[i + 1] : null;
+    let endsWithFill = false;
+    if (next && resolved[i + 1] && durationBeats >= 2 * variant.beatsPerBar) {
+      const pool = fillPool(variant, fillData);
+      if (pool.length > 0) {
+        const fill = pool[hashSeed(`${section.id}:fill`) % pool.length];
+        const nextTarget = getVelocity(next.section.velocity);
+        // Build toward a louder section; ease into a quieter one.
+        const fillTarget = nextTarget >= velocityTarget ? Math.max(velocityTarget, nextTarget) : Math.round(velocityTarget * 0.85);
+        const fillNotes = scaleToVelocityPreset(fill.notes, fillTarget);
+        const fillStart = durationBeats - fill.lengthBeats;
+        tiled = tiled.filter((note) => note.beat < fillStart);
+        for (const [beat, pitch, velocity] of fillNotes) {
+          const at = fillStart + beat;
+          if (at < durationBeats) tiled.push({ beat: at, pitch, velocity });
+        }
+        endsWithFill = true;
+      }
+    }
+
+    // A fill resolves onto a crash — put it on this section's downbeat when
+    // the previous section built into it, unless the groove already opens
+    // with one.
+    if (previousEndedWithFill && !tiled.some((n) => n.pitch === CRASH_PITCH && n.beat < 0.25)) {
+      tiled.push({ beat: 0, pitch: CRASH_PITCH, velocity: Math.min(127, velocityTarget + 4) });
+    }
+    previousEndedWithFill = endsWithFill;
+
+    const notes: NoteDescription[] = tiled
+      .sort((a, b) => a.beat - b.beat || a.pitch - b.pitch)
+      .map(({ beat, pitch, velocity }) => ({
+        pitch,
+        startTime: beat,
+        duration: HIT_DURATION,
+        velocity,
+      }));
 
     return { name: section.name, startBeat, durationBeats, notes };
   });

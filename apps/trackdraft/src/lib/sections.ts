@@ -9,7 +9,6 @@ function newSection(name: string, role: BlueprintSection["role"]): BlueprintSect
     bars: 8,
     chords: [],
     beatsPerChord: 4,
-    drumPattern: "standard",
     velocity: "mf",
     timeSignatureNumerator: 4,
     timeSignatureDenPower: 2,

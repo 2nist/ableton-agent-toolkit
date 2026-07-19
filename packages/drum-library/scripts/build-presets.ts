@@ -22,10 +22,11 @@ import { grooveLengthBeats, resolveGrooveNotes } from "../src/resolve.js";
 import { foldForAbleton } from "../src/ableton.js";
 import { parseCatalog } from "../src/catalog.js";
 import { loadTake } from "../src/take.js";
-import type { PackedNote, PackedPreset } from "../src/presetData.js";
+import type { PackedNote, PackedPreset, PackedVariant, PresetLibraryFile } from "../src/presetData.js";
 import type { Segment, Take } from "../src/types.js";
 
 const DATA_DIR = path.join(import.meta.dirname, "..", "data");
+const EGMD_ROOT = process.env.EGMD_ROOT ?? "/Users/Matthew/Datasets/e-gmd-v1.0.0";
 // Under src/, not data/: data/ is gitignored (it's regenerable from E-GMD,
 // which isn't checked in either), but this curated output is small — tens
 // of KB — and needs to survive a fresh clone so trackdraft-bridge can import
@@ -70,15 +71,14 @@ async function main(): Promise<void> {
   console.log(`loaded ${takes.length} takes, selecting variants per preset...`);
 
   const index = buildIndex(takes, segments);
-  const output: Partial<Record<DrumPattern, PackedPreset>> = {};
+  const presets: Partial<Record<DrumPattern, PackedPreset>> = {};
 
   for (const pattern of Object.keys(PRESETS) as DrumPattern[]) {
-    if (!PRESETS[pattern]) continue; // 'none' and '78' — see presets.ts
+    if (!PRESETS[pattern]) continue; // no corpus target — 'none', '78' and the synth-only machine idioms
     const started = Date.now();
 
-    const variants: PackedNote[][] = [];
+    const variants: PackedVariant[] = [];
     const seen = new Set<string>();
-    let lengthBeats = 0;
 
     for (let i = 0; i < VARIANTS_PER_PRESET; i++) {
       const spec = selectGroove(index, pattern, { seed: `${pattern}:${i}`, poolSize: POOL_SIZE });
@@ -93,17 +93,117 @@ async function main(): Promise<void> {
       if (seen.has(key)) continue; // small pools can repeat; keep variants distinct
       seen.add(key);
 
-      lengthBeats = grooveLengthBeats(index, spec);
-      variants.push(packed);
+      const lengthBeats = grooveLengthBeats(index, spec);
+      // Any present limb's take is representative for meter — selectGroove
+      // pins every limb of one spec to a single time signature.
+      const anyRef = spec.feet ?? spec.snare ?? spec.cymbals ?? spec.toms;
+      const beatsPerBar = anyRef ? (index.takes.get(anyRef.takeId)?.beatsPerBar ?? 4) : 4;
+
+      variants.push({
+        lengthBeats,
+        beatsPerBar,
+        notes: packed,
+        // The whole point of format 2: every baked variant records exactly
+        // which corpus performances each limb came from.
+        source: {
+          origin: "egmd",
+          refs: {
+            ...(spec.feet && { feet: spec.feet }),
+            ...(spec.snare && { snare: spec.snare }),
+            ...(spec.cymbals && { cymbals: spec.cymbals }),
+            ...(spec.toms && { toms: spec.toms }),
+          },
+        },
+      });
     }
 
-    if (variants.length > 0) output[pattern] = { lengthBeats, variants };
+    if (variants.length > 0) presets[pattern] = { variants };
     console.log(`  ${pattern}: ${variants.length} variants (${Date.now() - started}ms)`);
   }
 
+  console.log("extracting corpus fills...");
+  const fills = extractFills();
+  for (const [bar, list] of Object.entries(fills)) {
+    console.log(`  fills[${bar} beats/bar]: ${list.length}`);
+  }
+
+  const output: PresetLibraryFile = {
+    format: 2,
+    meta: {
+      corpus: "e-gmd-v1.0.0",
+      generatedAt: new Date().toISOString(),
+      takesIndexed: takes.length,
+    },
+    presets,
+    fills,
+  };
+
   fs.writeFileSync(OUT_PATH, JSON.stringify(output));
-  report(output);
+  report(presets);
   console.log(`\nwrote ${OUT_PATH}`);
+}
+
+/** How many corpus fills to bake, per bar length. */
+const FILLS_PER_METER = 12;
+
+/**
+ * Bake one-bar fills from E-GMD's own `beatType: "fill"` takes — short
+ * one-shot transition figures recorded separately from the grooves. The
+ * last full bar of each take is the part that lands on the downbeat, so
+ * that's the bar that gets kept. Selection is deterministic (sorted ids,
+ * spread across drummers) and quality-gated the simple way: a usable fill
+ * bar has a sane number of hits.
+ */
+function extractFills(): Record<string, PackedVariant[]> {
+  const catalog = parseCatalog(fs.readFileSync(path.join(EGMD_ROOT, "e-gmd-v1.0.0.csv"), "utf8"));
+  const fillEntries = catalog
+    .filter((entry) => entry.beatType === "fill")
+    .sort((a, b) => a.midiFilename.localeCompare(b.midiFilename));
+
+  const byBar: Record<string, PackedVariant[]> = {};
+  const perDrummer = new Map<string, number>();
+
+  for (const entry of fillEntries) {
+    const midiPath = path.join(EGMD_ROOT, entry.midiFilename);
+    if (!fs.existsSync(midiPath)) continue;
+
+    let take: Take;
+    try {
+      take = loadTake(new Uint8Array(fs.readFileSync(midiPath)), entry);
+    } catch {
+      continue;
+    }
+
+    const barBeats = take.beatsPerBar;
+    const key = String(barBeats);
+    if ((byBar[key]?.length ?? 0) >= FILLS_PER_METER) continue;
+    // No single drummer's vocabulary should dominate the baked set.
+    if ((perDrummer.get(take.drummer) ?? 0) >= 3) continue;
+
+    const lastBeat = Math.max(...take.notes.map((n) => n.beat), 0);
+    const barStart = Math.floor(lastBeat / barBeats) * barBeats;
+    const barNotes = take.notes
+      .filter((n) => n.beat >= barStart && n.beat < barStart + barBeats)
+      .map((n) => ({ ...n, beat: n.beat - barStart }));
+
+    const folded = foldForAbleton(barNotes);
+    // A fill bar with almost nothing in it is a truncation artifact; one
+    // with dozens of hits per beat is a roll that folded badly.
+    if (folded.notes.length < 4 || folded.notes.length > barBeats * 8) continue;
+
+    (byBar[key] ??= []).push({
+      lengthBeats: barBeats,
+      beatsPerBar: barBeats,
+      notes: folded.notes.map((n) => [round4(n.beat), n.pitch, n.velocity]),
+      source: {
+        origin: "egmd",
+        refs: { snare: { takeId: take.id, startBar: barStart / barBeats, lengthBars: 1 } },
+      },
+    });
+    perDrummer.set(take.drummer, (perDrummer.get(take.drummer) ?? 0) + 1);
+  }
+
+  return byBar;
 }
 
 function round4(value: number): number {
@@ -131,10 +231,6 @@ function loadFullTakes(ids: Set<string>, _summaries: unknown): Take[] {
   // Re-parses just the takes that survived segmentation and are actually
   // referenced, rather than the full 45k — this script only needs to run
   // once per extraction, so simplicity wins over speed here.
-  const EGMD_ROOT =
-    process.env.EGMD_ROOT ??
-    "/Users/Matthew/Datasets/e-gmd-v1.0.0";
-
   const catalog = parseCatalog(fs.readFileSync(path.join(EGMD_ROOT, "e-gmd-v1.0.0.csv"), "utf8"));
   const byFilename = new Map(catalog.map((entry) => [entry.midiFilename, entry]));
 
@@ -153,9 +249,10 @@ function report(output: Partial<Record<DrumPattern, PackedPreset>>): void {
   console.log("preset            variants  notes/variant  beats");
   for (const [pattern, packed] of Object.entries(output)) {
     const avgNotes = Math.round(
-      packed.variants.reduce((sum, v) => sum + v.length, 0) / packed.variants.length,
+      packed.variants.reduce((sum, v) => sum + v.notes.length, 0) / packed.variants.length,
     );
-    console.log(`  ${pattern.padEnd(15)} ${String(packed.variants.length).padStart(3)}       ${String(avgNotes).padStart(6)}         ${packed.lengthBeats}`);
+    const beats = [...new Set(packed.variants.map((v) => v.lengthBeats))].join(",");
+    console.log(`  ${pattern.padEnd(15)} ${String(packed.variants.length).padStart(3)}       ${String(avgNotes).padStart(6)}         ${beats}`);
   }
   for (const pattern of Object.keys(PRESETS) as DrumPattern[]) {
     if (PRESETS[pattern] && !output[pattern]) {

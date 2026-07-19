@@ -10,3 +10,7 @@ export * from "./presets.js";
 export * from "./select.js";
 export * from "./resolve.js";
 export * from "./presetData.js";
+export * from "./synthesize.js";
+export * from "./infer.js";
+export * from "./vary.js";
+export * from "./groove.js";
