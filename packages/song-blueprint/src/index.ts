@@ -112,12 +112,16 @@ export interface ProductionStatus {
 
 /** Where a BlueprintSong's data actually came from, and how much of it to
  *  trust. Every non-manual adapter (docx ingestion, audio extraction,
- *  future MIDI import) produces a *draft* for review in TrackDraft's UI,
- *  not a silent import — `warnings` is where "I couldn't confidently
- *  extract X" surfaces to the user instead of only a console a user may
- *  never see again. */
+ *  future MIDI import, catalog lookup) produces a *draft* for review in
+ *  TrackDraft's UI, not a silent import — `warnings` is where "I
+ *  couldn't confidently extract X" surfaces to the user instead of only
+ *  a console a user may never see again. "catalog-lookup" (real
+ *  human-annotated chord/lyric data matched from a known-song corpus —
+ *  see apps/trackdraft/scripts/catalog) is deliberately distinct from
+ *  "audio-extract" (inferred from a raw waveform) — conflating the two
+ *  would misrepresent real ground-truth data as lower-confidence guesswork. */
 export interface Provenance {
-  source: "manual" | "docx-ingest" | "audio-extract" | "midi-import";
+  source: "manual" | "docx-ingest" | "audio-extract" | "midi-import" | "catalog-lookup";
   extractedAt: string;
   warnings?: string[];
 }

@@ -7,6 +7,7 @@ import { planDrumClips } from "./drumClips.js";
 import { planBassLine } from "./bassLine.js";
 import { buildPickerHtml } from "./picker.js";
 import { buildViewerHtml } from "./viewer.js";
+import { buildProbeHtml, CLOSE_SCRIPT, findDrumRack, probeDrumRack } from "./drumRackProbe.js";
 
 const APPLY_COMMAND_ID = "trackdraftBridge.applySongBlueprint";
 const VIEW_COMMAND_ID = "trackdraftBridge.viewSongBlueprint";
@@ -14,6 +15,7 @@ const GENERATE_CHORDS_COMMAND_ID = "trackdraftBridge.generateChordClips";
 const GENERATE_DRUMS_COMMAND_ID = "trackdraftBridge.generateDrumClips";
 const GENERATE_BASS_COMMAND_ID = "trackdraftBridge.generateBassLine";
 const GENERATE_BLANK_COMMAND_ID = "trackdraftBridge.generateBlankClips";
+const PROBE_DRUM_RACK_COMMAND_ID = "trackdraftBridge.probeDrumRack";
 
 interface ClipPlanEntry {
   name: string;
@@ -53,6 +55,7 @@ export function activate(activation: ActivationContext) {
   context.ui.registerContextMenuAction("MidiTrack", "Generate Drum Clips", GENERATE_DRUMS_COMMAND_ID);
   context.ui.registerContextMenuAction("MidiTrack", "Generate Bass Line", GENERATE_BASS_COMMAND_ID);
   context.ui.registerContextMenuAction("MidiTrack", "Generate Blank Section Clips", GENERATE_BLANK_COMMAND_ID);
+  context.ui.registerContextMenuAction("MidiTrack", "Probe Drum Rack", PROBE_DRUM_RACK_COMMAND_ID);
 
   // A thrown/rejected command handler kills the whole extension host
   // process (observed directly: one bad fs call took both registered
@@ -109,6 +112,33 @@ export function activate(activation: ActivationContext) {
     const [trackHandle] = args;
     return context.getObjectFromHandle(trackHandle as Handle, MidiTrack) ?? undefined;
   }
+
+  // Reports a loaded Drum Rack's real pad layout and velocity parameters.
+  // Read-only by design: it answers what the rack is, and changes nothing.
+  context.commands.registerCommand(
+    PROBE_DRUM_RACK_COMMAND_ID,
+    guard(async (...args: unknown[]) => {
+      const track = resolveMidiTrack(args);
+      if (!track) return;
+
+      const rack = findDrumRack(track);
+      if (!rack) {
+        const message = `<!doctype html><meta charset="utf-8">
+<body style="font:13px system-ui;background:#1a1a1a;color:#ddd;padding:20px;margin:0">
+<p>No Drum Rack on track "${track.name}" — checked its full device chain, including inside other racks.</p>
+<button id="closeBtn" style="margin-top:10px;background:transparent;color:#999;border:1px solid #444;border-radius:4px;padding:5px 12px;cursor:pointer;font:inherit">Close</button>
+<script>${CLOSE_SCRIPT}</script>
+</body>`;
+        await context.ui.showModalDialog(`data:text/html,${encodeURIComponent(message)}`, 460, 180);
+        return;
+      }
+
+      const report = await probeDrumRack(track, rack);
+      console.log("[trackdraft-bridge] drum rack probe", JSON.stringify(report, null, 2));
+      const dataUrl = `data:text/html,${encodeURIComponent(buildProbeHtml(report))}`;
+      await context.ui.showModalDialog(dataUrl, 860, 620);
+    }),
+  );
 
   context.commands.registerCommand(
     VIEW_COMMAND_ID,
