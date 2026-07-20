@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSongStore } from "../../store/songStore";
 import { downloadSongJson, readSongFile } from "../../lib/exportImport";
+import CatalogBrowser from "./CatalogBrowser";
 
 export default function Dashboard() {
   const songs = useSongStore((s) => s.songs);
@@ -74,6 +75,8 @@ export default function Dashboard() {
         />
       </div>
       {importError && <p className="text-xs text-red-400">{importError}</p>}
+
+      {import.meta.env.DEV && <CatalogBrowser />}
 
       <ul className="divide-y divide-edge border border-edge rounded">
         {songs.length === 0 && (
