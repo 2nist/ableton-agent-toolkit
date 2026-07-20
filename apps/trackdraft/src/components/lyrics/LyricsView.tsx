@@ -5,11 +5,15 @@ import LyricsEditor from "./LyricsEditor";
 import MetricalTable from "./MetricalTable";
 import RhymeSuggestions from "./RhymeSuggestions";
 import WritingContext from "./WritingContext";
+import LyricDocumentView from "./LyricDocumentView";
+
+type ViewMode = "per-section" | "song-text";
 
 export default function LyricsView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [mode, setMode] = useState<ViewMode>("per-section");
 
   if (!currentSong) return null;
   const song = currentSong;
@@ -35,23 +39,42 @@ export default function LyricsView() {
 
   return (
     <div className="p-6 max-w-5xl space-y-4">
-      <div className="flex gap-2 flex-wrap">
-        {song.sections.map((section) => (
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2 flex-wrap">
+          {song.sections.map((section) => (
+            <button
+              key={section.id}
+              className={`text-sm px-3 py-1 rounded border ${
+                activeSection?.id === section.id
+                  ? "border-accent text-accent"
+                  : "border-edge text-inkMuted hover:text-ink"
+              }`}
+              onClick={() => setSelectedSectionId(section.id)}
+            >
+              {section.name}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1 border border-edge rounded p-0.5">
           <button
-            key={section.id}
-            className={`text-sm px-3 py-1 rounded border ${
-              activeSection?.id === section.id
-                ? "border-accent text-accent"
-                : "border-edge text-inkMuted hover:text-ink"
-            }`}
-            onClick={() => setSelectedSectionId(section.id)}
+            className={`text-xs px-2 py-1 rounded ${mode === "per-section" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
+            onClick={() => setMode("per-section")}
           >
-            {section.name}
+            Per-section
           </button>
-        ))}
+          <button
+            className={`text-xs px-2 py-1 rounded ${mode === "song-text" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
+            onClick={() => setMode("song-text")}
+            title="See the whole song's lyrics as one document and define or fix sections directly from the words"
+          >
+            Song text
+          </button>
+        </div>
       </div>
 
-      {activeSection && (
+      {mode === "song-text" && <LyricDocumentView song={song} onChange={updateCurrentSong} />}
+
+      {mode === "per-section" && activeSection && (
         <div className="grid grid-cols-[1fr_280px] gap-4">
           <div className="space-y-4">
             <LyricsEditor
