@@ -45,13 +45,58 @@ function totalText(song: BlueprintSong): string {
 }
 
 describe("buildLyricDocument", () => {
-  it("prefers lyricsTimeline over plain lyrics when both exist", () => {
+  it("uses .lyrics as the line list and borrows per-line timing from lyricsTimeline", () => {
     const song = makeSong([
-      { id: "s0", lyrics: "wrong a\nwrong b", lyricsTimeline: [{ text: "right a", startBeat: 0 }, { text: "right b", startBeat: 4 }] },
+      { id: "s0", lyrics: "line a\nline b", lyricsTimeline: [{ text: "line a", startBeat: 0 }, { text: "line b", startBeat: 4 }] },
     ]);
     const doc = buildLyricDocument(song);
-    expect(doc.map((l) => l.text)).toEqual(["right a", "right b"]);
+    expect(doc.map((l) => l.text)).toEqual(["line a", "line b"]);
+    expect(doc[0].startBeat).toBe(0);
     expect(doc[1].startBeat).toBe(4);
+  });
+
+  it("splits a single timeline entry whose own text spans multiple lines (the real single-blob shape)", () => {
+    // Real ingestion can dump a whole passage into one lyricsTimeline entry
+    // with one timestamp for the lot — confirmed on the actual catalog
+    // ("No Reply": the entire song's lyrics as one entry under a section
+    // misnamed "silence"). Only the first of the entry's lines may carry
+    // that timestamp; the rest are genuinely untimed at the line level.
+    const song = makeSong([
+      {
+        id: "s0",
+        lyrics: "verse one line one\nverse one line two\n\nverse two line one",
+        lyricsTimeline: [{ text: "verse one line one\nverse one line two\n\nverse two line one", startBeat: 0 }],
+      },
+    ]);
+    const doc = buildLyricDocument(song);
+    expect(doc.map((l) => l.text)).toEqual(["verse one line one", "verse one line two", "", "verse two line one"]);
+    expect(doc[0].startBeat).toBe(0);
+    expect(doc[1].startBeat).toBeUndefined();
+    expect(doc[2].startBeat).toBeUndefined();
+    expect(doc[3].startBeat).toBeUndefined();
+  });
+
+  it("attaches timing per multi-line span when several timeline entries each cover a run of lines", () => {
+    const song = makeSong([
+      {
+        id: "s0",
+        lyrics: "a1\na2\nb1\nb2\nb3",
+        lyricsTimeline: [
+          { text: "a1\na2", startBeat: 0 },
+          { text: "b1\nb2\nb3", startBeat: 8 },
+        ],
+      },
+    ]);
+    const doc = buildLyricDocument(song);
+    expect(doc.map((l) => l.startBeat)).toEqual([0, undefined, 8, undefined, undefined]);
+  });
+
+  it("attaches no timing at all when the timeline's line spans don't reconcile with .lyrics (mismatch guard)", () => {
+    const song = makeSong([
+      { id: "s0", lyrics: "a\nb\nc", lyricsTimeline: [{ text: "a\nb\nc\nd", startBeat: 0 }] }, // entry claims 4 lines, only 3 exist
+    ]);
+    const doc = buildLyricDocument(song);
+    expect(doc.every((l) => l.startBeat === undefined)).toBe(true);
   });
 
   it("falls back to splitting plain lyrics when there's no timeline", () => {

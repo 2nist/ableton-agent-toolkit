@@ -18,25 +18,66 @@ export interface LyricLine {
   startBeat?: number;
 }
 
-/** Concatenates every section's lyrics (preferring `lyricsTimeline` when
- *  present, since it carries real timing) into one ordered document. */
+/**
+ * Per-line startBeat for a section's split `.lyrics`, borrowed from
+ * `lyricsTimeline`. Real ingested data (see `toBlueprintSong.ts`) does not
+ * guarantee one timeline entry per line — a whole passage can arrive as a
+ * *single* entry whose own `.text` contains embedded `\n`s, one timestamp
+ * covering many lines (this is exactly what makes a song look like a
+ * "single blob": the entire lyric dumped into one section, and within
+ * that section, into one timeline entry). Each entry is assumed to cover
+ * the next `entry.text.split("\n").length` raw lines in order — true when
+ * `.lyrics` and the concatenation of timeline entries came from the same
+ * source, which holds for this app's own ingestion. Only the *first* line
+ * of an entry's span gets its real startBeat; the rest are genuinely
+ * untimed at the per-line level, and stay `undefined` rather than
+ * fabricating a timestamp. If the entries' total span doesn't reconcile
+ * with the raw line count, no timing is attached at all — a wrong
+ * boundary derived from mismatched data is worse than none.
+ */
+function startBeatsForLines(rawLines: string[], timeline: LyricsTimelineEntry[] | undefined): (number | undefined)[] {
+  const startBeats = new Array<number | undefined>(rawLines.length).fill(undefined);
+  if (!timeline || timeline.length === 0) return startBeats;
+
+  let cursor = 0;
+  for (const entry of timeline) {
+    const span = entry.text.split("\n").length;
+    if (cursor + span > rawLines.length) return new Array(rawLines.length).fill(undefined); // mismatch — no timing rather than wrong timing
+    startBeats[cursor] = entry.startBeat;
+    cursor += span;
+  }
+  return startBeats;
+}
+
+/** Concatenates every section's lyrics into one ordered, line-granular
+ *  document. `.lyrics` (when present) is the authoritative line list —
+ *  `lyricsTimeline` only ever contributes per-line timing on top of it,
+ *  never a competing line count, since a timeline entry's own `.text` can
+ *  itself span multiple lines (see `startBeatsForLines`). Only falls back
+ *  to splitting `lyricsTimeline` entries directly when a section has no
+ *  `.lyrics` at all. */
 export function buildLyricDocument(song: BlueprintSong): LyricLine[] {
   const lines: LyricLine[] = [];
   for (const section of song.sections) {
-    if (section.lyricsTimeline && section.lyricsTimeline.length > 0) {
-      section.lyricsTimeline.forEach((entry, index) => {
-        lines.push({
-          sectionId: section.id,
-          sectionName: section.name,
-          lineIndexInSection: index,
-          text: entry.text,
-          startBeat: entry.startBeat,
+    if (section.lyrics) {
+      const rawLines = section.lyrics.split("\n");
+      const startBeats = startBeatsForLines(rawLines, section.lyricsTimeline);
+      rawLines.forEach((text, index) => {
+        lines.push({ sectionId: section.id, sectionName: section.name, lineIndexInSection: index, text, startBeat: startBeats[index] });
+      });
+    } else if (section.lyricsTimeline && section.lyricsTimeline.length > 0) {
+      let index = 0;
+      for (const entry of section.lyricsTimeline) {
+        entry.text.split("\n").forEach((text, subIndex) => {
+          lines.push({
+            sectionId: section.id,
+            sectionName: section.name,
+            lineIndexInSection: index++,
+            text,
+            startBeat: subIndex === 0 ? entry.startBeat : undefined,
+          });
         });
-      });
-    } else if (section.lyrics) {
-      section.lyrics.split("\n").forEach((text, index) => {
-        lines.push({ sectionId: section.id, sectionName: section.name, lineIndexInSection: index, text });
-      });
+      }
     }
   }
   return lines;

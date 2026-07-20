@@ -17,7 +17,7 @@ import { catalogSongToBlueprintSong } from "./catalog/toBlueprintSong.js";
 
 const CHORDS_DIR = "/Users/Matthew/beatles data/Beatles-Chords";
 const LRCLIB_DIR = "/Users/Matthew/beatles data/lyrics_from_lrclib";
-const OUTPUT_DIR = path.join(import.meta.dirname, "output", "catalog");
+const OUTPUT_DIR = process.env.CATALOG_OUTPUT_DIR ?? path.join(import.meta.dirname, "output", "catalog");
 
 interface LrclibMatch {
   trackName: string;
