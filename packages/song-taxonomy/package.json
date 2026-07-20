@@ -1,0 +1,33 @@
+{
+  "name": "@music-theory/song-taxonomy",
+  "version": "0.1.0",
+  "description": "Evolving, editable narrative-form and subgenre classification for songs — mined empirically from annotated corpora (McGill Billboard/SALAMI, Rock Corpus, the TrackDraft Beatles catalog), then grown by human-confirmed proposals rather than a fixed enum.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "mine": "tsx scripts/mine-corpora.ts",
+    "taxonomy:classify": "tsx scripts/classify-corpora.ts",
+    "taxonomy:promote": "tsx scripts/promote-candidates.ts"
+  },
+  "dependencies": {
+    "@music-theory/core": "0.1.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.0.0"
+  }
+}

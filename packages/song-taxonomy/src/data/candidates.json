@@ -1,0 +1,446 @@
+[
+  {
+    "id": "cand-bridge-solo",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "bridge",
+      "solo"
+    ],
+    "support": 3,
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Janis_Joplin__me_and_bobby_mcgee_tdc",
+        "title": "Me and Bobby McGee"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "stairway_to_heaven_tdc",
+        "title": "Stairway To Heaven"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "The_Sex_Pistols__anarchy_in_the_u.k._tdc",
+        "title": "Anarchy in the U.K."
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-bridge-solo-verse-chorus",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "bridge",
+      "solo",
+      "verse",
+      "chorus"
+    ],
+    "support": 4,
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "The_Bangles__september_gurls_tdc",
+        "title": "September Gurls"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "california_dreamin_tdc",
+        "title": "California Dreamin'"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "The_Beach_Boys__dont_worry_baby_tdc",
+        "title": "Don't Worry Baby"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Etta_James__whatd_i_say_tdc",
+        "title": "What'd I Say"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-bridge-verse-chorus-solo-bridge",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "bridge",
+      "verse",
+      "chorus",
+      "solo",
+      "bridge"
+    ],
+    "support": 2,
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "BEATLES__i_saw_her_standing_there_tdc",
+        "title": "I Saw Her Standing There"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "disco_inferno_the_trammps",
+        "title": "Disco Inferno"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-bridge-verse-pre_chorus-chorus",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "bridge",
+      "verse",
+      "pre_chorus",
+      "chorus"
+    ],
+    "support": 1,
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "hallelujah_tdc",
+        "title": "Hallelujah"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-chorus-pre_chorus",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "chorus",
+      "pre_chorus"
+    ],
+    "support": 2,
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "sleep_walk_santo_johnny",
+        "title": "Sleep Walk"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Ramones__i_wanna_be_sedated_tdc",
+        "title": "I Wanna Be Sedated"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-chorus-verse-bridge-solo-verse",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "chorus",
+      "verse",
+      "bridge",
+      "solo",
+      "verse"
+    ],
+    "support": 2,
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "25_or_6_to_4_chicago",
+        "title": "25 Or 6 To 4"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "everlasting_love_carl_carlton",
+        "title": "Everlasting Love"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-chorus-verse-chorus-solo-verse-solo-verse-chorus",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "chorus",
+      "verse",
+      "chorus",
+      "solo",
+      "verse",
+      "solo",
+      "verse",
+      "chorus"
+    ],
+    "support": 3,
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "hound_dog_tdc",
+        "title": "Hound Dog"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Gene_Vincent__be-bop-a-lula_tdc",
+        "title": "Be-Bop-A-Lula"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "crackerbox_palace_george_harrison",
+        "title": "Crackerbox Palace"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-pre_chorus-chorus",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "pre_chorus",
+      "chorus"
+    ],
+    "support": 1,
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Ronan_Keating__i_believe_i_can_fly_tdc",
+        "title": "I Believe I Can Fly"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-pre_chorus-chorus-bridge-pre_chorus-chorus",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "pre_chorus",
+      "chorus",
+      "bridge",
+      "pre_chorus",
+      "chorus"
+    ],
+    "support": 1,
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Various__enter_sandman_tdc",
+        "title": "Enter Sandman"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-solo-bridge-solo-bridge-solo",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "solo",
+      "bridge",
+      "solo",
+      "bridge",
+      "solo"
+    ],
+    "support": 2,
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "layla_tdc",
+        "title": "Layla"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Bruce_Springsteen__born_to_run_tdc",
+        "title": "Born To Run"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-solo-verse",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "solo",
+      "verse"
+    ],
+    "support": 1,
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "house_of_the_rising_sun_tdc",
+        "title": "House of the Rising Sun"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-verse-bridge-solo-verse-bridge",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "verse",
+      "bridge",
+      "solo",
+      "verse",
+      "bridge"
+    ],
+    "support": 3,
+    "exemplars": [
+      {
+        "corpus": "beatles-catalog",
+        "songId": "beatles-05-boys",
+        "title": "Boys"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "running_on_empty_jackson_browne",
+        "title": "Running On Empty"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Rod_Stewart__maggie_may_tdc",
+        "title": "Maggie May"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-verse-bridge-verse-bridge-solo-bridge-verse-bridge",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "verse",
+      "bridge",
+      "verse",
+      "bridge",
+      "solo",
+      "bridge",
+      "verse",
+      "bridge"
+    ],
+    "support": 3,
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Stevie_Wonder__living_for_the_city_tdc",
+        "title": "Living For The City"
+      },
+      {
+        "corpus": "beatles-catalog",
+        "songId": "beatles-10-for-no-one",
+        "title": "For No One"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Beatles__while_my_guitar_gently_weeps_tdc",
+        "title": "While My Guitar Gently Weeps"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-verse-chorus-bridge-pre_chorus-solo-verse",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "verse",
+      "chorus",
+      "bridge",
+      "pre_chorus",
+      "solo",
+      "verse"
+    ],
+    "support": 1,
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "frankenstein_edgar_winter",
+        "title": "Frankenstein"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-verse-pre_chorus-chorus-verse-pre_chorus-chorus-solo-chorus",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "verse",
+      "pre_chorus",
+      "chorus",
+      "verse",
+      "pre_chorus",
+      "chorus",
+      "solo",
+      "chorus"
+    ],
+    "support": 2,
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "billie_jean_tdc",
+        "title": "Billie Jean"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "dream_on_tdc",
+        "title": "Dream On"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  },
+  {
+    "id": "cand-verse-solo-bridge-pre_chorus-chorus",
+    "kind": "narrative",
+    "status": "pending",
+    "proposedName": "",
+    "proposedDefinition": "",
+    "signature": [
+      "verse",
+      "solo",
+      "bridge",
+      "pre_chorus",
+      "chorus"
+    ],
+    "support": 1,
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Pavement__summer_babe_tdc",
+        "title": "Summer Babe"
+      }
+    ],
+    "proposedAt": "2026-07-20T18:50:36.540Z"
+  }
+]

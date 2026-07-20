@@ -1,0 +1,2618 @@
+[
+  {
+    "id": "verse-chorus-verse-chorus",
+    "name": "Verse-Chorus-Verse-Chorus",
+    "definition": "",
+    "signature": [
+      "verse",
+      "chorus",
+      "verse",
+      "chorus"
+    ],
+    "variants": [
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "pre_chorus"
+      ],
+      [
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "solo",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "solo",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "solo"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "solo",
+        "chorus",
+        "verse"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "50_ways_to_leave_your_lover_paul_simon",
+        "title": "50 Ways To Leave Your Lover"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "another_rainy_day_in_new_york_city_chicago",
+        "title": "Another Rainy Day In New York City"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "behind_closed_doors_charlie_rich",
+        "title": "Behind Closed Doors"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.538Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "mcgill:249, rock-corpus:25, beatles-catalog:35",
+        "support": 309,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "verse-chorus-verse-chorus-bridge-verse-chorus",
+    "name": "Verse-Chorus-Verse-Chorus-Bridge-Verse-Chorus",
+    "definition": "",
+    "signature": [
+      "verse",
+      "chorus",
+      "verse",
+      "chorus",
+      "bridge",
+      "verse",
+      "chorus"
+    ],
+    "variants": [
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "solo",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "solo",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "solo",
+        "verse",
+        "chorus"
+      ],
+      [
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "solo",
+        "verse",
+        "chorus",
+        "solo"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "pre_chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "solo",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "solo",
+        "verse",
+        "chorus",
+        "solo",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "solo",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "solo",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "solo",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "pre_chorus",
+        "verse",
+        "pre_chorus",
+        "chorus",
+        "bridge",
+        "verse",
+        "pre_chorus",
+        "chorus"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "an_innocent_man_billy_joel",
+        "title": "An Innocent Man"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "back_home_again_john_denver",
+        "title": "Back Home Again"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "born_to_be_wild_steppenwolf",
+        "title": "Born To Be Wild"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.539Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "mcgill:143, beatles-catalog:32, rock-corpus:9",
+        "support": 184,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "verse",
+    "name": "Verse",
+    "definition": "",
+    "signature": [
+      "verse"
+    ],
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "20_75_willie_mitchell",
+        "title": "20-75"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "ain_t_no_sunshine_bill_withers",
+        "title": "Ain't No Sunshine"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "all_she_wants_is_duran_duran",
+        "title": "All She Wants Is"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.539Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "mcgill:135, rock-corpus:15, beatles-catalog:8",
+        "support": 158,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "verse-bridge-verse-bridge-verse",
+    "name": "Verse-Bridge-Verse-Bridge-Verse",
+    "definition": "",
+    "signature": [
+      "verse",
+      "bridge",
+      "verse",
+      "bridge",
+      "verse"
+    ],
+    "variants": [
+      [
+        "verse",
+        "bridge",
+        "verse",
+        "solo",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "bridge",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "solo",
+        "verse",
+        "solo",
+        "verse"
+      ],
+      [
+        "bridge",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "bridge",
+        "verse",
+        "solo",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "bridge",
+        "chorus",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "bridge",
+        "solo",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "bridge",
+        "solo",
+        "bridge",
+        "verse",
+        "solo"
+      ],
+      [
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "bridge",
+        "verse",
+        "solo",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "pre_chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "solo",
+        "verse",
+        "solo",
+        "verse",
+        "solo"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Billie_Holiday__georgia_on_my_mind_tdc",
+        "title": "Georgia On My Mind"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Fats_Domino__blueberry_hill_tdc",
+        "title": "Blueberry Hill"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Ramones__blitzkrieg_bop_tdc",
+        "title": "Blitzkrieg Bop"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.539Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "rock-corpus:13, beatles-catalog:62, mcgill:8",
+        "support": 83,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "verse-chorus-bridge-verse-chorus-bridge-chorus-bridge",
+    "name": "Verse-Chorus-Bridge-Verse-Chorus-Bridge-Chorus-Bridge",
+    "definition": "",
+    "signature": [
+      "verse",
+      "chorus",
+      "bridge",
+      "verse",
+      "chorus",
+      "bridge",
+      "chorus",
+      "bridge"
+    ],
+    "variants": [
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "pre_chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "solo",
+        "chorus",
+        "verse",
+        "chorus",
+        "solo",
+        "chorus",
+        "solo"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "pre_chorus",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus",
+        "pre_chorus",
+        "bridge",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "pre_chorus",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "pre_chorus",
+        "solo",
+        "chorus",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "bridge",
+        "pre_chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "pre_chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "pre_chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "pre_chorus",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "pre_chorus",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "pre_chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "caught_up_in_the_rapture_anita_baker",
+        "title": "Caught Up In The Rapture"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "don_t_treat_me_bad_firehouse",
+        "title": "Don t Treat Me Bad"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "every_little_thing_she_does_is_magic_the_police",
+        "title": "Every Little Thing She Does Is Magic"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "mcgill:70, rock-corpus:1",
+        "support": 71,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "verse-chorus",
+    "name": "Verse-Chorus",
+    "definition": "",
+    "signature": [
+      "verse",
+      "chorus"
+    ],
+    "variants": [
+      [
+        "verse",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "pre_chorus"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "a_hazy_shade_of_winter_simon_garfunkel",
+        "title": "A Hazy Shade Of Winter"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "amanda_boston",
+        "title": "Amanda"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "amor_ben_e_king",
+        "title": "Amor"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "mcgill:44, rock-corpus:5",
+        "support": 49,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "verse-bridge-verse",
+    "name": "Verse-Bridge-Verse",
+    "definition": "",
+    "signature": [
+      "verse",
+      "bridge",
+      "verse"
+    ],
+    "variants": [
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "solo",
+        "verse"
+      ],
+      [
+        "chorus",
+        "verse",
+        "bridge",
+        "verse"
+      ],
+      [
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "bridge",
+        "solo"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "a_cowboys_work_is_never_done_sonny_cher",
+        "title": "A Cowboys Work Is Never Done"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Sam_Cooke__a_change_is_gonna_come_tdc",
+        "title": "A Change Is Gonna Come"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "The_Velvet_Underground__im_waiting_for_the_man_tdc",
+        "title": "I'm Waiting For The Man"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "mcgill:18, rock-corpus:12, beatles-catalog:15",
+        "support": 45,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "verse-chorus-verse-chorus-verse-chorus-verse-chorus-verse-chorus",
+    "name": "Verse-Chorus-Verse-Chorus-Verse-Chorus-Verse-Chorus-Verse-Chorus",
+    "definition": "",
+    "signature": [
+      "verse",
+      "chorus",
+      "verse",
+      "chorus",
+      "verse",
+      "chorus",
+      "verse",
+      "chorus",
+      "verse",
+      "chorus"
+    ],
+    "variants": [
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "pre_chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "solo",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "pre_chorus",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "solo",
+        "chorus",
+        "verse",
+        "chorus",
+        "solo",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "solo",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "pre_chorus",
+        "verse"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "buy_for_me_the_rain_nitty_gritty_dirt_band",
+        "title": "Buy For Me The Rain"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "lucky_greg_kihn",
+        "title": "Lucky"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "sunshine_superman_donovan",
+        "title": "Sunshine Superman"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "mcgill:27, rock-corpus:2, beatles-catalog:7",
+        "support": 36,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "chorus",
+    "name": "Chorus",
+    "definition": "",
+    "signature": [
+      "chorus"
+    ],
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Jonas_Blue__fast_car_tdc",
+        "title": "Fast Car"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "New_Order__bizarre_love_triangle_tdc",
+        "title": "Bizarre Love Triangle"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Ozzy_Osbourne__for_what_its_worth_tdc",
+        "title": "For What It's Worth"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "rock-corpus:12, beatles-catalog:5",
+        "support": 17,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "bridge-chorus",
+    "name": "Bridge-Chorus",
+    "definition": "",
+    "signature": [
+      "bridge",
+      "chorus"
+    ],
+    "variants": [
+      [
+        "solo",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "bridge",
+        "chorus"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Beach_Boys__good_vibrations_tdc",
+        "title": "Good Vibrations"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Eva_Cassidy__take_me_to_the_river_tdc",
+        "title": "Take Me To The River"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Johnny_Rivers__tracks_of_my_tears_tdc",
+        "title": "Tracks Of My Tears"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "rock-corpus:14, beatles-catalog:1",
+        "support": 15,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "chorus-bridge-chorus-bridge-chorus",
+    "name": "Chorus-Bridge-Chorus-Bridge-Chorus",
+    "definition": "",
+    "signature": [
+      "chorus",
+      "bridge",
+      "chorus",
+      "bridge",
+      "chorus"
+    ],
+    "variants": [
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge"
+      ],
+      [
+        "chorus",
+        "bridge",
+        "solo",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "solo",
+        "chorus",
+        "solo",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "solo",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "solo",
+        "chorus",
+        "bridge",
+        "chorus"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Bobby_Fuller_Four__i_fought_the_law_tdc",
+        "title": "I Fought The Law"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Sam_Cooke__you_send_me_tdc",
+        "title": "You Send Me"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "The_Crew_Cuts__earth_angel_tdc",
+        "title": "Earth Angel"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "rock-corpus:9, mcgill:2, beatles-catalog:1",
+        "support": 12,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "chorus-verse",
+    "name": "Chorus-Verse",
+    "definition": "",
+    "signature": [
+      "chorus",
+      "verse"
+    ],
+    "variants": [
+      [
+        "chorus",
+        "verse",
+        "bridge"
+      ],
+      [
+        "chorus",
+        "verse",
+        "solo"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "fernando_abba",
+        "title": "Fernando"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "hot_fun_in_the_summertime_sly_the_family_stone",
+        "title": "Hot Fun In The Summertime"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "i_saw_her_standing_there_the_beatles",
+        "title": "I Saw Her Standing There"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "mcgill:9, rock-corpus:1",
+        "support": 10,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "bridge",
+    "name": "Bridge",
+    "definition": "",
+    "signature": [
+      "bridge"
+    ],
+    "variants": [
+      [
+        "solo"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Bryan_Ferry__will_you_love_me_tomorrow_tdc",
+        "title": "Will You Love Me Tomorrow"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Joy_Division__love_will_tear_us_apart_tdc",
+        "title": "Love Will Tear Us Apart"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "imagine_tdc",
+        "title": "Imagine"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "rock-corpus:9",
+        "support": 9,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "chorus-verse-bridge-verse-bridge-chorus-verse-bridge",
+    "name": "Chorus-Verse-Bridge-Verse-Bridge-Chorus-Verse-Bridge",
+    "definition": "",
+    "signature": [
+      "chorus",
+      "verse",
+      "bridge",
+      "verse",
+      "bridge",
+      "chorus",
+      "verse",
+      "bridge"
+    ],
+    "variants": [
+      [
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse",
+        "chorus"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse"
+      ],
+      [
+        "chorus",
+        "verse",
+        "solo",
+        "chorus",
+        "verse",
+        "solo"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "bridge"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Shirley_Bassey__eleanor_rigby_tdc",
+        "title": "Eleanor Rigby"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "The_Everly_Brothers__all_i_have_to_do_is_dream_tdc",
+        "title": "All I Have To Do Is Dream"
+      },
+      {
+        "corpus": "beatles-catalog",
+        "songId": "beatles-cd2-07-long-long-long",
+        "title": "Long Long Long"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "rock-corpus:3, beatles-catalog:1, mcgill:3",
+        "support": 7,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "chorus-verse-pre_chorus-verse",
+    "name": "Chorus-Verse-Pre-Chorus-Verse",
+    "definition": "",
+    "signature": [
+      "chorus",
+      "verse",
+      "pre_chorus",
+      "verse"
+    ],
+    "variants": [
+      [
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse"
+      ],
+      [
+        "chorus",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "chorus",
+        "verse",
+        "pre_chorus",
+        "verse",
+        "pre_chorus",
+        "verse"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "fever_peggy_lee",
+        "title": "Fever"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "heart_in_hand_brenda_lee",
+        "title": "Heart In Hand"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "nick_of_time_bonnie_raitt",
+        "title": "Nick Of Time"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "mcgill:7",
+        "support": 7,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "verse-chorus-bridge-chorus-bridge-chorus-pre_chorus-verse-bridge-chorus",
+    "name": "Verse-Chorus-Bridge-Chorus-Bridge-Chorus-Pre-Chorus-Verse-Bridge-Chorus",
+    "definition": "",
+    "signature": [
+      "verse",
+      "chorus",
+      "bridge",
+      "chorus",
+      "bridge",
+      "chorus",
+      "pre_chorus",
+      "verse",
+      "bridge",
+      "chorus"
+    ],
+    "variants": [
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "chorus",
+        "bridge",
+        "verse",
+        "pre_chorus",
+        "bridge",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "bridge",
+        "pre_chorus",
+        "bridge",
+        "pre_chorus",
+        "solo",
+        "verse",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "solo",
+        "chorus",
+        "solo",
+        "verse",
+        "chorus",
+        "solo",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "shake_your_groove_thing_peaches_herb",
+        "title": "Shake Your Groove Thing"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "i_just_can_t_stop_loving_you_michael_jackson_with_siedah_garrett",
+        "title": "I Just Can't Stop Loving You"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "the_power_snap",
+        "title": "The Power"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "mcgill:6, beatles-catalog:1",
+        "support": 7,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "verse-chorus-verse-bridge-chorus-verse-bridge-pre_chorus-verse",
+    "name": "Verse-Chorus-Verse-Bridge-Chorus-Verse-Bridge-Pre-Chorus-Verse",
+    "definition": "",
+    "signature": [
+      "verse",
+      "chorus",
+      "verse",
+      "bridge",
+      "chorus",
+      "verse",
+      "bridge",
+      "pre_chorus",
+      "verse"
+    ],
+    "variants": [
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "bridge",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "pre_chorus"
+      ],
+      [
+        "verse",
+        "chorus",
+        "verse",
+        "chorus",
+        "verse",
+        "bridge",
+        "pre_chorus",
+        "solo"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "mcgill",
+        "songId": "motownphilly_boyz_ii_men",
+        "title": "Motownphilly"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "the_stroke_billy_squier",
+        "title": "The Stroke"
+      },
+      {
+        "corpus": "mcgill",
+        "songId": "heart_full_of_soul_the_yardbirds",
+        "title": "Heart Full Of Soul"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "mcgill:7",
+        "support": 7,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "verse-solo",
+    "name": "Verse-Solo",
+    "definition": "",
+    "signature": [
+      "verse",
+      "solo"
+    ],
+    "variants": [
+      [
+        "verse",
+        "bridge"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Steppenwolf__born_to_be_wild_tdc",
+        "title": "Born To Be Wild"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "The_Kinks__you_really_got_me_tdc",
+        "title": "You Really Got Me"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "shake_rattle_and_roll_tdc",
+        "title": "Shake, Rattle, and Roll"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "rock-corpus:6, beatles-catalog:1",
+        "support": 7,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "bridge-verse-bridge-verse-bridge-verse-bridge-verse",
+    "name": "Bridge-Verse-Bridge-Verse-Bridge-Verse-Bridge-Verse",
+    "definition": "",
+    "signature": [
+      "bridge",
+      "verse",
+      "bridge",
+      "verse",
+      "bridge",
+      "verse",
+      "bridge",
+      "verse"
+    ],
+    "variants": [
+      [
+        "verse",
+        "bridge",
+        "solo",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse"
+      ],
+      [
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse",
+        "bridge"
+      ],
+      [
+        "verse",
+        "bridge",
+        "verse",
+        "solo",
+        "bridge",
+        "verse",
+        "bridge",
+        "verse"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "beatles-catalog",
+        "songId": "beatles-13-i-ll-be-back",
+        "title": "I'll Be Back"
+      },
+      {
+        "corpus": "beatles-catalog",
+        "songId": "beatles-04-nowhere-man",
+        "title": "Nowhere Man"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "The_Police__every_breath_you_take_tdc",
+        "title": "Every Breath You Take"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "beatles-catalog:4, rock-corpus:2",
+        "support": 6,
+        "threshold": 0.34
+      }
+    }
+  },
+  {
+    "id": "chorus-solo",
+    "name": "Chorus-Solo",
+    "definition": "",
+    "signature": [
+      "chorus",
+      "solo"
+    ],
+    "variants": [
+      [
+        "chorus",
+        "bridge"
+      ],
+      [
+        "chorus",
+        "solo",
+        "chorus"
+      ]
+    ],
+    "exemplars": [
+      {
+        "corpus": "rock-corpus",
+        "songId": "Guns_N'_Roses__sweet_child_o_mine_tdc",
+        "title": "Sweet Child O' Mine"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "Wilson_Pickett__in_the_midnight_hour_tdc",
+        "title": "In the Midnight Hour"
+      },
+      {
+        "corpus": "rock-corpus",
+        "songId": "louie_louie_tdc",
+        "title": "Louie Louie"
+      }
+    ],
+    "provenance": {
+      "addedAt": "2026-07-20T18:50:36.540Z",
+      "addedBy": "corpus-mining",
+      "derivedFrom": {
+        "corpus": "rock-corpus:6",
+        "support": 6,
+        "threshold": 0.34
+      }
+    }
+  }
+]
