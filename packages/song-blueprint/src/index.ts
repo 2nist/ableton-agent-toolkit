@@ -136,6 +136,55 @@ export interface ArrangementRepeat {
   overrides?: Partial<Pick<BlueprintSection, "bars" | "velocity" | "chords" | "lyrics" | "lyricsTimeline">>;
 }
 
+/**
+ * Expands `song.arrangement` into the full, ordered list of
+ * (sectionId, repeats, overrides) passes — filling in any section from
+ * `song.sections` that no entry references as an implicit
+ * `{sectionId, repeats: 1}`, appended in `sections` list order.
+ *
+ * This is what makes `arrangement` optional-to-author: an empty array
+ * (every song before this existed, and every brand-new song) resolves to
+ * exactly "every section once, in list order" — the original behavior,
+ * unchanged. A section is never silently dropped from export just
+ * because it's missing from `arrangement`.
+ *
+ * Shared by `sectionSpans` (`extensions/trackdraft-bridge`, at export
+ * time) and `syncArrangementToSections` below (the TrackDraft app, at
+ * edit time) — one implementation of "what does an incomplete or absent
+ * arrangement mean," not two that could drift apart.
+ */
+export function resolveArrangement(song: BlueprintSong): ArrangementRepeat[] {
+  const covered = new Set(song.arrangement.map((entry) => entry.sectionId));
+  const implicit: ArrangementRepeat[] = song.sections
+    .filter((section) => !covered.has(section.id))
+    .map((section) => ({ sectionId: section.id, repeats: 1 }));
+  return [...song.arrangement, ...implicit];
+}
+
+/**
+ * Rebuilds `arrangement` to match `sections` 1:1 — same length, same
+ * order, one entry per section — preserving each section's existing
+ * `repeats`/`variation`/`overrides` where it already has an entry
+ * (anywhere in the current `arrangement`, not just at the same index),
+ * and defaulting anything new to `{sectionId, repeats: 1}`.
+ *
+ * TrackDraft's Structure tab calls this after every structural edit
+ * (add/remove/reorder a section, apply a template) so `arrangement`
+ * never silently drifts out of sync with `sections` — the drag-reorder
+ * list and the actual playback order stay the same thing, always. This
+ * keeps the section-repeats feature deliberately simple: one arrangement
+ * entry per section, not the more general "the same section appears at
+ * two different, non-adjacent points in the timeline" case, which
+ * `ArrangementRepeat`'s shape supports but nothing needs yet.
+ */
+export function syncArrangementToSections(song: BlueprintSong): BlueprintSong {
+  const existingBySectionId = new Map(resolveArrangement(song).map((entry) => [entry.sectionId, entry]));
+  const arrangement = song.sections.map(
+    (section) => existingBySectionId.get(section.id) ?? { sectionId: section.id, repeats: 1 },
+  );
+  return { ...song, arrangement };
+}
+
 /** Converts a BlueprintSection's authoring-time chords into
  *  song-structure's SectionChord[] DSL shape for export/S()/buildSong(). */
 export function toSectionChords(section: BlueprintSection): SectionChord[] {

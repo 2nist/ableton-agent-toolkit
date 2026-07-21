@@ -8,7 +8,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { useSongStore } from "../../store/songStore";
-import { addSection, removeSection, updateSection, applySongMap } from "../../lib/sections";
+import { addSection, removeSection, updateSection, updateRepeats, repeatsFor, applySongMap } from "../../lib/sections";
 import { getSongMap } from "../../data/songMaps";
 import SectionCard from "./SectionCard";
 import MapPicker from "./MapPicker";
@@ -47,7 +47,9 @@ export default function StructureView() {
               <SectionCard
                 key={section.id}
                 section={section}
+                repeats={repeatsFor(song, section.id)}
                 onChange={(updater) => updateCurrentSong((s) => updateSection(s, section.id, updater))}
+                onChangeRepeats={(repeats) => updateCurrentSong((s) => updateRepeats(s, section.id, repeats))}
                 onDelete={() => updateCurrentSong((s) => removeSection(s, section.id))}
               />
             ))}

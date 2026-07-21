@@ -6,7 +6,7 @@ export type {
   ArrangementRepeat,
 } from "@music-theory/song-blueprint";
 
-import type { BlueprintSong, BlueprintSection, ArrangementRepeat } from "@music-theory/song-blueprint";
+import { resolveArrangement, type BlueprintSong, type BlueprintSection } from "@music-theory/song-blueprint";
 
 export interface SectionSpan {
   section: BlueprintSection;
@@ -17,27 +17,6 @@ export interface SectionSpan {
    *  deterministic-but-*varied* output per repeat instead of accidentally
    *  rendering every pass of a repeated section byte-identical. */
   occurrenceIndex: number;
-}
-
-/**
- * Expands `song.arrangement` into the full, ordered list of
- * (sectionId, repeats, overrides) passes — filling in any section from
- * `song.sections` that no entry references as an implicit
- * `{sectionId, repeats: 1}`, appended in `sections` list order.
- *
- * This is what makes `arrangement` optional-to-author: an empty array
- * (every song today, and every brand-new song) resolves to exactly
- * "every section once, in list order" — current behavior, unchanged.
- * A section is never silently dropped from export just because it's
- * missing from `arrangement` — same "never silently drop" discipline as
- * the rest of this schema.
- */
-function resolveArrangement(song: BlueprintSong): ArrangementRepeat[] {
-  const covered = new Set(song.arrangement.map((entry) => entry.sectionId));
-  const implicit: ArrangementRepeat[] = song.sections
-    .filter((section) => !covered.has(section.id))
-    .map((section) => ({ sectionId: section.id, repeats: 1 }));
-  return [...song.arrangement, ...implicit];
 }
 
 /**

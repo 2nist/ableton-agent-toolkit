@@ -14,11 +14,13 @@ const DENOMINATOR_OPTIONS = [2, 4, 8, 16];
 
 interface SectionCardProps {
   section: BlueprintSection;
+  repeats: number;
   onChange: (updater: (section: BlueprintSection) => BlueprintSection) => void;
+  onChangeRepeats: (repeats: number) => void;
   onDelete: () => void;
 }
 
-export default function SectionCard({ section, onChange, onDelete }: SectionCardProps) {
+export default function SectionCard({ section, repeats, onChange, onChangeRepeats, onDelete }: SectionCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: section.id,
   });
@@ -110,6 +112,19 @@ export default function SectionCard({ section, onChange, onDelete }: SectionCard
             className="w-14 bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink"
             value={section.beatsPerChord}
             onChange={(e) => onChange((s) => ({ ...s, beatsPerChord: Number(e.target.value) || 1 }))}
+          />
+        </label>
+        <label
+          className="flex items-center gap-1"
+          title="How many times this section plays in a row here — repeat the same Chorus without duplicating it into a separate section. 0 skips it without deleting it."
+        >
+          Repeats
+          <input
+            type="number"
+            min={0}
+            className="w-12 bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink"
+            value={repeats}
+            onChange={(e) => onChangeRepeats(Number(e.target.value))}
           />
         </label>
         {/* No drum control on purpose: drums are generated heuristically in
