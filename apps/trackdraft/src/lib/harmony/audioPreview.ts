@@ -1,5 +1,6 @@
 import { chordToMidiNotes, pitchClass } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
+import { applyPerformanceEffect, type PerfNote } from "./performanceEffects";
 
 /** Standard 12-TET: A4 (MIDI 69) = 440Hz. */
 export function midiToFreq(midi: number): number {
@@ -11,6 +12,38 @@ export function midiToFreq(midi: number): number {
  *  register for a quick preview rather than the extension's export octave. */
 export function chordToFreqs(chord: Chord): number[] {
   return chordToMidiNotes(pitchClass(chord.root), chord.quality, 4).map(midiToFreq);
+}
+
+export interface PerformedVoice {
+  freq: number;
+  startOffsetSec: number;
+  durSec: number;
+  velocity: number;
+}
+
+/** A chord's voicing with its own `performance` effect (strum/pulse/legato)
+ *  already applied — the same transform chordClips.ts's export path uses,
+ *  so preview audio matches what actually ships to Ableton. `startTime`/
+ *  `duration` in the shared transform are nominally "beats", but for a
+ *  one-shot preview hold there's no tempo context beyond `durSec` itself,
+ *  so they're applied directly as seconds — consistent with how `strumMs`
+ *  is already authored (divided by 1000 to a small offset) in the shared
+ *  module. */
+function chordToPerformedVoicing(chord: Chord, durSec: number): PerformedVoice[] {
+  const midiNotes = chordToMidiNotes(pitchClass(chord.root), chord.quality, 4);
+  const baseNotes: PerfNote[] = midiNotes.map((pitch) => ({
+    pitch,
+    startTime: 0,
+    duration: durSec,
+    velocity: 100,
+  }));
+  const performed = applyPerformanceEffect(baseNotes, chord.performance, chord.id);
+  return performed.map((n) => ({
+    freq: midiToFreq(n.pitch),
+    startOffsetSec: n.startTime,
+    durSec: n.duration,
+    velocity: n.velocity,
+  }));
 }
 
 export interface ScheduledChord {
@@ -86,32 +119,49 @@ class PreviewPlayer {
     this.voices = [];
   }
 
-  /** Sound one chord (as frequencies) for roughly `durSec`, cutting off
-   *  anything already sounding first. */
-  playChord(freqs: number[], durSec = 1): void {
+  /** Schedules one voice per entry, each with its own start offset,
+   *  duration and velocity — cutting off anything already sounding first.
+   *  Shared by `playChord` (uniform voicing) and `playChordObject`
+   *  (performance-effect-staggered voicing). */
+  private scheduleVoicing(voicing: PerformedVoice[]): void {
     const ctx = this.getContext();
     this.stopVoices();
 
     const now = ctx.currentTime;
     const attack = 0.01;
-    const release = Math.min(0.15, durSec / 2);
-    const peak = Math.min(0.25, 0.8 / Math.max(1, freqs.length));
 
-    for (const freq of freqs) {
+    for (const v of voicing) {
+      const startAt = now + Math.max(0, v.startOffsetSec);
+      const release = Math.min(0.15, v.durSec / 2);
+      const peak = Math.min(0.25, 0.8 / Math.max(1, voicing.length)) * (v.velocity / 100);
+
       const oscillator = ctx.createOscillator();
       oscillator.type = "triangle";
-      oscillator.frequency.value = freq;
+      oscillator.frequency.value = v.freq;
 
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(peak, now + attack);
-      gain.gain.setTargetAtTime(0, now + durSec - release, release / 3);
+      gain.gain.setValueAtTime(0, startAt);
+      gain.gain.linearRampToValueAtTime(peak, startAt + attack);
+      gain.gain.setTargetAtTime(0, startAt + v.durSec - release, release / 3);
 
       oscillator.connect(gain).connect(ctx.destination);
-      oscillator.start(now);
-      oscillator.stop(now + durSec + release * 2);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + v.durSec + release * 2);
       this.voices.push({ oscillator, gain });
     }
+  }
+
+  /** Sound one chord (as frequencies) for roughly `durSec`, cutting off
+   *  anything already sounding first. */
+  playChord(freqs: number[], durSec = 1): void {
+    this.scheduleVoicing(freqs.map((freq) => ({ freq, startOffsetSec: 0, durSec, velocity: 100 })));
+  }
+
+  /** Sound one chord the same way `playChord` does, but honoring its own
+   *  `performance` effect (strum/pulse/legato) if it has one — so preview
+   *  audio matches what the export pipeline actually renders. */
+  playChordObject(chord: Chord, durSec = 1): void {
+    this.scheduleVoicing(chordToPerformedVoicing(chord, durSec));
   }
 
   /** Loop (or play once) a section's progression at `bpm`, calling
@@ -147,7 +197,7 @@ class PreviewPlayer {
         const delayMs = Math.max(0, (entry.startSec - positionInLoop) * 1000);
         this.highlightTimeouts.push(
           setTimeout(() => {
-            this.playChord(chordToFreqs(chords[entry.index]), entry.durSec);
+            this.playChordObject(chords[entry.index], entry.durSec);
             options.onChordStart?.(entry.index);
           }, delayMs),
         );

@@ -3,7 +3,7 @@ import { pitchClass } from "@music-theory/core";
 import type { ScaleType, ChordQuality, NoteName } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
 import { chordFromDegree, chordsToHoneycombText, chordDisplayName } from "../../lib/harmony/chordBuilder";
-import { getPreviewPlayer, chordToFreqs } from "../../lib/harmony/audioPreview";
+import { getPreviewPlayer } from "../../lib/harmony/audioPreview";
 import {
   parseProgression,
   buildWalk,
@@ -60,10 +60,17 @@ export default function HoneycombWheel({
   // sequence step are decoupled).
   const endStep = walk.length ? walk.length - 1 : 0;
 
-  const revealed = useMemo(
-    () => getRevealedCells(walk, endStep, "full"),
-    [walk, endStep],
-  );
+  const revealed = useMemo(() => {
+    const cells = getRevealedCells(walk, endStep, "full");
+    // A brand-new section has an empty walk, so getRevealedCells returns
+    // nothing to render — the hex would show up completely blank with no
+    // way to start a progression. Seed the origin as a choice cell so
+    // there's always something clickable.
+    if (walk.length === 0) {
+      return [{ q: 0, r: 0, d: 0, type: "choice" as const }];
+    }
+    return cells;
+  }, [walk, endStep]);
 
   // Separately, which walk step (if any) corresponds to the chord picked
   // for editing — used only for a "selected" highlight, never for choice-
@@ -142,7 +149,7 @@ export default function HoneycombWheel({
     const updated = [...chords, newChord];
     onChangeChords(updated);
     onSelectChord(newChord.id);
-    getPreviewPlayer().playChord(chordToFreqs(newChord), 1);
+    getPreviewPlayer().playChordObject(newChord, 1);
   }, [chords, keyPc, keyName, intervals, diatonicByDegree, beatsPerChord, onChangeChords, onSelectChord]);
 
   const selectChordAtCell = useCallback((q: number, r: number) => {
@@ -152,7 +159,7 @@ export default function HoneycombWheel({
         const chord = chords[i];
         if (chord) {
           onSelectChord(chord.id);
-          getPreviewPlayer().playChord(chordToFreqs(chord), 1);
+          getPreviewPlayer().playChordObject(chord, 1);
         }
         return;
       }

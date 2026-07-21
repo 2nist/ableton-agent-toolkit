@@ -3,7 +3,7 @@ import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
 import { getSubstitutionMenu } from "../../lib/harmony/substitutions";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
-import { getPreviewPlayer, chordToFreqs } from "../../lib/harmony/audioPreview";
+import { getPreviewPlayer } from "../../lib/harmony/audioPreview";
 
 interface ChordInspectorProps {
   chord: Chord | null;
@@ -46,7 +46,7 @@ export default function ChordInspector({ chord, keyName, scale, onChange }: Chor
 
   function auditionAndApply(next: Chord) {
     onChange(next);
-    getPreviewPlayer().playChord(chordToFreqs(next), 1);
+    getPreviewPlayer().playChordObject(next, 1);
   }
 
   return (
