@@ -12,6 +12,18 @@ interface ChordInspectorProps {
   onChange: (chord: Chord) => void;
 }
 
+// Chromatic subs (tritone/secondary-dominant) aren't diatonic, so there's no
+// scale degree to label them with — but the honeycomb still needs *some*
+// key-relative roman numeral to plot their hex position, so we derive one
+// from the semitone offset off the key root, same accidental convention as
+// honeycombWalk's own chromatic degree labels ("♭II — Neapolitan", etc).
+const CHROMATIC_DEGREES = ["I", "♭II", "II", "♭III", "III", "IV", "♯IV", "V", "♭VI", "VI", "♭VII", "VII"];
+
+function chromaticDegreeLabel(keyPc: number, rootPc: number): string {
+  const offset = (((rootPc - keyPc) % 12) + 12) % 12;
+  return CHROMATIC_DEGREES[offset];
+}
+
 /** The substitution menu for the selected chord: mode-aware suggestions
  *  (with their theoretical explanation), the two chromatic transforms, and
  *  every borrowed-chord candidate for the scale. Replaces the old 2-option
@@ -91,6 +103,7 @@ export default function ChordInspector({ chord, keyName, scale, onChange }: Chor
                   ...chord,
                   root: noteName(sub.root, keyName),
                   quality: sub.quality,
+                  romanNumeral: chromaticDegreeLabel(keyPc, sub.root),
                   isSubstitution: true,
                   substitutedFrom: chord.romanNumeral,
                 })

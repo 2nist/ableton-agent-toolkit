@@ -8,11 +8,9 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
-import { pitchClass } from "@music-theory/core";
 import type { ScaleType, NoteName } from "@music-theory/core";
 import type { BlueprintSection, Chord } from "../../types/blueprint";
-import { getDiatonicOptions, chordDisplayName, chordFromDegree, functionColorHex } from "../../lib/harmony/chordBuilder";
-import { getPreviewPlayer, chordToFreqs } from "../../lib/harmony/audioPreview";
+import { getPreviewPlayer } from "../../lib/harmony/audioPreview";
 import ChordCard from "./ChordCard";
 
 interface ProgressionBuilderProps {
@@ -34,8 +32,6 @@ export default function ProgressionBuilder({
   onSelectChord,
   onChangeChords,
 }: ProgressionBuilderProps) {
-  const keyPc = pitchClass(keyName);
-  const diatonicOptions = getDiatonicOptions(scale);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -47,12 +43,6 @@ export default function ProgressionBuilder({
   useEffect(() => {
     return () => getPreviewPlayer().stop();
   }, [section.id]);
-
-  function addChord(option: ReturnType<typeof getDiatonicOptions>[number]) {
-    const chord = chordFromDegree(keyPc, keyName, option.degree, option.quality, option.root, section.beatsPerChord);
-    onChangeChords([...section.chords, chord]);
-    getPreviewPlayer().playChord(chordToFreqs(chord), 1);
-  }
 
   function updateChord(index: number, updated: Chord) {
     onChangeChords(section.chords.map((c, i) => (i === index ? updated : c)));
@@ -89,33 +79,6 @@ export default function ProgressionBuilder({
   return (
     <div className="space-y-3">
       <div>
-        <p className="text-xs text-inkMuted uppercase tracking-wide mb-1">
-          Diatonic chords — click to add to {section.name}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {diatonicOptions.map((opt) => {
-            const hex = functionColorHex(opt.func);
-            const style = opt.isBorrowed || !hex ? undefined : { borderColor: hex, color: hex };
-            return (
-              <button
-                key={opt.degree}
-                className={`text-xs border rounded px-2 py-1 ${
-                  opt.isBorrowed
-                    ? "border-accent/50 text-accent hover:bg-accent/10"
-                    : "border-edge text-inkMuted hover:bg-panelAlt hover:text-ink"
-                }`}
-                style={style}
-                title={opt.func}
-                onClick={() => addChord(opt)}
-              >
-                {opt.degree} · {chordDisplayName((keyPc + opt.root) % 12, opt.quality, keyName)}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div>
         <div className="flex items-center justify-between mb-1">
           <p className="text-xs text-inkMuted uppercase tracking-wide">Progression</p>
           {section.chords.length > 0 && (
@@ -128,7 +91,7 @@ export default function ProgressionBuilder({
           )}
         </div>
         {section.chords.length === 0 ? (
-          <p className="text-sm text-inkMuted">No chords yet — add some from the palette above.</p>
+          <p className="text-sm text-inkMuted">No chords yet — click a dashed cell on the honeycomb above to add one.</p>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={section.chords.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
