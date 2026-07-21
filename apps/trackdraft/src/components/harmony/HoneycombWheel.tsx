@@ -81,6 +81,23 @@ export default function HoneycombWheel({
     return idx >= 0 && idx < walk.length ? idx : -1;
   }, [chords, selectedChordId, walk.length]);
 
+  // Step-order badges, one per unique cell — a repeating progression (e.g.
+  // I-IV-I-IV) revisits the same cell many times, and stacking one opaque
+  // badge per visit at dead-center used to completely bury the roman
+  // numeral/chord name under whichever visit drew last. Grouped by
+  // position and shown as "first-visit×count" in a corner instead, so the
+  // main label always stays legible.
+  const walkBadges = useMemo(() => {
+    const byCell = new Map<string, { q: number; r: number; indices: number[] }>();
+    walk.forEach((p, i) => {
+      const key = `${p.q},${p.r}`;
+      const entry = byCell.get(key);
+      if (entry) entry.indices.push(i + 1);
+      else byCell.set(key, { q: p.q, r: p.r, indices: [i + 1] });
+    });
+    return Array.from(byCell.values());
+  }, [walk]);
+
   const loop = useMemo(() => detectLoop(steps, walk), [steps, walk]);
   const loopVec = loop?.translated
     ? { x: loop.dq * S * Math.sqrt(3), y: loop.dr * S * 1.5 }
@@ -249,16 +266,21 @@ export default function HoneycombWheel({
           );
         })}
 
-        {walk.map((p, i) =>
-          i > 0 && walk[i].q === walk[i - 1].q && walk[i].r === walk[i - 1].r ? null : (
-            <g key={i} style={{ pointerEvents: "none" }}>
-              <circle cx={hexToPixel(p.q, p.r, S).x} cy={hexToPixel(p.q, p.r, S).y} r={9} fill="#0E1116" stroke="#F5E7C8" strokeWidth={1.5} />
-              <text x={hexToPixel(p.q, p.r, S).x} y={hexToPixel(p.q, p.r, S).y + 1} textAnchor="middle" dominantBaseline="middle"
-                fontFamily="'IBM Plex Mono', monospace" fontSize={9} fontWeight={600} fill="#F5E7C8">
-                {i + 1}
+        {walkBadges.map(({ q, r, indices }) => {
+          const center = hexToPixel(q, r, S);
+          const bx = center.x + S * 0.6;
+          const by = center.y - S * 0.6;
+          const label = indices.length > 1 ? `${indices[0]}×${indices.length}` : String(indices[0]);
+          return (
+            <g key={`${q},${r}`} style={{ pointerEvents: "none" }}>
+              <circle cx={bx} cy={by} r={9} fill="#0E1116" stroke="#F5E7C8" strokeWidth={1.5} />
+              <text x={bx} y={by + 1} textAnchor="middle" dominantBaseline="middle"
+                fontFamily="'IBM Plex Mono', monospace" fontSize={8} fontWeight={600} fill="#F5E7C8">
+                {label}
               </text>
             </g>
-          ))}
+          );
+        })}
       </svg>
     </div>
   );
