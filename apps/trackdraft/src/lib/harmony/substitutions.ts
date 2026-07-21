@@ -93,7 +93,13 @@ export interface ModeAwareSubstitution extends GeneratedSubstitution {
  *  scale degree to look suggestions up by, so it gets no mode-aware subs
  *  (chromatic and borrowed subs still apply to it; see `getSubstitutionMenu`). */
 export function getModeAwareSubstitutions(scale: ScaleType, romanNumeral: string): ModeAwareSubstitution[] {
-  const degreeIndex = MODE_DATA[scale].degrees.indexOf(romanNumeral);
+  // Strip leading accidentals (♭, b, ♯, #) from the roman numeral before
+  // lookup — MODE_DATA.degrees stores bare names like "VII", but catalog
+  // chords carry accidentaled labels like "♭VII" or "bVII".  Without this
+  // strip every borrowed/flat chord silently receives an empty substitution
+  // menu instead of the real mode-aware options it should show.
+  const stripped = romanNumeral.replace(/^[♭b♯#]/, "");
+  const degreeIndex = MODE_DATA[scale].degrees.indexOf(stripped);
   if (degreeIndex === -1) return [];
 
   return getSubstitutionOptions(scale, degreeIndex + 1).flatMap((option) => {

@@ -37,16 +37,34 @@ export function parseImportedSong(raw: unknown): BlueprintSong {
   // through as an untyped array. A malformed entry (e.g. hand-edited JSON
   // missing `repeats`) previously wouldn't fail until sectionSpans() ran
   // deep inside export, with no clear message pointing back at the file.
+  //
+  // Accepts `sectionName` as a legacy alias for `sectionId` -- the
+  // catalog ingestion script (apps/trackdraft/scripts/catalog/
+  // toBlueprintSong.ts) wrote `sectionName` until 2026-07-21, and all
+  // 179 existing Beatles catalog files have it. Normalization below
+  // converts those entries so downstream code never sees the legacy
+  // field name, but the validation message only mentions `sectionId`
+  // so users hand-editing a file know the canonical name to use.
   for (const entry of obj.arrangement) {
-    if (
-      typeof entry !== "object" ||
-      entry === null ||
-      typeof (entry as Record<string, unknown>).sectionId !== "string" ||
-      typeof (entry as Record<string, unknown>).repeats !== "number"
-    ) {
-      throw new Error('Not a valid song file: arrangement entries need a "sectionId" string and a "repeats" number.');
+    const e = entry as Record<string, unknown>;
+    if (typeof entry !== "object" || entry === null || typeof e.repeats !== "number") {
+      throw new Error('Not a valid song file: arrangement entries need a "repeats" number.');
+    }
+    if (typeof e.sectionId !== "string" && typeof e.sectionName !== "string") {
+      throw new Error('Not a valid song file: arrangement entries need a "sectionId" string (or the legacy "sectionName" field) and a "repeats" number.');
     }
   }
+  // Normalize any legacy `sectionName` entries to `sectionId` so the
+  // returned BlueprintSong always carries the canonical field name.
+  const normalizedArrangement: BlueprintSong["arrangement"] = obj.arrangement.map((entry: unknown) => {
+    const e = entry as Record<string, unknown>;
+    return {
+      sectionId: (typeof e.sectionId === "string" ? e.sectionId : e.sectionName) as string,
+      repeats: e.repeats as number,
+      variation: typeof e.variation === "string" ? e.variation : undefined,
+      overrides: (e.overrides as Record<string, unknown>) ?? undefined,
+    } as BlueprintSong["arrangement"][number];
+  });
   const now = new Date().toISOString();
   return {
     id: typeof obj.id === "string" ? obj.id : crypto.randomUUID(),
@@ -58,7 +76,7 @@ export function parseImportedSong(raw: unknown): BlueprintSong {
     timeSignatureNumerator: typeof obj.timeSignatureNumerator === "number" ? obj.timeSignatureNumerator : 4,
     timeSignatureDenominator: typeof obj.timeSignatureDenominator === "number" ? obj.timeSignatureDenominator : 4,
     sections: obj.sections as BlueprintSong["sections"],
-    arrangement: obj.arrangement as BlueprintSong["arrangement"],
+    arrangement: normalizedArrangement,
     concept: typeof obj.concept === "string" ? obj.concept : undefined,
     notes: (obj.notes as BlueprintSong["notes"]) ?? undefined,
     additionalIdeas: Array.isArray(obj.additionalIdeas) ? (obj.additionalIdeas as string[]) : undefined,

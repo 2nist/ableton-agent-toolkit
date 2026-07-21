@@ -59,11 +59,33 @@ function main() {
     const lrclib = lrclibIndex.get(normalizeTitle(parsed.title));
 
     const hasSyncedLyrics = Boolean(lrclib?.syncedLyrics);
+
+    // When only plain lyrics are available (syncedLyrics is null),
+    // split the text into individual lines and assign synthetic
+    // timestamps evenly across the song's total duration so the
+    // tail-zone binning in toBlueprintSong can distribute each line
+    // into its best-fit section instead of a single blob in section 0.
+    const plainLinesWithSyntheticTiming = (
+      plainText: string,
+      totalSec: number,
+    ): { text: string; startSec: number }[] => {
+      const lines = plainText
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+      if (lines.length <= 1 || totalSec <= 0) return lines.map((text) => ({ text, startSec: 0 }));
+      const step = totalSec / (lines.length - 1);
+      return lines.map((text, i) => ({ text, startSec: i * step }));
+    };
+
+    const lastSectionEndSec =
+      (parsed.sections[parsed.sections.length - 1]?.endSec) ?? 0;
+
     const lyricLines = lrclib
       ? hasSyncedLyrics
         ? parseLrc(lrclib.syncedLyrics!)
         : lrclib.plainLyrics
-          ? [{ text: lrclib.plainLyrics, startSec: 0 }]
+          ? plainLinesWithSyntheticTiming(lrclib.plainLyrics, lastSectionEndSec)
           : []
       : undefined;
 

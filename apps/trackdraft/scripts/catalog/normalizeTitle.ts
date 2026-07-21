@@ -11,6 +11,12 @@ export function normalizeTitle(title: string): string {
     .replace(/^CD\s*\d+\s*[-_]*\s*/i, "")
     .replace(/^\d+\s*[-_]*\s*/, "")
     .replace(/[_-]/g, " ")
+    // LRCLIB track names routinely use Unicode smart-quote / acute-accent
+    // characters for apostrophes (U+00B4, U+0060 backtick, U+2018/U+2019
+    // single smart quotes, U+201a, and even U+0019).  Normalize all of
+    // them to a plain ASCII apostrophe before stripping punctuation, so
+    // "you´re" === "you're" and both match.
+    .replace(/[\u00B4\u0060\u2018\u2019\u201a\u0019#]+/g, "'")
     .replace(/[.,!?'"()]/g, "")
     .toLowerCase()
     .replace(/\s+/g, " ")

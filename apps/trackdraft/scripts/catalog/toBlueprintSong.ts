@@ -41,6 +41,13 @@ function guessSectionRole(rawName: string): SectionRole {
   return CANONICAL_TO_SECTION_ROLE[canonical];
 }
 
+/** Sections whose canonical role is nothing and whose name contains
+ *  "silence" — JCRD's leading/trailing timing artifacts.  Filtered so
+ *  the first real section can capture orphaned lyrics/chords. */
+function isStructuralJunk(rawName: string): boolean {
+  return normalizeRole(rawName) === null && rawName.toLowerCase().includes("silence");
+}
+
 const DEFAULT_BPM = 120;
 const DEFAULT_TIME_SIG_NUMERATOR = 4;
 
@@ -88,11 +95,68 @@ export function catalogSongToBlueprintSong({ id, raw, lyricLines, hasSyncedLyric
     warnings.push("No LRCLIB match found — lyrics not populated");
   }
 
-  const sections: BlueprintSection[] = raw.sections.map((rawSection, sectionIndex) => {
+  // ——— pre‑process ———————————————————————————————————————————————
+
+  const meaningfulRawSections = raw.sections.filter((rs) => !isStructuralJunk(rs.name ?? ""));
+
+  // Single sorted timeline used for both chord & lyric binning.
+  // Chord midpoint is the tie‑breaker when boundaries are fuzzy
+  // (the last chord of a section often stretches into the next).
+  const allRawChords = raw.sections
+    .filter((rs) => !isStructuralJunk(rs.name ?? ""))
+    .flatMap((rs) => rs.chords)
+    .sort((a, b) => a.startSec - b.startSec);
+
+  // Deferred‑from‑previous‑section accumulators — mutable through
+  // the `.map()` closure below (Zustand‑style intentional mutation).
+  let deferredFromPrev: LrcLine[] = [];
+  let deferredChordsFromPrev: typeof allRawChords = [];
+
+  // ——— per‑section processing ——————————————————————————————————————
+
+  const sections: BlueprintSection[] = meaningfulRawSections.map((rawSection, sectionIndex) => {
     const durationBeats = (rawSection.endSec - rawSection.startSec) * beatsPerSec;
     const bars = Math.max(1, Math.round(durationBeats / DEFAULT_TIME_SIG_NUMERATOR));
 
-    const chords: Chord[] = rawSection.chords.map((c, chordIndex) => {
+    // ---- timing & tail zone ----------------------------------------
+
+    // Raw start/end in beats.  The first section extends to 0 to
+    // capture chords/lyrics that fell inside filtered leading silence.
+    const rawStartBeat = sectionIndex === 0 ? 0 : rawSection.startSec * beatsPerSec;
+    const rawEndBeat = rawSection.endSec * beatsPerSec;
+    const TAIL_ZONE_BEATS = (2 * bpm) / 60; // 2 seconds in beats
+
+    // Any event (chord‑midpoint or lyric timestamp) on or after
+    // `cutoverBeat` routes to the *next* section instead.
+    const cutoverBeat = Math.min(rawEndBeat - TAIL_ZONE_BEATS, rawEndBeat);
+
+    const sectionStartBeat = rawStartBeat;
+    const sectionEndBeat = rawEndBeat;
+
+    // ---- chords (flat‑timeline tail‑zone binning) --------------------
+
+    // Unlike lyrics, a chord belongs to the section where it *starts*,
+    // not where its midpoint falls.  Vocals enter late (0.5-1.5 s before
+    // the chord change), so lyric lines need the tail‑zone deferral;
+    // chords are the anchor points the tail zone is defined against, so
+    // using midpoint here would push boundary‑spanning chords into the
+    // wrong section, making every verse appear one chord short.
+    const claimedChords: typeof allRawChords = [];
+    const deferredChords: typeof allRawChords = [];
+    for (const c of allRawChords) {
+      const startBeat = c.startSec * beatsPerSec;
+      if (startBeat < sectionStartBeat || startBeat >= sectionEndBeat) continue;
+      if (startBeat >= cutoverBeat && sectionIndex + 1 < meaningfulRawSections.length) {
+        deferredChords.push(c);
+        continue;
+      }
+      claimedChords.push(c);
+    }
+
+    const binnedChords = [...deferredChordsFromPrev, ...claimedChords];
+    deferredChordsFromPrev = deferredChords.length ? deferredChords : [];
+
+    const chords: Chord[] = binnedChords.map((c, chordIndex) => {
       const chordBeats = roundToQuarterBeat((c.endSec - c.startSec) * beatsPerSec);
       const quality = c.quality as ChordQuality;
       return {
@@ -112,18 +176,28 @@ export function catalogSongToBlueprintSong({ id, raw, lyricLines, hasSyncedLyric
           )[0].beats
       : DEFAULT_TIME_SIG_NUMERATOR;
 
-    const sectionStartBeat = raw.sections
-      .slice(0, sectionIndex)
-      .reduce((sum, s) => sum + Math.max(1, Math.round((s.endSec - s.startSec) * beatsPerSec / DEFAULT_TIME_SIG_NUMERATOR)) * DEFAULT_TIME_SIG_NUMERATOR, 0);
-    const sectionEndBeat = sectionStartBeat + bars * DEFAULT_TIME_SIG_NUMERATOR;
+    // ---- lyrics (tail‑zone deferral, same cutoverBeat) ---------------
 
-    const linesInSection = (lyricLines ?? []).filter((line) => {
+    const claimedLines: LrcLine[] = [];
+    const deferredLines: LrcLine[] = [];
+    for (const line of (lyricLines ?? [])) {
       const lineBeat = line.startSec * beatsPerSec;
-      return lineBeat >= sectionStartBeat && lineBeat < sectionEndBeat;
-    });
+      if (lineBeat < sectionStartBeat || lineBeat >= sectionEndBeat) continue;
+      if (lineBeat >= cutoverBeat && sectionIndex + 1 < meaningfulRawSections.length) {
+        deferredLines.push(line);
+        continue;
+      }
+      claimedLines.push(line);
+    }
+
+    const linesInSection = [...deferredFromPrev, ...claimedLines];
+    deferredFromPrev = deferredLines.length ? deferredLines : [];
+
     const lyricsTimeline: LyricsTimelineEntry[] | undefined = linesInSection.length
       ? linesInSection.map((line) => ({ text: line.text, startBeat: line.startSec * beatsPerSec }))
       : undefined;
+
+    // ---- return section object ---------------------------------------
 
     return {
       id: `${id}-section-${sectionIndex}`,
@@ -156,7 +230,7 @@ export function catalogSongToBlueprintSong({ id, raw, lyricLines, hasSyncedLyric
     timeSignatureNumerator: DEFAULT_TIME_SIG_NUMERATOR,
     timeSignatureDenominator: 4,
     sections,
-    arrangement: sections.map((s) => ({ sectionName: s.name, repeats: 1 })),
+    arrangement: sections.map((s) => ({ sectionId: s.id, repeats: 1 })),
     provenance: { source: "catalog-lookup", extractedAt: now, warnings },
     createdAt: now,
     updatedAt: now,
