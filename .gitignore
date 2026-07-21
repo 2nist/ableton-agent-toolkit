@@ -6,3 +6,13 @@ dist/
 *.tsbuildinfo
 .vscode/*.log
 *.ablx
+
+# Build / editor artifacts
+.whisper-venv/
+_pgbackup/
+_pginfo/
+pinegrow.json
+puck.generated.tsx
+
+# Generated data
+apps/trackdraft/scripts/output/

@@ -1,0 +1,43 @@
+{
+  "id": "genre-grunge-soft-loud",
+  "name": "Grunge / Alternative Rock",
+  "description": "The soft-loud paradigm: restrained verses, explosive choruses, a chug-warning pre-chorus between them.",
+  "defaults": {
+    "bpm": 96,
+    "key": "A",
+    "scale": "aeolian",
+    "concept": "Grunge-era alternative rock — quiet anxious verses, a rhythmic chug-warning, then a raw wall-of-sound chorus. Dynamics are the primary structural device."
+  },
+  "slots": [
+    {
+      "role": "verse",
+      "label": "Claustrophobic Verse",
+      "purpose": "FEEL: Anxious, isolated, tightly restrained. PRODUCTION NOTE: Minimalist arrangement. The drum MIDI loop triggers basic rim-clicks and tight closed-hat strokes with zero rolling fill data.",
+      "bars": 16,
+      "velocity": "p",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "pre_chorus",
+      "label": "The Chug Warning",
+      "purpose": "FEEL: Imminent dynamic explosion. TRICK: Hit heavy, syncopated, dead-muted guitar scratch strokes on the eighth-note offbeats. The drum pattern accelerates note density using a steady, unaccented snare ramp.",
+      "bars": 4,
+      "velocity": "mp",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "chorus",
+      "label": "Explosive Catharsis",
+      "purpose": "FEEL: Raw, unhinged, wide wall of sound. PRODUCTION NOTE: Rhythm elements completely drop the tight verse pocket, switching instantly to wide-open, sloshy hi-hat wash patterns and loud kick-snare variations.",
+      "bars": 12,
+      "velocity": "ff",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    }
+  ]
+}

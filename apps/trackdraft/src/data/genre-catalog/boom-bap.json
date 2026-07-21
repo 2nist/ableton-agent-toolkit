@@ -1,0 +1,53 @@
+{
+  "id": "genre-boom-bap",
+  "name": "Boom Bap Hip Hop",
+  "description": "Classic sampled loop structure with filtered intro, 16-bar verses, a vocal hook, and beat drop-outs.",
+  "defaults": {
+    "bpm": 88,
+    "key": "G",
+    "scale": "aeolian",
+    "concept": "Classic boom bap hip hop — gritty, unquantized kick-snare transients, vinyl-filtered sample loops, a swinging pocket with beat drop-outs for vocal punctuation."
+  },
+  "slots": [
+    {
+      "role": "intro",
+      "label": "Filtered Sample Intro",
+      "purpose": "FEEL: Muffled, historical, vinyl character. TRICK: Apply a steep low-pass filter to the main chord loop. Keep the drum track entirely muted so the groove is felt before the full track hits.",
+      "bars": 4,
+      "velocity": "p",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "verse",
+      "label": "16-Bar Verse Core",
+      "purpose": "FEEL: Hard-hitting, gritty, swinging pocket. PRODUCTION NOTE: Pop open the filter sweep. Unleash the heavy, unquantized kick-snare transient positions. The harmonic loop cycles rigidly every 4 bars.",
+      "bars": 16,
+      "velocity": "f",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "chorus",
+      "label": "The Vocal Hook",
+      "purpose": "FEEL: Focused and anthemic. TRICK: Overlay a minor melodic asset (like a background horn snippet or turntable scratch line) to signify the hook block without changing the underlying main chords.",
+      "bars": 8,
+      "velocity": "f",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "breakdown",
+      "label": "The Beat Drop Out",
+      "purpose": "FEEL: High vocal exposure. TRICK: Drop the drum MIDI clips out completely on measures 2 and 4 of this block to punctuate the lyricist's line delivery.",
+      "bars": 4,
+      "velocity": "mp",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    }
+  ]
+}

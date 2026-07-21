@@ -1,0 +1,53 @@
+{
+  "id": "genre-indie-folk",
+  "name": "Indie Folk",
+  "description": "Open-tuning drone suite with fingerpicked intro, narrative verses, a dominant V lift, and an ensemble climax.",
+  "defaults": {
+    "bpm": 102,
+    "key": "D",
+    "scale": "ionian",
+    "concept": "Indie folk open-tuning drone — organic fingerpicked acoustic patterns, a ringing root drone string, foot-stomp MIDI layers on every downbeat, building to full acoustic ensemble saturation."
+  },
+  "slots": [
+    {
+      "role": "intro",
+      "label": "Acoustic Fingerpick Intro",
+      "purpose": "FEEL: Organic, woody, rolling. PRODUCTION NOTE: Acoustic patterns layout a driving modal Open-D drone framework. No kick drum transients are present yet.",
+      "bars": 8,
+      "velocity": "p",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "verse",
+      "label": "Verse (Narrative Bed)",
+      "purpose": "FEEL: Storytelling focus, calm momentum. PRODUCTION NOTE: Melodies weave simple harmonic steps between the root and subdominant chords over the ringing root guitar drone string.",
+      "bars": 12,
+      "velocity": "mp",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "chorus",
+      "label": "The Chorus Lift",
+      "purpose": "FEEL: Uplifting, rootsy, open. TRICK: Introduce the dominant V chord for the first time to create an open cadential lift. A steady acoustic foot-stomp MIDI layer triggers on every downbeat.",
+      "bars": 8,
+      "velocity": "mf",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "solo",
+      "label": "The Ensemble Climax",
+      "purpose": "FEEL: Cascading, full acoustic saturation. PRODUCTION NOTE: Arrange dense instrumental counter-melodies on the subdominant chord. The drum clip scales up to a riding, rhythmic pulse with active rolling subdivisions.",
+      "bars": 12,
+      "velocity": "ff",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    }
+  ]
+}

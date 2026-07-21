@@ -1,0 +1,43 @@
+{
+  "id": "genre-prog-rock-54",
+  "name": "Progressive Rock (5/4)",
+  "description": "A three-section progressive rock concept suite in 5/4, built around a rolling ostinato and an instrumental duel.",
+  "defaults": {
+    "bpm": 124,
+    "key": "E",
+    "scale": "dorian",
+    "concept": "Progressive rock concept suite in 5/4 — intricate tom-driven rhythms, long-form narrative verses, and a virtuosic instrumental duel anchored by a heavy backbeat on beat 4."
+  },
+  "slots": [
+    {
+      "role": "intro",
+      "label": "The Rolling Ostinato",
+      "purpose": "FEEL: Urgent, cyclical, spinning forward. PRODUCTION NOTE: Keyboards establish a rolling 5/4 ostinato. The drum MIDI clip utilizes intricate tom-tom accent lines on beats 1, 3, and 4 instead of a standard hi-hat tick.",
+      "bars": 6,
+      "velocity": "mp",
+      "beatsPerChord": 5,
+      "timeSignatureNumerator": 5,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "verse",
+      "label": "The Linear Verse",
+      "purpose": "FEEL: Narrative story bed. TRICK: Vocal melodies stretch out over long phrases that cross over the 5-beat boundaries. In the final 2 bars of the verse, completely drop out the low end of the mix to clear a dynamic valley.",
+      "bars": 10,
+      "velocity": "mf",
+      "beatsPerChord": 5,
+      "timeSignatureNumerator": 5,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "solo",
+      "label": "The Instrumental Duel",
+      "purpose": "FEEL: Virtuosic and highly theatrical. TRICK: A blazing trade-off solo layout alternating phrases between leads. The drum clip locks a heavy, unchanging snare backbeat straight on beat 4 of every measure to anchor the odd time signature.",
+      "bars": 12,
+      "velocity": "ff",
+      "beatsPerChord": 2,
+      "timeSignatureNumerator": 5,
+      "timeSignatureDenPower": 2
+    }
+  ]
+}

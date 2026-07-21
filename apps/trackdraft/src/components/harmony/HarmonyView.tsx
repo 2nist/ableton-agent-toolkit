@@ -1,17 +1,14 @@
 import { useEffect, useState } from "react";
-import { pitchClass, noteName, KEY_ROOTS } from "@music-theory/core";
+import { pitchClass, noteName } from "@music-theory/core";
 import type { ScaleType, NoteName } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
 import { useSongStore } from "../../store/songStore";
 import { updateSection } from "../../lib/sections";
 import { parseToken, MODE_TO_SCALE_KEY, SCALE_INTERVALS } from "../../lib/harmony/honeycombWalk";
-import KeySelector from "./KeySelector";
-import ProgressionBuilder from "./ProgressionBuilder";
-import ChordInspector from "./ChordInspector";
-import PresetPicker from "./PresetPicker";
 import HoneycombWheel from "./HoneycombWheel";
-
-const SCALES: ScaleType[] = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
+import ProgressionTrack from "./ProgressionTrack";
+import FloatingToolbar from "./FloatingToolbar";
+import ChordEditorPopover from "./ChordEditorPopover";
 
 /** Re-roots a section's chords to a new key/scale — root pitch only,
  *  preserving each chord's authored quality/roman-numeral label so a
@@ -34,6 +31,8 @@ export default function HarmonyView() {
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [selectedChordId, setSelectedChordId] = useState<string | null>(null);
+  // The one chord editor: which chord, and the viewport point to anchor beside.
+  const [editor, setEditor] = useState<{ chordId: string; anchor: { x: number; y: number } } | null>(null);
 
   if (!currentSong) return null;
   const song = currentSong;
@@ -42,16 +41,32 @@ export default function HarmonyView() {
 
   useEffect(() => {
     setSelectedChordId(null);
+    setEditor(null);
   }, [activeSection?.id]);
 
-  const selectedChord = activeSection?.chords.find((c) => c.id === selectedChordId) ?? null;
-
   // A section can override the song's key/scale (modulation) — everything
-  // downstream of the tab strip reads/writes against this effective value,
-  // never song.key/song.scale directly, so a modulated section is edited
-  // correctly without touching the song-wide default.
+  // downstream reads/writes against this effective value, never
+  // song.key/song.scale directly, so a modulated section is edited correctly
+  // without touching the song-wide default.
   const effectiveKey = activeSection?.key ?? song.key;
   const effectiveScale = activeSection?.scale ?? song.scale;
+
+  const editorChord = editor ? activeSection?.chords.find((c) => c.id === editor.chordId) ?? null : null;
+
+  function openEditor(chordId: string, anchor: { x: number; y: number }) {
+    setSelectedChordId(chordId);
+    setEditor({ chordId, anchor });
+  }
+
+  function updateChords(chords: Chord[]) {
+    if (!activeSection) return;
+    updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, chords })));
+  }
+
+  function setSectionBars(bars: number) {
+    if (!activeSection) return;
+    updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, bars })));
+  }
 
   function handleRekey(newKey: NoteName | undefined, newScale: ScaleType | undefined) {
     if (!activeSection) return;
@@ -67,126 +82,107 @@ export default function HarmonyView() {
     );
   }
 
-  return (
-    <div className="p-6 max-w-5xl space-y-6">
-      <KeySelector
-        activeKey={song.key}
-        activeScale={song.scale}
-        onChangeKey={(key) => updateCurrentSong((s) => ({ ...s, key }))}
-        onChangeScale={(scale: ScaleType) => updateCurrentSong((s) => ({ ...s, scale }))}
-      />
-
-      {song.sections.length === 0 ? (
+  if (song.sections.length === 0) {
+    return (
+      <div className="p-6 max-w-5xl">
         <p className="text-inkMuted text-sm">
           Add sections in the Structure tab first, then come back here to build chord progressions.
         </p>
-      ) : (
-        <div className="space-y-3">
-          <div className="flex gap-2 flex-wrap">
-            {song.sections.map((section) => (
-              <button
-                key={section.id}
-                className={`text-sm px-3 py-1 rounded border ${
-                  activeSection?.id === section.id
-                    ? "border-accent text-accent"
-                    : "border-edge text-inkMuted hover:text-ink"
-                }`}
-                onClick={() => setSelectedSectionId(section.id)}
-              >
-                {section.name}
-              </button>
-            ))}
-          </div>
+      </div>
+    );
+  }
 
+  return (
+    <div className="p-6 max-w-5xl space-y-4">
+      {/* Hex canvas with its floating, collapsible controls overlaid */}
+      <div className="relative border border-edge rounded-lg bg-[#0e1218] overflow-hidden min-h-[420px]">
+        <FloatingToolbar
+          songKey={song.key}
+          songScale={song.scale}
+          onChangeSongKey={(key) => updateCurrentSong((s) => ({ ...s, key }))}
+          onChangeSongScale={(scale) => updateCurrentSong((s) => ({ ...s, scale }))}
+          presetKeyName={effectiveKey}
+          beatsPerChord={activeSection?.beatsPerChord ?? 4}
+          hasChords={(activeSection?.chords.length ?? 0) > 0}
+          sectionName={activeSection?.name ?? ""}
+          onApplyPreset={updateChords}
+          sectionKeyOverride={activeSection?.key}
+          sectionScaleOverride={activeSection?.scale}
+          onRekeySection={handleRekey}
+        />
+        <div className="flex justify-center p-4 pt-6">
           {activeSection && (
-            <div className="grid grid-cols-[1fr_280px] gap-4">
-              <div className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs text-inkMuted uppercase tracking-wide">Harmony wheel</p>
-                    <div className="flex items-center gap-1 text-xs text-inkMuted">
-                      <span>Section key:</span>
-                      <select
-                        className="bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink"
-                        value={activeSection.key ?? ""}
-                        onChange={(e) => handleRekey(e.target.value || undefined, activeSection.scale)}
-                        title="Override this section's key — modulates it independently of the song key, transposing its chords"
-                      >
-                        <option value="">(song: {song.key})</option>
-                        {KEY_ROOTS.map((k) => (
-                          <option key={k} value={k}>{k}</option>
-                        ))}
-                      </select>
-                      <select
-                        className="bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink"
-                        value={activeSection.scale ?? ""}
-                        onChange={(e) => handleRekey(activeSection.key, (e.target.value || undefined) as ScaleType | undefined)}
-                        title="Override this section's mode"
-                      >
-                        <option value="">(song: {song.scale})</option>
-                        {SCALES.map((sc) => (
-                          <option key={sc} value={sc}>{sc}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <HoneycombWheel
-                    keyName={effectiveKey}
-                    scale={effectiveScale}
-                    chords={activeSection.chords}
-                    beatsPerChord={activeSection.beatsPerChord}
-                    selectedChordId={selectedChordId}
-                    onSelectChord={setSelectedChordId}
-                    onChangeChords={(chords) =>
-                      updateCurrentSong((s) =>
-                        updateSection(s, activeSection.id, (sec) => ({ ...sec, chords })),
-                      )
-                    }
-                  />
-                </div>
-
-                <PresetPicker
-                  keyName={effectiveKey}
-                  beatsPerChord={activeSection.beatsPerChord}
-                  hasChords={activeSection.chords.length > 0}
-                  sectionName={activeSection.name}
-                  onApply={(chords) =>
-                    updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, chords })))
-                  }
-                />
-
-                <ProgressionBuilder
-                  key={activeSection.id}
-                  section={activeSection}
-                  keyName={effectiveKey}
-                  scale={effectiveScale}
-                  bpm={song.bpm}
-                  selectedChordId={selectedChordId}
-                  onSelectChord={setSelectedChordId}
-                  onChangeChords={(chords) =>
-                    updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, chords })))
-                  }
-                />
-              </div>
-
-              <div>
-                <ChordInspector
-                  chord={selectedChord}
-                  keyName={effectiveKey}
-                  scale={effectiveScale}
-                  onChange={(updated) =>
-                    updateCurrentSong((s) =>
-                      updateSection(s, activeSection.id, (sec) => ({
-                        ...sec,
-                        chords: sec.chords.map((c) => (c.id === updated.id ? updated : c)),
-                      })),
-                    )
-                  }
-                />
-              </div>
-            </div>
+            <HoneycombWheel
+              keyName={effectiveKey}
+              scale={effectiveScale}
+              chords={activeSection.chords}
+              beatsPerChord={activeSection.beatsPerChord}
+              selectedChordId={selectedChordId}
+              onSelectChord={setSelectedChordId}
+              onEditChord={openEditor}
+              onChangeChords={updateChords}
+            />
           )}
         </div>
+      </div>
+
+      {/* One framed panel: three aligned tracks — sections / progression / effects */}
+      {activeSection && (
+        <div className="border border-edge rounded-lg bg-panel overflow-hidden">
+          <div className="grid grid-cols-[96px_1fr] items-stretch">
+            <div className="flex flex-col items-end justify-center gap-0.5 px-3 border-r border-edge">
+              <span className="font-mono text-[9px] uppercase tracking-wider text-inkMuted">Sections</span>
+              <span className="font-mono text-[8.5px] text-inkMuted/70">{song.sections.length}</span>
+            </div>
+            <div className="px-3 py-2 overflow-x-auto">
+              <div className="flex gap-1 flex-wrap">
+                {song.sections.map((section) => (
+                  <button
+                    key={section.id}
+                    className={`font-mono text-[11px] whitespace-nowrap rounded-[5px] border px-2.5 py-1 ${
+                      activeSection.id === section.id
+                        ? "border-accent text-accent bg-accent/10"
+                        : "border-edge text-inkMuted hover:text-ink hover:border-inkMuted"
+                    }`}
+                    onClick={() => setSelectedSectionId(section.id)}
+                  >
+                    {section.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <ProgressionTrack
+            key={activeSection.id}
+            section={activeSection}
+            keyName={effectiveKey}
+            scale={effectiveScale}
+            bpm={song.bpm}
+            selectedChordId={selectedChordId}
+            onEditChord={openEditor}
+            onChangeChords={updateChords}
+            onSetBars={setSectionBars}
+          />
+        </div>
+      )}
+
+      {activeSection && editorChord && editor && (
+        <ChordEditorPopover
+          chord={editorChord}
+          keyName={effectiveKey}
+          scale={effectiveScale}
+          anchor={editor.anchor}
+          onChange={(updated) =>
+            updateChords(activeSection.chords.map((c) => (c.id === updated.id ? updated : c)))
+          }
+          onRemove={() => {
+            updateChords(activeSection.chords.filter((c) => c.id !== editorChord.id));
+            setEditor(null);
+            setSelectedChordId(null);
+          }}
+          onClose={() => setEditor(null)}
+        />
       )}
     </div>
   );

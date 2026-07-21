@@ -16,8 +16,10 @@ interface HexWheelProps {
 
 export default function HexWheel({ keyName, scale, usedDegrees, onSelectDegree }: HexWheelProps) {
   const keyPc = pitchClass(keyName);
+  const mode = MODE_DATA[scale];
+  if (!mode) return null;
   const cells = getDiatonicHexCells();
-  const degreeLabels = MODE_DATA[scale].degrees;
+  const degreeLabels = mode.degrees;
 
   const positions = cells.map((cell) => ({ ...cell, ...hexToPixel(cell.q, cell.r, HEX_SIZE) }));
   const minX = Math.min(...positions.map((p) => p.x));
@@ -33,7 +35,7 @@ export default function HexWheel({ keyName, scale, usedDegrees, onSelectDegree }
     <svg width={width} height={height}>
       {positions.map((pos) => {
         const label = degreeLabels[pos.degreeIndex];
-        const entry = MODE_DATA[scale].map[label];
+        const entry = mode.map[label];
         if (!entry) return null;
         const absRoot = (keyPc + entry.pc) % 12;
         const name = chordDisplayName(absRoot, entry.triad, keyName);

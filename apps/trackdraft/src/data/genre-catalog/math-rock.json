@@ -1,0 +1,53 @@
+{
+  "id": "genre-math-rock-78",
+  "name": "Math Rock (7/8)",
+  "description": "Asymmetric-meter loop with a mid-song 4/4 deception. Exercises the odd-meter drum engine.",
+  "defaults": {
+    "bpm": 142,
+    "key": "C",
+    "scale": "ionian",
+    "concept": "Angular math rock in 7/8 — clean finger-tapped guitars, interlocking parts, tight conversational pocket, one deceptive pivot to straight time."
+  },
+  "slots": [
+    {
+      "role": "intro",
+      "label": "Bright Tapping Intro",
+      "purpose": "FEEL: Jittery, expectant, suspended. TRICK: Keep drum parts completely silent for the first 4 bars. Let clean, dry finger-tapped guitar lines carry the metric ambiguity before the raw MIDI rhythm triggers on bar 5.",
+      "bars": 8,
+      "velocity": "mp",
+      "beatsPerChord": 3.5,
+      "timeSignatureNumerator": 7,
+      "timeSignatureDenPower": 3
+    },
+    {
+      "role": "verse",
+      "label": "Interlocking Poly-Verse",
+      "purpose": "FEEL: Intricate, tight conversational pocket. PRODUCTION NOTE: The generated drum clip should rely entirely on crisp snare ghost notes and rapid rim-shots, purposefully accentuating the missing final eighth note of the measure.",
+      "bars": 12,
+      "velocity": "mf",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 7,
+      "timeSignatureDenPower": 3
+    },
+    {
+      "role": "bridge",
+      "label": "The Metric Deception",
+      "purpose": "FEEL: Floating and wide. TRICK: Sudden pivot to a straight 4/4 pulse. Strings should maintain their original 7-beat phrases overlapping the new bar boundaries to displace the downbeat accents seamlessly.",
+      "bars": 4,
+      "velocity": "p",
+      "beatsPerChord": 2,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "chorus",
+      "label": "Explosive Math Climax",
+      "purpose": "FEEL: Urgent and mathematically intense. PRODUCTION NOTE: The underlying drum layout drops tight hat patterns, switching completely to an open, continuous ride-cymbal wash to blow open the sonic energy.",
+      "bars": 16,
+      "velocity": "f",
+      "beatsPerChord": 3.5,
+      "timeSignatureNumerator": 7,
+      "timeSignatureDenPower": 3
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-ki
 import { useSongStore } from "../../store/songStore";
 import { addSection, removeSection, updateSection, updateRepeats, repeatsFor, applySongMap } from "../../lib/sections";
 import { getSongMap } from "../../data/songMaps";
+import { getGenreMap } from "../../data/genre-catalog/index";
 import SectionCard from "./SectionCard";
 import MapPicker from "./MapPicker";
 
@@ -35,7 +36,7 @@ export default function StructureView() {
       <MapPicker
         hasSections={song.sections.length > 0}
         onApply={(mapId) => {
-          const map = getSongMap(mapId);
+          const map = getSongMap(mapId) ?? getGenreMap(mapId);
           if (map) updateCurrentSong((s) => applySongMap(s, map));
         }}
       />

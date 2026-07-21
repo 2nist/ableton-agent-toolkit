@@ -1,0 +1,53 @@
+{
+  "id": "genre-stoner-sludge",
+  "name": "Stoner / Sludge",
+  "description": "Slow, monolithic riff-rock arc: loom, drag, dissolve, crush.",
+  "defaults": {
+    "bpm": 74,
+    "key": "C",
+    "scale": "aeolian",
+    "concept": "Fuzz-saturated stoner rock — down-tuned monolithic riffs, drums dragging behind the beat, a psychedelic void in the middle, ending on a hard stop."
+  },
+  "slots": [
+    {
+      "role": "intro",
+      "label": "Fuzz-Saturated Intro",
+      "purpose": "FEEL: Looming and ancient. TRICK: Introduce a singular down-tuned guitar riff. Let the final measure ring out with raw amp hum and sustain, empty of drum data before the downbeat hits.",
+      "bars": 4,
+      "velocity": "mf",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "verse",
+      "label": "The Monolithic Pocket",
+      "purpose": "FEEL: Deliberate, exhausting, dragging significantly behind the back grid line. PRODUCTION NOTE: To fake real room weight, ensure generated MIDI kick and snare notes hit slightly late against the sequencer block.",
+      "bars": 8,
+      "velocity": "f",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "breakdown",
+      "label": "The Psychedelic Void",
+      "purpose": "FEEL: Hallucinatory and spatial. TRICK: Heavy rhythms cut completely. The drum generation switches to sparse, ringing cymbal edge scrapes and occasional deep floor-tom strikes to let vocal delays bleed over.",
+      "bars": 8,
+      "velocity": "mp",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "outro",
+      "label": "The Wall of Riffs",
+      "purpose": "FEEL: Crushing, infinite momentum. TRICK: Discard standard studio fading. Cut all MIDI notes cleanly on beat one of an unresolved root chord, forcing the track to end on a hard stop.",
+      "bars": 8,
+      "velocity": "fff",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    }
+  ]
+}

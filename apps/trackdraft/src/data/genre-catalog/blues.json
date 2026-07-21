@@ -1,0 +1,43 @@
+{
+  "id": "genre-blues-12bar",
+  "name": "Traditional Blues",
+  "description": "Rigid 12-bar blues form with shuffle swing, a climax solo verse, and a dominant V7 turnaround outro.",
+  "defaults": {
+    "bpm": 82,
+    "key": "E",
+    "scale": "mixolydian",
+    "concept": "Traditional 12-bar blues — steady shuffle swing with I7-IV7-V7 turnaround, a swinging ride-cymbal edge pattern during the solo, resolving on a wide-voiced tonic major chord."
+  },
+  "slots": [
+    {
+      "role": "verse",
+      "label": "The 12-Bar Verse Block",
+      "purpose": "FEEL: Steady shuffle swing. HARMONIC BLUEPRINT: [Bars 1-4: I7] -> [Bars 5-6: IV7] -> [Bars 7-8: I7] -> [Bar 9: V7] -> [Bar 10: IV7] -> [Bars 11-12: I7 Turnaround].",
+      "bars": 12,
+      "velocity": "mf",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "solo",
+      "label": "The Climax Solo Verse",
+      "purpose": "FEEL: High emotional expression. PRODUCTION NOTE: Maintain the exact 12-bar chord grid sequence. Ramping up velocity prompts the drum generator to switch to an active, swinging ride-cymbal edge pattern.",
+      "bars": 12,
+      "velocity": "ff",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "outro",
+      "label": "Dominant Turnaround Outro",
+      "purpose": "FEEL: Resolving, winding down. TRICK: Emulate a live ritardando. Vamp continuously on the dominant V7 chord block, resolving onto a final, wide-voiced tonic major chord on the last beat.",
+      "bars": 4,
+      "velocity": "p",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    }
+  ]
+}

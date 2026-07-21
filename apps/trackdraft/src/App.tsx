@@ -7,6 +7,7 @@ import StructureView from "./components/structure/StructureView";
 import HarmonyView from "./components/harmony/HarmonyView";
 import LyricsView from "./components/lyrics/LyricsView";
 import DetailsView from "./components/details/DetailsView";
+import LivePreviewSandbox from "./pages/LivePreviewSandbox";
 
 function App() {
   const loadFromStorage = useSongStore((s) => s.loadFromStorage);
@@ -27,6 +28,7 @@ function App() {
             <Route path="harmony" element={<HarmonyView />} />
             <Route path="lyrics" element={<LyricsView />} />
           </Route>
+          <Route path="/sandbox" element={<LivePreviewSandbox />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

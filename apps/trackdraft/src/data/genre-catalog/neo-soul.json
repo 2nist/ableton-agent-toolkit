@@ -1,0 +1,53 @@
+{
+  "id": "genre-neo-soul-modal",
+  "name": "Neo-Soul / Jazz Fusion",
+  "description": "Modal extended form with lush chord voicings, a jazz turnaround bridge, and a hanging resolution.",
+  "defaults": {
+    "bpm": 92,
+    "key": "F",
+    "scale": "dorian",
+    "concept": "Neo-soul modal groove — extended chord voicings (9ths/11ths/13ths), a laid-back pocket sitting behind the beat, a chromatic jazz turnaround that pivots the tonal center, resolving on an unresolved Major 7th."
+  },
+  "slots": [
+    {
+      "role": "intro",
+      "label": "Lush Chilled Intro",
+      "purpose": "FEEL: Smooth, velvety, warm. PRODUCTION NOTE: Establish a 2-chord modal vamp utilizing extended chords. Drums run a highly sparse, laid-back pocket sitting heavily behind the beat.",
+      "bars": 4,
+      "velocity": "p",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "verse",
+      "label": "Vocal Verse Loop",
+      "purpose": "FEEL: Locked in a lazy, stable pocket. PRODUCTION NOTE: Keep the introductory loop static to provide a steady bed for vocal performance. Rim-clicks swap with light snare cross-sticks on beats 2 and 4.",
+      "bars": 16,
+      "velocity": "mp",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "bridge",
+      "label": "The Jazz Turnaround",
+      "purpose": "FEEL: Complex harmonic motion. TRICK: Break the loop constraints. Drop a chromatic jazz turnaround (e.g., bIII7 to bII7 secondary dominants) to forcefully pivot the overall tonal center.",
+      "bars": 8,
+      "velocity": "mf",
+      "beatsPerChord": 2,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    },
+    {
+      "role": "chorus",
+      "label": "Main Groove Climax",
+      "purpose": "FEEL: Elevated energy, high emotional resolution. PRODUCTION NOTE: Reintroduce the main theme layered with syncopated voice-leading lines. TRICK: The drum loop drives straight velocity hits, ending the entire section on an unresolved, hanging Major 7th chord.",
+      "bars": 16,
+      "velocity": "f",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2
+    }
+  ]
+}
