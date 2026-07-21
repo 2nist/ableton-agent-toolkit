@@ -34,6 +34,21 @@ function hashSeed(seed: string): number {
 }
 
 /**
+ * A section's own id for the first pass through it, `id:occurrenceIndex`
+ * for every repeat after that — so a section repeated via `arrangement`
+ * gets independently varied drums per pass instead of rendering every
+ * repeat byte-identical by accident. Occurrence 0 (a section that plays
+ * once, or the first pass of one that repeats) always resolves to the
+ * bare section id — the exact seed used before repeats existed, so every
+ * song with no explicit repeats keeps producing byte-identical output.
+ * Same reasoning `vary.ts` was built on: a repeat that never varies reads
+ * as mechanical, not as a human playing the same part twice.
+ */
+function occurrenceSeed(sectionId: string, occurrenceIndex: number): string {
+  return occurrenceIndex === 0 ? sectionId : `${sectionId}:${occurrenceIndex}`;
+}
+
+/**
  * Scale a groove's baked-in velocities so its peak lands on the section's
  * chosen `VelocityPreset`, without touching the *shape* of its dynamics.
  *
@@ -101,7 +116,7 @@ export function planDrumClips(
 
   // First pass: choose pattern + variant per section, so fill/crash
   // decisions can look at the *next* section's resolved target too.
-  const resolved = spans.map(({ section }) => {
+  const resolved = spans.map(({ section, occurrenceIndex }) => {
     const pattern = inferDrumPattern(
       {
         role: section.role,
@@ -114,12 +129,12 @@ export function planDrumClips(
     );
     const preset = presetData[pattern];
     if (!preset || preset.variants.length === 0) return null;
-    return preset.variants[hashSeed(section.id) % preset.variants.length];
+    return preset.variants[hashSeed(occurrenceSeed(section.id, occurrenceIndex)) % preset.variants.length];
   });
 
   let previousEndedWithFill = false;
 
-  return spans.map(({ section, startBeat, durationBeats }, i) => {
+  return spans.map(({ section, startBeat, durationBeats, occurrenceIndex }, i) => {
     const variant = resolved[i];
     if (!variant) {
       previousEndedWithFill = false;
@@ -133,7 +148,7 @@ export function planDrumClips(
       scaled.map(([beat, pitch, velocity]) => ({ beat, pitch, velocity })),
       variant.lengthBeats,
       durationBeats,
-      { seed: section.id },
+      { seed: occurrenceSeed(section.id, occurrenceIndex) },
     );
 
     // Section transition: swap the final bar for a fill when this section
@@ -144,7 +159,7 @@ export function planDrumClips(
     if (next && resolved[i + 1] && durationBeats >= 2 * variant.beatsPerBar) {
       const pool = fillPool(variant, fillData);
       if (pool.length > 0) {
-        const fill = pool[hashSeed(`${section.id}:fill`) % pool.length];
+        const fill = pool[hashSeed(`${occurrenceSeed(section.id, occurrenceIndex)}:fill`) % pool.length];
         const nextTarget = getVelocity(next.section.velocity);
         // Build toward a louder section; ease into a quieter one.
         const fillTarget = nextTarget >= velocityTarget ? Math.max(velocityTarget, nextTarget) : Math.round(velocityTarget * 0.85);

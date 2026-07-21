@@ -194,6 +194,39 @@ describe("planDrumClips — heuristic selection", () => {
   });
 });
 
+describe("planDrumClips — repeated sections (via arrangement) get varied, not identical, drums", () => {
+  it("a section's first occurrence is byte-identical to a non-repeated section with the same id (backward compat)", () => {
+    const solo = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [makeSection({ id: "c", name: "Chorus", bars: 8, timeSignatureNumerator: 4 })],
+    });
+    const repeatedOnce = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [makeSection({ id: "c", name: "Chorus", bars: 8, timeSignatureNumerator: 4 })],
+      arrangement: [{ sectionId: "c", repeats: 1 }],
+    });
+    expect(planDrumClips(repeatedOnce, fixturePresets(), emptyFills)).toEqual(
+      planDrumClips(solo, fixturePresets(), emptyFills),
+    );
+  });
+
+  it("two occurrences of a repeated section render audibly different drums, not a copy-paste repeat", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [makeSection({ id: "c", name: "Chorus", bars: 8, timeSignatureNumerator: 4 })],
+      arrangement: [{ sectionId: "c", repeats: 2 }],
+    });
+    const [first, second] = planDrumClips(song, fixturePresets(), emptyFills);
+    expect(first.notes).not.toEqual(second.notes);
+  });
+});
+
 describe("planDrumClips — dynamics", () => {
   it("scales a groove's peak to the section's velocity preset without flattening dynamics", () => {
     const song = makeSong({

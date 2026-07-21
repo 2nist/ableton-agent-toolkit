@@ -30,6 +30,17 @@ export interface LyricsTimelineEntry {
   endBeat?: number;
 }
 
+/** A timed articulation change applied to a single chord: strum-spread,
+ *  velocity pulse, legato overlap — shape-in-time effects that are worth
+ *  seeing at a glance in a per-step lane (like a DAW automation lane under
+ *  the progression) rather than buried in a dropdown. The params bag is
+ *  deliberately per-style so a chord can only carry one effect at a time,
+ *  keeping it a deliberate choice rather than an unmanageable stack. */
+export interface ChordPerformanceEffect {
+  style: "strum" | "pulse" | "legato";
+  params?: Record<string, number>;
+}
+
 /** A chord in the Harmony view's progression builder. Distinct from
  *  song-structure's SectionChord (which is arrangement-DSL shaped) —
  *  this is the authoring-time representation with a resolved MIDI root. */
@@ -42,6 +53,17 @@ export interface Chord {
   beats: number;
   isSubstitution?: boolean;
   substitutedFrom?: string;
+  /** When the chord has a richer quality than ChordQuality can express
+   *  (e.g. "maj9", "7b13", "m11"), this holds the honeycomb-style suffix
+   *  the hex/inspector prefer for display and voicing. `quality` stays
+   *  the closest basic equivalent for the export pipeline (which only
+   *  needs to know major/minor/dominant-ish). Optional — when absent,
+   *  quality is the single source of truth, exactly as before. */
+  extendedSuffix?: string;
+  /** Optional per-step articulation effect (strum/pulse/legato). When
+   *  absent the chord plays as a plain block chord — no change from
+   *  current behaviour. */
+  performance?: ChordPerformanceEffect;
 }
 
 /** A section as authored in the app. Mirrors song-structure's SongSection
@@ -74,6 +96,44 @@ export interface BlueprintSection {
   lyricsMetrical?: LyricMetricalRow[];
   lyricsTimeline?: LyricsTimelineEntry[];
   transitionNote?: string;
+
+  /** Section-level key override. When present, this section is in a
+   *  different key than the song's global key — supporting real
+   *  modulation rather than just borrowed-chord workarounds. Falls
+   *  back to the song's `key` when absent, so every existing section
+   *  stays valid without migration. */
+  key?: NoteName;
+  /** Section-level scale/mode override. Works the same way as `key`:
+   *  absent → falls back to the song's global `scale`. */
+  scale?: ScaleType;
+}
+
+/** One pass of a section through the song timeline. Lets one canonical
+ *  `BlueprintSection` (written once, in Harmony/Lyrics) repeat without
+ *  duplicating itself into independent, driftable objects — which is what
+ *  both `SongMap` templates and the lyric editor's chorus-consolidation
+ *  did before this existed (three separate "Chorus"/"Chorus 2"/"Chorus 3"
+ *  sections with no relationship to each other).
+ *
+ *  Keyed by `sectionId`, not name — `BlueprintSection.name` is freely
+ *  user-editable and not guaranteed unique, so a name-keyed reference
+ *  (song-structure's own `ArrangementEntry`) would be fragile here.
+ *  `overrides` is deliberately narrow and typed against real
+ *  `BlueprintSection` fields (not the DSL `SongSection` shape
+ *  `ArrangementEntry.overrides` uses) — grow it only when a real use case
+ *  needs more.
+ *
+ *  `song.arrangement` is optional-to-author: any section not covered by
+ *  an entry here is treated by `sectionSpans` as an implicit
+ *  `{sectionId, repeats: 1}` in `sections` list order — today's behavior,
+ *  unchanged. Every existing song stays valid with zero migration. */
+export interface ArrangementRepeat {
+  sectionId: string;
+  /** 1 = plays once, the default/current-equivalent behavior. */
+  repeats: number;
+  /** Display label for a specific pass, e.g. "Chorus (final)". */
+  variation?: string;
+  overrides?: Partial<Pick<BlueprintSection, "bars" | "velocity" | "chords" | "lyrics" | "lyricsTimeline">>;
 }
 
 /** Converts a BlueprintSection's authoring-time chords into
@@ -145,7 +205,7 @@ export interface BlueprintSong {
   timeSignatureDenominator: number;
 
   sections: BlueprintSection[];
-  arrangement: ArrangementEntry[];
+  arrangement: ArrangementRepeat[];
 
   concept?: string;
   notes?: SongNotes;

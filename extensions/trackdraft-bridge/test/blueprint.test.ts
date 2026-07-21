@@ -54,9 +54,119 @@ describe("planCuePoints", () => {
 describe("sectionSpans", () => {
   it("carries both start and duration alongside the section itself", () => {
     const spans = sectionSpans(twinFish);
-    expect(spans[0]).toEqual({ section: twinFish.sections[0], startBeat: 0, durationBeats: 32 });
-    expect(spans[1]).toEqual({ section: twinFish.sections[1], startBeat: 32, durationBeats: 64 });
+    expect(spans[0]).toEqual({ section: twinFish.sections[0], startBeat: 0, durationBeats: 32, occurrenceIndex: 0 });
+    expect(spans[1]).toEqual({ section: twinFish.sections[1], startBeat: 32, durationBeats: 64, occurrenceIndex: 0 });
     expect(spans[spans.length - 1].startBeat + spans[spans.length - 1].durationBeats).toBe(352);
+  });
+
+  it("with an empty arrangement, behaves exactly as before -- one span per section, in list order", () => {
+    // twinFish's makeSong default is arrangement: [] -- this is the real
+    // shape of every existing song today (catalog songs aside, which
+    // populate one repeats:1 entry per section -- covered below).
+    const spans = sectionSpans(twinFish);
+    expect(spans).toHaveLength(twinFish.sections.length);
+    expect(spans.map((s) => s.section.id)).toEqual(twinFish.sections.map((s) => s.id));
+    expect(spans.every((s) => s.occurrenceIndex === 0)).toBe(true);
+  });
+
+  it("an arrangement entry with repeats > 1 expands into multiple spans, each numbered by occurrence", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        makeSection({ id: "v", name: "Verse", bars: 4, timeSignatureNumerator: 4 }),
+        makeSection({ id: "c", name: "Chorus", bars: 4, timeSignatureNumerator: 4 }),
+      ],
+      arrangement: [
+        { sectionId: "v", repeats: 1 },
+        { sectionId: "c", repeats: 3 },
+      ],
+    });
+    const spans = sectionSpans(song);
+    expect(spans.map((s) => s.section.id)).toEqual(["v", "c", "c", "c"]);
+    expect(spans.map((s) => s.occurrenceIndex)).toEqual([0, 0, 1, 2]);
+    expect(spans.map((s) => s.startBeat)).toEqual([0, 16, 32, 48]);
+  });
+
+  it("a section not covered by any arrangement entry is appended once, in sections list order -- never silently dropped", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        makeSection({ id: "v", name: "Verse", bars: 4, timeSignatureNumerator: 4 }),
+        makeSection({ id: "c", name: "Chorus", bars: 4, timeSignatureNumerator: 4 }),
+        makeSection({ id: "o", name: "Outro", bars: 4, timeSignatureNumerator: 4 }),
+      ],
+      // Only "v" is covered -- "c" and "o" have no arrangement entry at all
+      // (e.g. added after the arrangement was authored).
+      arrangement: [{ sectionId: "v", repeats: 2 }],
+    });
+    const spans = sectionSpans(song);
+    expect(spans.map((s) => s.section.id)).toEqual(["v", "v", "c", "o"]);
+  });
+
+  it("an arrangement entry referencing a deleted section is skipped, not crashed on", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [makeSection({ id: "v", name: "Verse", bars: 4, timeSignatureNumerator: 4 })],
+      arrangement: [
+        { sectionId: "v", repeats: 1 },
+        { sectionId: "does-not-exist", repeats: 2 },
+      ],
+    });
+    expect(sectionSpans(song).map((s) => s.section.id)).toEqual(["v"]);
+  });
+
+  it("repeats: 0 plays a section zero times, deliberately -- not clamped up to 1", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        makeSection({ id: "v", name: "Verse", bars: 4, timeSignatureNumerator: 4 }),
+        makeSection({ id: "c", name: "Chorus", bars: 4, timeSignatureNumerator: 4 }),
+      ],
+      arrangement: [
+        { sectionId: "v", repeats: 0 },
+        { sectionId: "c", repeats: 1 },
+      ],
+    });
+    expect(sectionSpans(song).map((s) => s.section.id)).toEqual(["c"]);
+  });
+
+  it("overrides merge onto the section for that pass only", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [makeSection({ id: "c", name: "Chorus", bars: 4, velocity: "mf", timeSignatureNumerator: 4 })],
+      arrangement: [
+        { sectionId: "c", repeats: 1 },
+        { sectionId: "c", repeats: 1, overrides: { velocity: "ff" }, variation: "Chorus (final)" },
+      ],
+    });
+    const spans = sectionSpans(song);
+    expect(spans).toHaveLength(2);
+    expect(spans[0].section.velocity).toBe("mf");
+    expect(spans[1].section.velocity).toBe("ff");
+    // The base section object itself is untouched by the override.
+    expect(song.sections[0].velocity).toBe("mf");
+  });
+
+  it("matches the catalog-ingestion shape: one repeats:1 entry per section produces identical output to no arrangement at all", () => {
+    const sections = twinFish.sections;
+    const withExplicitArrangement = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 60,
+      sections,
+      arrangement: sections.map((s) => ({ sectionId: s.id, repeats: 1 })),
+    });
+    expect(sectionSpans(withExplicitArrangement)).toEqual(sectionSpans(twinFish));
   });
 });
 

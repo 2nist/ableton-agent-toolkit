@@ -33,6 +33,20 @@ export function parseImportedSong(raw: unknown): BlueprintSong {
   if (typeof obj.key === "string" && !(obj.key in NOTE_TO_PC)) {
     throw new Error(`Not a valid song file: "${obj.key}" is not a recognized note name (expected e.g. "C", "F#", "Bb").`);
   }
+  // `arrangement`'s entries weren't validated at all before -- just cast
+  // through as an untyped array. A malformed entry (e.g. hand-edited JSON
+  // missing `repeats`) previously wouldn't fail until sectionSpans() ran
+  // deep inside export, with no clear message pointing back at the file.
+  for (const entry of obj.arrangement) {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      typeof (entry as Record<string, unknown>).sectionId !== "string" ||
+      typeof (entry as Record<string, unknown>).repeats !== "number"
+    ) {
+      throw new Error('Not a valid song file: arrangement entries need a "sectionId" string and a "repeats" number.');
+    }
+  }
   const now = new Date().toISOString();
   return {
     id: typeof obj.id === "string" ? obj.id : crypto.randomUUID(),
