@@ -101,8 +101,8 @@ describe("catalogSongToBlueprintSong", () => {
   it("builds a trivial 1:1 arrangement matching section order", () => {
     const song = catalogSongToBlueprintSong({ id: "test-1", raw: twoSectionSong });
     expect(song.arrangement).toEqual([
-      { sectionName: "Verse", repeats: 1 },
-      { sectionName: "Chorus", repeats: 1 },
+      { sectionId: "test-1-section-0", repeats: 1 },
+      { sectionId: "test-1-section-1", repeats: 1 },
     ]);
   });
 });
