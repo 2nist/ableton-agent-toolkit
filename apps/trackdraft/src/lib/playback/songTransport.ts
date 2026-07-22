@@ -10,9 +10,9 @@ import type { BlueprintSong } from "../../types/blueprint";
  *  JS-timer jitter (a `setTimeout` running a few ms late, a busy tab)
  *  doesn't shift the *audible* result, since the actual start time is the
  *  precise one computed from the shared AudioContext, not "whenever this
- *  callback happened to run." Small enough that firing this early is
- *  itself inaudible. */
-const SCHEDULE_LOOKAHEAD_MS = 30;
+ *  callback happened to run." 100ms covers typical GC pauses and React
+ *  re-render cycles; firing this much early is itself inaudible. */
+const SCHEDULE_LOOKAHEAD_MS = 100;
 
 /** A song-wide playback position, emitted on every tick while playing and
  *  once more (isPlaying: false) when play stops or reaches the end. */
@@ -72,7 +72,7 @@ function sectionIndexAt(spans: SectionSpan[], beat: number): number {
  *  server round-trip. */
 class SongTransport {
   private channel: BroadcastChannel | null = null;
-  private schedulerId: ReturnType<typeof setInterval> | null = null;
+  private schedulerId: ReturnType<typeof requestAnimationFrame> | null = null;
   private chordTimeouts: ReturnType<typeof setTimeout>[] = [];
   private audioStartTime = 0;
   private spans: SectionSpan[] = [];
@@ -129,7 +129,13 @@ class SongTransport {
       const delayMs = Math.max(0, (preciseTime - ctx.currentTime) * 1000 - SCHEDULE_LOOKAHEAD_MS);
       this.chordTimeouts.push(
         setTimeout(() => {
-          if (this.isPlaying) fn(preciseTime);
+          if (this.isPlaying) {
+            // Clamp to current time: if the JS thread was blocked and this
+            // timeout fired late, handing WebAudio a past-tense time would
+            // still be audibly late — Math.max gets "now" instead, the
+            // earliest time WebAudio can honor.
+            fn(Math.max(preciseTime, getSharedAudioContext().currentTime));
+          }
         }, delayMs),
       );
     };
@@ -156,17 +162,23 @@ class SongTransport {
       });
     }
 
-    const tick = () => {
+    // Playhead position ticks at display refresh rate (60fps) so the
+    // visual cursor moves smoothly, not at a choppy 10Hz. The
+    // BroadcastChannel still fires at ~60fps too — the popout window
+    // handles that rate fine and it looks dramatically better than a
+    // jumpy 100ms update.
+    const tickLoop = () => {
+      if (!this.isPlaying) return;
       const beat = (ctx.currentTime - this.audioStartTime) / secPerBeat;
       if (beat >= totalBeats) {
         this.stop();
         return;
       }
       this.emit({ beat, isPlaying: true, sectionIndex: sectionIndexAt(this.spans, beat) });
+      this.schedulerId = requestAnimationFrame(tickLoop);
     };
 
-    tick();
-    this.schedulerId = setInterval(tick, 100);
+    this.schedulerId = requestAnimationFrame(tickLoop);
   }
 
   /** Follow Ableton's transport instead of playing audio here — no chords
@@ -214,7 +226,7 @@ class SongTransport {
    *  handshake every time playback toggles. */
   stop(): void {
     if (this.schedulerId !== null) {
-      clearInterval(this.schedulerId);
+      cancelAnimationFrame(this.schedulerId);
       this.schedulerId = null;
     }
     for (const t of this.chordTimeouts) clearTimeout(t);
