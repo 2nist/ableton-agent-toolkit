@@ -7,6 +7,7 @@ import { updateSection } from "../../lib/sections";
 import { transposeChords } from "../../lib/harmony/honeycombWalk";
 import FloatingToolbar from "./FloatingToolbar";
 import ChordEditorPopover from "./ChordEditorPopover";
+import InstrumentPanel from "./InstrumentPanel";
 
 /** The Harmony tab's dock content — registered once by HarmonyView and
  *  fully self-sufficient from there (reads `useSongStore` +
@@ -53,36 +54,42 @@ export default function HarmonyDockTools() {
 
   const editorChord = selectedChordId ? activeSection.chords.find((c) => c.id === selectedChordId) ?? null : null;
 
-  if (editorChord) {
-    return (
-      <ChordEditorPopover
-        chord={editorChord}
-        keyName={effectiveKey}
-        scale={effectiveScale}
-        onChange={(updated) => updateChords(activeSection!.chords.map((c) => (c.id === updated.id ? updated : c)))}
-        onRemove={() => {
-          updateChords(activeSection!.chords.filter((c) => c.id !== editorChord.id));
-          setSelectedChordId(null);
-        }}
-        onDeselect={() => setSelectedChordId(null)}
-      />
-    );
-  }
-
   return (
-    <FloatingToolbar
-      songKey={song.key}
-      songScale={song.scale}
-      onChangeSongKey={(key) => updateCurrentSong((s) => ({ ...s, key: key as NoteName }))}
-      onChangeSongScale={(scale) => updateCurrentSong((s) => ({ ...s, scale }))}
-      presetKeyName={effectiveKey}
-      beatsPerChord={activeSection.beatsPerChord}
-      hasChords={activeSection.chords.length > 0}
-      sectionName={activeSection.name}
-      onApplyPreset={updateChords}
-      sectionKeyOverride={activeSection.key}
-      sectionScaleOverride={activeSection.scale}
-      onRekeySection={handleRekey}
-    />
+    <div className="flex flex-col">
+      {/* Playback-wide, not song data — stays visible across both branches
+         below rather than living inside either one, so switching voices
+         mid-edit doesn't require deselecting the chord you're working on. */}
+      <div className="p-3 border-b border-edge">
+        <InstrumentPanel />
+      </div>
+      {editorChord ? (
+        <ChordEditorPopover
+          chord={editorChord}
+          keyName={effectiveKey}
+          scale={effectiveScale}
+          onChange={(updated) => updateChords(activeSection!.chords.map((c) => (c.id === updated.id ? updated : c)))}
+          onRemove={() => {
+            updateChords(activeSection!.chords.filter((c) => c.id !== editorChord.id));
+            setSelectedChordId(null);
+          }}
+          onDeselect={() => setSelectedChordId(null)}
+        />
+      ) : (
+        <FloatingToolbar
+          songKey={song.key}
+          songScale={song.scale}
+          onChangeSongKey={(key) => updateCurrentSong((s) => ({ ...s, key: key as NoteName }))}
+          onChangeSongScale={(scale) => updateCurrentSong((s) => ({ ...s, scale }))}
+          presetKeyName={effectiveKey}
+          beatsPerChord={activeSection.beatsPerChord}
+          hasChords={activeSection.chords.length > 0}
+          sectionName={activeSection.name}
+          onApplyPreset={updateChords}
+          sectionKeyOverride={activeSection.key}
+          sectionScaleOverride={activeSection.scale}
+          onRekeySection={handleRekey}
+        />
+      )}
+    </div>
   );
 }
