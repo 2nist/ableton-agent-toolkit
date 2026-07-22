@@ -275,7 +275,14 @@ class PreviewPlayer {
 
   private playVoicingNow(voicing: PerformedVoice[], startAt?: number): void {
     const ctx = this.getContext();
-    this.stopVoices();
+
+    // Only stop previous voices when playing "right now" (no explicit
+    // startAt — chord auditioning, manual preview).  When startAt IS
+    // provided (songTransport scheduling chords into the future),
+    // stopping would also cancel any other sampled voices the transport
+    // has already scheduled ahead of this one, emptying the timeline
+    // except for whatever chord happens to fire last.
+    if (startAt === undefined) this.stopVoices();
 
     const now = startAt ?? ctx.currentTime;
 

@@ -150,6 +150,12 @@ class SongTransport {
     // callback wraps `fn` in a `Math.max(preciseTime, ctx.currentTime)`
     // clamp — same late-timeout guard as before, just now the
     // scheduling delay isn't itself subject to main-thread jitter.
+    // Accumulate events locally, then post them all at once — the
+    // worker replaces its entire queue on each `schedule` message, so
+    // sending them one at a time would silently drop every event
+    // except the last.
+    const pendingEvents: { id: number; fireAtMs: number }[] = [];
+
     const scheduleAt = (beat: number, fn: (preciseTime: number) => void) => {
       const preciseTime = this.audioStartTime + beat * secPerBeat;
       // preciseTime is AudioContext seconds (relative to AC creation).
@@ -160,10 +166,7 @@ class SongTransport {
       this.eventCallbacks.set(id, () => {
         fn(Math.max(preciseTime, getSharedAudioContext().currentTime));
       });
-      this.timerWorker!.postMessage({
-        type: "schedule",
-        events: [{ id, fireAtMs }],
-      });
+      pendingEvents.push({ id, fireAtMs });
     };
 
     const player = getPreviewPlayer();
@@ -186,6 +189,13 @@ class SongTransport {
       scheduleAt(span.startBeat, (preciseTime) => {
         void playDrumHits(pattern, span.section.drumVariantIndex, span.section, secPerBeat, preciseTime);
       });
+    }
+
+    // Post the full event queue atomically — the worker replaces its
+    // internal array on every schedule message, so this must be done
+    // once after the entire schedule is built.
+    if (pendingEvents.length > 0) {
+      this.timerWorker!.postMessage({ type: "schedule", events: pendingEvents });
     }
 
     // Playhead position ticks at display refresh rate (60fps) so the
