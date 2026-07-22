@@ -1,6 +1,7 @@
 import { getPreviewPlayer } from "../harmony/audioPreview";
 import { playDrumHits, inferPatternForSection } from "./drumPreview";
 import { getSharedAudioContext } from "./audioContext";
+import { createTimerWorker } from "./clockWorker";
 import { sectionSpans, type SectionSpan } from "../arrangement";
 import { getAbletonClock } from "./abletonClock";
 import type { BlueprintSong } from "../../types/blueprint";
@@ -10,9 +11,10 @@ import type { BlueprintSong } from "../../types/blueprint";
  *  JS-timer jitter (a `setTimeout` running a few ms late, a busy tab)
  *  doesn't shift the *audible* result, since the actual start time is the
  *  precise one computed from the shared AudioContext, not "whenever this
- *  callback happened to run." 100ms covers typical GC pauses and React
- *  re-render cycles; firing this much early is itself inaudible. */
-const SCHEDULE_LOOKAHEAD_MS = 100;
+ *  callback happened to run." 200ms is generous but still inaudibly early
+ *  — it covers worst-case main-thread blockages (DevTools open, heavy
+ *  React reconciliation) while keeping scheduling crisp. */
+const SCHEDULE_LOOKAHEAD_MS = 200;
 
 /** A song-wide playback position, emitted on every tick while playing and
  *  once more (isPlaying: false) when play stops or reaches the end. */
@@ -73,7 +75,9 @@ function sectionIndexAt(spans: SectionSpan[], beat: number): number {
 class SongTransport {
   private channel: BroadcastChannel | null = null;
   private schedulerId: ReturnType<typeof requestAnimationFrame> | null = null;
-  private chordTimeouts: ReturnType<typeof setTimeout>[] = [];
+  private timerWorker: Worker | null = null;
+  private eventCallbacks = new Map<number, () => void>();
+  private nextEventId = 0;
   private audioStartTime = 0;
   private spans: SectionSpan[] = [];
   private isPlaying = false;
@@ -119,25 +123,37 @@ class SongTransport {
     this.audioStartTime = ctx.currentTime;
     this.isPlaying = true;
 
-    // Schedules `fn(preciseAudioTime)` to run `SCHEDULE_LOOKAHEAD_MS`
-    // before `beat`'s exact moment, handing it the *precomputed* time
-    // (relative to `audioStartTime`, fixed at the top of this method) —
-    // not whatever `ctx.currentTime` reads when the timeout callback
-    // itself actually runs, which is only ever approximately on-beat.
+    // Spin up a Web Worker whose sole job is firing callbacks at
+    // precise wall-clock intervals — unblocked by main-thread activity
+    // (React renders, GC, DevTools).  The worker is built from an
+    // inline string so TypeScript doesn't need a .ts module at all.
+    const w = createTimerWorker();
+    w.onmessage = (msg: MessageEvent<{ type: string; id: number }>) => {
+      if (msg.data.type === "fire") {
+        const cb = this.eventCallbacks.get(msg.data.id);
+        if (cb && this.isPlaying) cb();
+        this.eventCallbacks.delete(msg.data.id);
+      }
+    };
+    this.timerWorker = w;
+
+    // Schedules `fn(preciseAudioTime)` to run via the worker timer,
+    // which will post back `{type:"fire", id}` roughly
+    // `SCHEDULE_LOOKAHEAD_MS` before `beat`'s exact moment.  The
+    // callback wraps `fn` in a `Math.max(preciseTime, ctx.currentTime)`
+    // clamp — same late-timeout guard as before, just now the
+    // scheduling delay isn't itself subject to main-thread jitter.
     const scheduleAt = (beat: number, fn: (preciseTime: number) => void) => {
       const preciseTime = this.audioStartTime + beat * secPerBeat;
-      const delayMs = Math.max(0, (preciseTime - ctx.currentTime) * 1000 - SCHEDULE_LOOKAHEAD_MS);
-      this.chordTimeouts.push(
-        setTimeout(() => {
-          if (this.isPlaying) {
-            // Clamp to current time: if the JS thread was blocked and this
-            // timeout fired late, handing WebAudio a past-tense time would
-            // still be audibly late — Math.max gets "now" instead, the
-            // earliest time WebAudio can honor.
-            fn(Math.max(preciseTime, getSharedAudioContext().currentTime));
-          }
-        }, delayMs),
-      );
+      const fireAtMs = (preciseTime - SCHEDULE_LOOKAHEAD_MS / 1000) * 1000 + performance.timeOrigin;
+      const id = this.nextEventId++;
+      this.eventCallbacks.set(id, () => {
+        fn(Math.max(preciseTime, getSharedAudioContext().currentTime));
+      });
+      this.timerWorker!.postMessage({
+        type: "schedule",
+        events: [{ id, fireAtMs }],
+      });
     };
 
     const player = getPreviewPlayer();
@@ -229,8 +245,11 @@ class SongTransport {
       cancelAnimationFrame(this.schedulerId);
       this.schedulerId = null;
     }
-    for (const t of this.chordTimeouts) clearTimeout(t);
-    this.chordTimeouts = [];
+    if (this.timerWorker) {
+      this.timerWorker.terminate();
+      this.timerWorker = null;
+    }
+    this.eventCallbacks.clear();
     if (this.abletonUnsub) {
       this.abletonUnsub();
       this.abletonUnsub = null;
