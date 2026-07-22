@@ -1,0 +1,32 @@
+{
+  "name": "@platform/blueprint-store",
+  "version": "0.1.0",
+  "description": "Node-side SQLite catalog for BlueprintSong data — separate from TrackDraft's web app (which keeps using localStorage/JSON import-export). For ingestion/extraction scripts and other Node tooling to save/browse/load blueprints from a durable archive.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@music-theory/song-blueprint": "0.1.0",
+    "better-sqlite3": "^11.8.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^25.0.10",
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.3",
+    "vitest": "^3.0.0"
+  }
+}
