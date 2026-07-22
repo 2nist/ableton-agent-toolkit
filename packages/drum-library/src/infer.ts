@@ -1,16 +1,18 @@
 import type { DrumPattern } from "./presets.js";
 
 /**
- * Heuristic pattern selection — the decision that used to be a per-section
- * "Drums" dropdown in TrackDraft.
+ * Heuristic pattern selection — the default when a section has no explicit
+ * `drumPattern` override.
  *
- * The dropdown was removed deliberately: pattern names like `driving` or
+ * TrackDraft's Structure tab now has a per-section "Drums" dropdown that
+ * lets a user choose a specific pattern and variant, which the bridge's
+ * `planDrumClips` reads directly. This function is the fallback for any
+ * section left on "auto (heuristic)": pattern names like `driving` or
  * `bridge_sparse` are engine vocabulary, not something a songwriter should
- * have to pick from a flat list, and the blueprint already carries every
- * signal the choice actually depends on — section role, dynamics, meter,
- * tempo, and the song's own description of itself. Drums are generated
- * entirely behind the scenes; anyone who wants different drums edits the
- * clip in Live, where drum editing belongs.
+ * be forced to pick from a flat list for every section. The blueprint
+ * already carries every signal the choice depends on — section role,
+ * dynamics, meter, tempo, and the song's own description of itself — so
+ * the heuristic picks a sensible default that can still be overridden.
  *
  * Inputs are structural (plain fields, not schema imports) so this package
  * stays decoupled from `@music-theory/song-structure` — the engine's

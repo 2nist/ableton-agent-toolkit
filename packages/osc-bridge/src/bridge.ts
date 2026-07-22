@@ -3,6 +3,13 @@ const { UDPPort } = osc;
 import { WebSocketServer, type WebSocket } from "ws";
 import { parseOscReply, type BridgeEvent } from "./protocol.js";
 
+export interface TelemetryState {
+  bpm: number;
+  scale: string;
+  rootNote: string;
+  timestamp: number;
+}
+
 export interface PositionBridgeOptions {
   /** Where AbletonOSC (the Remote Script) is running. */
   abletonOscHost?: string;
@@ -28,21 +35,39 @@ const DEFAULTS: Required<Omit<PositionBridgeOptions, "onEvent">> = {
 
 export interface PositionBridge {
   stop(): void;
+  /** Expose the telemetry cache so the CLI can feed M4L state into the
+   *  same WebSocket channel without a separate REST server. */
+  setTelemetry(state: Partial<TelemetryState>): void;
 }
 
 /**
- * Relays Ableton's playhead beat position and play state to any number of
- * WebSocket clients, as the only way to get that data at all — the
- * Extensions SDK exposes neither (confirmed: no playhead/isPlaying
- * property anywhere in Application or Song). AbletonOSC's fixed
- * OSC_RESPONSE_PORT means only one process can hold this relay role at a
- * time; this bridge is that single OSC subscriber, fanning out to N
- * WebSocket clients.
+ * Bidirectional relay between a browser WebSocket and AbletonOSC's UDP
+ * transport:
+ *
+ *   - Inbound (Ableton → browser): subscribes to /live/song/beat and
+ *     /live/song/is_playing via OSC, fans out as JSON {"type":"beat"/"playState"}
+ *     to every connected WebSocket client.
+ *   - Outbound (browser → Ableton): clients send JSON
+ *     {"type":"command","address":"/live/song/set/tempo","args":[140]}
+ *     and this bridge forwards it as an OSC message.  Any command the
+ *     AbletonOSC remote script understands (/live/song/set/…,
+ *     /live/track/…, etc.) is routable.
+ *   - Telemetry (M4L → browser): call `bridge.setTelemetry({…})` from the
+ *     CLI's M4L OSC listener to broadcast app-level state (bpm, key,
+ *     scale) on the same WebSocket channel, avoiding a separate REST
+ *     server.  Emitted as {"type":"telemetry","bpm":…,"scale":…,...}.
+ *
+ * The OSC_UDPPort is the single point of communication with AbletonOSC;
+ * nothing else in this process opens a UDP socket on 11000/11001.
  */
 export function startPositionBridge(options: PositionBridgeOptions = {}): PositionBridge {
   const config = { ...DEFAULTS, ...options };
   const onEvent = options.onEvent ?? (() => {});
-  const lastState: { beat?: number; isPlaying?: boolean } = {};
+  const lastState: {
+    beat?: number;
+    isPlaying?: boolean;
+    telemetry?: TelemetryState;
+  } = {};
   const clients = new Set<WebSocket>();
 
   const udpPort = new UDPPort({
@@ -52,12 +77,23 @@ export function startPositionBridge(options: PositionBridgeOptions = {}): Positi
     remotePort: config.abletonOscSendPort,
   });
 
-  function broadcast(event: BridgeEvent) {
-    const payload = JSON.stringify(event);
+  function broadcast(data: unknown) {
+    const payload = JSON.stringify(data);
     for (const client of clients) {
       if (client.readyState === client.OPEN) client.send(payload);
     }
   }
+
+  /** Forward an outgoing command from a WebSocket client to AbletonOSC. */
+  function forwardCommand(address: string, args: unknown[] = []) {
+    try {
+      udpPort.send({ address, args });
+    } catch (err) {
+      console.error("[osc-bridge] failed to forward OSC command", address, err);
+    }
+  }
+
+  // --- Inbound OSC (AbletonOSC → WebSocket clients) ---
 
   udpPort.on("message", (message) => {
     const event = parseOscReply(message.address, message.args);
@@ -76,21 +112,36 @@ export function startPositionBridge(options: PositionBridgeOptions = {}): Positi
   udpPort.on("ready", subscribe);
   udpPort.open();
 
-  // AbletonOSC's listener registration doesn't survive a Live/AbletonOSC
-  // restart. Periodically re-subscribing is harmless — re-registering an
-  // existing listener just replaces it (see AbletonOSCHandler._start_listen)
-  // — and makes this bridge self-healing without a manual restart.
   const resubscribeTimer = setInterval(subscribe, config.resubscribeIntervalMs);
+
+  // --- WebSocket server (bidirectional) ---
 
   const wss = new WebSocketServer({ port: config.websocketPort });
   wss.on("connection", (client) => {
     clients.add(client);
-    // A client that connects mid-song has no reason to wait for the next
-    // beat/play-state change — send whatever we already know immediately.
+
+    // Catch-up: send everything we already know to a newly-connected client.
     if (lastState.beat !== undefined) client.send(JSON.stringify({ type: "beat", beat: lastState.beat }));
     if (lastState.isPlaying !== undefined) {
       client.send(JSON.stringify({ type: "playState", isPlaying: lastState.isPlaying }));
     }
+    if (lastState.telemetry) {
+      client.send(JSON.stringify({ type: "telemetry", ...lastState.telemetry }));
+    }
+
+    // --- Outbound commands (browser → AbletonOSC) ---
+    client.on("message", (raw) => {
+      let msg: { type?: string; address?: string; args?: unknown[] };
+      try {
+        msg = JSON.parse(raw.toString());
+      } catch {
+        return;
+      }
+      if (msg.type === "command" && typeof msg.address === "string") {
+        forwardCommand(msg.address, msg.args ?? []);
+      }
+    });
+
     client.on("close", () => clients.delete(client));
   });
 
@@ -99,6 +150,15 @@ export function startPositionBridge(options: PositionBridgeOptions = {}): Positi
       clearInterval(resubscribeTimer);
       udpPort.close();
       wss.close();
+    },
+    setTelemetry(partial: Partial<TelemetryState>) {
+      lastState.telemetry = {
+        bpm: partial.bpm ?? lastState.telemetry?.bpm ?? 120,
+        scale: partial.scale ?? lastState.telemetry?.scale ?? "Major",
+        rootNote: partial.rootNote ?? lastState.telemetry?.rootNote ?? "C",
+        timestamp: partial.timestamp ?? Date.now(),
+      };
+      broadcast({ type: "telemetry", ...lastState.telemetry });
     },
   };
 }

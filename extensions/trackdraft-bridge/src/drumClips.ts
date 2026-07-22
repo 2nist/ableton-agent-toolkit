@@ -83,23 +83,25 @@ function fillPool(variant: PackedVariant, fills: FillLibrary): PackedVariant[] {
 }
 
 /**
- * One clip per section. Everything about the drums is decided here, behind
- * the scenes — there is no drum control anywhere in TrackDraft by design:
+ * One clip per section. Pattern and variant selection:
  *
- * - `inferDrumPattern` maps each section's role, dynamics, meter and the
- *   song's tempo/self-description to an engine pattern (the old
- *   `section.drumPattern` field is legacy and no longer consulted).
- * - A variant is picked deterministically per section id, scaled so its
- *   peak lands on the section's velocity preset, and tiled with seeded
- *   per-bar micro-variation (`tileGrooveVaried`) so long sections don't
- *   loop identically.
- * - When a section leads into another, its last bar is replaced by a fill
- *   from the matching family, scaled toward the *louder* of the two
- *   sections when building up and pulled back when settling down — and the
- *   following section opens with a crash.
+ * - When `section.drumPattern` is set (user has chosen a pattern in
+ *   TrackDraft's Structure tab), that pattern is used directly — overriding
+ *   the heuristic. `section.drumVariantIndex` picks a specific variant
+ *   (clamped to the preset's actual variant count); absent or out of range
+ *   falls back to the deterministic hash pick.
+ * - Otherwise `inferDrumPattern` maps each section's role, dynamics, meter
+ *   and the song's tempo/self-description to an engine pattern, and a
+ *   variant is picked deterministically per section id — exactly as before
+ *   manual control existed.
  *
- * Anyone who wants different drums edits the generated clip in Live, which
- * is the right tool for that job anyway.
+ * Regardless of how the pattern is chosen, variants are scaled so their
+ * peak lands on the section's velocity preset, and tiled with seeded
+ * per-bar micro-variation (`tileGrooveVaried`) so long sections don't
+ * loop identically. When a section leads into another, its last bar is
+ * replaced by a fill from the matching family, scaled toward the *louder*
+ * of the two sections when building up and pulled back when settling
+ * down — and the following section opens with a crash.
  *
  * `presetData`/`fillData` default to the real library and only need
  * overriding in tests, which use small fixture presets instead of asserting
@@ -117,7 +119,7 @@ export function planDrumClips(
   // First pass: choose pattern + variant per section, so fill/crash
   // decisions can look at the *next* section's resolved target too.
   const resolved = spans.map(({ section, occurrenceIndex }) => {
-    const pattern = inferDrumPattern(
+    const pattern = section.drumPattern ?? inferDrumPattern(
       {
         role: section.role,
         velocity: section.velocity,
@@ -129,7 +131,13 @@ export function planDrumClips(
     );
     const preset = presetData[pattern];
     if (!preset || preset.variants.length === 0) return null;
-    return preset.variants[hashSeed(occurrenceSeed(section.id, occurrenceIndex)) % preset.variants.length];
+
+    // Explicit variant index when the user chose one (clamped to valid range);
+    // otherwise the deterministic hash pick that's been the default since day one.
+    const variantIndex = section.drumVariantIndex !== undefined
+      ? Math.max(0, Math.min(section.drumVariantIndex, preset.variants.length - 1))
+      : hashSeed(occurrenceSeed(section.id, occurrenceIndex)) % preset.variants.length;
+    return preset.variants[variantIndex];
   });
 
   let previousEndedWithFill = false;

@@ -17,6 +17,9 @@ const GENERATE_BASS_COMMAND_ID = "trackdraftBridge.generateBassLine";
 const GENERATE_BLANK_COMMAND_ID = "trackdraftBridge.generateBlankClips";
 const PROBE_DRUM_RACK_COMMAND_ID = "trackdraftBridge.probeDrumRack";
 
+/** Polling interval for the file-based command queue (ms). */
+const COMMAND_POLL_MS = 2000;
+
 interface ClipPlanEntry {
   name: string;
   startBeat: number;
@@ -238,4 +241,82 @@ export function activate(activation: ActivationContext) {
       await applyClipPlan(track, plan);
     }),
   );
+
+  // --- File-based command queue polling ---
+  //
+  // The osc-bridge's /api/command endpoint writes JSON payloads to
+  // storageDirectory/blueprints/queue/.  This loop reads and deletes
+  // them so the browser app can trigger actions (set tempo, apply a
+  // blueprint, generate clips) without a user right-clicking a track
+  // in Live.  Each file's shape is intentionally envelope-only:
+  // { action: "applyBlueprint", blueprintId: "…" } or
+  // { action: "setTempo", bpm: 140 } — the action key is mandatory.
+  const queueDir = context.environment.storageDirectory
+    ? path.join(context.environment.storageDirectory, "blueprints", "queue")
+    : undefined;
+
+  async function pollCommandQueue() {
+    if (!queueDir || !fs.existsSync(queueDir)) return;
+
+    const files = fs.readdirSync(queueDir).filter((f) => f.endsWith(".json")).sort();
+    if (files.length === 0) return;
+
+    for (const file of files) {
+      const filePath = path.join(queueDir, file);
+      let payload: { action?: string; blueprintId?: string; bpm?: number };
+      try {
+        payload = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        fs.unlinkSync(filePath);
+      } catch {
+        continue; // malformed JSON or already deleted by another process
+      }
+
+      if (!payload.action) continue;
+
+      switch (payload.action) {
+        case "setTempo": {
+          const song = context.application.song;
+          const bpm = typeof payload.bpm === "number" ? payload.bpm : null;
+          if (song && bpm !== null && bpm > 0 && bpm <= 999) {
+            await context.withinTransaction(() => {
+              song.tempo = bpm;
+            });
+            console.log(`[trackdraft-bridge] queue: tempo → ${bpm}`);
+          }
+          break;
+        }
+        case "applyBlueprint": {
+          const song = context.application.song;
+          if (!song || typeof payload.blueprintId !== "string") break;
+          const blueprint = loadBlueprints(context.environment.storageDirectory).find(
+            (b) => b.id === payload.blueprintId,
+          );
+          if (!blueprint) break;
+
+          const cuePlan = planCuePoints(blueprint);
+          const names = cuePointNamesFor(blueprint);
+          const stale = song.cuePoints.filter((c) => names.has(c.name));
+
+          await context.withinTransaction(() =>
+            Promise.all(stale.map((c) => song.deleteCuePoint(c))),
+          );
+          const created = await context.withinTransaction(() =>
+            Promise.all(cuePlan.map((e) => song.createCuePoint(e.beat))),
+          );
+          await context.withinTransaction(() => {
+            created.forEach((c, i) => (c.name = cuePlan[i].name));
+            song.tempo = blueprint.bpm;
+          });
+          console.log(`[trackdraft-bridge] queue: applied blueprint "${blueprint.title}"`);
+          break;
+        }
+      }
+    }
+  }
+
+  setInterval(() => {
+    guard(async () => {
+      await pollCommandQueue();
+    })();
+  }, COMMAND_POLL_MS);
 }

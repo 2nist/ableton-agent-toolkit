@@ -20,7 +20,6 @@ export function makeSection(
     role: "custom",
     chords: [],
     beatsPerChord: 4,
-    drumPattern: "standard",
     velocity: "mf",
     timeSignatureDenPower: 2,
     ...overrides,

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useSongStore } from "./store/songStore";
+import { startAtomSqUserMidi, stopAtomSqUserMidi } from "./lib/playback/userMidi";
 import Dashboard from "./components/dashboard/Dashboard";
 import SongEditorLayout from "./components/layout/SongEditorLayout";
 import StudioView from "./components/studio/StudioView";
@@ -10,6 +11,7 @@ import LyricsView from "./components/lyrics/LyricsView";
 import LivePreviewSandbox from "./pages/LivePreviewSandbox";
 import GenreWorkbench from "./pages/GenreWorkbench";
 import UiKitSandbox from "./pages/UiKitSandbox";
+import LyricChordPopout from "./components/popout/LyricChordPopout";
 
 function App() {
   const loadFromStorage = useSongStore((s) => s.loadFromStorage);
@@ -17,6 +19,12 @@ function App() {
   useEffect(() => {
     loadFromStorage();
   }, [loadFromStorage]);
+
+  // Start listening for ATOM SQ User-mode MIDI messages once on mount.
+  useEffect(() => {
+    startAtomSqUserMidi();
+    return () => stopAtomSqUserMidi();
+  }, []);
 
   return (
     <BrowserRouter>
@@ -30,6 +38,10 @@ function App() {
             <Route path="harmony" element={<HarmonyView />} />
             <Route path="lyrics" element={<LyricsView />} />
           </Route>
+          {/* Top-level, not nested under SongEditorLayout — deliberately
+              chrome-free (no header/nav/dock) for a window meant to be
+              glanced at from across a room while playing. */}
+          <Route path="/song/:songId/popout" element={<LyricChordPopout />} />
           <Route path="/sandbox" element={<LivePreviewSandbox />} />
           <Route path="/genre-workbench" element={<GenreWorkbench />} />
           <Route path="/ui-kit-sandbox" element={<UiKitSandbox />} />

@@ -108,7 +108,7 @@ describe("planDrumClips — heuristic selection", () => {
     expect(clip.notes.some((n) => n.pitch === KICK)).toBe(false);
   });
 
-  it("ignores the legacy drumPattern field entirely", () => {
+  it("a section's explicit drumPattern overrides the heuristic", () => {
     const dnb: PackedPreset = {
       variants: [{ lengthBeats: 4, beatsPerBar: 4, notes: [[0, TOM_HIGH, 120]], source: { origin: "synth" } }],
     };
@@ -117,11 +117,27 @@ describe("planDrumClips — heuristic selection", () => {
       title: "x",
       bpm: 120,
       sections: [
-        // Legacy blueprints carry drumPattern; the role/velocity say "standard".
+        // The heuristic would pick "standard" (has kicks), but the section
+        // explicitly asks for "dnb" — the explicit choice wins.
         makeSection({ id: "1", name: "Verse", bars: 1, timeSignatureNumerator: 4, drumPattern: "dnb" }),
       ],
     });
     const [clip] = planDrumClips(song, fixturePresets({ dnb }), emptyFills);
+    expect(clip.notes.some((n) => n.pitch === KICK)).toBe(false);
+    expect(clip.notes.some((n) => n.pitch === TOM_HIGH)).toBe(true);
+  });
+
+  it("falls back to the heuristic when drumPattern is not set", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        // No drumPattern → heuristic picks "standard" (has kicks, no toms).
+        makeSection({ id: "1", name: "Verse", bars: 1, timeSignatureNumerator: 4 }),
+      ],
+    });
+    const [clip] = planDrumClips(song, fixturePresets(), emptyFills);
     expect(clip.notes.some((n) => n.pitch === KICK)).toBe(true);
     expect(clip.notes.some((n) => n.pitch === TOM_HIGH)).toBe(false);
   });

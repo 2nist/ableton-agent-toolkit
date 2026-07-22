@@ -88,8 +88,32 @@ export const ATOMSQ_MAPPINGS: ControllerMappings = {
         next_bank_button: "display_buttons[5]",
       },
       user: {
+        // Generic controls (the raw MIDI the bridge relays):
         encoders: "encoders",
         channel_selection_buttons: "display_buttons",
+        // Chord / scale semantic targets (User mode, channels 10+):
+        // Encoder 0 (CC 14, ch 10) — scale root (C, C#, D, …)
+        scale_root_encoder: "encoders[0]",
+        // Encoder 1 (CC 15, ch 11) — scale type (ionian, dorian, …)
+        scale_type_encoder: "encoders[1]",
+        // Encoder 2 (CC 16, ch 12) — chord degree within current section
+        chord_degree_encoder: "encoders[2]",
+        // Encoder 3 (CC 17, ch 13) — chord quality (major, minor, …)
+        chord_quality_encoder: "encoders[3]",
+        // Encoder 4 (CC 18, ch 14) — chord inversion
+        chord_inversion_encoder: "encoders[4]",
+        // Encoder 5 (CC 19, ch 15) — chord voicing / extensions
+        chord_voicing_encoder: "encoders[5]",
+        // Encoder 6 (CC 20, ch 16) — tempo coarse
+        tempo_coarse_encoder: "encoders[6]",
+        // Encoder 7 (CC 21, ch 17) — velocity preset
+        velocity_preset_encoder: "encoders[7]",
+        // Display button 0 (note 36, ch 10) — trigger selected chord
+        chord_trigger_button: "display_buttons[0]",
+        // Display button 1 (note 37, ch 11) — cycle section focus
+        section_next_button: "display_buttons[1]",
+        // Display button 2 (note 38, ch 12) — toggle playback
+        transport_play_toggle_button: "display_buttons[2]",
       },
     },
   },

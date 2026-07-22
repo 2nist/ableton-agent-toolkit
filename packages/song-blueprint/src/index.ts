@@ -82,11 +82,16 @@ export interface BlueprintSection {
   bars: number;
   chords: Chord[];
   beatsPerChord: number;
-  /** @deprecated Legacy field from the removed per-section drum dropdown.
-   *  Drums are now inferred heuristically by the Ableton extension (role +
-   *  velocity + meter + tempo); this is kept only so old blueprints and the
-   *  lalo-chezia S() format still parse, and nothing reads it anymore. */
+  /** Per-section drum pattern override. When absent the Ableton extension
+   *  still picks a pattern heuristically (role + velocity + meter + tempo);
+   *  set this to choose a specific engine pattern instead. Paired with
+   *  `drumVariantIndex` for full manual control per section. */
   drumPattern?: DrumPattern;
+  /** When `drumPattern` is set, which variant of that pattern's preset to
+   *  use (0-based, clamped to the preset's actual variant count at export
+   *  time). Absent → the extension picks a variant deterministically from
+   *  the section's id, same as before manual control existed. */
+  drumVariantIndex?: number;
   velocity: VelocityPreset;
   timeSignatureNumerator: number;
   timeSignatureDenPower: number;
