@@ -13,6 +13,7 @@ import { getSongMap } from "../../data/songMaps";
 import { getGenreMap } from "../../data/genre-catalog/index";
 import SectionCard from "./SectionCard";
 import MapPicker from "./MapPicker";
+import DrumKitPanel from "./DrumKitPanel";
 
 export default function StructureView() {
   const currentSong = useSongStore((s) => s.currentSong());
@@ -40,6 +41,8 @@ export default function StructureView() {
           if (map) updateCurrentSong((s) => applySongMap(s, map));
         }}
       />
+
+      <DrumKitPanel />
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={song.sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>

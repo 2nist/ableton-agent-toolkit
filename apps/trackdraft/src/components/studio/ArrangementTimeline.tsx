@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
@@ -6,10 +6,43 @@ import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement
 import { roleStyle } from "../../lib/roleColors";
 import { classifySong } from "../../lib/classification";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
+import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import type { BlueprintSong } from "../../types/blueprint";
 
 const PX_PER_BEAT = 2;
 const MIN_BLOCK_WIDTH = 32;
+// Tailwind's `gap-0.5` (0.125rem at the default 16px root) — the block
+// row's own gap, needed here too so the playhead's pixel math accounts
+// for the same spacing between blocks, not just their widths.
+const BLOCK_GAP_PX = 2;
+
+/** Left-edge pixel offset of each span, honoring the same
+ *  MIN_BLOCK_WIDTH-clamped width every block actually renders at — a
+ *  playhead computed from raw `beat * PX_PER_BEAT` would drift out of
+ *  alignment with the blocks themselves as soon as any section is short
+ *  enough to hit the floor. */
+function blockLefts(spans: SectionSpan[]): number[] {
+  const lefts: number[] = [];
+  let cursor = 0;
+  for (const span of spans) {
+    lefts.push(cursor);
+    const width = Math.max(MIN_BLOCK_WIDTH, span.durationBeats * PX_PER_BEAT);
+    cursor += width + BLOCK_GAP_PX;
+  }
+  return lefts;
+}
+
+/** The playhead's x position for the current tick, interpolated within
+ *  whichever span it falls in — null when stopped or the tick's beat
+ *  doesn't land in any span (e.g. a moment before playback fully starts). */
+function playheadX(spans: SectionSpan[], lefts: number[], tick: TransportTick | null): number | null {
+  if (!tick || !tick.isPlaying || tick.sectionIndex < 0) return null;
+  const span = spans[tick.sectionIndex];
+  if (!span) return null;
+  const width = Math.max(MIN_BLOCK_WIDTH, span.durationBeats * PX_PER_BEAT);
+  const progress = span.durationBeats > 0 ? (tick.beat - span.startBeat) / span.durationBeats : 0;
+  return lefts[tick.sectionIndex] + Math.max(0, Math.min(1, progress)) * width;
+}
 
 /** Compact, click-to-reveal form indicator in the timeline's own header —
  *  not a separate static panel. Restating "your structure is kind of like
@@ -67,10 +100,15 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
   const { songId } = useParams<{ songId: string }>();
   const spans = sectionSpans(song);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [tick, setTick] = useState<TransportTick | null>(null);
+
+  useEffect(() => getSongTransport().onTick(setTick), []);
 
   if (spans.length === 0) return null;
 
   const hovered = hoveredIndex !== null ? spans[hoveredIndex] : null;
+  const lefts = blockLefts(spans);
+  const playheadLeft = playheadX(spans, lefts, tick);
 
   return (
     <div className="border border-edge rounded-lg bg-panel p-4 space-y-2">
@@ -79,7 +117,13 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
         <FormDisclosure song={song} />
       </div>
       <div className="overflow-x-auto">
-        <div className="flex gap-0.5" style={{ width: "max-content" }}>
+        <div className="relative flex gap-0.5" style={{ width: "max-content" }}>
+          {playheadLeft !== null && (
+            <div
+              className="absolute top-0 bottom-0 w-px bg-accent pointer-events-none z-10"
+              style={{ left: playheadLeft, boxShadow: "0 0 4px 1px #E8B54A" }}
+            />
+          )}
           {spans.map((span, i) => {
             const style = roleStyle(span.section.role);
             const width = Math.max(MIN_BLOCK_WIDTH, span.durationBeats * PX_PER_BEAT);

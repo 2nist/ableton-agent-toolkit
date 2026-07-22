@@ -3,6 +3,7 @@ import type { Chord } from "../../types/blueprint";
 import { applyPerformanceEffect, type PerfNote } from "./performanceEffects";
 import { Soundfont2, type Soundfont2 as Soundfont2Instance } from "smplr";
 import { SoundFont2 } from "soundfont2";
+import { getSharedAudioContext } from "../playback/audioContext";
 
 /** Standard 12-TET: A4 (MIDI 69) = 440Hz. */
 export function midiToFreq(midi: number): number {
@@ -135,7 +136,6 @@ const DEFAULT_INSTRUMENT_URL = AVAILABLE_INSTRUMENTS[0].url;
  *  and if loading fails, playback falls back to the plain oscillator synth
  *  below so a chord always makes *some* sound immediately on first click. */
 class PreviewPlayer {
-  private ctx: AudioContext | null = null;
   private voices: Voice[] = [];
   private schedulerId: ReturnType<typeof setInterval> | null = null;
   private highlightTimeouts: ReturnType<typeof setTimeout>[] = [];
@@ -145,13 +145,13 @@ class PreviewPlayer {
   private currentInstrumentUrl: string = DEFAULT_INSTRUMENT_URL;
   private pendingVolume = 100;
 
+  /** The whole page's one AudioContext (`audioContext.ts`) — shared with
+   *  `drumPreview.ts`'s DrumMachine so a whole-song play (chords + drums,
+   *  `songTransport.ts`) schedules both against the same clock instead of
+   *  two independently-created contexts with no relationship between
+   *  their `currentTime` origins. */
   private getContext(): AudioContext {
-    if (!this.ctx) {
-      const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new Ctor();
-    }
-    if (this.ctx.state === "suspended") void this.ctx.resume();
-    return this.ctx;
+    return getSharedAudioContext();
   }
 
   /** Fetches, parses and readies the .sf2 at `url` as the active sampler.
@@ -223,15 +223,15 @@ class PreviewPlayer {
   }
 
   private stopVoices(): void {
-    const ctx = this.ctx;
-    for (const voice of this.voices) {
-      if (ctx) {
+    if (this.voices.length > 0) {
+      const ctx = this.getContext();
+      for (const voice of this.voices) {
         voice.gain.gain.cancelScheduledValues(ctx.currentTime);
         voice.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.03);
+        voice.oscillator.stop(ctx.currentTime + 0.1);
       }
-      voice.oscillator.stop(ctx ? ctx.currentTime + 0.1 : undefined);
+      this.voices = [];
     }
-    this.voices = [];
     this.sampler?.stop();
   }
 
@@ -247,28 +247,37 @@ class PreviewPlayer {
    *  later chord, once `this.sampler` is populated, sounds correct. So a
    *  call made before loading finishes waits briefly for it instead of
    *  immediately falling back; a short grace period still guarantees
-   *  sound if loading is slow or fails outright. */
-  private scheduleVoicing(voicing: PerformedVoice[]): void {
+   *  sound if loading is slow or fails outright.
+   *
+   *  `startAt`, when given, is an absolute time on the shared AudioContext
+   *  to schedule against instead of "now" — `songTransport.ts` uses this
+   *  to give chords a precise, pre-computed time (submitted ahead of when
+   *  it's due, so WebAudio's own sample-accurate scheduling handles the
+   *  actual timing) rather than whatever moment this function happens to
+   *  be *called* at, which is only ever approximately on-beat once
+   *  JS-timer jitter is in the picture. Omitted for every other caller
+   *  (chord auditioning), which means "right now," same as before. */
+  private scheduleVoicing(voicing: PerformedVoice[], startAt?: number): void {
     const samplerLoad = this.ensureSampler();
     if (this.sampler) {
-      this.playVoicingNow(voicing);
+      this.playVoicingNow(voicing, startAt);
       return;
     }
     let played = false;
     const playOnce = () => {
       if (played) return;
       played = true;
-      this.playVoicingNow(voicing);
+      this.playVoicingNow(voicing, startAt);
     };
     samplerLoad.then(playOnce);
     setTimeout(playOnce, 250);
   }
 
-  private playVoicingNow(voicing: PerformedVoice[]): void {
+  private playVoicingNow(voicing: PerformedVoice[], startAt?: number): void {
     const ctx = this.getContext();
     this.stopVoices();
 
-    const now = ctx.currentTime;
+    const now = startAt ?? ctx.currentTime;
 
     if (this.sampler) {
       for (const v of voicing) {
@@ -284,7 +293,7 @@ class PreviewPlayer {
 
     const attack = 0.01;
     for (const v of voicing) {
-      const startAt = now + Math.max(0, v.startOffsetSec);
+      const startAtVoice = now + Math.max(0, v.startOffsetSec);
       const release = Math.min(0.15, v.durSec / 2);
       const peak = Math.min(0.25, 0.8 / Math.max(1, voicing.length)) * (v.velocity / 100);
 
@@ -293,13 +302,13 @@ class PreviewPlayer {
       oscillator.frequency.value = v.freq;
 
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0, startAt);
-      gain.gain.linearRampToValueAtTime(peak, startAt + attack);
-      gain.gain.setTargetAtTime(0, startAt + v.durSec - release, release / 3);
+      gain.gain.setValueAtTime(0, startAtVoice);
+      gain.gain.linearRampToValueAtTime(peak, startAtVoice + attack);
+      gain.gain.setTargetAtTime(0, startAtVoice + v.durSec - release, release / 3);
 
       oscillator.connect(gain).connect(ctx.destination);
-      oscillator.start(startAt);
-      oscillator.stop(startAt + v.durSec + release * 2);
+      oscillator.start(startAtVoice);
+      oscillator.stop(startAtVoice + v.durSec + release * 2);
       this.voices.push({ oscillator, gain });
     }
   }
@@ -314,9 +323,12 @@ class PreviewPlayer {
 
   /** Sound one chord the same way `playChord` does, but honoring its own
    *  `performance` effect (strum/pulse/legato) if it has one — so preview
-   *  audio matches what the export pipeline actually renders. */
-  playChordObject(chord: Chord, durSec = 1): void {
-    this.scheduleVoicing(chordToPerformedVoicing(chord, durSec));
+   *  audio matches what the export pipeline actually renders. `startAt`
+   *  (absolute shared-AudioContext time) is optional — see
+   *  `scheduleVoicing`'s doc; every caller except `songTransport.ts`
+   *  omits it and gets "right now," same as before this existed. */
+  playChordObject(chord: Chord, durSec = 1, startAt?: number): void {
+    this.scheduleVoicing(chordToPerformedVoicing(chord, durSec), startAt);
   }
 
   /** Loop (or play once) a section's progression at `bpm`, calling
