@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { pitchClass } from "@music-theory/core";
 import type { ScaleType, ChordQuality, NoteName } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
@@ -7,6 +7,7 @@ import { getPreviewPlayer } from "../../lib/harmony/audioPreview";
 import {
   parseProgression,
   buildWalk,
+  collapseRepeatsForLoopView,
   detectLoop,
   getRevealedCells,
   getWalkPathD,
@@ -21,6 +22,8 @@ import {
   DIRS,
   type RevealedCell,
 } from "../../lib/harmony/honeycombWalk";
+
+type HoneycombViewMode = "linear" | "loop";
 
 const S = 34;
 
@@ -60,27 +63,39 @@ export default function HoneycombWheel({
   const { steps } = useMemo(() => parseProgression(honeycombText), [honeycombText]);
   const walk = useMemo(() => buildWalk(steps), [steps]);
 
+  // "linear" is the straight-line walk above (one hex per chord, only a
+  // literal back-and-forth reuses a hex). "loop" collapses a detected
+  // repeating vamp onto a single lap for a compact view — same step
+  // order/count, just reused coordinates. Rendering and click-hit-testing
+  // below key off `displayWalk`; `walk` stays the source of truth for
+  // indexing into `chords`/`steps` (both arrays share its length/order).
+  const [viewMode, setViewMode] = useState<HoneycombViewMode>("linear");
+  const displayWalk = useMemo(
+    () => (viewMode === "loop" ? collapseRepeatsForLoopView(walk, steps) : walk),
+    [viewMode, walk, steps],
+  );
+
   // The "current"/"choice" anchor is always the true end of the
   // progression, independent of whichever chord is selected for editing —
   // selecting an earlier chord to inspect must never relocate where a
   // click-to-add lands (see honeycomb design spec: cell position vs.
   // sequence step are decoupled).
-  const endStep = walk.length ? walk.length - 1 : 0;
+  const endStep = displayWalk.length ? displayWalk.length - 1 : 0;
 
   const revealed = useMemo(() => {
-    const cells = getRevealedCells(walk, endStep, "full");
+    const cells = getRevealedCells(displayWalk, endStep, "full");
     // A brand-new section has an empty walk, so getRevealedCells returns
     // nothing. Seed a starter ring — the tonic at the origin plus its six
     // diatonic neighbours — so every scale degree is an addable choice cell
     // right away, rather than a single dead-end cell with nothing to click.
-    if (walk.length === 0) {
+    if (displayWalk.length === 0) {
       return [
         { q: 0, r: 0, d: 0, type: "choice" as const },
         ...DIRS.map(([a, b]) => ({ q: a, r: b, d: degreeAt(a, b), type: "choice" as const })),
       ];
     }
     return cells;
-  }, [walk, endStep]);
+  }, [displayWalk, endStep]);
 
   // Separately, which walk step (if any) corresponds to the chord picked
   // for editing — used only for a "selected" highlight, never for choice-
@@ -88,8 +103,8 @@ export default function HoneycombWheel({
   const selectedStep = useMemo(() => {
     if (!selectedChordId) return -1;
     const idx = chords.findIndex((c) => c.id === selectedChordId);
-    return idx >= 0 && idx < walk.length ? idx : -1;
-  }, [chords, selectedChordId, walk.length]);
+    return idx >= 0 && idx < displayWalk.length ? idx : -1;
+  }, [chords, selectedChordId, displayWalk.length]);
 
   // Step-order badges, one per unique cell — a repeating progression (e.g.
   // I-IV-I-IV) revisits the same cell many times, and stacking one opaque
@@ -99,21 +114,24 @@ export default function HoneycombWheel({
   // main label always stays legible.
   const walkBadges = useMemo(() => {
     const byCell = new Map<string, { q: number; r: number; indices: number[] }>();
-    walk.forEach((p, i) => {
+    displayWalk.forEach((p, i) => {
       const key = `${p.q},${p.r}`;
       const entry = byCell.get(key);
       if (entry) entry.indices.push(i + 1);
       else byCell.set(key, { q: p.q, r: p.r, indices: [i + 1] });
     });
     return Array.from(byCell.values());
-  }, [walk]);
+  }, [displayWalk]);
 
-  const loop = useMemo(() => detectLoop(steps, walk), [steps, walk]);
+  const loop = useMemo(() => detectLoop(steps, displayWalk), [steps, displayWalk]);
   const loopVec = loop?.translated
     ? { x: loop.dq * S * Math.sqrt(3), y: loop.dr * S * 1.5 }
     : null;
 
-  const pathD = useMemo(() => getWalkPathD(walk, endStep, "full", S), [walk, endStep]);
+  const pathD = useMemo(
+    () => getWalkPathD(displayWalk, endStep, "full", S),
+    [displayWalk, endStep],
+  );
 
   // SVG bounds — guard against empty (no chords) section
   const svgDims = useMemo(() => {
@@ -121,10 +139,10 @@ export default function HoneycombWheel({
     if (revealed.length > 0) {
       allPts.push(...revealed.map((c) => hexToPixel(c.q, c.r, S)));
     }
-    if (walk.length > 0) {
-      allPts.push(...walk.map((p) => hexToPixel(p.q, p.r, S)));
+    if (displayWalk.length > 0) {
+      allPts.push(...displayWalk.map((p) => hexToPixel(p.q, p.r, S)));
       if (loopVec) {
-        const first = hexToPixel(walk[0].q, walk[0].r, S);
+        const first = hexToPixel(displayWalk[0].q, displayWalk[0].r, S);
         allPts.push({ x: first.x + loopVec.x, y: first.y + loopVec.y });
       }
     }
@@ -144,7 +162,7 @@ export default function HoneycombWheel({
       w: Math.max(220, maxX - minX + 16),
       h: Math.max(180, maxY - minY + 16),
     };
-  }, [revealed, walk, loopVec]);
+  }, [revealed, displayWalk, loopVec]);
 
   const addChordAtDegree = useCallback((deg: number) => {
     const diatonic = diatonicByDegree[deg].triad;
@@ -164,9 +182,9 @@ export default function HoneycombWheel({
   }, [chords, keyPc, keyName, intervals, diatonicByDegree, beatsPerChord, onChangeChords, onSelectChord]);
 
   const selectChordAtCell = useCallback((q: number, r: number, anchor: { x: number; y: number }) => {
-    if (!walk.length) return;
-    for (let i = walk.length - 1; i >= 0; i--) {
-      if (walk[i].q === q && walk[i].r === r) {
+    if (!displayWalk.length) return;
+    for (let i = displayWalk.length - 1; i >= 0; i--) {
+      if (displayWalk[i].q === q && displayWalk[i].r === r) {
         const chord = chords[i];
         if (chord) {
           onSelectChord(chord.id);
@@ -176,7 +194,7 @@ export default function HoneycombWheel({
         return;
       }
     }
-  }, [walk, chords, onSelectChord, onEditChord]);
+  }, [displayWalk, chords, onSelectChord, onEditChord]);
 
   const handleCellClick = useCallback((cell: RevealedCell, e: React.MouseEvent) => {
     if (cell.type === "choice") addChordAtDegree(cell.d);
@@ -187,6 +205,32 @@ export default function HoneycombWheel({
 
   return (
     <div style={{ position: "relative" }}>
+      <div
+        style={{
+          position: "absolute", top: 4, right: 4, zIndex: 1,
+          display: "flex", gap: 2, fontFamily: "'IBM Plex Mono', monospace",
+        }}
+      >
+        {(["linear", "loop"] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setViewMode(mode)}
+            style={{
+              fontSize: 9, padding: "2px 7px", borderRadius: 4, cursor: "pointer",
+              border: `1px solid ${viewMode === mode ? "#E8B54A" : "#3A3F4B"}`,
+              background: viewMode === mode ? "#3A2F16" : "transparent",
+              color: viewMode === mode ? "#F2D9A0" : "#8B94A1",
+            }}
+            title={
+              mode === "linear"
+                ? "One hex per chord (only immediate back-and-forth reuses a hex)"
+                : "Collapse repeating vamps onto a single lap"
+            }
+          >
+            {mode === "linear" ? "Linear" : "Loop"}
+          </button>
+        ))}
+      </div>
       <svg
         viewBox={vbStr}
         style={{ width: svgDims.w, height: svgDims.h, display: "block" }}
@@ -207,8 +251,8 @@ export default function HoneycombWheel({
 
         {loop && loop.translated && (
           <g style={{ pointerEvents: "none" }}>
-            <line x1={hexToPixel(walk[0].q, walk[0].r, S).x} y1={hexToPixel(walk[0].q, walk[0].r, S).y}
-              x2={hexToPixel(walk[walk.length - 1].q, walk[walk.length - 1].r, S).x} y2={hexToPixel(walk[walk.length - 1].q, walk[walk.length - 1].r, S).y}
+            <line x1={hexToPixel(displayWalk[0].q, displayWalk[0].r, S).x} y1={hexToPixel(displayWalk[0].q, displayWalk[0].r, S).y}
+              x2={hexToPixel(displayWalk[displayWalk.length - 1].q, displayWalk[displayWalk.length - 1].r, S).x} y2={hexToPixel(displayWalk[displayWalk.length - 1].q, displayWalk[displayWalk.length - 1].r, S).y}
               stroke="#E8B54A" strokeWidth={2} strokeDasharray="6 4" markerEnd="url(#hw-arrow)" opacity={0.75} />
           </g>
         )}
@@ -219,7 +263,7 @@ export default function HoneycombWheel({
           const cy = hexToPixel(q, r, S).y;
           const isCurrent = type === "current";
           const isChoice = type === "choice";
-          const isSelected = selectedStep >= 0 && walk[selectedStep].q === q && walk[selectedStep].r === r;
+          const isSelected = selectedStep >= 0 && displayWalk[selectedStep].q === q && displayWalk[selectedStep].r === r;
 
           const romanLabel = diatonicByDegree[d].triad.minor ? ROMAN_UP[d].toLowerCase() : ROMAN_UP[d];
           const rootPc = intervals[d];

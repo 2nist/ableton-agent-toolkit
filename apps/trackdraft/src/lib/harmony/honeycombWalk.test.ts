@@ -13,6 +13,8 @@ import {
   bassInterval,
   diatonicChordAt,
   buildWalk,
+  detectRepeatRuns,
+  collapseRepeatsForLoopView,
   detectLoop,
   getRevealedCells,
   getWalkPathD,
@@ -522,9 +524,10 @@ describe("buildWalk", () => {
   });
 
   it("I → IV → V → I walks a path without returning to origin", () => {
-    // The walker greedily picks the first adjacent hex matching the
-    // target degree.  I→IV→V→I does not guarantee a return to (0,0)
-    // because the final "I" lands on whichever adjacent hex has degree 0.
+    // The walker greedily picks the adjacent hex matching the target
+    // degree.  I→IV→V→I does not return to (0,0) because the final "I"
+    // is not an immediate reversal of the V→I move, and (0,0) is not the
+    // naive next cell here anyway.
     const text = "I IV V I";
     const { steps } = parseProgression(text);
     const walk = buildWalk(steps);
@@ -532,6 +535,99 @@ describe("buildWalk", () => {
     expect(walk[0]).toEqual({ q: 0, r: 0 });
     // The final step must have degree 0 (I)
     expect(degreeAt(walk[3].q, walk[3].r)).toBe(0);
+  });
+
+  it("reuses the same hex for a literal back-and-forth (immediate reversal)", () => {
+    // Am → Em → Am → Em: each move directly undoes the one before it,
+    // so the walk should bounce between exactly 2 hexes forever, not drift.
+    const { steps } = parseProgression("vi iii vi iii");
+    const walk = buildWalk(steps);
+    expect(walk).toHaveLength(4);
+    expect(walk[2]).toEqual(walk[0]); // 3rd chord reuses the 1st chord's hex
+    expect(walk[3]).toEqual(walk[1]); // 4th chord reuses the 2nd chord's hex
+  });
+
+  it("deflects a coincidental non-adjacent collision to a fresh hex", () => {
+    // I → IV → vii → IV → I. The IV→vii→IV bounce is an immediate
+    // reversal (fine, reuses the IV hex). But vii→IV→I does NOT reverse
+    // the IV→vii move, even though the naive computation would coincide
+    // with the very first "I" hex several chords back — that coincidence
+    // should be deflected to a new, unvisited hex instead of silently
+    // merging two unrelated "I" chords onto one cell.
+    const { steps } = parseProgression("I IV vii IV I");
+    const walk = buildWalk(steps);
+    expect(walk).toHaveLength(5);
+    expect(walk[0]).toEqual({ q: 0, r: 0 }); // first I
+    expect(walk[3]).toEqual(walk[1]); // IV reuses the IV hex via reversal
+    expect(degreeAt(walk[4].q, walk[4].r)).toBe(0); // last I is still degree 0
+    expect(walk[4]).not.toEqual(walk[0]); // but NOT the same hex as the first I
+  });
+});
+
+/* ============================================================
+   PROGRESSION VIEW — repeat-run detection & collapse
+   ============================================================ */
+
+describe("detectRepeatRuns", () => {
+  it("returns no runs for a non-repeating progression", () => {
+    const { steps } = parseProgression("I IV V vi");
+    expect(detectRepeatRuns(steps)).toEqual([]);
+  });
+
+  it("detects a simple 2-chord vamp repeated 4 times", () => {
+    const { steps } = parseProgression("I IV I IV I IV I IV");
+    const runs = detectRepeatRuns(steps);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toEqual({ start: 0, period: 2, laps: 4 });
+  });
+
+  it("only flags the repeating stretch, leaving lead-in/tail alone", () => {
+    // vii I IV | (I IV) x4 | V I IV — the middle 8 chords are the run.
+    const { steps } = parseProgression("vii I IV I IV I IV I IV I IV V I IV");
+    const runs = detectRepeatRuns(steps);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].period).toBe(2);
+    expect(runs[0].laps).toBeGreaterThanOrEqual(4);
+  });
+
+  it("does not treat a I vs I7 as the same repeated unit", () => {
+    const { steps } = parseProgression("I IV I7 IV");
+    const runs = detectRepeatRuns(steps);
+    expect(runs).toEqual([]);
+  });
+
+  it("requires at least 2 laps to count as a run", () => {
+    const { steps } = parseProgression("I IV V");
+    expect(detectRepeatRuns(steps)).toEqual([]);
+  });
+});
+
+describe("collapseRepeatsForLoopView", () => {
+  it("leaves a non-repeating walk unchanged", () => {
+    const { steps } = parseProgression("I IV V vi");
+    const walk = buildWalk(steps);
+    expect(collapseRepeatsForLoopView(walk, steps)).toEqual(walk);
+  });
+
+  it("collapses every lap of a repeated vamp onto the first lap's hexes", () => {
+    const { steps } = parseProgression("I IV I IV I IV I IV");
+    const walk = buildWalk(steps);
+    const collapsed = collapseRepeatsForLoopView(walk, steps);
+    expect(collapsed).toHaveLength(8);
+    // Every "I" (even indices) shares the first "I" hex; every "IV" shares the first "IV" hex.
+    for (let i = 0; i < 8; i += 2) expect(collapsed[i]).toEqual(collapsed[0]);
+    for (let i = 1; i < 8; i += 2) expect(collapsed[i]).toEqual(collapsed[1]);
+  });
+
+  it("preserves array length/order and leaves lead-in/tail chords untouched", () => {
+    const { steps } = parseProgression("vii I IV I IV I IV I IV I IV V I IV");
+    const walk = buildWalk(steps);
+    const collapsed = collapseRepeatsForLoopView(walk, steps);
+    expect(collapsed).toHaveLength(walk.length);
+    expect(collapsed[0]).toEqual(walk[0]); // leading "vii" untouched
+    expect(collapsed[collapsed.length - 1]).toEqual(
+      walk[walk.length - 1],
+    ); // trailing "IV" untouched (not part of the run)
   });
 });
 

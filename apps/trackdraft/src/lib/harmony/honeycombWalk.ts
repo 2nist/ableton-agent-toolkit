@@ -458,27 +458,154 @@ export function emitToken(step: HoneycombStep): string {
    WALK BUILDER — steps → hex cell positions
    ============================================================ */
 
+/** Starting from `from`, BFS outward over the infinite hex lattice for the
+ *  closest cell of the given target degree that isn't already in `visited`.
+ *  Used by buildWalk() to deflect a coincidental long-range collision onto
+ *  fresh territory instead of silently reusing an unrelated earlier hex. */
+function findNearestUnvisited(
+  target: number,
+  from: HexCell,
+  visited: Set<string>,
+): HexCell {
+  const seen = new Set<string>([`${from.q},${from.r}`]);
+  let frontier: HexCell[] = [from];
+  for (let ring = 0; ring < 24; ring++) {
+    const next: HexCell[] = [];
+    for (const cell of frontier) {
+      for (const [dq, dr] of DIRS) {
+        const q = cell.q + dq;
+        const r = cell.r + dr;
+        const key = `${q},${r}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (degreeAt(q, r) === target && !visited.has(key)) return { q, r };
+        next.push({ q, r });
+      }
+    }
+    frontier = next;
+  }
+  return from;
+}
+
 /** Given a sequence of HoneycombSteps, compute the hex-grid walk
  *  path.  Each step tries to move to an adjacent hex whose degree
- *  matches the step's target degree.  If no adjacent cell matches
- *  (or the degree is already on the current cell), it stays put. */
+ *  matches the step's target degree; if the degree is already on the
+ *  current cell it stays put (a held/repeated chord).
+ *
+ *  A hex is only ever revisited in one of two cases: staying put, or
+ *  the move being an immediate reversal of the move just taken (e.g.
+ *  Am → Em → Am walks straight back to the Am hex it just left — a
+ *  literal back-and-forth). Any other case where the naively-computed
+ *  next cell happens to coincide with an *earlier*, non-adjacent visit
+ *  (a coincidental loop-closure several chords later) is deflected to
+ *  the nearest not-yet-visited hex of the same degree instead — so a
+ *  varied progression keeps growing outward, one hex per real event,
+ *  rather than silently folding unrelated chords onto the same cell. */
 export function buildWalk(steps: HoneycombStep[]): HexCell[] {
   if (!steps.length) return [];
   const walk: HexCell[] = [{ q: 0, r: steps[0].deg }];
+  const visited = new Set<string>([`0,${steps[0].deg}`]);
   for (let i = 1; i < steps.length; i++) {
     const d = steps[i].deg;
     const { q, r } = walk[walk.length - 1];
+    const prevCell = walk.length >= 2 ? walk[walk.length - 2] : null;
+
     if (degreeAt(q, r) === d) {
       walk.push({ q, r });
       continue;
     }
-    const dir = DIRS.find(
-      ([a, b]) => degreeAt(q + a, r + b) === d,
-    );
-    if (dir) walk.push({ q: q + dir[0], r: r + dir[1] });
-    else walk.push({ q, r });
+
+    const dir = DIRS.find(([a, b]) => degreeAt(q + a, r + b) === d);
+    let next = dir ? { q: q + dir[0], r: r + dir[1] } : { q, r };
+    const key = `${next.q},${next.r}`;
+    const isImmediateReversal =
+      prevCell !== null && next.q === prevCell.q && next.r === prevCell.r;
+
+    if (visited.has(key) && !isImmediateReversal) {
+      next = findNearestUnvisited(d, next, visited);
+    }
+
+    walk.push(next);
+    visited.add(`${next.q},${next.r}`);
   }
   return walk;
+}
+
+/* ============================================================
+   PROGRESSION VIEW — repeat-run detection & collapse
+   ============================================================ */
+
+export interface RepeatRun {
+  start: number; // index of the run's first step
+  period: number; // length of one lap, in steps
+  laps: number; // number of complete laps (>= 2)
+}
+
+/** Find maximal, non-overlapping repeated-unit runs in a step sequence:
+ *  contiguous stretches where a short pattern repeats two or more times
+ *  back-to-back (e.g. "I IV I IV I IV" is one run with period 2, 3 laps).
+ *  Greedy left-to-right — at each position it picks whichever period
+ *  covers the most steps (laps × period), then jumps past the run and
+ *  continues. Non-repeating stretches between/around runs are left alone.
+ *  Chords are compared on every property (degree, accidental, quality,
+ *  suffix, bass), so a I and an I7 are NOT the same repeated unit. */
+export function detectRepeatRuns(steps: HoneycombStep[]): RepeatRun[] {
+  const sig = (s: HoneycombStep) =>
+    `${s.deg}|${s.acc}|${s.minor}|${s.suffix}|${s.bass}`;
+  const sigs = steps.map(sig);
+  const n = sigs.length;
+  const runs: RepeatRun[] = [];
+  let i = 0;
+  while (i < n) {
+    let best: RepeatRun | null = null;
+    const maxPeriod = Math.floor((n - i) / 2);
+    for (let p = 1; p <= maxPeriod; p++) {
+      let laps = 1;
+      while (
+        i + (laps + 1) * p <= n &&
+        Array.from({ length: p }, (_, k) => sigs[i + laps * p + k]).every(
+          (s, k) => s === sigs[i + k],
+        )
+      ) {
+        laps++;
+      }
+      if (laps >= 2 && (!best || laps * p > best.laps * best.period)) {
+        best = { start: i, period: p, laps };
+      }
+    }
+    if (best) {
+      runs.push(best);
+      i = best.start + best.laps * best.period;
+    } else {
+      i++;
+    }
+  }
+  return runs;
+}
+
+/** Rewrite a linear walk's hex positions for the "progression" (loop)
+ *  view: within each detected repeat run, every lap after the first
+ *  reuses the exact hex positions of the first lap, so a repeating
+ *  progression reads as one compact loop with a visit-count badge
+ *  instead of a fresh hex for every repeat. The array's length and
+ *  step-index order are unchanged — only the (q,r) values move — so
+ *  callers can keep indexing into the original `steps`/`chords` arrays
+ *  by position. Stretches outside a detected run are left untouched,
+ *  matching the "straight line" walk exactly. */
+export function collapseRepeatsForLoopView(
+  walk: HexCell[],
+  steps: HoneycombStep[],
+): HexCell[] {
+  const runs = detectRepeatRuns(steps);
+  const out = [...walk];
+  for (const { start, period, laps } of runs) {
+    for (let lap = 1; lap < laps; lap++) {
+      for (let k = 0; k < period; k++) {
+        out[start + lap * period + k] = out[start + k];
+      }
+    }
+  }
+  return out;
 }
 
 /* ============================================================
