@@ -1,0 +1,39 @@
+{
+  "name": "@devkit/puck-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared Puck AST compiler + Vite save-middleware for visual layout pipelines",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "puck-engine": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.3",
+    "vite": "^5.0.8"
+  },
+  "peerDependencies": {
+    "vite": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  }
+}
