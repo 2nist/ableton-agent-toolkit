@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { GENRE_CATALOG, CATALOGED_GENRE_NAMES } from "../data/genre-catalog/index";
 import { buildGenreMapPrompt, validateSongMapShape, genreMapFilename } from "../data/genre-prompt";
 import type { SongMap } from "../data/songMaps";
@@ -111,7 +112,10 @@ export default function GenreWorkbench() {
   return (
     <div className="p-6 max-w-4xl space-y-6">
       <div>
-        <h1 className="text-lg font-semibold mb-1">Genre Map Workbench</h1>
+        <Link to="/" className="text-inkMuted text-sm hover:text-ink">
+          ← Back to Dashboard
+        </Link>
+        <h1 className="text-lg font-semibold mb-1 mt-2">Genre Map Workbench</h1>
         <p className="text-sm text-inkMuted">
           Research and generate SongMap templates for unresearched genres.
           {GENRE_CATALOG.length} of {ALL_GENRES.length} genres cataloged.

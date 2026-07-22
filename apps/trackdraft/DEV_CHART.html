@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrackDraft — Development Status Chart</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --ink: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --amber: #d29922;
+    --orange: #db6d28;
+    --red: #f85149;
+    --purple: #a371f7;
+    --pink: #db61a2;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 2rem;
+    line-height: 1.5;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.1rem; margin: 1.5rem 0 0.75rem; padding-bottom: 0.25rem; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 0.9rem; margin: 1rem 0 0.5rem; color: var(--muted); }
+  .subtitle { color: var(--muted); font-size: 0.8rem; margin-bottom: 1.5rem; }
+  .legend { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; font-size: 0.75rem; }
+  .legend span { display: flex; align-items: center; gap: 0.25rem; }
+  .dot { width: 0.75rem; height: 0.75rem; border-radius: 50%; display: inline-block; }
+  .dot-done { background: var(--green); }
+  .dot-active { background: var(--amber); }
+  .dot-planned { background: var(--purple); }
+  .dot-stub { background: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-bottom: 1.5rem; }
+  th { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 2px solid var(--border); color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+  td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: var(--panel); }
+  .status { font-size: 0.7rem; font-weight: 600; white-space: nowrap; }
+  .status-done { color: var(--green); }
+  .status-active { color: var(--amber); }
+  .status-planned { color: var(--purple); }
+  .status-stub { color: var(--muted); }
+  .filepath { color: var(--muted); font-size: 0.68rem; font-family: 'SF Mono', 'Fira Code', monospace; }
+  .notes { color: var(--muted); font-size: 0.7rem; }
+  .count { color: var(--muted); font-size: 0.75rem; margin-bottom: 0.5rem; }
+  .section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media (max-width: 900px) { .section-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<h1>🎵 TrackDraft Development Status</h1>
+<p class="subtitle">Last updated: July 21, 2026 · Session scope: Landing page redesign, file parsers, YouTube/LRCLIB integration</p>
+
+<div class="legend">
+  <span><span class="dot dot-done"></span> Done</span>
+  <span><span class="dot dot-active"></span> In Progress</span>
+  <span><span class="dot dot-planned"></span> Planned</span>
+  <span><span class="dot dot-stub"></span> Stub (unused, may remove)</span>
+</div>
+
+<!-- ============ DASHBOARD / LANDING PAGE ============ -->
+<h2>📋 Dashboard & Landing Page <span class="count">— 12 components</span></h2>
+
+<table>
+  <thead>
+    <tr><th style="width:22%">Component</th><th style="width:35%">File</th><th style="width:12%">Status</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Dashboard</td>
+      <td class="filepath">src/components/dashboard/Dashboard.tsx</td>
+      <td class="status status-done">✅ Done</td>
+      <td class="notes">Root layout: sidebar + sticky header/action/filter bar + scrollable content area. Three views: All Songs, Templates, Directory Listing.</td>
+    </tr>
+    <tr>
+      <td>Sidebar</td>
+      <td class="filepath">src/components/dashboard/Sidebar.tsx</td>
+      <td class="status status-done">✅ Done</td>
+      <td class="notes">200px sidebar: Songs/Templates nav, scrollable directory tree, compact import drop zone at bottom.</td>
+    </tr>
+    <tr>
+      <td>DirectoryTree</td>
+      <td class="filepath">src/components/dashboard/DirectoryTree.tsx</td>
+      <td class="status status-done">✅ Done</td>
+      <td class="notes">"All Songs" pseudo-entry + per-dir rows with file counts, default-dir star, auto-load listings.</td>
+    </tr>
+    <tr>
+      <td>DirSetupModal</td>
+      <td class="filepath">src/components/dashboard/DirSetupModal.tsx</td>
+      <td class="status status-done">✅ Done</td>
+      <td class="notes">Modal: add/remove/manage directories, set default, see file counts. Persisted to localStorage.</td>
+    </tr>
+    <tr>
+      <td>SongTable</td>
+      <td class="filepath">src/components/dashboard/SongTable.tsx</td>
+      <td class="status status-done">✅ Done</td>
+      <td class="notes">Sortable table with confidence dots (🟢🟡🟠🔴⚫), sort by title/conf/BPM/sections/date, Export/Delete per row.</td>
+    </tr>
+    <tr>
+      <td>FilterBar</td>
+      <td class="filepath">src/components/dashboard/FilterBar.tsx</td>
+      <td class="status status-done">✅ Done</td>
+      <td class="notes">Search + confidence filter chips + key chips + scale chips + has-sections toggle.</td>
+    </tr>
+    <tr>
+      <td>ActionBar</td>
+      <td class="filepath">src/components/dashboard/ActionBar.tsx</td>
+      <td class="status status-done">✅ Done</td>
+      <td class="notes">Row 1: New Song + Import .json. Row 2: YouTube URL → metadata → LRCLIB lyrics → blueprint.</td>
+    </tr>
+    <tr>
+      <td>TemplatePicker</td>
+      <td class="filepath">src/components/dashboard/TemplatePicker.tsx</td>
+      <td class="status status-done">✅ Done</td>
+      <td class="notes">Grid of 13 templates (genre catalog + song maps), creates song with defaults, navigates to Structure.</td>
+    </tr>
+    <tr>
+      <td>ImportZone (standalone)</td>
+      <td class="filepath">src/components/dashboard/ImportZone.tsx</td>
+      <td class="status status-stub">⚠ Stub</td>
+      <td class="notes">Original main-area import zone. Superseded by sidebar import zone in Sidebar.tsx + ActionBar YouTube row.</td>
+    </tr>
+    <tr>
+      <td>TemplateList (sidebar)</td>
+      <td class="filepath">src/components/dashboard/TemplateList.tsx</td>
+      <td class="status status-stub">⚠ Stub</td>
+      <td class="notes">Original sidebar template list. Superseded by TemplatePicker (main-area grid view).</td>
+    </tr>
+    <tr>
+      <td>CatalogBrowser (dev-only)</td>
+      <td class="filepath">src/components/dashboard/CatalogBrowser.tsx</td>
+      <td class="status status-stub">⚠ Stub</td>
+      <td class="notes">Original dev-only Beatles catalog browser. Superseded by directory browser (lists all configured dirs).</td>
+    </tr>
+    <tr>
+      <td>SongEditorLayout</td>
+      <td class="filepath">src/components/layout/SongEditorLayout.tsx</td>
+      <td class="status status-done">✅ Done (pre-existing)</td>
+      <td class="notes">Studio/Structure/Harmony/Lyrics tabs, undo/redo, song info panel sidebar.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============ DATA & STORES ============ -->
+<h2>🗄️ Data & Stores <span class="count">— 5 modules</span></h2>
+
+<table>
+  <thead><tr><th style="width:22%">Module</th><th style="width:35%">File</th><th style="width:12%">Status</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Song Store (Zustand)</td>
+      <td class="filepath">src/store/songStore.ts</td>
+      <td class="status status-done">✅ Done (pre-existing)</td>
+      <td class="notes">CRUD + undo/redo + localStorage persistence. All parser output flows through importSong().</td>
+    </tr>
+    <tr>
+      <td>Directory Store (Zustand)</td>
+      <td class="filepath">src/store/directoryStore.ts</td>
+      <td class="status status-done">✅ Done (new)</td>
+      <td class="notes">Config persistence, listing cache, loadListing() fetches /__local-browse, error propagation.</td>
+    </tr>
+    <tr>
+      <td>Dock Store (Zustand)</td>
+      <td class="filepath">src/store/dockStore.ts</td>
+      <td class="status status-done">✅ Done (pre-existing)</td>
+      <td class="notes">Info/Tools side panel in song editor.</td>
+    </tr>
+    <tr>
+      <td>Harmony Selection Store</td>
+      <td class="filepath">src/store/harmonySelectionStore.ts</td>
+      <td class="status status-done">✅ Done (pre-existing)</td>
+      <td class="notes">Chord selection state for harmony editor.</td>
+    </tr>
+    <tr>
+      <td>Lyrics Selection Store</td>
+      <td class="filepath">src/store/lyricsSelectionStore.ts</td>
+      <td class="status status-done">✅ Done (pre-existing)</td>
+      <td class="notes">Lyric selection state for lyrics editor.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============ FILE PARSERS ============ -->
+<h2>📥 File Import Parsers <span class="count">— 4 modules</span></h2>
+
+<table>
+  <thead><tr><th style="width:22%">Parser</th><th style="width:35%">File</th><th style="width:12%">Status</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Blueprint JSON</td>
+      <td class="filepath">src/lib/exportImport.ts</td>
+      <td class="status status-done">✅ Done (pre-existing)</td>
+      <td class="notes">parseImportedSong() validates shape, normalizes legacy fields. Used by file picker + directory browser.</td>
+    </tr>
+    <tr>
+      <td>MIDI Parser</td>
+      <td class="filepath">src/lib/parsers/parseMidi.ts</td>
+      <td class="status status-done">✅ Done (new)</td>
+      <td class="notes">Manual SMF binary parser — no deps. BPM, key sig, time sig, note on/off with section detection.</td>
+    </tr>
+    <tr>
+      <td>Audio Parser</td>
+      <td class="filepath">src/lib/parsers/parseAudio.ts</td>
+      <td class="status status-done">✅ Done (new)</td>
+      <td class="notes">Web Audio API: onset detection + autocorrelation (BPM), chromagram + Krumhansl-Kessler (key). Also: textToBlueprintSong() for lyrics files.</td>
+    </tr>
+    <tr>
+      <td>Parser Router</td>
+      <td class="filepath">src/lib/parsers/index.ts</td>
+      <td class="status status-done">✅ Done (new)</td>
+      <td class="notes">parseFile() dispatches by type. Returns ParseResult {ok, song} | {ok: false, error}.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============ YOUTUBE / LRCLIB ============ -->
+<h2>🔗 YouTube + LRCLIB Integration <span class="count">— 2 modules</span></h2>
+
+<table>
+  <thead><tr><th style="width:22%">Module</th><th style="width:35%">File</th><th style="width:12%">Status</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>YouTube Library</td>
+      <td class="filepath">src/lib/youtube.ts</td>
+      <td class="status status-done">✅ Done (new)</td>
+      <td class="notes">extractVideoId (4 formats), fetchYoutubeMetadata (via Vite oEmbed proxy), searchLrclib, parseSyncedLyrics → LyricsTimelineEntry[], buildYoutubeBlueprintSong.</td>
+    </tr>
+    <tr>
+      <td>YouTube endpoint</td>
+      <td class="filepath">vite.config.ts (youtubePlugin)</td>
+      <td class="status status-done">✅ Done (new)</td>
+      <td class="notes">/__youtube-meta?videoId=... → YouTube oEmbed → {title, artist, videoId}. No API key required.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============ VITE ENDPOINTS ============ -->
+<h2>⚡ Vite Dev Endpoints <span class="count">— 5 endpoints</span></h2>
+
+<table>
+  <thead><tr><th style="width:22%">Endpoint</th><th style="width:35%">Route</th><th style="width:12%">Status</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Local Browse</td>
+      <td class="filepath">/__local-browse?dir=<path></td>
+      <td class="status status-done">✅ Done</td>
+      <td class="notes">Lists all files in directory with type detection (blueprint/audio/midi/lyrics/ableton/directory). Accepts absolute + relative paths.</td>
+    </tr>
+    <tr>
+      <td>Local File</td>
+      <td class="filepath">/__local-file?dir=<path>&file=<name></td>
+      <td class="status status-done">✅ Done</td>
+      <td class="notes">Serves file contents. JSON as text, audio as binary, MIDI as binary, other as text.</td>
+    </tr>
+    <tr>
+      <td>Catalog Index</td>
+      <td class="filepath">/__catalog/index</td>
+      <td class="status status-done">✅ Done (pre-existing)</td>
+      <td class="notes">Lists Beatles catalog (179 .trackdraft.json files).</td>
+    </tr>
+    <tr>
+      <td>Catalog File</td>
+      <td class="filepath">/__catalog/file?name=<file></td>
+      <td class="status status-done">✅ Done (pre-existing)</td>
+      <td class="notes">Serves individual catalog file.</td>
+    </tr>
+    <tr>
+      <td>YouTube Metadata</td>
+      <td class="filepath">/__youtube-meta?videoId=<id></td>
+      <td class="status status-done">✅ Done (new)</td>
+      <td class="notes">Proxies YouTube oEmbed. Returns title, artist, videoId.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============ SCORING & CLASSIFICATION ============ -->
+<h2>📊 Scoring & Classification <span class="count">— 2 modules</span></h2>
+
+<table>
+  <thead><tr><th style="width:22%">Module</th><th style="width:35%">File</th><th style="width:12%">Status</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Confidence Scoring</td>
+      <td class="filepath">src/lib/confidence.ts</td>
+      <td class="status status-done">✅ Done (new)</td>
+      <td class="notes">computeConfidence() — 0–1 score from arrangement (25%), chords (25%), lyrics (25%), concept/notes (25%). 5 levels: 🟢complete 🟡strong 🟠partial 🔴draft ⚫empty.</td>
+    </tr>
+    <tr>
+      <td>Song Classification</td>
+      <td class="filepath">src/lib/classification.ts</td>
+      <td class="status status-done">✅ Done (pre-existing)</td>
+      <td class="notes">classifySong() characterizes by section roles.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============ EXISTING FEATURES (PRE-SESSION) ============ -->
+<h2>🧬 Pre-Existing Features <span class="count">— intact, not modified this session</span></h2>
+
+<div class="section-grid">
+  <div>
+    <h3>Harmony Editor</h3>
+    <table>
+      <thead><tr><th>Component</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>HarmonyView</td><td class="status status-done">✅</td></tr>
+        <tr><td>HoneycombWheel</td><td class="status status-done">✅</td></tr>
+        <tr><td>ChordEditorPopover</td><td class="status status-done">✅</td></tr>
+        <tr><td>ChordInspector</td><td class="status status-done">✅</td></tr>
+        <tr><td>ChordCard</td><td class="status status-done">✅</td></tr>
+        <tr><td>KeySelector</td><td class="status status-done">✅</td></tr>
+        <tr><td>ProgressionTrack</td><td class="status status-done">✅</td></tr>
+        <tr><td>FloatingToolbar</td><td class="status status-done">✅</td></tr>
+        <tr><td>audioPreview.ts</td><td class="status status-done">✅</td></tr>
+        <tr><td>chordBuilder.ts</td><td class="status status-done">✅</td></tr>
+        <tr><td>substitutions.ts</td><td class="status status-done">✅</td></tr>
+        <tr><td>performanceEffects.ts</td><td class="status status-done">✅</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <h3>Lyrics Editor</h3>
+    <table>
+      <thead><tr><th>Component</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>LyricsView</td><td class="status status-done">✅</td></tr>
+        <tr><td>LyricsEditor</td><td class="status status-done">✅</td></tr>
+        <tr><td>MetricalTable</td><td class="status status-done">✅</td></tr>
+        <tr><td>RhymeSuggestions</td><td class="status status-done">✅</td></tr>
+        <tr><td>SectionMarker</td><td class="status status-done">✅</td></tr>
+        <tr><td>WritingContext</td><td class="status status-done">✅</td></tr>
+        <tr><td>sectionize.ts</td><td class="status status-done">✅</td></tr>
+        <tr><td>rhymes.ts</td><td class="status status-done">✅</td></tr>
+        <tr><td>syllables.ts</td><td class="status status-done">✅</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <h3>Structure & Studio</h3>
+    <table>
+      <thead><tr><th>Component</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>StructureView</td><td class="status status-done">✅</td></tr>
+        <tr><td>StudioView</td><td class="status status-done">✅</td></tr>
+        <tr><td>ArrangementTimeline</td><td class="status status-done">✅</td></tr>
+        <tr><td>MapPicker</td><td class="status status-done">✅</td></tr>
+        <tr><td>SectionCard</td><td class="status status-done">✅</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <h3>Data & Catalog</h3>
+    <table>
+      <thead><tr><th>Item</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Genre Catalog (8 templates)</td><td class="status status-done">✅</td></tr>
+        <tr><td>Song Maps (5 templates)</td><td class="status status-done">✅</td></tr>
+        <tr><td>Beatles Catalog (179 songs)</td><td class="status status-done">✅</td></tr>
+        <tr><td>Lalo Chezia (12 songs)</td><td class="status status-done">✅</td></tr>
+        <tr><td>Blueprint Types (canonical)</td><td class="status status-done">✅</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============ PLANNED / FUTURE ============ -->
+<h2>🔮 Planned / Future Development</h2>
+
+<table>
+  <thead><tr><th style="width:22%">Feature</th><th style="width:35%">Scope</th><th style="width:12%">Priority</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>ChordMiniApp Bridge</td>
+      <td class="filepath">new: scripts/chordmini-bridge.ts</td>
+      <td class="status status-planned">🔮 High</td>
+      <td class="notes">Script to call ChordMiniApp Python backend for audio → chord/beat/segmentation analysis, then convert output JSON to BlueprintSong. Requires ChordMiniApp running.</td>
+    </tr>
+    <tr>
+      <td>MIDI → Chord Detection</td>
+      <td class="filepath">src/lib/parsers/parseMidi.ts (extend)</td>
+      <td class="status status-planned">🔮 High</td>
+      <td class="notes">Group simultaneously active MIDI notes at each beat → match against chord templates → populate section.chords[]. Already have note timing data.</td>
+    </tr>
+    <tr>
+      <td>Subdirectory Navigation</td>
+      <td class="filepath">src/components/dashboard/</td>
+      <td class="status status-planned">🔮 Medium</td>
+      <td class="notes">Click into subdirectories from the directory listing table. DirectoryEntry has type:'directory', needs click handler.</td>
+    </tr>
+    <tr>
+      <td>Bulk Import from Directory</td>
+      <td class="filepath">src/components/dashboard/</td>
+      <td class="status status-planned">🔮 Medium</td>
+      <td class="notes">"Import All" button in directory listing to import every .trackdraft.json at once.</td>
+    </tr>
+    <tr>
+      <td>LRCLIB → Section Detection</td>
+      <td class="filepath">src/lib/youtube.ts (extend)</td>
+      <td class="status status-planned">🔮 Medium</td>
+      <td class="notes">Detect chorus/verse boundaries from repeated lyric patterns in synced lyrics to auto-generate sections instead of single "Full Song" section.</td>
+    </tr>
+    <tr>
+      <td>Ableton .als Import</td>
+      <td class="filepath">new: src/lib/parsers/parseAbleton.ts</td>
+      <td class="status status-planned">🔮 Low</td>
+      <td class="notes">.als is gzipped XML. Parse tempo, key, clip structure → BlueprintSong. Requires server-side or bridge.</td>
+    </tr>
+    <tr>
+      <td>Song Sharing / Remote Catalog</td>
+      <td class="filepath">new: server + UI</td>
+      <td class="status status-planned">🔮 Low</td>
+      <td class="notes">Server-backed catalog where users share blueprints. Currently all data is local.</td>
+    </tr>
+    <tr>
+      <td>Spotify / Apple Music URL Import</td>
+      <td class="filepath">src/lib/youtube.ts (extend)</td>
+      <td class="status status-planned">🔮 Low</td>
+      <td class="notes">Pull track metadata (no audio) to seed blueprint. Would need API keys.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============ SESSION SUMMARY ============ -->
+<h2>📝 Session Summary</h2>
+
+<table>
+  <thead><tr><th style="width:22%">Metric</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>New files created</td><td><strong>11</strong></td></tr>
+    <tr><td>Files modified</td><td><strong>3</strong> (Dashboard.tsx, ActionBar.tsx, vite.config.ts)</td></tr>
+    <tr><td>Stub files (may remove)</td><td><strong>3</strong> (ImportZone.tsx, TemplateList.tsx, CatalogBrowser.tsx are superseded)</td></tr>
+    <tr><td>Pre-existing features (untouched)</td><td><strong>35+</strong> components/libraries across harmony, lyrics, structure, studio</td></tr>
+    <tr><td>Vite endpoints</td><td><strong>5</strong> (2 pre-existing, 3 new)</td></tr>
+    <tr><td>Parser pipeline</td><td><strong>Blueprint JSON, MIDI (binary), Audio (Web Audio API), Lyrics/TXT</strong> — all run browser-side, zero npm deps</td></tr>
+    <tr><td>External integrations</td><td><strong>YouTube oEmbed (no key), LRCLIB (synced lyrics)</strong></td></tr>
+    <tr><td>Total build errors</td><td><strong>0</strong> — clean TypeScript compilation throughout</td></tr>
+  </tbody>
+</table>
+
+</body>
+</html>

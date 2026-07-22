@@ -1,118 +1,314 @@
-import { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useSongStore } from "../../store/songStore";
-import { downloadSongJson, readSongFile } from "../../lib/exportImport";
-import CatalogBrowser from "./CatalogBrowser";
+import { useDirectoryStore, type DirectoryEntry } from "../../store/directoryStore";
+import { computeConfidence } from "../../lib/confidence";
+import { parseFile } from "../../lib/parsers";
+
+import Sidebar from "./Sidebar";
+import ActionBar from "./ActionBar";
+import FilterBar, { type Filters, defaultFilters } from "./FilterBar";
+import SongTable, { type SortKey, type SortDir } from "./SongTable";
+import TemplatePicker from "./TemplatePicker";
+import DirSetupModal from "./DirSetupModal";
+
+const TYPE_BADGES: Record<string, { label: string; color: string }> = {
+  blueprint: { label: "Blueprint", color: "bg-accent/20 text-accent" },
+  audio: { label: "Audio", color: "bg-amber-400/20 text-amber-400" },
+  midi: { label: "MIDI", color: "bg-emerald-400/20 text-emerald-400" },
+  lyrics: { label: "Lyrics", color: "bg-blue-400/20 text-blue-400" },
+  ableton: { label: "Ableton", color: "bg-purple-400/20 text-purple-400" },
+  directory: { label: "Folder", color: "bg-inkMuted/20 text-inkMuted" },
+  unknown: { label: "File", color: "bg-inkMuted/10 text-inkMuted" },
+};
+
+type ActiveView = "songs" | "templates";
 
 export default function Dashboard() {
   const songs = useSongStore((s) => s.songs);
-  const createNewSong = useSongStore((s) => s.createNewSong);
   const importSong = useSongStore((s) => s.importSong);
-  const deleteSong = useSongStore((s) => s.deleteSong);
-  const currentSongId = useSongStore((s) => s.currentSongId);
+  const dirs = useDirectoryStore((s) => s.dirs);
+  const listings = useDirectoryStore((s) => s.listings);
+  const loadListing = useDirectoryStore((s) => s.loadListing);
+  const dirLoading = useDirectoryStore((s) => s.loading);
+  const dirError = useDirectoryStore((s) => s.error);
   const navigate = useNavigate();
 
-  const [newTitle, setNewTitle] = useState("");
-  const [importError, setImportError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeView, setActiveView] = useState<ActiveView>("songs");
+  const [selectedDir, setSelectedDir] = useState<string | null>(null);
+  const [showDirSetup, setShowDirSetup] = useState(false);
+  const [filters, setFilters] = useState<Filters>(defaultFilters);
+  const [sortKey, setSortKey] = useState<SortKey>("updatedAt");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  async function handleImportFile(file: File) {
-    try {
-      const song = await readSongFile(file);
-      importSong(song);
-      setImportError(null);
-      navigate(`/song/${song.id}`);
-    } catch (err) {
-      setImportError(err instanceof Error ? err.message : "Failed to import file.");
+  // Auto-load built-in dirs if none configured
+  useEffect(() => {
+    if (dirs.length === 0) {
+      const store = useDirectoryStore.getState();
+      store.addDirectory({
+        path: "scripts/output/catalog",
+        label: "Beatles Catalog",
+        isDefault: true,
+      });
+      store.addDirectory({
+        path: "scripts/output",
+        label: "Lalo Chezia",
+        isDefault: false,
+      });
+      store.addDirectory({
+        path: "/Users/Matthew/mcgill_jcrd_salami_Billboard",
+        label: "McGill JCRD (742)",
+        isDefault: false,
+      });
+      store.addDirectory({
+        path: "/Users/Matthew/Rock Corpus-TDC",
+        label: "Rock Corpus TDC (196)",
+        isDefault: false,
+      });
+    }
+  }, [dirs.length]);
+
+  // When a directory is selected, load its listing
+  useEffect(() => {
+    if (selectedDir && !listings[selectedDir]) {
+      loadListing(selectedDir);
+    }
+  }, [selectedDir, listings, loadListing]);
+
+  // Parse and import any file from the directory browser
+  const importDirFile = useCallback(
+    async (dirPath: string, entry: DirectoryEntry) => {
+      const result = await parseFile(dirPath, entry);
+      if (!result.ok) throw new Error(result.error);
+      importSong(result.song);
+      navigate(`/song/${result.song.id}`);
+    },
+    [importSong, navigate],
+  );
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
     }
   }
 
+  // Determine which view to show in the main area
+  const showDirListing = selectedDir !== null;
+  const dirEntries: DirectoryEntry[] =
+    selectedDir ? (listings[selectedDir] ?? []) : [];
+  const isLoadingDir = selectedDir ? dirLoading === selectedDir : false;
+  const dirLabel = selectedDir ? (dirs.find((d) => d.path === selectedDir)?.label ?? selectedDir) : "";
+
+  // Apply filters (only relevant when showing localStorage songs, not dir listing)
+  const filteredSongs = useMemo(() => {
+    return songs.filter((song) => {
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        const matchTitle = song.title.toLowerCase().includes(q);
+        const matchArtist = song.artist?.toLowerCase().includes(q);
+        const matchConcept = song.concept?.toLowerCase().includes(q);
+        if (!matchTitle && !matchArtist && !matchConcept) return false;
+      }
+      if (!filters.keys.has(song.key)) return false;
+      if (!filters.scales.has(song.scale)) return false;
+      const conf = computeConfidence(song);
+      if (!filters.confidence.has(conf.level)) return false;
+      if (song.bpm < filters.bpmMin || song.bpm > filters.bpmMax) return false;
+      if (filters.hasSections && song.sections.length === 0) return false;
+      return true;
+    });
+  }, [songs, filters]);
+
+  // Filter dir entries by search only
+  const filteredDirEntries = useMemo(() => {
+    if (!filters.search) return dirEntries;
+    const q = filters.search.toLowerCase();
+    return dirEntries.filter((e) => e.title.toLowerCase().includes(q));
+  }, [dirEntries, filters.search]);
+
+  // Confidence stats for header
+  const confidenceStats = useMemo(() => {
+    const counts = { complete: 0, strong: 0, partial: 0, draft: 0, empty: 0 };
+    for (const song of filteredSongs) {
+      const conf = computeConfidence(song);
+      counts[conf.level]++;
+    }
+    return counts;
+  }, [filteredSongs]);
+
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">TrackDraft</h1>
+    <div className="flex h-screen overflow-hidden">
+      {/* Sidebar */}
+      <Sidebar
+        selectedDir={selectedDir}
+        activeView={activeView}
+        onSelectDir={(dir) => {
+          setSelectedDir(dir);
+          setActiveView("songs");
+        }}
+        onSelectView={setActiveView}
+        onManageDirs={() => setShowDirSetup(true)}
+      />
 
-      <div className="flex gap-2">
-        <form
-          className="flex gap-2 flex-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const title = newTitle.trim();
-            if (!title) return;
-            const song = createNewSong(title);
-            setNewTitle("");
-            navigate(`/song/${song.id}`);
-          }}
-        >
-          <input
-            className="flex-1 bg-panel border border-edge rounded px-3 py-2 text-sm"
-            placeholder="New song title…"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-          />
-          <button
-            type="submit"
-            className="bg-accent text-black font-medium px-4 py-2 rounded text-sm"
-          >
-            Create
-          </button>
-        </form>
-        <button
-          className="border border-edge rounded px-4 py-2 text-sm text-inkMuted hover:text-ink hover:bg-panelAlt"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          Import JSON…
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json,.json"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleImportFile(file);
-            e.target.value = "";
-          }}
-        />
-      </div>
-      {importError && <p className="text-xs text-red-400">{importError}</p>}
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0 bg-canvas overflow-hidden">
+        {activeView === "templates" ? (
+          <TemplatePicker />
+        ) : showDirListing ? (
+          /* Directory listing view */
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="shrink-0">
+              <header className="flex items-center justify-between px-4 py-2 border-b border-edge">
+                <div className="flex items-center gap-2">
+                  <button
+                    className="text-inkMuted text-xs hover:text-ink"
+                    onClick={() => setSelectedDir(null)}
+                  >
+                    ← Back
+                  </button>
+                  <h1 className="text-sm font-semibold">{dirLabel}</h1>
+                </div>
+                <div className="flex items-center gap-3 text-[10px] text-inkMuted">
+                  <span>
+                    {isLoadingDir ? "Loading…" : `${filteredDirEntries.length} files`}
+                  </span>
+                  <Link to="/ui-kit-sandbox" className="hover:text-ink">
+                    UI Kit
+                  </Link>
+                </div>
+              </header>
 
-      {import.meta.env.DEV && <CatalogBrowser />}
-
-      <ul className="divide-y divide-edge border border-edge rounded">
-        {songs.length === 0 && (
-          <li className="p-4 text-inkMuted text-sm">No songs yet.</li>
-        )}
-        {songs.map((song) => (
-          <li
-            key={song.id}
-            className={`flex items-center justify-between p-3 ${
-              song.id === currentSongId ? "bg-panelAlt" : "bg-panel"
-            }`}
-          >
-            <button
-              className="text-left flex-1"
-              onClick={() => navigate(`/song/${song.id}`)}
-            >
-              <div className="font-medium">{song.title}</div>
-              <div className="text-xs text-inkMuted">
-                {song.key} {song.scale} · {song.bpm} BPM · {song.sections.length} sections
+              {/* Simple search for dir listings */}
+              <div className="px-3 py-2 border-b border-edge">
+                <input
+                  className="w-full bg-panel border border-edge rounded px-2 py-1 text-xs"
+                  placeholder="Filter by title…"
+                  value={filters.search}
+                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                />
               </div>
-            </button>
-            <button
-              className="text-xs text-inkMuted hover:text-ink px-2"
-              onClick={() => downloadSongJson(song)}
-            >
-              Export
-            </button>
-            <button
-              className="text-xs text-inkMuted hover:text-red-400 px-2"
-              onClick={() => deleteSong(song.id)}
-            >
-              Delete
-            </button>
-          </li>
-        ))}
-      </ul>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {dirError && (
+                <div className="p-4 text-center">
+                  <div className="text-sm text-red-400 mb-1">Failed to load directory</div>
+                  <div className="text-xs text-inkMuted">{dirError}</div>
+                </div>
+              )}
+              {!dirError && isLoadingDir && (
+                <div className="p-4 text-center text-inkMuted text-sm">Loading directory…</div>
+              )}
+              {!dirError && !isLoadingDir && filteredDirEntries.length === 0 && (
+                <div className="p-4 text-center text-inkMuted text-sm">
+                  No files found.
+                </div>
+              )}
+              {!dirError && !isLoadingDir && filteredDirEntries.length > 0 && (
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-panel border-b border-edge">
+                    <tr>
+                      <th className="text-left px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-inkMuted">
+                        Name
+                      </th>
+                      <th className="text-left px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-inkMuted w-16">
+                        Type
+                      </th>
+                      <th className="w-20 px-3 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-edge">
+                    {filteredDirEntries.map((entry) => {
+                      const typeBadge = TYPE_BADGES[entry.type ?? "unknown"] ?? TYPE_BADGES.unknown;
+                      const hasParser = entry.type === "blueprint" || entry.type === "jcrd" || entry.type === "midi" || entry.type === "audio" || entry.type === "lyrics";
+                      return (
+                        <tr
+                          key={entry.file}
+                          className={`${
+                            hasParser ? "hover:bg-panelAlt/50 cursor-pointer" : "opacity-50"
+                          }`}
+                          onClick={() => {
+                            if (hasParser) importDirFile(selectedDir!, entry);
+                          }}
+                        >
+                          <td className="px-3 py-1.5">
+                            <span className="text-xs font-medium">{entry.title}</span>
+                            <span className="text-[10px] text-inkMuted ml-2">{entry.file}</span>
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded ${typeBadge.color}`}>
+                              {typeBadge.label}
+                            </span>
+                          </td>
+                          <td className="px-3 py-1.5">
+                            {hasParser ? (
+                              <button
+                                className="text-[10px] text-inkMuted hover:text-accent px-1"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  importDirFile(selectedDir!, entry);
+                                }}
+                              >
+                                Import
+                              </button>
+                            ) : entry.type !== "directory" ? (
+                              <span className="text-[9px] text-inkMuted/50">Planned</span>
+                            ) : null}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* All Songs view (localStorage) */
+          <>
+            <div className="shrink-0">
+              <header className="flex items-center justify-between px-4 py-2 border-b border-edge">
+                <h1 className="text-sm font-semibold">TrackDraft</h1>
+                <div className="flex items-center gap-3 text-[10px] text-inkMuted">
+                  <span>{songs.length} songs</span>
+                  <span className="flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    {confidenceStats.complete}
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    {confidenceStats.strong}
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-400" />
+                    {confidenceStats.partial}
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400" />
+                    {confidenceStats.draft}
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-500" />
+                    {confidenceStats.empty}
+                  </span>
+                  <Link to="/ui-kit-sandbox" className="hover:text-ink">
+                    UI Kit
+                  </Link>
+                </div>
+              </header>
+
+              <ActionBar />
+
+              <FilterBar filters={filters} onChange={setFilters} />
+            </div>
+
+            <SongTable
+              songs={filteredSongs}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+          </>
+        )}
+      </div>
+
+      {/* Directory Setup Modal */}
+      <DirSetupModal open={showDirSetup} onClose={() => setShowDirSetup(false)} />
     </div>
   );
 }
