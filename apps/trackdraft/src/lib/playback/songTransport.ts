@@ -123,10 +123,17 @@ class SongTransport {
     this.audioStartTime = ctx.currentTime;
     this.isPlaying = true;
 
+    // Map AudioContext seconds to wall-clock ms (performance.now()
+    // timebase).  `ctx.currentTime` is seconds since AC creation;
+    // `performance.now()` is ms since page start.  The offset is
+    // stable for the life of the AC — snapshot it once and every
+    // `preciseTime` can be converted to a real-world fire-at moment.
+    const acOffsetMs = performance.now() - ctx.currentTime * 1000;
+
     // Spin up a Web Worker whose sole job is firing callbacks at
     // precise wall-clock intervals — unblocked by main-thread activity
-    // (React renders, GC, DevTools).  The worker is built from an
-    // inline string so TypeScript doesn't need a .ts module at all.
+    // (React renders, GC, DevTools).  Built from an inline Blob so
+    // TypeScript doesn't need a .ts module at all.
     const w = createTimerWorker();
     w.onmessage = (msg: MessageEvent<{ type: string; id: number }>) => {
       if (msg.data.type === "fire") {
@@ -145,7 +152,10 @@ class SongTransport {
     // scheduling delay isn't itself subject to main-thread jitter.
     const scheduleAt = (beat: number, fn: (preciseTime: number) => void) => {
       const preciseTime = this.audioStartTime + beat * secPerBeat;
-      const fireAtMs = (preciseTime - SCHEDULE_LOOKAHEAD_MS / 1000) * 1000 + performance.timeOrigin;
+      // preciseTime is AudioContext seconds (relative to AC creation).
+      // Convert to wall-clock ms via the snapshotted offset, then
+      // subtract the lookahead so the worker fires early.
+      const fireAtMs = preciseTime * 1000 + acOffsetMs - SCHEDULE_LOOKAHEAD_MS;
       const id = this.nextEventId++;
       this.eventCallbacks.set(id, () => {
         fn(Math.max(preciseTime, getSharedAudioContext().currentTime));
