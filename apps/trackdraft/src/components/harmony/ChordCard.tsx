@@ -8,7 +8,7 @@ import { getPreviewPlayer } from "../../lib/harmony/audioPreview";
 import type { NoteName, ScaleType } from "@music-theory/core";
 
 type EditProperty = "none" | "quality" | "beats" | "performance";
-const PERFORMANCE_STYLES: ChordPerformanceEffect["style"][] = ["strum", "pulse", "legato"];
+const PERFORMANCE_STYLES: ChordPerformanceEffect["style"][] = ["strum", "pulse", "arp"];
 
 interface ChordCardProps {
   chord: Chord;

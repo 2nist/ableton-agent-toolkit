@@ -11,12 +11,29 @@ import { SortableContext, horizontalListSortingStrategy, arrayMove, useSortable 
 import { CSS } from "@dnd-kit/utilities";
 import { pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
-import type { BlueprintSection, Chord } from "../../types/blueprint";
+import type { BlueprintSection, Chord, ChordPerformanceEffect } from "../../types/blueprint";
 import { beatsPerBar, describeProgressionFit } from "../../types/blueprint";
 import { chordDisplayName, chordFunction, functionColorHex } from "../../lib/harmony/chordBuilder";
 import { getPreviewPlayer } from "../../lib/harmony/audioPreview";
 
 const CELL_W = 78;
+
+const EFFECT_CYCLE: (ChordPerformanceEffect | undefined)[] = [
+  undefined,
+  { style: "strum" },
+  { style: "pulse" },
+  { style: "arp" },
+];
+
+/** Cycle a chord's performance effect through none → strum → pulse → arp → none. */
+function nextPerformanceEffect(
+  current: ChordPerformanceEffect | undefined,
+): ChordPerformanceEffect | undefined {
+  const idx = EFFECT_CYCLE.findIndex(
+    (e) => e?.style === current?.style && (e === undefined) === (current === undefined),
+  );
+  return EFFECT_CYCLE[(idx + 1) % EFFECT_CYCLE.length];
+}
 
 /** Trims a beat count to at most 2 decimal places (chord beats can be
  *  half-steps, and non-4/4 time signatures can make beatsPerBar itself
@@ -25,15 +42,9 @@ function fmtBeats(n: number): string {
   return Number(n.toFixed(2)).toString();
 }
 
-/** Viewport point (top-centre of a cell) the editor popover anchors beside. */
-function anchorOf(el: HTMLElement): { x: number; y: number } {
-  const r = el.getBoundingClientRect();
-  return { x: r.left + r.width / 2, y: r.top };
-}
-
 /** Small shape-in-time glyph for a performance effect — legible at a glance in
  *  the slim effect lane so a strummed chord *looks* strummed. */
-function EffectGlyph({ style }: { style: "strum" | "pulse" | "legato" }) {
+function EffectGlyph({ style }: { style: "strum" | "pulse" | "arp" }) {
   const stroke = "#ffa500";
   if (style === "strum")
     return (
@@ -53,10 +64,13 @@ function EffectGlyph({ style }: { style: "strum" | "pulse" | "legato" }) {
         </g>
       </svg>
     );
+  // arp: ascending stepping pattern
   return (
     <svg width="30" height="16" aria-hidden="true">
-      <path d="M4 11 q11 -9 22 0" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" />
-      <circle cx="4" cy="11" r="2" fill={stroke} /><circle cx="26" cy="11" r="2" fill={stroke} />
+      <g stroke={stroke} strokeWidth={1.8} strokeLinecap="round">
+        <line x1="4" y1="12" x2="4" y2="8" /><line x1="11" y1="8" x2="11" y2="4" />
+        <line x1="18" y1="4" x2="18" y2="8" /><line x1="25" y1="8" x2="25" y2="12" />
+      </g>
     </svg>
   );
 }
@@ -67,9 +81,13 @@ interface ProgressionTrackProps {
   scale: ScaleType;
   bpm: number;
   selectedChordId: string | null;
-  /** Open the single chord editor anchored beside the clicked cell/slot. */
-  onEditChord: (id: string, anchor: { x: number; y: number }) => void;
+  /** Selecting a chord (from a cell) opens its editor in the dock,
+   *  driven by the shared harmonySelectionStore. */
+  onSelectChord: (id: string) => void;
   onChangeChords: (chords: Chord[]) => void;
+  /** Update a single chord in-place — used by the effect lane so a
+   *  quick effect toggle doesn't force a full array replacement. */
+  onUpdateChord: (id: string, update: Partial<Chord>) => void;
   /** Snap the section's `bars` to exactly one clean pass of the current
    *  progression — the one action the fit indicator's button performs,
    *  regardless of whether the section currently loops or overflows it. */
@@ -82,7 +100,7 @@ function SortableChordCell({
   scale,
   isSelected,
   isSounding,
-  onEdit,
+  onSelect,
   onRemove,
 }: {
   chord: Chord;
@@ -90,7 +108,7 @@ function SortableChordCell({
   scale: ScaleType;
   isSelected: boolean;
   isSounding: boolean;
-  onEdit: (anchor: { x: number; y: number }) => void;
+  onSelect: () => void;
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: chord.id });
@@ -112,7 +130,7 @@ function SortableChordCell({
       className={`relative h-[50px] shrink-0 rounded-[5px] border bg-panelAlt cursor-pointer overflow-hidden pt-1.5 px-2 ${
         isSelected ? "border-accent ring-2 ring-accent" : "border-edge hover:border-inkMuted"
       } ${isSounding ? "ring-2 ring-accent/70" : ""}`}
-      onClick={(e) => onEdit(anchorOf(e.currentTarget as HTMLElement))}
+      onClick={() => onSelect()}
     >
       <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: stripe }} />
       <div className="font-mono text-[9.5px] leading-none" style={{ color: chord.isSubstitution ? "#ffa500" : "#8a8a92" }}>
@@ -138,15 +156,17 @@ function SortableChordCell({
 
 /** The progression and its effect lane as two vertically-aligned slim tracks —
  *  each chord sits directly above its own effect slot (matching fixed widths).
- *  Drag a chord to reorder; click a cell or slot to open the one chord editor. */
+ *  Drag a chord to reorder; click a chord cell to select it, click an effect
+ *  slot to cycle effects, right-click an effect slot to open the chord editor. */
 export default function ProgressionTrack({
   section,
   keyName,
   scale,
   bpm,
   selectedChordId,
-  onEditChord,
+  onSelectChord,
   onChangeChords,
+  onUpdateChord,
   onSetBars,
 }: ProgressionTrackProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -204,7 +224,7 @@ export default function ProgressionTrack({
                       scale={scale}
                       isSelected={selectedChordId === chord.id}
                       isSounding={playingIndex === i}
-                      onEdit={(anchor) => onEditChord(chord.id, anchor)}
+                      onSelect={() => onSelectChord(chord.id)}
                       onRemove={() => onChangeChords(section.chords.filter((c) => c.id !== chord.id))}
                     />
                   ))}
@@ -215,7 +235,7 @@ export default function ProgressionTrack({
         </div>
       </div>
 
-      {/* Effect lane */}
+      {/* Effect lane — click to cycle, right-click to open editor */}
       <div className="grid grid-cols-[96px_1fr] items-stretch border-t border-edge">
         <div className="flex items-center justify-end px-3 border-r border-edge">
           <span className="font-mono text-[9px] uppercase tracking-wider text-inkMuted">Effects</span>
@@ -232,8 +252,19 @@ export default function ProgressionTrack({
                   className={`h-[32px] shrink-0 rounded-[5px] border flex items-center justify-center ${
                     chord.performance ? "border-accent/60 border-solid" : "border-edge border-dashed"
                   } bg-[#131316] hover:border-inkMuted`}
-                  title={chord.performance ? `${chord.performance.style} — click to change` : "Add a performance effect"}
-                  onClick={(e) => onEditChord(chord.id, anchorOf(e.currentTarget as HTMLElement))}
+                  title={chord.performance ? `${chord.performance.style} — click to cycle, right-click to edit` : "Add a performance effect"}
+                  onClick={() => {
+                    const next = nextPerformanceEffect(chord.performance);
+                    onUpdateChord(chord.id, { performance: next });
+                    if (next) {
+                      getPreviewPlayer().playChordObject({ ...chord, performance: next }, 1);
+                    }
+                    onSelectChord(chord.id);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    onSelectChord(chord.id);
+                  }}
                 >
                   {chord.performance ? (
                     <span className="flex items-center gap-1.5">

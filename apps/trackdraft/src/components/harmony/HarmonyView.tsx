@@ -1,38 +1,40 @@
-import { useEffect, useState } from "react";
-import { pitchClass, noteName } from "@music-theory/core";
-import type { ScaleType, NoteName } from "@music-theory/core";
+import { useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import { NOTE_TO_PC } from "@music-theory/core";
+import type { NoteName } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
 import { useSongStore } from "../../store/songStore";
+import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
+import { useDockStore } from "../../store/dockStore";
 import { updateSection } from "../../lib/sections";
-import { parseToken, MODE_TO_SCALE_KEY, SCALE_INTERVALS } from "../../lib/harmony/honeycombWalk";
 import HoneycombWheel from "./HoneycombWheel";
 import ProgressionTrack from "./ProgressionTrack";
-import FloatingToolbar from "./FloatingToolbar";
-import ChordEditorPopover from "./ChordEditorPopover";
+import HarmonyDockTools from "./HarmonyDockTools";
 
-/** Re-roots a section's chords to a new key/scale — root pitch only,
- *  preserving each chord's authored quality/roman-numeral label so a
- *  deliberate substitution isn't silently overwritten by a key change.
- *  Unparseable roman numerals (shouldn't normally happen) are left
- *  untouched rather than guessed at. */
-function transposeChords(chords: Chord[], newKeyPc: number, newKeyName: NoteName, newScale: ScaleType): Chord[] {
-  const scaleKey = MODE_TO_SCALE_KEY[newScale as keyof typeof MODE_TO_SCALE_KEY] ?? "major";
-  const intervals = SCALE_INTERVALS[scaleKey];
-  return chords.map((c) => {
-    const step = parseToken(c.romanNumeral);
-    if (!step) return c;
-    const rootPc = ((newKeyPc + intervals[step.deg] + step.acc) % 12 + 12) % 12;
-    return { ...c, root: noteName(rootPc, newKeyName) };
-  });
-}
-
+/** The Harmony tab's canvas: the hex wheel and the linear progression
+ *  track. Song/section settings (key, scale, presets) and the selected
+ *  chord's editor live in the bottom dock now (`HarmonyDockTools`,
+ *  registered once below) instead of a floating overlay + anchored
+ *  popover — this view only owns section/chord *selection*, shared via
+ *  `harmonySelectionStore` with the dock content that reacts to it. */
 export default function HarmonyView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
-  const [selectedChordId, setSelectedChordId] = useState<string | null>(null);
-  // The one chord editor: which chord, and the viewport point to anchor beside.
-  const [editor, setEditor] = useState<{ chordId: string; anchor: { x: number; y: number } } | null>(null);
+  const [searchParams] = useSearchParams();
+  const selectedSectionId = useHarmonySelectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useHarmonySelectionStore((s) => s.setSelectedSectionId);
+  const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
+  const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
+  const setTools = useDockStore((s) => s.setTools);
+
+  // The dock's tools panel is registered once and reads the shared
+  // selection store directly — it re-renders itself on selection/song
+  // changes, so this effect never needs to re-run (and never risks the
+  // update-loop a content-recomputing effect here would create).
+  useEffect(() => {
+    setTools(<HarmonyDockTools />);
+    return () => setTools(null);
+  }, [setTools]);
 
   if (!currentSong) return null;
   const song = currentSong;
@@ -41,22 +43,36 @@ export default function HarmonyView() {
 
   useEffect(() => {
     setSelectedChordId(null);
-    setEditor(null);
-  }, [activeSection?.id]);
+  }, [activeSection?.id, setSelectedChordId]);
+
+  // Lets the Studio tab's arrangement timeline deep-link into a specific
+  // section (?section=<id>) — falls back to today's "first section"
+  // default whenever the param is absent or stale (e.g. a section since
+  // deleted), never overriding a manual section-chip click afterward
+  // since this only re-runs when the URL's search params actually change.
+  useEffect(() => {
+    const sectionParam = searchParams.get("section");
+    if (sectionParam && song.sections.some((s) => s.id === sectionParam)) {
+      setSelectedSectionId(sectionParam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // A section can override the song's key/scale (modulation) — everything
   // downstream reads/writes against this effective value, never
   // song.key/song.scale directly, so a modulated section is edited correctly
   // without touching the song-wide default.
-  const effectiveKey = activeSection?.key ?? song.key;
+  //
+  // Validated here rather than trusted, because this is the actual
+  // boundary where malformed data (e.g. a pre-`parseImportedSong` song with
+  // key="E major" still sitting in localStorage — `loadFromStorage()` never
+  // re-validates) meets rendering. `pitchClass()` throws on anything not a
+  // bare note name, which used to crash the whole tree here with no way to
+  // reach the key selector to fix it. Falling back to "C" keeps the tab
+  // usable so the bad value can be corrected through the dock instead.
+  const rawKey = activeSection?.key ?? song.key;
+  const effectiveKey: NoteName = rawKey in NOTE_TO_PC ? (rawKey as NoteName) : "C";
   const effectiveScale = activeSection?.scale ?? song.scale;
-
-  const editorChord = editor ? activeSection?.chords.find((c) => c.id === editor.chordId) ?? null : null;
-
-  function openEditor(chordId: string, anchor: { x: number; y: number }) {
-    setSelectedChordId(chordId);
-    setEditor({ chordId, anchor });
-  }
 
   function updateChords(chords: Chord[]) {
     if (!activeSection) return;
@@ -68,23 +84,15 @@ export default function HarmonyView() {
     updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, bars })));
   }
 
-  function handleRekey(newKey: NoteName | undefined, newScale: ScaleType | undefined) {
+  function updateSingleChord(chordId: string, update: Partial<Chord>) {
     if (!activeSection) return;
-    const resolvedKey = newKey ?? song.key;
-    const resolvedScale = newScale ?? song.scale;
-    updateCurrentSong((s) =>
-      updateSection(s, activeSection.id, (sec) => ({
-        ...sec,
-        key: newKey,
-        scale: newScale,
-        chords: transposeChords(sec.chords, pitchClass(resolvedKey), resolvedKey, resolvedScale),
-      })),
-    );
+    const next = activeSection.chords.map((c) => (c.id === chordId ? { ...c, ...update } : c));
+    updateChords(next);
   }
 
   if (song.sections.length === 0) {
     return (
-      <div className="p-6 max-w-5xl">
+      <div className="p-4 max-w-5xl">
         <p className="text-inkMuted text-sm">
           Add sections in the Structure tab first, then come back here to build chord progressions.
         </p>
@@ -93,23 +101,10 @@ export default function HarmonyView() {
   }
 
   return (
-    <div className="p-6 max-w-5xl space-y-4">
-      {/* Hex canvas with its floating, collapsible controls overlaid */}
-      <div className="relative border border-edge rounded-lg bg-[#0e1218] overflow-hidden min-h-[420px]">
-        <FloatingToolbar
-          songKey={song.key}
-          songScale={song.scale}
-          onChangeSongKey={(key) => updateCurrentSong((s) => ({ ...s, key }))}
-          onChangeSongScale={(scale) => updateCurrentSong((s) => ({ ...s, scale }))}
-          presetKeyName={effectiveKey}
-          beatsPerChord={activeSection?.beatsPerChord ?? 4}
-          hasChords={(activeSection?.chords.length ?? 0) > 0}
-          sectionName={activeSection?.name ?? ""}
-          onApplyPreset={updateChords}
-          sectionKeyOverride={activeSection?.key}
-          sectionScaleOverride={activeSection?.scale}
-          onRekeySection={handleRekey}
-        />
+    <div className="p-4 max-w-5xl space-y-3">
+      {/* Hex canvas — full room to wander now that song/section settings
+         live in the dock instead of an overlay on top of it. */}
+      <div className="border border-edge rounded-lg bg-[#0e1218] overflow-hidden min-h-[420px]">
         <div className="flex justify-center p-4 pt-6">
           {activeSection && (
             <HoneycombWheel
@@ -119,7 +114,6 @@ export default function HarmonyView() {
               beatsPerChord={activeSection.beatsPerChord}
               selectedChordId={selectedChordId}
               onSelectChord={setSelectedChordId}
-              onEditChord={openEditor}
               onChangeChords={updateChords}
             />
           )}
@@ -160,29 +154,12 @@ export default function HarmonyView() {
             scale={effectiveScale}
             bpm={song.bpm}
             selectedChordId={selectedChordId}
-            onEditChord={openEditor}
+            onSelectChord={setSelectedChordId}
             onChangeChords={updateChords}
+            onUpdateChord={updateSingleChord}
             onSetBars={setSectionBars}
           />
         </div>
-      )}
-
-      {activeSection && editorChord && editor && (
-        <ChordEditorPopover
-          chord={editorChord}
-          keyName={effectiveKey}
-          scale={effectiveScale}
-          anchor={editor.anchor}
-          onChange={(updated) =>
-            updateChords(activeSection.chords.map((c) => (c.id === updated.id ? updated : c)))
-          }
-          onRemove={() => {
-            updateChords(activeSection.chords.filter((c) => c.id !== editorChord.id));
-            setEditor(null);
-            setSelectedChordId(null);
-          }}
-          onClose={() => setEditor(null)}
-        />
       )}
     </div>
   );

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   applyStrum,
   applyPulse,
-  applyLegato,
+  applyArp,
   applyPerformanceEffect,
   type PerfNote,
 } from "./performanceEffects";
@@ -44,14 +44,16 @@ describe("applyStrum", () => {
 });
 
 describe("applyPulse", () => {
-  it("modulates velocity in a triangle wave pattern", () => {
+  it("re-triggers notes at the subdivision rate", () => {
+    // 3 notes, subdivision=4 → 12 hits
     const notes = makeNotes([48, 52, 55], 0.1, 1);
     const effect = { style: "pulse" as const, params: { subdivision: 4 } };
     const result = applyPulse(notes, effect, { seed: "pulse-a" });
-    expect(result).toHaveLength(3);
-    expect(result[0].velocity).not.toBe(96);
-    expect(result[0].velocity).toBeGreaterThan(1);
-    expect(result[0].velocity).toBeLessThanOrEqual(127);
+    expect(result).toHaveLength(12);
+    // first hit is at the original start time
+    expect(result[0].startTime).toBe(0.1);
+    // each hit is duration/subdivision long
+    expect(result[0].duration).toBeCloseTo(0.25);
   });
 
   it("handles empty input", () => {
@@ -69,37 +71,38 @@ describe("applyPulse", () => {
   });
 });
 
-describe("applyLegato", () => {
-  it("extends durations to overlap next notes when there is a gap", () => {
-    const notes = [
-      { pitch: 48, startTime: 0, duration: 2, velocity: 96 },
-      { pitch: 52, startTime: 2, duration: 1, velocity: 96 },
-    ];
-    const effect = { style: "legato" as const, params: { overlapBeats: 0.1 } };
-    const result = applyLegato(notes, effect, { seed: "legato-a" });
-    // gap is 0 (2-2), so duration = 2 + 0 + 0.1 + ~0.01 jitter
-    expect(result[0].duration).toBeGreaterThan(2.08);
-    expect(result[0].duration).toBeLessThan(2.15);
-    expect(result[1].duration).toBe(1); // last note unchanged
+describe("applyArp", () => {
+  it("cycles through chord notes one at a time", () => {
+    const notes = makeNotes([48, 52, 55], 0, 1);
+    const effect = { style: "arp" as const, params: { subdivision: 4 } };
+    const result = applyArp(notes, effect, { seed: "arp-a" });
+    // 4 steps cycling through 3 notes
+    expect(result).toHaveLength(4);
+    // Step 0: lowest pitch (48)
+    expect(result[0].pitch).toBe(48);
+    // Step 1: next pitch (52)
+    expect(result[1].pitch).toBe(52);
+    // Step 2: highest (55)
+    expect(result[2].pitch).toBe(55);
+    // Step 3: wraps to lowest (48)
+    expect(result[3].pitch).toBe(48);
+    // Each step is 0.25s apart for a 1s chord with subdivision=4
+    expect(result[1].startTime - result[0].startTime).toBeCloseTo(0.25);
+    expect(result[0].duration).toBeCloseTo(0.25);
   });
 
-  it("returns single-note unchanged", () => {
+  it("returns notes unchanged for single-note input (still cycles that one note)", () => {
     const notes = makeNotes([48], 0, 1);
-    const effect = { style: "legato" as const, params: {} };
-    const result = applyLegato(notes, effect, { seed: "single" });
-    expect(result).toHaveLength(1);
+    const effect = { style: "arp" as const, params: { subdivision: 4 } };
+    const result = applyArp(notes, effect, { seed: "single" });
+    expect(result).toHaveLength(4);
+    result.forEach((n) => expect(n.pitch).toBe(48));
   });
 
-  it("extends to overlap back-to-back notes", () => {
-    const notes = [
-      { pitch: 48, startTime: 0, duration: 1, velocity: 96 },
-      { pitch: 52, startTime: 1, duration: 1, velocity: 96 },
-    ];
-    const effect = { style: "legato" as const, params: { overlapBeats: 0.05 } };
-    const result = applyLegato(notes, effect, { seed: "backtoback" });
-    // gap is 0, so duration = 1 + 0 + 0.05 + jitter(~0.01)
-    expect(result[0].duration).toBeGreaterThan(1.03);
-    expect(result[0].duration).toBeLessThan(1.1);
+  it("handles empty input", () => {
+    const effect = { style: "arp" as const, params: { subdivision: 4 } };
+    const result = applyArp([], effect, { seed: "empty" });
+    expect(result).toEqual([]);
   });
 });
 
@@ -121,16 +124,16 @@ describe("applyPerformanceEffect (dispatcher)", () => {
     const notes = makeNotes([48, 52, 55], 0.1, 1);
     const effect = { style: "pulse" as const, params: { subdivision: 4 } };
     const result = applyPerformanceEffect(notes, effect, "seed");
-    expect(result[0].velocity).not.toBe(96);
+    expect(result).toHaveLength(12); // 3 notes × 4 subdivision
   });
 
-  it("dispatches to legato", () => {
-    const notes = [
-      { pitch: 48, startTime: 0, duration: 1, velocity: 96 },
-      { pitch: 52, startTime: 1.2, duration: 1, velocity: 96 },
-    ];
-    const effect = { style: "legato" as const, params: { overlapBeats: 0.1 } };
+  it("dispatches to arp", () => {
+    const notes = makeNotes([48, 52, 55], 0, 1);
+    const effect = { style: "arp" as const, params: { subdivision: 4 } };
     const result = applyPerformanceEffect(notes, effect, "seed");
-    expect(result[0].duration).toBeGreaterThan(1);
+    expect(result).toHaveLength(4); // 4 steps, one note at a time
+    // Cycling low-high
+    expect(result[0].pitch).toBe(48);
+    expect(result[2].pitch).toBe(55);
   });
 });

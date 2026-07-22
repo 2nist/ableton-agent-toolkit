@@ -1,10 +1,19 @@
 import { chordToMidiNotes, pitchClass } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
 import { applyPerformanceEffect, type PerfNote } from "./performanceEffects";
+import { Soundfont2, type Soundfont2 as Soundfont2Instance } from "smplr";
+import { SoundFont2 } from "soundfont2";
 
 /** Standard 12-TET: A4 (MIDI 69) = 440Hz. */
 export function midiToFreq(midi: number): number {
   return 440 * 2 ** ((midi - 69) / 12);
+}
+
+/** Inverse of midiToFreq — used only to backfill a MIDI pitch for the
+ *  legacy freq-only playChord() path, which predates sampler playback and
+ *  has no pitch of its own to hand the sampler. */
+function freqToMidi(freq: number): number {
+  return Math.round(69 + 12 * Math.log2(freq / 440));
 }
 
 /** A chord's voicing as playable frequencies — octave 4 (same default as
@@ -15,6 +24,7 @@ export function chordToFreqs(chord: Chord): number[] {
 }
 
 export interface PerformedVoice {
+  pitch: number;
   freq: number;
   startOffsetSec: number;
   durSec: number;
@@ -38,7 +48,16 @@ function chordToPerformedVoicing(chord: Chord, durSec: number): PerformedVoice[]
     velocity: 100,
   }));
   const performed = applyPerformanceEffect(baseNotes, chord.performance, chord.id);
+
+  // Debug: confirm transforms are producing staggered output
+  if (chord.performance?.style === "strum" && performed.length > 1) {
+    const offsets = performed.map((n) => n.startTime.toFixed(3));
+    const firstGap = performed.length > 1 ? (performed[1].startTime - performed[0].startTime).toFixed(3) : "n/a";
+    console.log(`[audioPreview] strum applied: ${performed.length} notes, offsets=[${offsets.join(", ")}], first-gap=${firstGap}s`);
+  }
+
   return performed.map((n) => ({
+    pitch: n.pitch,
     freq: midiToFreq(n.pitch),
     startOffsetSec: n.startTime,
     durSec: n.duration,
@@ -85,18 +104,46 @@ export interface PlayProgressionOptions {
   onEnd?: () => void;
 }
 
+export interface InstrumentOption {
+  name: string;
+  url: string;
+}
+
+/** Static catalog of the bundled .sf2 files, served as-is from `public/`
+ *  (not bundled — soundfonts are too large to route through the JS module
+ *  graph). Add an entry here (and drop the file in public/instruments/) to
+ *  make a new one selectable in the instrument picker. */
+export const AVAILABLE_INSTRUMENTS: InstrumentOption[] = [
+  { name: "Sad Piano", url: encodeURI("/instruments/Sad Piano.sf2") },
+  { name: "Hammond B3", url: encodeURI("/instruments/Hammond B3.sf2") },
+  { name: "Cello (Karoryfer)", url: encodeURI("/instruments/CelloKaroryfer.sf2") },
+  { name: "Saturn", url: encodeURI("/instruments/Saturn.sf2") },
+  { name: "Distortion Bass", url: encodeURI("/instruments/Bread Breads Distortion Bass Guitar v1.1 FIXED.sf2") },
+];
+
+const DEFAULT_INSTRUMENT_URL = AVAILABLE_INSTRUMENTS[0].url;
+
 /** Minimal WebAudio synth for auditioning chords in the browser — no
  *  export path touches this; it exists purely so a writer can hear a
  *  progression without round-tripping through Ableton. One shared
  *  AudioContext, lazily created on first play (autoplay policies require a
  *  user-gesture-triggered context, and every caller here is a click
- *  handler, so lazy creation is always safe). */
+ *  handler, so lazy creation is always safe).
+ *
+ *  Voices come from a real sampled instrument (a .sf2 soundfont, read
+ *  directly via smplr's Soundfont2) once it finishes loading; until then,
+ *  and if loading fails, playback falls back to the plain oscillator synth
+ *  below so a chord always makes *some* sound immediately on first click. */
 class PreviewPlayer {
   private ctx: AudioContext | null = null;
   private voices: Voice[] = [];
   private schedulerId: ReturnType<typeof setInterval> | null = null;
   private highlightTimeouts: ReturnType<typeof setTimeout>[] = [];
   private endTimeout: ReturnType<typeof setTimeout> | null = null;
+  private sampler: Soundfont2Instance | null = null;
+  private samplerLoadPromise: Promise<void> | null = null;
+  private currentInstrumentUrl: string = DEFAULT_INSTRUMENT_URL;
+  private pendingVolume = 100;
 
   private getContext(): AudioContext {
     if (!this.ctx) {
@@ -105,6 +152,74 @@ class PreviewPlayer {
     }
     if (this.ctx.state === "suspended") void this.ctx.resume();
     return this.ctx;
+  }
+
+  /** Fetches, parses and readies the .sf2 at `url` as the active sampler.
+   *  Shared by `ensureSampler` (first load) and `setInstrument` (switching
+   *  later) — the only difference between them is what happens to whatever
+   *  sampler was active before. */
+  private loadInstrument(url: string): Promise<void> {
+    const instance = Soundfont2(this.getContext(), {
+      url,
+      createSoundfont: (data) => new SoundFont2(data),
+      volume: this.pendingVolume,
+    });
+    return instance.ready
+      .then(() => {
+        const firstInstrument = instance.instrumentNames[0];
+        return firstInstrument ? instance.loadInstrument(firstInstrument) : undefined;
+      })
+      .then(() => {
+        this.sampler = instance;
+      })
+      .catch((err) => {
+        console.warn(`[PreviewPlayer] failed to load ${url}, using synth fallback`, err);
+      });
+  }
+
+  /** Kicks off the sampler load once, the first time it's needed, and
+   *  returns the (memoized) load promise so callers can wait on it instead
+   *  of racing it — see `scheduleVoicing`. After a `setInstrument` switch,
+   *  `samplerLoadPromise` already points at that load, so this is a no-op
+   *  until the *next* fresh load is needed. */
+  private ensureSampler(): Promise<void> {
+    if (!this.samplerLoadPromise) {
+      this.samplerLoadPromise = this.loadInstrument(this.currentInstrumentUrl);
+    }
+    return this.samplerLoadPromise;
+  }
+
+  /** Switch the sampled instrument to a different .sf2 (see
+   *  `AVAILABLE_INSTRUMENTS`). Resolves once the new file is loaded and
+   *  ready; the old instrument is disposed only once the new one has taken
+   *  over, so a chord already sounding when you switch isn't cut off
+   *  mid-note. Notes played *during* the switch use the oscillator
+   *  fallback via the same wait-briefly-then-fallback path as first load. */
+  setInstrument(url: string): Promise<void> {
+    if (url === this.currentInstrumentUrl && this.samplerLoadPromise) return this.samplerLoadPromise;
+    this.currentInstrumentUrl = url;
+    const previous = this.sampler;
+    this.sampler = null;
+    this.samplerLoadPromise = this.loadInstrument(url).then(() => {
+      if (previous !== this.sampler) previous?.dispose();
+    });
+    return this.samplerLoadPromise;
+  }
+
+  getCurrentInstrumentUrl(): string {
+    return this.currentInstrumentUrl;
+  }
+
+  /** 0-127, MIDI-style volume — matches smplr's own scale. Applied
+   *  immediately if a sampler is already loaded; otherwise remembered and
+   *  passed as the `volume` construction option the next time one loads. */
+  setVolume(volume: number): void {
+    this.pendingVolume = volume;
+    if (this.sampler) this.sampler.output.volume = volume;
+  }
+
+  getVolume(): number {
+    return this.pendingVolume;
   }
 
   private stopVoices(): void {
@@ -117,19 +232,57 @@ class PreviewPlayer {
       voice.oscillator.stop(ctx ? ctx.currentTime + 0.1 : undefined);
     }
     this.voices = [];
+    this.sampler?.stop();
   }
 
   /** Schedules one voice per entry, each with its own start offset,
    *  duration and velocity — cutting off anything already sounding first.
    *  Shared by `playChord` (uniform voicing) and `playChordObject`
-   *  (performance-effect-staggered voicing). */
+   *  (performance-effect-staggered voicing). Uses the sampled instrument
+   *  once it's loaded; otherwise falls back to the oscillator synth below.
+   *
+   *  The very first call of a session races the sf2 load against the
+   *  click that triggered it — without waiting, that first chord would
+   *  always land on the oscillator fallback (wrong timbre) while every
+   *  later chord, once `this.sampler` is populated, sounds correct. So a
+   *  call made before loading finishes waits briefly for it instead of
+   *  immediately falling back; a short grace period still guarantees
+   *  sound if loading is slow or fails outright. */
   private scheduleVoicing(voicing: PerformedVoice[]): void {
+    const samplerLoad = this.ensureSampler();
+    if (this.sampler) {
+      this.playVoicingNow(voicing);
+      return;
+    }
+    let played = false;
+    const playOnce = () => {
+      if (played) return;
+      played = true;
+      this.playVoicingNow(voicing);
+    };
+    samplerLoad.then(playOnce);
+    setTimeout(playOnce, 250);
+  }
+
+  private playVoicingNow(voicing: PerformedVoice[]): void {
     const ctx = this.getContext();
     this.stopVoices();
 
     const now = ctx.currentTime;
-    const attack = 0.01;
 
+    if (this.sampler) {
+      for (const v of voicing) {
+        this.sampler.start({
+          note: v.pitch,
+          velocity: v.velocity,
+          time: now + Math.max(0, v.startOffsetSec),
+          duration: v.durSec,
+        });
+      }
+      return;
+    }
+
+    const attack = 0.01;
     for (const v of voicing) {
       const startAt = now + Math.max(0, v.startOffsetSec);
       const release = Math.min(0.15, v.durSec / 2);
@@ -154,7 +307,9 @@ class PreviewPlayer {
   /** Sound one chord (as frequencies) for roughly `durSec`, cutting off
    *  anything already sounding first. */
   playChord(freqs: number[], durSec = 1): void {
-    this.scheduleVoicing(freqs.map((freq) => ({ freq, startOffsetSec: 0, durSec, velocity: 100 })));
+    this.scheduleVoicing(
+      freqs.map((freq) => ({ pitch: freqToMidi(freq), freq, startOffsetSec: 0, durSec, velocity: 100 })),
+    );
   }
 
   /** Sound one chord the same way `playChord` does, but honoring its own

@@ -37,7 +37,7 @@ export interface LyricsTimelineEntry {
  *  deliberately per-style so a chord can only carry one effect at a time,
  *  keeping it a deliberate choice rather than an unmanageable stack. */
 export interface ChordPerformanceEffect {
-  style: "strum" | "pulse" | "legato";
+  style: "strum" | "pulse" | "arp";
   params?: Record<string, number>;
 }
 
@@ -183,6 +183,45 @@ export function syncArrangementToSections(song: BlueprintSong): BlueprintSong {
     (section) => existingBySectionId.get(section.id) ?? { sectionId: section.id, repeats: 1 },
   );
   return { ...song, arrangement };
+}
+
+/** Beats per bar for a section's time signature — e.g. 4/4 → 4, 6/8 → 3,
+ *  7/8 → 3.5. Mirrors the formula in extensions/trackdraft-bridge's
+ *  sectionSpans() exactly (that file's own comment documents the bug an
+ *  earlier numerator-only version caused on x/8 sections) — kept here so
+ *  the Harmony tab can compute the identical number without re-deriving
+ *  or drifting from the export path's math. */
+export function beatsPerBar(section: Pick<BlueprintSection, "timeSignatureNumerator" | "timeSignatureDenPower">): number {
+  return section.timeSignatureNumerator * (4 / 2 ** section.timeSignatureDenPower);
+}
+
+export function sectionDurationBeats(section: BlueprintSection): number {
+  return section.bars * beatsPerBar(section);
+}
+
+/** How a section's chords[] (one pass through its progression) relates to
+ *  the section's declared bar length — the same relationship
+ *  loopChordsToFill() (extensions/trackdraft-bridge/src/chordCycle.ts)
+ *  actually applies at export time, computed here as plain numbers instead
+ *  of a full occurrence list, so the Harmony tab can show it honestly
+ *  before export ever runs. Returns null for an empty progression (caller
+ *  shows nothing in that case — the "no chords yet" message already
+ *  covers it). */
+export interface ProgressionFit {
+  cycleBeats: number;
+  durationBeats: number;
+  wholeCycles: number;
+  remainderBeats: number;
+  overflowBeats: number;
+}
+export function describeProgressionFit(section: BlueprintSection): ProgressionFit | null {
+  const cycleBeats = section.chords.reduce((sum, c) => sum + c.beats, 0);
+  if (cycleBeats <= 0) return null;
+  const durationBeats = sectionDurationBeats(section);
+  const wholeCycles = Math.floor(durationBeats / cycleBeats);
+  const remainderBeats = durationBeats - wholeCycles * cycleBeats;
+  const overflowBeats = wholeCycles === 0 ? cycleBeats - durationBeats : 0;
+  return { cycleBeats, durationBeats, wholeCycles, remainderBeats, overflowBeats };
 }
 
 /** Converts a BlueprintSection's authoring-time chords into

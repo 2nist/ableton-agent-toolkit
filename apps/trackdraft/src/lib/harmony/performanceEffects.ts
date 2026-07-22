@@ -75,7 +75,7 @@ export function applyStrum(
 ): PerfNote[] {
   if (notes.length < 2) return notes;
   const rng = mulberry32(hashSeed(options.seed));
-  const strumMs = (effect.params?.strumMs ?? 40) * (1 + (rng() - 0.5) * 0.1); // ±5% humanisation
+  const strumMs = (effect.params?.strumMs ?? 150) * (1 + (rng() - 0.5) * 0.1); // ±5% humanisation
   const strumBeats = strumMs / 1000; // convert to beats (approximate — caller should pass actual tempo for precision)
   const interval = strumBeats / Math.max(1, notes.length - 1);
 
@@ -91,12 +91,15 @@ export function applyStrum(
 }
 
 /* ---------------------------------------------------------------
-   PULSE
+   PULSE (re-trigger / tremolo)
    --------------------------------------------------------------- */
 
-/** Velocity pulse: notes rhythmically dip and rise.  subdivision=4
- *  gives eighth-note pulses (default).  Pulse depth = 0.15 of
- *  velocity, spread evenly across notes. */
+/** Tremolo re-trigger: each note in the chord is split into
+ *  `subdivision` equal-duration hits across the original note's span.
+ *  subdivision=4 produces 4 hits per note (16th-note tremolo on a
+ *  quarter-note chord).  Velocities follow a triangle wave (0→1→0)
+ *  across the re-trigger cycle, with seeded humanisation so every
+ *  bar of a looping section doesn't sound copy-paste identical. */
 export function applyPulse(
   notes: PerfNote[],
   effect: ChordPerformanceEffect,
@@ -105,47 +108,62 @@ export function applyPulse(
   if (notes.length === 0) return notes;
   const rng = mulberry32(hashSeed(options.seed));
   const subdivision = effect.params?.subdivision ?? 4;
-  const pulseBeats = 1 / subdivision;
+  const hitDuration = notes[0].duration / subdivision;
 
-  return notes.map((n) => {
-    // Pulse position = where in the pulse cycle this note hits
-    const positionInPulse = (n.startTime % pulseBeats) / pulseBeats;
-    // Triangle wave: 0→1→0 over the pulse cycle
-    const factor = 1 - Math.abs(positionInPulse - 0.5) * 2;
-    const velocityDelta = Math.round(factor * 20 + (rng() - 0.5) * 6);
-    return {
-      ...n,
-      velocity: Math.max(1, Math.min(127, n.velocity + velocityDelta)),
-    };
-  });
+  return notes
+    .flatMap((n) => {
+      const hits: PerfNote[] = [];
+      for (let i = 0; i < subdivision; i++) {
+        // Triangle wave: 0→1→0 across [0, subdivision-1]
+        const position = i / Math.max(1, subdivision - 1);
+        const factor = 1 - Math.abs(position - 0.5) * 2;
+        const velocity = Math.max(1, Math.min(127, Math.round(
+          n.velocity * (0.6 + factor * 0.4) + (rng() - 0.5) * 8,
+        )));
+        hits.push({
+          pitch: n.pitch,
+          startTime: n.startTime + i * hitDuration,
+          duration: hitDuration,
+          velocity,
+        });
+      }
+      return hits;
+    })
+    .sort((a, b) => a.startTime - b.startTime);
 }
 
 /* ---------------------------------------------------------------
-   LEGATO
+   ARPEGGIATOR
    --------------------------------------------------------------- */
 
-/** Legato overlap: extend note durations so they overlap the next
- *  note slightly.  overlapBeats=0.05 is a gentle overlap;
- *  overlapBeats=0.15 is a pronounced slur.  Default 0.08. */
-export function applyLegato(
+/** Arpeggiator: cycles through chord notes one at a time at a
+ *  `subdivision` rate across the chord's full duration, low-to-high.
+ *  subdivision=4 (default) gives 16th-note steps on a quarter-note chord:
+ *  a 3-note triad becomes 4 single-note hits cycling C→E→G→C. */
+export function applyArp(
   notes: PerfNote[],
   effect: ChordPerformanceEffect,
   options: PerfOptions,
 ): PerfNote[] {
-  if (notes.length < 2) return notes;
+  if (notes.length === 0) return notes;
   const rng = mulberry32(hashSeed(options.seed));
-  const overlapBeats = (effect.params?.overlapBeats ?? 0.08) + (rng() - 0.5) * 0.02;
+  const subdivision = effect.params?.subdivision ?? 4;
+  const sorted = [...notes].sort((a, b) => a.pitch - b.pitch);
+  const stepDuration = notes[0].duration / subdivision;
+  const hits: PerfNote[] = [];
 
-  return notes.map((n, i) => {
-    if (i >= notes.length - 1) return n;
-    const next = notes[i + 1];
-    const gap = next.startTime - (n.startTime + n.duration);
-    if (gap < 0) return n; // already overlapping or back-to-back
-    return {
-      ...n,
-      duration: n.duration + gap + overlapBeats,
-    };
-  });
+  for (let i = 0; i < subdivision; i++) {
+    const note = sorted[i % sorted.length];
+    hits.push({
+      pitch: note.pitch,
+      startTime: notes[0].startTime + i * stepDuration,
+      duration: stepDuration,
+      velocity: Math.max(1, Math.min(127, Math.round(
+        note.velocity + (rng() - 0.5) * 8,
+      ))),
+    });
+  }
+  return hits;
 }
 
 /* ---------------------------------------------------------------
@@ -167,8 +185,8 @@ export function applyPerformanceEffect(
       return applyStrum(notes, effect, options);
     case "pulse":
       return applyPulse(notes, effect, options);
-    case "legato":
-      return applyLegato(notes, effect, options);
+    case "arp":
+      return applyArp(notes, effect, options);
     default:
       return notes;
   }

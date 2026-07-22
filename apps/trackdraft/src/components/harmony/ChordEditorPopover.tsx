@@ -1,4 +1,3 @@
-import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { pitchClass, noteName } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord, ChordPerformanceEffect } from "../../types/blueprint";
@@ -14,73 +13,131 @@ function chromaticDegreeLabel(keyPc: number, rootPc: number): string {
   return CHROMATIC_DEGREES[(((rootPc - keyPc) % 12) + 12) % 12];
 }
 
-const PERFORMANCE_STYLES: ChordPerformanceEffect["style"][] = ["strum", "pulse", "legato"];
+const PERFORMANCE_STYLES: ChordPerformanceEffect["style"][] = ["strum", "pulse", "arp"];
 
 interface ChordEditorPopoverProps {
   chord: Chord;
   keyName: NoteName;
   scale: ScaleType;
-  /** Viewport point to anchor the panel beside (usually the top-centre of the
-   *  clicked hex or chord cell). The panel positions itself to the right, then
-   *  flips left / clamps vertically to stay on screen. */
-  anchor: { x: number; y: number };
   onChange: (chord: Chord) => void;
   onRemove: () => void;
-  onClose: () => void;
+  /** Deselects the chord — the dock falls back to song/section controls. */
+  onDeselect: () => void;
 }
 
-/** The single per-chord editor — opened from a hex, a progression cell, or an
- *  effect-lane slot, always the same panel anchored beside the click. Replaces
- *  the old split between ChordCard's inline "edit…" dropdown and the pinned
- *  ChordInspector rail, so there's exactly one place a chord's quality,
- *  duration, performance, and substitution are mutated. */
+/** Small slider row for a single numeric parameter. */
+function ParamSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="font-mono text-2xs text-inkMuted w-32 shrink-0">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-2 w-full accent-accent"
+      />
+      <span className="font-mono text-2xs text-inkMuted w-9 text-right">{value}</span>
+    </div>
+  );
+}
+
+/** Exposes the active effect's tunable parameters as sliders, writing
+ *  them into `chord.performance.params` so the export path reads them
+ *  instead of falling back to built-in defaults. */
+function PerformanceParams({
+  chord,
+  onChange,
+}: {
+  chord: Chord;
+  onChange: (chord: Chord) => void;
+}) {
+  const style = chord.performance!.style;
+  const params = chord.performance!.params ?? {};
+
+  function setParam(key: string, value: number) {
+    onChange({
+      ...chord,
+      performance: { style, params: { ...params, [key]: value } },
+    });
+  }
+
+  if (style === "strum") {
+    return (
+      <ParamSlider
+        label="Strum speed (ms)"
+        value={params.strumMs ?? 150}
+        min={100}
+        max={300}
+        step={5}
+        onChange={(v) => setParam("strumMs", v)}
+      />
+    );
+  }
+
+  if (style === "pulse") {
+    return (
+      <ParamSlider
+        label="Subdivision"
+        value={params.subdivision ?? 4}
+        min={1}
+        max={16}
+        step={1}
+        onChange={(v) => setParam("subdivision", v)}
+      />
+    );
+  }
+
+  // arp
+  return (
+    <ParamSlider
+      label="Subdivision"
+      value={params.subdivision ?? 4}
+      min={1}
+      max={16}
+      step={1}
+      onChange={(v) => setParam("subdivision", v)}
+    />
+  );
+}
+
+/** The selected chord's editor — the dock's "tools" content whenever a chord
+ *  is selected (HoneycombWheel or ProgressionTrack). Used to be an
+ *  anchored floating popover; now a plain panel filling the dock's tools
+ *  area, laid out as horizontal bands (Substitutions | Quality+Beats |
+ *  Performance) instead of one narrow stacked column, since the dock is
+ *  wide and short rather than the other way around. Substitution options
+ *  are compact chips with their theory explanation moved to a `title`
+ *  tooltip — the old two-line label+explanation stack doesn't fit ~180px
+ *  of height for more than one or two options. */
 export default function ChordEditorPopover({
   chord,
   keyName,
   scale,
-  anchor,
   onChange,
   onRemove,
-  onClose,
+  onDeselect,
 }: ChordEditorPopoverProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-
   const keyPc = pitchClass(keyName);
   const rootPc = pitchClass(chord.root);
   const menu = getSubstitutionMenu(scale, chord.romanNumeral, rootPc);
   const isNonDiatonic = menu.modeAware.length === 0;
-
-  // Anchor beside the click, flipping / clamping to stay within the viewport.
-  useLayoutEffect(() => {
-    const eln = ref.current;
-    if (!eln) return;
-    const { width, height } = eln.getBoundingClientRect();
-    const gap = 16;
-    let left = anchor.x + gap;
-    if (left + width > window.innerWidth - 8) left = anchor.x - width - gap;
-    if (left < 8) left = 8;
-    let top = anchor.y - 24;
-    if (top + height > window.innerHeight - 8) top = window.innerHeight - height - 8;
-    if (top < 8) top = 8;
-    setPos({ left, top });
-  }, [anchor.x, anchor.y, chord.id, menu.modeAware.length]);
-
-  // Dismiss on Escape or a click outside the panel.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("mousedown", onDown);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onDown);
-    };
-  }, [onClose]);
 
   function auditionAndApply(next: Chord) {
     onChange(next);
@@ -88,77 +145,72 @@ export default function ChordEditorPopover({
   }
 
   return (
-    <div
-      ref={ref}
-      role="dialog"
-      aria-label={`Edit ${chord.romanNumeral}`}
-      className="fixed z-50 w-[248px] bg-panel border border-accent rounded-lg shadow-2xl p-3 space-y-3 text-xs"
-      style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, visibility: pos ? "visible" : "hidden" }}
-    >
-      <div className="flex items-baseline justify-between">
+    <div className="p-2 text-xs h-full flex flex-col gap-2">
+      <div className="flex items-baseline justify-between shrink-0">
         <p className="font-medium text-sm">
           {chord.romanNumeral}
           <span className="text-inkMuted font-normal ml-1.5">
             {chordDisplayName(rootPc, chord.quality, keyName)}
           </span>
         </p>
-        <button className="text-inkMuted hover:text-ink" onClick={onClose} aria-label="Close">✕</button>
+        <div className="flex items-center gap-2">
+          <button className="text-[11px] text-inkMuted hover:text-red-400" onClick={onRemove}>
+            Remove chord
+          </button>
+          <button className="text-inkMuted hover:text-ink" onClick={onDeselect} aria-label="Deselect">✕</button>
+        </div>
       </div>
 
-      {/* Substitutions */}
-      <div>
-        <p className="text-[10px] text-inkMuted uppercase tracking-wide mb-1">Substitutions</p>
-        {isNonDiatonic && (
-          <p className="text-[11px] text-inkMuted mb-1">
-            Non-diatonic chord — chromatic and borrowed options still apply.
-          </p>
-        )}
-        {menu.modeAware.map((sub) => (
-          <button
-            key={sub.degreeLabel}
-            className="block w-full text-left hover:bg-panelAlt px-2 py-1 rounded"
-            onClick={() =>
-              auditionAndApply({
-                ...chord,
-                root: noteName((keyPc + sub.root) % 12, keyName),
-                quality: sub.quality,
-                romanNumeral: sub.degreeLabel,
-                isSubstitution: true,
-                substitutedFrom: chord.romanNumeral,
-              })
-            }
-          >
-            <span className="font-medium">
-              {sub.degreeLabel} · {chordDisplayName((keyPc + sub.root) % 12, sub.quality, keyName)}
-            </span>
-            <span className="block text-inkMuted text-[10px]">{sub.explanation}</span>
-          </button>
-        ))}
-        {menu.chromatic.map((sub) => (
-          <button
-            key={sub.label}
-            className="block w-full text-left hover:bg-panelAlt px-2 py-1 rounded"
-            onClick={() =>
-              auditionAndApply({
-                ...chord,
-                root: noteName(sub.root, keyName),
-                quality: sub.quality,
-                romanNumeral: chromaticDegreeLabel(keyPc, sub.root),
-                isSubstitution: true,
-                substitutedFrom: chord.romanNumeral,
-              })
-            }
-          >
-            <span className="font-medium">{sub.label} — {chordDisplayName(sub.root, sub.quality, keyName)}</span>
-            <span className="block text-inkMuted text-[10px]">{sub.explanation}</span>
-          </button>
-        ))}
-        {menu.borrowed.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1">
+      <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto">
+        {/* Substitutions */}
+        <div>
+          <p className="text-3xs text-inkMuted uppercase tracking-wide mb-1">Substitutions</p>
+          {isNonDiatonic && (
+            <p className="text-3xs text-inkMuted mb-1">Non-diatonic — chromatic/borrowed still apply.</p>
+          )}
+          <div className="flex flex-wrap gap-1">
+            {menu.modeAware.map((sub) => (
+              <button
+                key={sub.degreeLabel}
+                className="text-2xs border border-edge rounded px-1.5 py-0.5 hover:bg-panelAlt hover:border-inkMuted"
+                title={sub.explanation}
+                onClick={() =>
+                  auditionAndApply({
+                    ...chord,
+                    root: noteName((keyPc + sub.root) % 12, keyName),
+                    quality: sub.quality,
+                    romanNumeral: sub.degreeLabel,
+                    isSubstitution: true,
+                    substitutedFrom: chord.romanNumeral,
+                  })
+                }
+              >
+                {sub.degreeLabel} · {chordDisplayName((keyPc + sub.root) % 12, sub.quality, keyName)}
+              </button>
+            ))}
+            {menu.chromatic.map((sub) => (
+              <button
+                key={sub.label}
+                className="text-2xs border border-edge rounded px-1.5 py-0.5 hover:bg-panelAlt hover:border-inkMuted"
+                title={sub.explanation}
+                onClick={() =>
+                  auditionAndApply({
+                    ...chord,
+                    root: noteName(sub.root, keyName),
+                    quality: sub.quality,
+                    romanNumeral: chromaticDegreeLabel(keyPc, sub.root),
+                    isSubstitution: true,
+                    substitutedFrom: chord.romanNumeral,
+                  })
+                }
+              >
+                {sub.label} — {chordDisplayName(sub.root, sub.quality, keyName)}
+              </button>
+            ))}
             {menu.borrowed.map((candidate) => (
               <button
                 key={`${candidate.sourceMode}-${candidate.degree}`}
-                className="text-[11px] border border-accent/50 text-accent rounded px-2 py-1 hover:bg-accent/10"
+                className="text-2xs border border-accent/50 text-accent rounded px-1.5 py-0.5 hover:bg-accent/10"
                 title={`from ${candidate.sourceMode}`}
                 onClick={() =>
                   auditionAndApply({
@@ -175,86 +227,76 @@ export default function ChordEditorPopover({
               </button>
             ))}
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* Quality */}
-      <div className="pt-2 border-t border-edge">
-        <p className="text-[10px] text-inkMuted uppercase tracking-wide mb-1.5">Quality</p>
-        <div className="flex flex-wrap gap-1">
-          {CHORD_QUALITIES.map((q) => (
+        {/* Quality + Beats */}
+        <div className="space-y-2">
+          <div>
+            <p className="text-3xs text-inkMuted uppercase tracking-wide mb-1">Quality</p>
+            <div className="flex flex-wrap gap-1">
+              {CHORD_QUALITIES.map((q) => (
+                <button
+                  key={q}
+                  className={`font-mono text-2xs rounded px-1.5 py-0.5 border ${
+                    chord.quality === q
+                      ? "border-accent text-accent bg-accent/10"
+                      : "border-edge text-inkMuted hover:text-ink"
+                  }`}
+                  onClick={() => onChange({ ...chord, quality: q, extendedSuffix: undefined })}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-3xs text-inkMuted uppercase tracking-wide mb-1">Beats</p>
+            <div className="flex items-center gap-1.5">
+              <button
+                className="w-5 h-5 rounded border border-edge text-inkMuted hover:text-ink"
+                onClick={() => onChange({ ...chord, beats: Math.max(0.5, chord.beats - 0.5) })}
+              >
+                –
+              </button>
+              <span className="font-mono text-2xs min-w-[46px] text-center">{chord.beats} beats</span>
+              <button
+                className="w-5 h-5 rounded border border-edge text-inkMuted hover:text-ink"
+                onClick={() => onChange({ ...chord, beats: chord.beats + 0.5 })}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Performance */}
+        <div>
+          <p className="text-3xs text-inkMuted uppercase tracking-wide mb-1">Performance</p>
+          <div className="flex flex-wrap gap-1 mb-1.5">
             <button
-              key={q}
-              className={`font-mono text-[11px] rounded px-2 py-1 border ${
-                chord.quality === q
-                  ? "border-accent text-accent bg-accent/10"
-                  : "border-edge text-inkMuted hover:text-ink"
+              className={`font-mono text-2xs rounded px-1.5 py-0.5 border ${
+                !chord.performance ? "border-accent text-accent bg-accent/10" : "border-edge text-inkMuted hover:text-ink"
               }`}
-              onClick={() => onChange({ ...chord, quality: q, extendedSuffix: undefined })}
+              onClick={() => onChange({ ...chord, performance: undefined })}
             >
-              {q}
+              none
             </button>
-          ))}
+            {PERFORMANCE_STYLES.map((style) => (
+              <button
+                key={style}
+                className={`font-mono text-2xs rounded px-1.5 py-0.5 border ${
+                  chord.performance?.style === style
+                    ? "border-accent text-accent bg-accent/10"
+                    : "border-edge text-inkMuted hover:text-ink"
+                }`}
+                onClick={() => onChange({ ...chord, performance: { style } })}
+              >
+                {style}
+              </button>
+            ))}
+          </div>
+          {chord.performance && <PerformanceParams chord={chord} onChange={onChange} />}
         </div>
-      </div>
-
-      {/* Beats */}
-      <div className="pt-2 border-t border-edge">
-        <p className="text-[10px] text-inkMuted uppercase tracking-wide mb-1.5">Beats</p>
-        <div className="flex items-center gap-2">
-          <button
-            className="w-6 h-6 rounded border border-edge text-inkMuted hover:text-ink"
-            onClick={() => onChange({ ...chord, beats: Math.max(0.5, chord.beats - 0.5) })}
-          >
-            –
-          </button>
-          <span className="font-mono min-w-[54px] text-center">{chord.beats} beats</span>
-          <button
-            className="w-6 h-6 rounded border border-edge text-inkMuted hover:text-ink"
-            onClick={() => onChange({ ...chord, beats: chord.beats + 0.5 })}
-          >
-            +
-          </button>
-        </div>
-      </div>
-
-      {/* Performance */}
-      <div className="pt-2 border-t border-edge">
-        <p className="text-[10px] text-inkMuted uppercase tracking-wide mb-1.5">Performance</p>
-        <div className="flex flex-wrap gap-1">
-          <button
-            className={`font-mono text-[11px] rounded px-2 py-1 border ${
-              !chord.performance
-                ? "border-accent text-accent bg-accent/10"
-                : "border-edge text-inkMuted hover:text-ink"
-            }`}
-            onClick={() => onChange({ ...chord, performance: undefined })}
-          >
-            none
-          </button>
-          {PERFORMANCE_STYLES.map((style) => (
-            <button
-              key={style}
-              className={`font-mono text-[11px] rounded px-2 py-1 border ${
-                chord.performance?.style === style
-                  ? "border-accent text-accent bg-accent/10"
-                  : "border-edge text-inkMuted hover:text-ink"
-              }`}
-              onClick={() => onChange({ ...chord, performance: { style } })}
-            >
-              {style}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="pt-2 border-t border-edge flex justify-end">
-        <button
-          className="text-[11px] text-inkMuted hover:text-red-400"
-          onClick={onRemove}
-        >
-          Remove chord
-        </button>
       </div>
     </div>
   );

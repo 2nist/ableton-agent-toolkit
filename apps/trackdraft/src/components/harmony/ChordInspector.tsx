@@ -1,9 +1,11 @@
 import { pitchClass, noteName } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
-import type { Chord } from "../../types/blueprint";
+import type { Chord, ChordPerformanceEffect } from "../../types/blueprint";
 import { getSubstitutionMenu } from "../../lib/harmony/substitutions";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { getPreviewPlayer } from "../../lib/harmony/audioPreview";
+
+const PERFORMANCE_STYLES: ChordPerformanceEffect["style"][] = ["strum", "pulse", "arp"];
 
 interface ChordInspectorProps {
   chord: Chord | null;
@@ -142,6 +144,136 @@ export default function ChordInspector({ chord, keyName, scale, onChange }: Chor
           </div>
         </div>
       )}
+
+      {/* Performance */}
+      <div className="border-t border-edge pt-3">
+        <p className="text-[11px] text-inkMuted uppercase tracking-wide mb-1.5">Performance</p>
+        <div className="flex flex-wrap gap-1 mb-2">
+          <button
+            className={`font-mono text-2xs rounded px-1.5 py-0.5 border ${
+              !chord.performance ? "border-accent text-accent bg-accent/10" : "border-edge text-inkMuted hover:text-ink"
+            }`}
+            onClick={() => onChange({ ...chord, performance: undefined })}
+          >
+            none
+          </button>
+          {PERFORMANCE_STYLES.map((style) => (
+            <button
+              key={style}
+              className={`font-mono text-2xs rounded px-1.5 py-0.5 border ${
+                chord.performance?.style === style
+                  ? "border-accent text-accent bg-accent/10"
+                  : "border-edge text-inkMuted hover:text-ink"
+              }`}
+              onClick={() => {
+                const next = { ...chord, performance: { style } };
+                onChange(next);
+                getPreviewPlayer().playChordObject(next, 1);
+              }}
+            >
+              {style}
+            </button>
+          ))}
+        </div>
+        {chord.performance && (
+          <PerformanceParams
+            chord={chord}
+            onChange={onChange}
+            onAudition={() => getPreviewPlayer().playChordObject(chord, 1)}
+          />
+        )}
+      </div>
     </div>
+  );
+}
+
+/** Slider for a performance parameter. */
+function ParamSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="font-mono text-[10px] text-inkMuted w-28 shrink-0">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-2 flex-1 accent-accent"
+      />
+      <span className="font-mono text-[10px] text-inkMuted w-10 text-right">{value}</span>
+    </div>
+  );
+}
+
+function PerformanceParams({
+  chord,
+  onChange,
+  onAudition,
+}: {
+  chord: Chord;
+  onChange: (chord: Chord) => void;
+  onAudition: () => void;
+}) {
+  const style = chord.performance!.style;
+  const params = chord.performance!.params ?? {};
+
+  function setParam(key: string, value: number) {
+    onChange({
+      ...chord,
+      performance: { style, params: { ...params, [key]: value } },
+    });
+  }
+
+  if (style === "strum") {
+    return (
+      <ParamSlider
+        label="Strum speed (ms)"
+        value={params.strumMs ?? 150}
+        min={100}
+        max={300}
+        step={5}
+        onChange={(v) => { setParam("strumMs", v); onAudition(); }}
+      />
+    );
+  }
+
+  if (style === "pulse") {
+    return (
+      <ParamSlider
+        label="Subdivision"
+        value={params.subdivision ?? 4}
+        min={1}
+        max={16}
+        step={1}
+        onChange={(v) => { setParam("subdivision", v); onAudition(); }}
+      />
+    );
+  }
+
+  // arp
+  return (
+    <ParamSlider
+      label="Subdivision"
+      value={params.subdivision ?? 4}
+      min={1}
+      max={16}
+      step={1}
+      onChange={(v) => { setParam("subdivision", v); onAudition(); }}
+    />
   );
 }
