@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { SONG_MAPS } from "../../data/songMaps";
 import { GENRE_CATALOG } from "../../data/genre-catalog/index";
 
@@ -24,6 +25,17 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
     if (newMaps.length > 0) setSelected(newMaps[0].id);
   }
 
+  const genreWorkbenchLink = (
+    <Link
+      to="/genre-workbench"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-xs text-accent hover:underline whitespace-nowrap"
+    >
+      Genre Workbench →
+    </Link>
+  );
+
   if (maps.length === 0 && source === "genre") {
     return (
       <div className="border border-edge rounded bg-panel p-3 space-y-2">
@@ -39,7 +51,7 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
           </button>
         </div>
         <p className="text-xs text-inkMuted">
-          No genre maps cataloged yet — visit the Genre Workbench to generate some.
+          No genre maps cataloged yet — visit the {genreWorkbenchLink} to generate some.
         </p>
       </div>
     );
@@ -47,22 +59,28 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
 
   return (
     <div className="border border-edge rounded bg-panel p-3 space-y-2">
-      <div className="flex items-center gap-2 mb-1">
-        <button
-          className={`text-xs px-2 py-0.5 rounded transition-colors ${source === "narrative" ? "bg-accent text-black" : "border border-edge text-inkMuted hover:text-ink"}`}
-          onClick={() => switchSource("narrative")}
-        >
-          Narrative
-        </button>
-        <button
-          className={`text-xs px-2 py-0.5 rounded transition-colors ${source === "genre" ? "bg-accent text-black" : "border border-edge text-inkMuted hover:text-ink"}`}
-          onClick={() => switchSource("genre")}
-        >
-          Genre maps
-          {GENRE_CATALOG.length > 0 && (
-            <span className="ml-1 opacity-60">({GENRE_CATALOG.length})</span>
-          )}
-        </button>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <div className="flex items-center gap-2">
+          <button
+            className={`text-xs px-2 py-0.5 rounded transition-colors ${source === "narrative" ? "bg-accent text-black" : "border border-edge text-inkMuted hover:text-ink"}`}
+            onClick={() => switchSource("narrative")}
+          >
+            Narrative
+          </button>
+          <button
+            className={`text-xs px-2 py-0.5 rounded transition-colors ${source === "genre" ? "bg-accent text-black" : "border border-edge text-inkMuted hover:text-ink"}`}
+            onClick={() => switchSource("genre")}
+          >
+            Genre maps
+            {GENRE_CATALOG.length > 0 && (
+              <span className="ml-1 opacity-60">({GENRE_CATALOG.length})</span>
+            )}
+          </button>
+        </div>
+        {/* Only 8 of 119 known genres are cataloged -- this stays useful
+           long after the catalog is no longer empty, so it's a persistent
+           entry point rather than gated behind the empty-state message. */}
+        {source === "genre" && genreWorkbenchLink}
       </div>
       <div className="flex items-center gap-2">
         <select
