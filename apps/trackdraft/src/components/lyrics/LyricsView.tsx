@@ -1,44 +1,46 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSongStore } from "../../store/songStore";
+import { useLyricsSelectionStore } from "../../store/lyricsSelectionStore";
+import { useDockStore } from "../../store/dockStore";
 import { updateSection } from "../../lib/sections";
 import LyricsEditor from "./LyricsEditor";
-import MetricalTable from "./MetricalTable";
-import RhymeSuggestions from "./RhymeSuggestions";
-import WritingContext from "./WritingContext";
 import LyricDocumentView from "./LyricDocumentView";
+import LyricsDockTools from "./LyricsDockTools";
 
 type ViewMode = "per-section" | "song-text";
 
 export default function LyricsView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const selectedSectionId = useLyricsSelectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useLyricsSelectionStore((s) => s.setSelectedSectionId);
+  const setTools = useDockStore((s) => s.setTools);
   const [mode, setMode] = useState<ViewMode>("per-section");
+
+  // MetricalTable/WritingContext/RhymeSuggestions (formerly a fixed 280px
+  // sidebar) are scoped to one section, so they only make sense in
+  // per-section mode — song-text mode has no single active section, and
+  // simply doesn't register dock content, falling back to Info.
+  useEffect(() => {
+    setTools(mode === "per-section" ? <LyricsDockTools /> : null);
+    return () => setTools(null);
+  }, [mode, setTools]);
 
   if (!currentSong) return null;
   const song = currentSong;
 
   const activeSection = song.sections.find((s) => s.id === selectedSectionId) ?? song.sections[0] ?? null;
 
-  const vocabulary = Array.from(
-    new Set(
-      song.sections
-        .flatMap((s) => (s.lyrics ?? "").split(/\s+/))
-        .map((w) => w.replace(/[^a-zA-Z']/g, ""))
-        .filter(Boolean),
-    ),
-  );
-
   if (song.sections.length === 0) {
     return (
-      <div className="p-6 text-inkMuted text-sm">
+      <div className="p-4 text-inkMuted text-sm">
         Add sections in the Structure tab first, then come back here to write lyrics.
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-5xl space-y-4">
+    <div className="p-4 max-w-5xl space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex gap-2 flex-wrap">
           {song.sections.map((section) => (
@@ -75,26 +77,12 @@ export default function LyricsView() {
       {mode === "song-text" && <LyricDocumentView song={song} onChange={updateCurrentSong} />}
 
       {mode === "per-section" && activeSection && (
-        <div className="grid grid-cols-[1fr_280px] gap-4">
-          <div className="space-y-4">
-            <LyricsEditor
-              value={activeSection.lyrics ?? ""}
-              onChange={(lyrics) =>
-                updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, lyrics })))
-              }
-            />
-            <MetricalTable
-              rows={activeSection.lyricsMetrical ?? []}
-              onChange={(lyricsMetrical) =>
-                updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, lyricsMetrical })))
-              }
-            />
-          </div>
-          <div className="space-y-4">
-            <WritingContext song={song} />
-            <RhymeSuggestions vocabulary={vocabulary} />
-          </div>
-        </div>
+        <LyricsEditor
+          value={activeSection.lyrics ?? ""}
+          onChange={(lyrics) =>
+            updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, lyrics })))
+          }
+        />
       )}
     </div>
   );

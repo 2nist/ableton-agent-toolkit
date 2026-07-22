@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { KEY_ROOTS } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
@@ -25,10 +24,11 @@ interface FloatingToolbarProps {
   onRekeySection: (key: NoteName | undefined, scale: ScaleType | undefined) => void;
 }
 
-/** The set-occasionally, glance-often controls — song-default key/scale and
- *  progression presets — floated over the hex canvas as one collapsible bar,
- *  so the honeycomb keeps full room to wander. Per-chord editing lives in the
- *  anchored popover instead; nothing chord-specific belongs here. */
+/** The dock's default tools content for Harmony — song/section key+scale
+ *  and progression presets — shown whenever no chord is selected. Used to
+ *  float over the hex canvas as a collapsible bar; now a plain horizontal
+ *  row filling the dock's tools area (the dock's own Info/Tools tab strip
+ *  is what hides/shows this, so the old collapse toggle is gone too). */
 export default function FloatingToolbar({
   songKey,
   songScale,
@@ -43,72 +43,58 @@ export default function FloatingToolbar({
   sectionScaleOverride,
   onRekeySection,
 }: FloatingToolbarProps) {
-  const [open, setOpen] = useState(true);
-
   return (
-    <div className="absolute top-3 left-3 z-20 w-[236px] bg-panel/95 backdrop-blur border border-edge rounded-lg shadow-xl overflow-hidden">
-      <button
-        className="flex items-center justify-between w-full px-3 py-2 text-left hover:bg-panelAlt"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-      >
-        <span className="font-mono text-[10px] uppercase tracking-widest text-accent">
-          Song&nbsp;·&nbsp;<span className="text-ink normal-case">{songKey} {songScale}</span>
+    <div className="p-3 space-y-4">
+      <div>
+        <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Song key</span>
+        <KeySelector
+          activeKey={songKey}
+          activeScale={songScale}
+          onChangeKey={onChangeSongKey}
+          onChangeScale={onChangeSongScale}
+        />
+      </div>
+      <div>
+        <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+          Section ({sectionName || "this section"})
         </span>
-        <span className={`text-inkMuted text-xs transition-transform ${open ? "" : "-rotate-90"}`}>▾</span>
-      </button>
-
-      {open && (
-        <div className="px-3 pb-3 pt-2 flex flex-col gap-3 border-t border-edge">
-          <KeySelector
-            activeKey={songKey}
-            activeScale={songScale}
-            onChangeKey={onChangeSongKey}
-            onChangeScale={onChangeSongScale}
-          />
-          <div>
-            <span className="font-mono text-[9px] uppercase tracking-wider text-inkMuted block mb-1.5">
-              Section key ({sectionName || "this section"})
-            </span>
-            <div className="flex items-center gap-1.5 text-sm">
-              <select
-                className="bg-panelAlt border border-edge rounded px-2 py-1 text-ink flex-1 min-w-0"
-                value={sectionKeyOverride ?? ""}
-                onChange={(e) => onRekeySection((e.target.value || undefined) as NoteName | undefined, sectionScaleOverride)}
-                title="Override this section's key — modulates it independently of the song key, transposing its chords"
-              >
-                <option value="">(song: {songKey})</option>
-                {KEY_ROOTS.map((k) => (
-                  <option key={k} value={k}>{k}</option>
-                ))}
-              </select>
-              <select
-                className="bg-panelAlt border border-edge rounded px-2 py-1 text-ink flex-1 min-w-0"
-                value={sectionScaleOverride ?? ""}
-                onChange={(e) => onRekeySection(sectionKeyOverride, (e.target.value || undefined) as ScaleType | undefined)}
-                title="Override this section's mode"
-              >
-                <option value="">(song: {songScale})</option>
-                {SCALES.map((sc) => (
-                  <option key={sc} value={sc}>{sc}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div>
-            <span className="font-mono text-[9px] uppercase tracking-wider text-inkMuted block mb-1.5">
-              Progression preset
-            </span>
-            <PresetPicker
-              keyName={presetKeyName}
-              beatsPerChord={beatsPerChord}
-              hasChords={hasChords}
-              sectionName={sectionName}
-              onApply={onApplyPreset}
-            />
-          </div>
+        <div className="space-y-1.5">
+          <select
+            className="w-full bg-panelAlt border border-edge rounded px-2 py-1 text-sm text-ink"
+            value={sectionKeyOverride ?? ""}
+            onChange={(e) => onRekeySection((e.target.value || undefined) as NoteName | undefined, sectionScaleOverride)}
+            title="Override this section's key — modulates it independently of the song key, transposing its chords"
+          >
+            <option value="">Key: (use {songKey})</option>
+            {KEY_ROOTS.map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+          <select
+            className="w-full bg-panelAlt border border-edge rounded px-2 py-1 text-sm text-ink"
+            value={sectionScaleOverride ?? ""}
+            onChange={(e) => onRekeySection(sectionKeyOverride, (e.target.value || undefined) as ScaleType | undefined)}
+            title="Override this section's mode"
+          >
+            <option value="">Scale: (use {songScale})</option>
+            {SCALES.map((sc) => (
+              <option key={sc} value={sc}>{sc}</option>
+            ))}
+          </select>
         </div>
-      )}
+      </div>
+      <div>
+        <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+          Preset
+        </span>
+        <PresetPicker
+          keyName={presetKeyName}
+          beatsPerChord={beatsPerChord}
+          hasChords={hasChords}
+          sectionName={sectionName}
+          onApply={onApplyPreset}
+        />
+      </div>
     </div>
   );
 }

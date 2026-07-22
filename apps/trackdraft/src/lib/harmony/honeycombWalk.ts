@@ -694,6 +694,8 @@ export function stepLabel(step: HoneycombStep): string {
  *  Uses `noteName()` from @music-theory/core so enharmonic spelling
  *  (Gb vs F#, B vs Cb) follows the key reference. */
 import { noteName as noteNameFn, pitchClass } from "@music-theory/core";
+import type { NoteName, ScaleType } from "@music-theory/core";
+import type { Chord } from "../../types/blueprint";
 
 export function letterName(
   keyName: string,
@@ -873,4 +875,22 @@ export function getWalkPathD(
       return `${i ? "L" : "M"} ${x} ${y}`;
     })
     .join(" ");
+}
+
+/** Re-roots a section's chords to a new key/scale — root pitch only,
+ *  preserving each chord's authored quality/roman-numeral label so a
+ *  deliberate substitution isn't silently overwritten by a key change.
+ *  Unparseable roman numerals (shouldn't normally happen) are left
+ *  untouched rather than guessed at. Shared by HarmonyView (the canvas)
+ *  and HarmonyDockTools (the section-rekey control living in the dock) —
+ *  one implementation, not two that could drift. */
+export function transposeChords(chords: Chord[], newKeyPc: number, newKeyName: NoteName, newScale: ScaleType): Chord[] {
+  const scaleKey = MODE_TO_SCALE_KEY[newScale as keyof typeof MODE_TO_SCALE_KEY] ?? "major";
+  const intervals = SCALE_INTERVALS[scaleKey];
+  return chords.map((c) => {
+    const step = parseToken(c.romanNumeral);
+    if (!step) return c;
+    const rootPc = ((newKeyPc + intervals[step.deg] + step.acc) % 12 + 12) % 12;
+    return { ...c, root: noteNameFn(rootPc, newKeyName) };
+  });
 }

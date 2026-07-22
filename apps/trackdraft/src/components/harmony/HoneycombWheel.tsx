@@ -33,12 +33,12 @@ interface HoneycombWheelProps {
   chords: Chord[];
   beatsPerChord: number;
   selectedChordId: string | null;
+  /** Selecting a chord (a new one, or an existing placed one) is now the
+   *  only signal needed — its editor lives in the dock, driven by the
+   *  shared `harmonySelectionStore`, not a click-anchored popover this
+   *  component used to have to open directly. */
   onSelectChord: (id: string | null) => void;
   onChangeChords: (chords: Chord[]) => void;
-  /** Open the shared chord editor anchored at the click, when a placed cell is
-   *  clicked. The linear progression row opens the same editor the same way —
-   *  the hex is just a second surface onto one editing panel. */
-  onEditChord?: (id: string, anchor: { x: number; y: number }) => void;
 }
 
 export default function HoneycombWheel({
@@ -49,7 +49,6 @@ export default function HoneycombWheel({
   selectedChordId,
   onSelectChord,
   onChangeChords,
-  onEditChord,
 }: HoneycombWheelProps) {
   const keyPc = pitchClass(keyName);
   const scaleKey = MODE_TO_SCALE_KEY[scale as keyof typeof MODE_TO_SCALE_KEY] ?? "major";
@@ -181,7 +180,7 @@ export default function HoneycombWheel({
     getPreviewPlayer().playChordObject(newChord, 1);
   }, [chords, keyPc, keyName, intervals, diatonicByDegree, beatsPerChord, onChangeChords, onSelectChord]);
 
-  const selectChordAtCell = useCallback((q: number, r: number, anchor: { x: number; y: number }) => {
+  const selectChordAtCell = useCallback((q: number, r: number) => {
     if (!displayWalk.length) return;
     for (let i = displayWalk.length - 1; i >= 0; i--) {
       if (displayWalk[i].q === q && displayWalk[i].r === r) {
@@ -189,16 +188,15 @@ export default function HoneycombWheel({
         if (chord) {
           onSelectChord(chord.id);
           getPreviewPlayer().playChordObject(chord, 1);
-          onEditChord?.(chord.id, anchor);
         }
         return;
       }
     }
-  }, [displayWalk, chords, onSelectChord, onEditChord]);
+  }, [displayWalk, chords, onSelectChord]);
 
-  const handleCellClick = useCallback((cell: RevealedCell, e: React.MouseEvent) => {
+  const handleCellClick = useCallback((cell: RevealedCell) => {
     if (cell.type === "choice") addChordAtDegree(cell.d);
-    else selectChordAtCell(cell.q, cell.r, { x: e.clientX, y: e.clientY });
+    else selectChordAtCell(cell.q, cell.r);
   }, [addChordAtDegree, selectChordAtCell]);
 
   const vbStr = `${svgDims.vb[0]} ${svgDims.vb[1]} ${svgDims.vb[2]} ${svgDims.vb[3]}`;
@@ -273,8 +271,8 @@ export default function HoneycombWheel({
 
           return (
             <g key={`${q},${r}`} transform={`translate(${cx}, ${cy})`} style={{ cursor: "pointer" }}
-              onClick={(e) => handleCellClick(cell, e)}
-              onContextMenu={(e) => { e.preventDefault(); handleCellClick(cell, e); }}
+              onClick={() => handleCellClick(cell)}
+              onContextMenu={(e) => { e.preventDefault(); handleCellClick(cell); }}
             >
               <polygon points={hexPoints(S - 2)}
                 fill={isChoice ? "#12161D" : hue.fill}
