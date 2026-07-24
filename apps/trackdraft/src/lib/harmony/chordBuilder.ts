@@ -250,3 +250,9 @@ export function honeycombTextToChords(
   }
   return chords;
 }
+/** Extract roman-numeral degree labels from a chord progression for
+ *  persistence as a reusable preset. Strips accidental prefixes from
+ *  non-diatonic degrees (e.g. "♭III" → "bIII" for storage). */
+export function chordsToPreset(chords: Chord[]): string[] {
+  return chords.map((c) => c.romanNumeral.replace(/♭/g, "b").replace(/♯/g, "#"));
+}
