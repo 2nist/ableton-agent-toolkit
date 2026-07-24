@@ -147,12 +147,46 @@ export default function ChordEditorPopover({
   return (
     <div className="p-2 text-xs h-full flex flex-col gap-2">
       <div className="flex items-baseline justify-between shrink-0">
-        <p className="font-medium text-sm">
-          {chord.romanNumeral}
-          <span className="text-inkMuted font-normal ml-1.5">
-            {chordDisplayName(rootPc, chord.quality, keyName)}
-          </span>
-        </p>
+        <div className="flex items-center gap-1">
+          <p className="font-medium text-sm">
+            {chord.romanNumeral}
+            <span className="text-inkMuted font-normal ml-1.5">
+              {chordDisplayName(rootPc, chord.quality, keyName)}
+            </span>
+          </p>
+          <button
+            className="w-5 h-5 rounded border border-edge text-[10px] text-inkMuted hover:text-ink hover:border-inkMuted font-mono leading-none flex items-center justify-center"
+            title="Flatten root (♭)"
+            onClick={() => {
+              const newRootPc = ((rootPc - 1) % 12 + 12) % 12;
+              auditionAndApply({
+                ...chord,
+                root: noteName(newRootPc, keyName),
+                romanNumeral: chromaticDegreeLabel(keyPc, newRootPc),
+                isSubstitution: true,
+                substitutedFrom: chord.romanNumeral,
+              });
+            }}
+          >
+            −
+          </button>
+          <button
+            className="w-5 h-5 rounded border border-edge text-[10px] text-inkMuted hover:text-ink hover:border-inkMuted font-mono leading-none flex items-center justify-center"
+            title="Sharpen root (♯)"
+            onClick={() => {
+              const newRootPc = (rootPc + 1) % 12;
+              auditionAndApply({
+                ...chord,
+                root: noteName(newRootPc, keyName),
+                romanNumeral: chromaticDegreeLabel(keyPc, newRootPc),
+                isSubstitution: true,
+                substitutedFrom: chord.romanNumeral,
+              });
+            }}
+          >
+            +
+          </button>
+        </div>
         <div className="flex items-center gap-2">
           <button className="text-[11px] text-inkMuted hover:text-red-400" onClick={onRemove}>
             Remove chord
