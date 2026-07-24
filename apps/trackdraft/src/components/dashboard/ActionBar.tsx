@@ -3,154 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useSongStore } from "../../store/songStore";
 import { readSongFile } from "../../lib/exportImport";
 import { extractVideoId } from "../../lib/youtube";
-import { parseSyncedLyrics } from "../../lib/youtube";
-import type { BlueprintSong, BlueprintSection, LyricsTimelineEntry } from "../../types/blueprint";
-import type { NoteName, ChordQuality } from "@music-theory/core";
-
-// ---------------------------------------------------------------------------
-// Chord name parser (shared with chordmini-bridge.ts)
-// ---------------------------------------------------------------------------
-
-interface ChordMiniAppResult {
-  key: string;
-  scale: string;
-  bpm: number;
-  time_signature?: { numerator: number; denominator: number };
-  chords: Array<{ chord: string; start_time: number; duration: number; confidence?: number }>;
-  segments?: Array<{ label: string; start_time: number; end_time: number }>;
-}
-
-function parseChordName(chordName: string): { root: NoteName; quality: ChordQuality } | null {
-  const match = chordName.match(/^([A-G][#b]?)(maj7|min7|m7b5|maj|min|m|dim|aug|sus2|sus4|7)?$/i);
-  if (!match) return null;
-  const rawRoot = match[1];
-  const root = (rawRoot.charAt(0).toUpperCase() + rawRoot.slice(1).toLowerCase()) as NoteName;
-  const suffix = match[2]?.toLowerCase() ?? "";
-  const qualityMap: Record<string, ChordQuality> = {
-    "": "maj", "maj": "maj", "min": "min", "m": "min", "7": "7",
-    "maj7": "maj7", "min7": "min7", "m7b5": "m7b5",
-    "sus2": "sus2", "sus4": "sus4", "dim": "dim", "aug": "aug",
-  };
-  return { root, quality: qualityMap[suffix] ?? "maj" };
-}
-
-function chordMiniAppToBlueprintSong(
-  json: ChordMiniAppResult,
-  title: string,
-  artist?: string,
-  lrclibData?: { syncedLyrics?: string; plainLyrics?: string } | null,
-): BlueprintSong {
-  const now = new Date().toISOString();
-  const scale = json.scale?.toLowerCase() === "minor" ? "aeolian" : "ionian";
-  const key = (json.key ?? "C") as NoteName;
-  const bpm = json.bpm ?? 120;
-  const timeSigNum = json.time_signature?.numerator ?? 4;
-  const timeSigDen = json.time_signature?.denominator ?? 4;
-  const secondsPerBeat = 60 / bpm;
-
-  // Convert chords from seconds to beats
-  const allChords = (json.chords ?? []).map((c) => {
-    const parsed = parseChordName(c.chord);
-    const durationBeats = Math.max(1, Math.round((c.duration / secondsPerBeat) * 100) / 100);
-    return {
-      id: crypto.randomUUID(),
-      romanNumeral: parsed?.root ?? "C",
-      root: parsed?.root ?? "C",
-      quality: parsed?.quality ?? "maj",
-      beats: Math.round(durationBeats),
-    };
-  });
-
-  // Build sections from segments, or single section from all chords
-  let sections: BlueprintSection[] = [];
-  if (json.segments && json.segments.length > 0) {
-    sections = json.segments.map((seg, i) => {
-      const durationBeats = (seg.end_time - seg.start_time) / secondsPerBeat;
-      const chordsPerSegment = Math.ceil(allChords.length / Math.max(1, json.segments!.length));
-      const segmentChordSlice = allChords.slice(i * chordsPerSegment, (i + 1) * chordsPerSegment);
-      const roleMap: Record<string, BlueprintSection["role"]> = {
-        intro: "intro", verse: "verse", chorus: "chorus", pre_chorus: "verse",
-        bridge: "bridge", outro: "outro", solo: "solo", breakdown: "breakdown",
-      };
-      return {
-        id: crypto.randomUUID(),
-        name: seg.label || `Section ${i + 1}`,
-        role: roleMap[seg.label?.toLowerCase()] ?? "custom",
-        bars: Math.max(4, Math.ceil(durationBeats / timeSigNum)),
-        chords: segmentChordSlice,
-        beatsPerChord: 4,
-        velocity: "mf",
-        timeSignatureNumerator: timeSigNum,
-        timeSignatureDenPower: Math.log2(timeSigDen),
-      };
-    });
-  } else if (allChords.length > 0) {
-    const totalBeats = allChords.reduce((sum, c) => sum + c.beats, 0);
-    sections = [{
-      id: crypto.randomUUID(),
-      name: "Full Song",
-      role: "verse",
-      bars: Math.max(16, Math.ceil(totalBeats / timeSigNum)),
-      chords: allChords,
-      beatsPerChord: 4,
-      velocity: "mf",
-      timeSignatureNumerator: timeSigNum,
-      timeSignatureDenPower: Math.log2(timeSigDen),
-    }];
-  }
-
-  // Attach lyrics if available
-  if (lrclibData?.syncedLyrics && sections.length > 0) {
-    const timeline = parseSyncedLyrics(lrclibData.syncedLyrics, bpm);
-    if (timeline.length > 0) {
-      const fullText = lrclibData.plainLyrics || timeline.map((t) => t.text).join("\n");
-      const lyricsTimeline: LyricsTimelineEntry[] = timeline.map((t) => ({ text: t.text, startBeat: t.startBeat }));
-
-      if (sections.length === 1) {
-        sections[0].lyrics = fullText;
-        sections[0].lyricsTimeline = lyricsTimeline;
-      } else {
-        // Distribute lyrics across sections by beat range
-        let cumulativeBeats = 0;
-        for (const section of sections) {
-          const sectionBeats = section.bars * timeSigNum;
-          const endBeat = cumulativeBeats + sectionBeats;
-          const sectionLyrics = lyricsTimeline.filter((l) => l.startBeat >= cumulativeBeats && l.startBeat < endBeat);
-          if (sectionLyrics.length > 0) {
-            section.lyrics = sectionLyrics.map((l) => l.text).join("\n");
-            section.lyricsTimeline = sectionLyrics;
-          }
-          cumulativeBeats = endBeat;
-        }
-      }
-    }
-  }
-
-  return {
-    id: crypto.randomUUID(),
-    title,
-    artist,
-    key,
-    scale: scale as BlueprintSong["scale"],
-    bpm,
-    timeSignatureNumerator: timeSigNum,
-    timeSignatureDenominator: timeSigDen,
-    sections,
-    arrangement: sections.map((s) => ({ sectionId: s.id, repeats: 1 })),
-    concept: `YouTube full import: ${json.chords?.length ?? 0} chords, ${json.segments?.length ?? 0} segments, ${lrclibData?.syncedLyrics ? "synced lyrics" : "no lyrics"}`,
-    provenance: {
-      source: "audio-extract",
-      extractedAt: now,
-      warnings: [
-        `Chord detection by ChordMiniApp — review and adjust.`,
-        `Key: ${key} ${json.scale ?? "major"}, BPM: ${bpm}`,
-        ...(lrclibData?.syncedLyrics ? ["Synced lyrics from LRCLIB — review section boundaries."] : []),
-      ],
-    },
-    createdAt: now,
-    updatedAt: now,
-  };
-}
+import { chordMiniAppToBlueprintSong } from "../../lib/youtubeFullImport";
+import type { ChordMiniAppResult, LrclibData } from "../../lib/youtubeFullImport";
 
 // ---------------------------------------------------------------------------
 // Component
@@ -261,7 +115,7 @@ export default function ActionBar() {
         throw new Error("Import completed but returned no data");
       }
 
-      const lrclib = resultData.lrclibData as { syncedLyrics?: string; plainLyrics?: string } | undefined;
+      const lrclib = resultData.lrclibData as LrclibData | undefined;
       const song = chordMiniAppToBlueprintSong(
         resultData.chordMiniData,
         resultData.title,
