@@ -2,12 +2,13 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSongStore } from "../../store/songStore";
 import { readSongFile } from "../../lib/exportImport";
-import { extractVideoId, fetchYoutubeMetadata, searchLrclib, buildYoutubeBlueprintSong } from "../../lib/youtube";
-import type { BlueprintSong, BlueprintSection } from "../../types/blueprint";
+import { extractVideoId } from "../../lib/youtube";
+import { parseSyncedLyrics } from "../../lib/youtube";
+import type { BlueprintSong, BlueprintSection, LyricsTimelineEntry } from "../../types/blueprint";
 import type { NoteName, ChordQuality } from "@music-theory/core";
 
 // ---------------------------------------------------------------------------
-// ChordMiniApp conversion (inline — same logic as scripts/chordmini-bridge.ts)
+// Chord name parser (shared with chordmini-bridge.ts)
 // ---------------------------------------------------------------------------
 
 interface ChordMiniAppResult {
@@ -33,7 +34,12 @@ function parseChordName(chordName: string): { root: NoteName; quality: ChordQual
   return { root, quality: qualityMap[suffix] ?? "maj" };
 }
 
-function chordMiniAppToBlueprintSong(json: ChordMiniAppResult, title: string): BlueprintSong {
+function chordMiniAppToBlueprintSong(
+  json: ChordMiniAppResult,
+  title: string,
+  artist?: string,
+  lrclibData?: { syncedLyrics?: string; plainLyrics?: string } | null,
+): BlueprintSong {
   const now = new Date().toISOString();
   const scale = json.scale?.toLowerCase() === "minor" ? "aeolian" : "ionian";
   const key = (json.key ?? "C") as NoteName;
@@ -42,6 +48,7 @@ function chordMiniAppToBlueprintSong(json: ChordMiniAppResult, title: string): B
   const timeSigDen = json.time_signature?.denominator ?? 4;
   const secondsPerBeat = 60 / bpm;
 
+  // Convert chords from seconds to beats
   const allChords = (json.chords ?? []).map((c) => {
     const parsed = parseChordName(c.chord);
     const durationBeats = Math.max(1, Math.round((c.duration / secondsPerBeat) * 100) / 100);
@@ -54,6 +61,7 @@ function chordMiniAppToBlueprintSong(json: ChordMiniAppResult, title: string): B
     };
   });
 
+  // Build sections from segments, or single section from all chords
   let sections: BlueprintSection[] = [];
   if (json.segments && json.segments.length > 0) {
     sections = json.segments.map((seg, i) => {
@@ -91,9 +99,37 @@ function chordMiniAppToBlueprintSong(json: ChordMiniAppResult, title: string): B
     }];
   }
 
+  // Attach lyrics if available
+  if (lrclibData?.syncedLyrics && sections.length > 0) {
+    const timeline = parseSyncedLyrics(lrclibData.syncedLyrics, bpm);
+    if (timeline.length > 0) {
+      const fullText = lrclibData.plainLyrics || timeline.map((t) => t.text).join("\n");
+      const lyricsTimeline: LyricsTimelineEntry[] = timeline.map((t) => ({ text: t.text, startBeat: t.startBeat }));
+
+      if (sections.length === 1) {
+        sections[0].lyrics = fullText;
+        sections[0].lyricsTimeline = lyricsTimeline;
+      } else {
+        // Distribute lyrics across sections by beat range
+        let cumulativeBeats = 0;
+        for (const section of sections) {
+          const sectionBeats = section.bars * timeSigNum;
+          const endBeat = cumulativeBeats + sectionBeats;
+          const sectionLyrics = lyricsTimeline.filter((l) => l.startBeat >= cumulativeBeats && l.startBeat < endBeat);
+          if (sectionLyrics.length > 0) {
+            section.lyrics = sectionLyrics.map((l) => l.text).join("\n");
+            section.lyricsTimeline = sectionLyrics;
+          }
+          cumulativeBeats = endBeat;
+        }
+      }
+    }
+  }
+
   return {
     id: crypto.randomUUID(),
     title,
+    artist,
     key,
     scale: scale as BlueprintSong["scale"],
     bpm,
@@ -101,16 +137,26 @@ function chordMiniAppToBlueprintSong(json: ChordMiniAppResult, title: string): B
     timeSignatureDenominator: timeSigDen,
     sections,
     arrangement: sections.map((s) => ({ sectionId: s.id, repeats: 1 })),
-    concept: `ChordMiniApp analysis: ${json.chords?.length ?? 0} chords, ${json.segments?.length ?? 0} segments`,
+    concept: `YouTube full import: ${json.chords?.length ?? 0} chords, ${json.segments?.length ?? 0} segments, ${lrclibData?.syncedLyrics ? "synced lyrics" : "no lyrics"}`,
     provenance: {
       source: "audio-extract",
       extractedAt: now,
-      warnings: [`Chord detection by ChordMiniApp — review and adjust. Key: ${key} ${json.scale ?? "major"}, BPM: ${bpm}`],
+      warnings: [
+        `Chord detection by ChordMiniApp — review and adjust.`,
+        `Key: ${key} ${json.scale ?? "major"}, BPM: ${bpm}`,
+        ...(lrclibData?.syncedLyrics ? ["Synced lyrics from LRCLIB — review section boundaries."] : []),
+      ],
     },
     createdAt: now,
     updatedAt: now,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+type ProgressStep = { step: string; message: string } | null;
 
 export default function ActionBar() {
   const createNewSong = useSongStore((s) => s.createNewSong);
@@ -124,6 +170,7 @@ export default function ActionBar() {
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeLoading, setYoutubeLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [progressStep, setProgressStep] = useState<ProgressStep>(null);
 
   async function handleImportFile(file: File) {
     try {
@@ -136,7 +183,8 @@ export default function ActionBar() {
     }
   }
 
-  async function handleYoutubeImport() {
+  /** One-click YouTube full import: download → ChordMiniApp → LRCLIB → assemble */
+  async function handleYoutubeFullImport() {
     const input = youtubeUrl.trim();
     if (!input) return;
 
@@ -148,21 +196,86 @@ export default function ActionBar() {
 
     setYoutubeLoading(true);
     setImportError(null);
+    setProgressStep({ step: "start", message: "Starting…" });
 
     try {
-      const metadata = await fetchYoutubeMetadata(videoId);
-      if (!metadata) {
-        setImportError("Could not fetch YouTube video metadata. Video may be unavailable.");
-        setYoutubeLoading(false);
-        return;
+      const res = await fetch("/__youtube-full-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `Server returned ${res.status}`);
       }
-      const lrclib = await searchLrclib(metadata.title, metadata.artist);
-      const song = buildYoutubeBlueprintSong(metadata, lrclib);
+
+      // Read SSE stream for progress updates
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let resultData: {
+        title?: string;
+        artist?: string;
+        chordMiniData?: ChordMiniAppResult;
+        lrclibData?: Record<string, unknown>;
+      } = {};
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        let currentEvent = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (currentEvent === "progress") {
+                setProgressStep({ step: data.step as string, message: data.message as string });
+                if (data.step === "analyze") {
+                  resultData.chordMiniData = data as unknown as ChordMiniAppResult;
+                }
+              } else if (currentEvent === "error") {
+                throw new Error(data.error as string);
+              } else if (currentEvent === "result") {
+                resultData = { ...resultData, ...data };
+              }
+            } catch (parseErr) {
+              if (parseErr instanceof Error && parseErr.message !== "Unexpected end of JSON input") {
+                throw parseErr;
+              }
+            }
+          }
+        }
+      }
+
+      if (!resultData.title || !resultData.chordMiniData) {
+        throw new Error("Import completed but returned no data");
+      }
+
+      const lrclib = resultData.lrclibData as { syncedLyrics?: string; plainLyrics?: string } | undefined;
+      const song = chordMiniAppToBlueprintSong(
+        resultData.chordMiniData,
+        resultData.title,
+        resultData.artist,
+        lrclib,
+      );
+
       importSong(song);
       setYoutubeUrl("");
+      setProgressStep(null);
       navigate(`/song/${song.id}`);
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : "Failed to import from YouTube.");
+      setImportError(err instanceof Error ? err.message : "YouTube import failed.");
+      setProgressStep(null);
     } finally {
       setYoutubeLoading(false);
     }
@@ -243,28 +356,42 @@ export default function ActionBar() {
         />
       </div>
 
-      {/* Row 2: YouTube import */}
+      {/* Row 2: YouTube one-click full import */}
       <div className="flex items-center gap-2">
         <input
           className="flex-1 bg-panel border border-edge rounded px-2 py-1 text-xs"
           placeholder="YouTube URL or video ID…"
           value={youtubeUrl}
           onChange={(e) => setYoutubeUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleYoutubeImport()}
+          onKeyDown={(e) => e.key === "Enter" && handleYoutubeFullImport()}
         />
         <button
-          className="border border-accent/50 text-accent rounded px-3 py-1 text-xs hover:bg-accent/10 disabled:opacity-40"
-          onClick={handleYoutubeImport}
+          className="border border-accent text-accent rounded px-3 py-1 text-xs hover:bg-accent/10 disabled:opacity-40 font-medium"
+          onClick={handleYoutubeFullImport}
           disabled={youtubeLoading || !youtubeUrl.trim()}
         >
-          {youtubeLoading ? "…" : "▶ YT Import"}
+          {youtubeLoading ? "…" : "▶ One-Click Import"}
         </button>
       </div>
 
-      {/* Row 3: ChordMiniApp audio analysis */}
+      {/* Progress indicator */}
+      {progressStep && (
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-[10px] text-emerald-400 font-mono">
+            {progressStep.step === "start" && "⬇ Starting…"}
+            {progressStep.step === "metadata" && "🔍 " + progressStep.message}
+            {progressStep.step === "download" && "⬇ " + progressStep.message}
+            {progressStep.step === "analyze" && "🎵 " + progressStep.message}
+            {progressStep.step === "lyrics" && "📝 " + progressStep.message}
+            {progressStep.step === "assemble" && "📦 " + progressStep.message}
+          </span>
+        </div>
+      )}
+
+      {/* Row 3: ChordMiniApp audio analysis (standalone file picker) */}
       <div className="flex items-center gap-2">
         <span className="text-[10px] text-inkMuted/60 flex-1">
-          {analyzing ? "Analyzing audio with ChordMiniApp…" : "Analyze audio (chords + key + BPM + structure)"}
+          {analyzing ? "Analyzing audio with ChordMiniApp…" : "Analyze audio file (chords + key + BPM + structure)"}
         </span>
         <button
           className="border border-purple-400/50 text-purple-300 rounded px-3 py-1 text-xs hover:bg-purple-400/10 disabled:opacity-40"
