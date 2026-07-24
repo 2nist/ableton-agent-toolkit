@@ -69,6 +69,49 @@ function roundToQuarterBeat(beats: number): number {
   return Math.round(beats * 4) / 4;
 }
 
+/**
+ * Conservative whole-beat rounding for chord durations. Every chord is
+ * rounded to the nearest whole beat (minimum 1 beat). Bars are computed
+ * from the rounded total: `Math.ceil(total / beatsPerBar)`.
+ *
+ * The section may end with a small gap (0-3 beats) between the last chord
+ * and the bar boundary — this is a natural rest/hold, not a timing error.
+ *
+ * Max change per chord: ±0.5 beats. We resolve fractions, we do not
+ * rewrite the song — no chord grows by more than 1 beat, no bar count
+ * changes by more than the chords genuinely require.
+ *
+ * Example ("Come Together" verse 1, 4/4, 46 raw beats):
+ *   Raw       [15.75, 16.25, 8, 6] = 46
+ *   Rounded   [16, 16, 8, 6]       = 46
+ *   Bars      ceil(46/4) = 12      → 48 beats, 2-beat gap (rest)
+ *   Changes:  ch1 +0.25, ch2 -0.25
+ *
+ * Example ("Eleanor Rigby" intro, 4/4, 24 raw beats):
+ *   Raw       [8, 8, 8] = 24
+ *   Rounded   [8, 8, 8] = 24  (already whole)
+ *   Bars      ceil(24/4) = 6       → 24 beats, no gap
+ *   (The source annotation had 8 bars; the chords actually fill 6.)
+ */
+export function snapProgressionToGrid(
+  chords: Chord[],
+  _totalBeats: number,
+  beatsPerBar: number,
+): { chords: Chord[]; bars: number } {
+  if (chords.length === 0) return { chords, bars: 0 };
+
+  // Round every chord to nearest whole beat (minimum 1).
+  const rounded = chords.map((c) => ({
+    ...c,
+    beats: Math.max(1, Math.round(c.beats)),
+  }));
+
+  const total = rounded.reduce((s, c) => s + c.beats, 0);
+  const bars = Math.max(1, Math.ceil(total / beatsPerBar));
+
+  return { chords: rounded, bars };
+}
+
 export interface ToBlueprintSongOptions {
   id: string;
   raw: RawCatalogSong;
@@ -156,7 +199,7 @@ export function catalogSongToBlueprintSong({ id, raw, lyricLines, hasSyncedLyric
     const binnedChords = [...deferredChordsFromPrev, ...claimedChords];
     deferredChordsFromPrev = deferredChords.length ? deferredChords : [];
 
-    const chords: Chord[] = binnedChords.map((c, chordIndex) => {
+    const rawChords: Chord[] = binnedChords.map((c, chordIndex) => {
       const chordBeats = roundToQuarterBeat((c.endSec - c.startSec) * beatsPerSec);
       const quality = c.quality as ChordQuality;
       return {
@@ -167,6 +210,15 @@ export function catalogSongToBlueprintSong({ id, raw, lyricLines, hasSyncedLyric
         beats: Math.max(0.25, chordBeats),
       };
     });
+
+    // Snap chord durations to whole-beat values and recompute bars so
+    // they follow the progression, not the other way around.
+    // Raw section timing (from audio onset detection) is coarse — bars
+    // derived from chords are more musically reliable.
+    const rawTotalBeats = rawChords.reduce((s, c) => s + c.beats, 0);
+    const snapped = snapProgressionToGrid(rawChords, rawTotalBeats, DEFAULT_TIME_SIG_NUMERATOR);
+    const chords: Chord[] = snapped.chords;
+    const snappedBars = snapped.bars;
 
     const mostCommonBeats = chords.length
       ? [...chords]
@@ -197,13 +249,19 @@ export function catalogSongToBlueprintSong({ id, raw, lyricLines, hasSyncedLyric
       ? linesInSection.map((line) => ({ text: line.text, startBeat: line.startSec * beatsPerSec }))
       : undefined;
 
+    // Use snapped bars (derived from chord durations) instead of
+    // raw section timing (derived from audio onset detection).
+    // Bars follow chords — the progression is the musical truth,
+    // section boundary timestamps are just coarse estimates.
+    const finalBars = rawChords.length > 0 ? snappedBars : bars;
+
     // ---- return section object ---------------------------------------
 
     return {
       id: `${id}-section-${sectionIndex}`,
       name: rawSection.name ?? `Section ${sectionIndex + 1}`,
       role: guessSectionRole(rawSection.name ?? ""),
-      bars,
+      bars: finalBars,
       chords,
       beatsPerChord: mostCommonBeats,
       drumPattern: "standard",

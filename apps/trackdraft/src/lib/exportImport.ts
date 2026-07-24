@@ -94,3 +94,33 @@ export async function readSongFile(file: File): Promise<BlueprintSong> {
   const raw = JSON.parse(text);
   return parseImportedSong(raw);
 }
+
+const ABLETON_BRIDGE_URL = "http://127.0.0.1:5200";
+
+/** Post the full song blueprint to the osc-bridge's REST API so it lands in
+ *  the extension's storage directory — no manual sync-script step needed.
+ *  If the bridge isn't running (connection refused), the caller shows a
+ *  notification; this is a deliberate fire-and-forget for the common case
+ *  but returns the response so the UI can give feedback. */
+export async function pushSongToAbleton(song: BlueprintSong): Promise<{ status: string; title: string }> {
+  const res = await fetch(`${ABLETON_BRIDGE_URL}/api/push-song`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(song),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `Bridge returned ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Sends a command to the bridge's command queue — used for actions that
+ *  don't carry a full blueprint payload (setTempo, etc.). */
+export async function sendAbletonCommand(action: string, payload: Record<string, unknown> = {}): Promise<void> {
+  await fetch(`${ABLETON_BRIDGE_URL}/api/command`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...payload }),
+  });
+}

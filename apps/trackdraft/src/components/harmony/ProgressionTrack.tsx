@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -14,7 +14,9 @@ import type { NoteName, ScaleType } from "@music-theory/core";
 import type { BlueprintSection, Chord, ChordPerformanceEffect } from "../../types/blueprint";
 import { beatsPerBar, describeProgressionFit } from "../../types/blueprint";
 import { chordDisplayName, chordFunction, functionColorHex } from "../../lib/harmony/chordBuilder";
-import { getPreviewPlayer } from "../../lib/harmony/audioPreview";
+import { getPreviewPlayer, buildSchedule } from "../../lib/harmony/audioPreview";
+import { playDrumHits, inferPatternForSection } from "../../lib/playback/drumPreview";
+import { getSharedAudioContext } from "../../lib/playback/audioContext";
 
 const CELL_W = 78;
 
@@ -172,9 +174,19 @@ export default function ProgressionTrack({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  const drumIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const drumLoopCountRef = useRef(0);
   const fit = describeProgressionFit(section);
 
-  useEffect(() => () => getPreviewPlayer().stop(), [section.id]);
+  useEffect(() => {
+    return () => {
+      getPreviewPlayer().stop();
+      if (drumIntervalRef.current !== null) {
+        clearInterval(drumIntervalRef.current);
+        drumIntervalRef.current = null;
+      }
+    };
+  }, [section.id]);
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -191,10 +203,55 @@ export default function ProgressionTrack({
       player.stop();
       setIsPlaying(false);
       setPlayingIndex(null);
+      if (drumIntervalRef.current !== null) {
+        clearInterval(drumIntervalRef.current);
+        drumIntervalRef.current = null;
+      }
       return;
     }
     setIsPlaying(true);
+
+    // Chords: use the existing playProgression (its setTimeout jitter is
+    // only visual for the highlight — chord audio is scheduled via
+    // playChordObject which hands it to WebAudio at a precise time).
     player.playProgression(section.chords, bpm, { loop: true, onChordStart: setPlayingIndex });
+
+    // Drums: one loop at a time via setInterval — same pattern as
+    // playProgression's internal scheduler. Each call triggers drums
+    // relative to its own "now" (no startAt), avoiding the async pileup
+    // and interleaving of 150+ simultaneous playDrumHits calls.
+    const schedule = buildSchedule(section.chords, bpm);
+    const loopDurSec = schedule.length > 0
+      ? schedule[schedule.length - 1].startSec + schedule[schedule.length - 1].durSec
+      : 0;
+
+    if (loopDurSec > 0) {
+      const secPerBeat = 60 / bpm;
+      const drumPattern = section.drumPattern ?? inferPatternForSection(section);
+      const progressionTotalBeats = schedule.reduce((sum, c) => sum + section.chords[c.index].beats, 0);
+      const ctx = getSharedAudioContext();
+      const startTime = ctx.currentTime;
+      drumLoopCountRef.current = 0;
+
+      // Fire the first loop immediately (setInterval doesn't fire its
+      // callback until after the first interval, but loop 0 needs to
+      // start at startTime which is now).
+      void playDrumHits(drumPattern, section.drumVariantIndex, section, secPerBeat,
+        startTime, progressionTotalBeats);
+      drumLoopCountRef.current = 1;
+
+      // Subsequent loops fire a bit ahead — setInterval drift is harmless
+      // because drum hits are dispatched at precise absolute startAt
+      // times, so boundaries are gap-free.
+      const SCHEDULE_AHEAD_MS = 50;
+      const intervalMs = Math.max(10, loopDurSec * 1000 - SCHEDULE_AHEAD_MS);
+      drumIntervalRef.current = setInterval(() => {
+        const i = drumLoopCountRef.current;
+        void playDrumHits(drumPattern, section.drumVariantIndex, section, secPerBeat,
+          startTime + i * loopDurSec, progressionTotalBeats);
+        drumLoopCountRef.current++;
+      }, intervalMs);
+    }
   }
 
   const empty = section.chords.length === 0;

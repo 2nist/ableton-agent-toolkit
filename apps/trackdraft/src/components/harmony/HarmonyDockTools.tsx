@@ -8,6 +8,7 @@ import { transposeChords } from "../../lib/harmony/honeycombWalk";
 import FloatingToolbar from "./FloatingToolbar";
 import ChordEditorPopover from "./ChordEditorPopover";
 import InstrumentPanel from "./InstrumentPanel";
+import DrumKitPanel from "../structure/DrumKitPanel";
 
 /** The Harmony tab's dock content — registered once by HarmonyView and
  *  fully self-sufficient from there (reads `useSongStore` +
@@ -59,8 +60,9 @@ export default function HarmonyDockTools() {
       {/* Playback-wide, not song data — stays visible across both branches
          below rather than living inside either one, so switching voices
          mid-edit doesn't require deselecting the chord you're working on. */}
-      <div className="p-3 border-b border-edge">
+      <div className="p-3 border-b border-edge space-y-3">
         <InstrumentPanel />
+        <DrumKitPanel />
       </div>
       {editorChord ? (
         <ChordEditorPopover

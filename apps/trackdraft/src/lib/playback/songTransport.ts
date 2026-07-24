@@ -171,13 +171,24 @@ class SongTransport {
 
     const player = getPreviewPlayer();
     for (const span of this.spans) {
-      let cursorBeat = 0;
-      for (const chord of span.section.chords) {
-        const chordBeats = chord.beats;
-        scheduleAt(span.startBeat + cursorBeat, (preciseTime) => {
-          player.playChordObject(chord, chordBeats * secPerBeat, preciseTime);
-        });
-        cursorBeat += chord.beats;
+      // Loop the progression to fill the section (matching export's loopChordsToFill).
+      // Two-pass: build occurrences first so closure-over-loop-variable is impossible.
+      if (span.section.chords.length > 0) {
+        const chordHits: { chord: typeof span.section.chords[number]; startBeat: number; chordBeats: number }[] = [];
+        let cursorBeat = 0;
+        while (cursorBeat < span.durationBeats) {
+          for (const chord of span.section.chords) {
+            if (cursorBeat >= span.durationBeats) break;
+            const chordBeats = Math.min(chord.beats, span.durationBeats - cursorBeat);
+            chordHits.push({ chord, startBeat: span.startBeat + cursorBeat, chordBeats });
+            cursorBeat += chordBeats;
+          }
+        }
+        for (const hit of chordHits) {
+          scheduleAt(hit.startBeat, (preciseTime) => {
+            player.playChordObject(hit.chord, hit.chordBeats * secPerBeat, preciseTime);
+          });
+        }
       }
 
       // Drums for the section, starting when it does — same

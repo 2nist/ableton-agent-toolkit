@@ -55,6 +55,11 @@ export function resolveDrumHits(
   variantIndex: number | undefined,
   section: BlueprintSection,
   secPerBeat: number,
+  /** Override the total beat count to tile to — defaults to the section's
+   *  full bar count (`sectionDurationBeats`). Pass the chord progression's
+   *  beat count when looping in the harmony view so drums match exactly
+   *  what you're hearing. */
+  totalBeatsOverride?: number,
 ): ScheduledDrumHit[] | null {
   const preset = PRESET_DATA[pattern];
   if (!preset || preset.variants.length === 0) return null;
@@ -77,7 +82,7 @@ export function resolveDrumHits(
     velocity: Math.max(1, Math.min(127, Math.round(velocity * scale))),
   }));
 
-  const totalBeats = sectionDurationBeats(section);
+  const totalBeats = totalBeatsOverride ?? sectionDurationBeats(section);
   const tiled = tileGrooveVaried(scaled, variant.lengthBeats, totalBeats, { seed: section.id });
 
   return tiled.map((note) => ({
@@ -311,8 +316,9 @@ export async function playDrumHits(
   section: BlueprintSection,
   secPerBeat: number,
   startAt?: number,
+  totalBeatsOverride?: number,
 ): Promise<void> {
-  const hits = resolveDrumHits(pattern, variantIndex, section, secPerBeat);
+  const hits = resolveDrumHits(pattern, variantIndex, section, secPerBeat, totalBeatsOverride);
   if (!hits || hits.length === 0) return;
 
   const drums = await getDrumMachine();
