@@ -1,11 +1,12 @@
 /**
  * Manual MIDI binary parser — no external dependencies.
  * Extracts BPM, key signature, time signature, and notes from a Standard MIDI File.
- * Produces a partial BlueprintSong skeleton.
+ * Produces a BlueprintSong skeleton with chord detection for every detected section.
  */
 
 import type { BlueprintSong, BlueprintSection } from "../../types/blueprint";
 import type { NoteName } from "@music-theory/core";
+import { detectMidiChords, parserNotesToTimed } from "./midiChordDetect";
 
 interface MidiEvent {
   tick: number;
@@ -298,7 +299,7 @@ export function midiToBlueprintSong(midi: ParsedMidi, title: string): BlueprintS
 
   // Simple section detection: divide by note density changes
   if (midi.notes.length > 0 && midi.ticksPerQuarter > 0) {
-    // Group notes into bars (assuming 4/4)
+    // Group notes into bars
     const beatsPerBar = midi.timeSigNum;
     const ticksPerBar = midi.ticksPerQuarter * beatsPerBar;
     const maxTick = midi.notes.reduce((max, n) => Math.max(max, n.endTick), 0);
@@ -316,9 +317,13 @@ export function midiToBlueprintSong(midi: ParsedMidi, title: string): BlueprintS
     let currentSection: BlueprintSection | null = null;
     const MIN_BARS_PER_SECTION = 4;
 
+    // Track the start bar of each detected section so we can slice notes for chord detection
+    const sectionBarRanges: Array<{ startBar: number; endBar: number }> = [];
+
     for (let b = 0; b < bars.length; b++) {
       if (bars[b].length === 0 && currentSection && currentSection.bars >= MIN_BARS_PER_SECTION) {
         // End section on empty bar
+        sectionBarRanges[sectionIdx] = { startBar: b - currentSection.bars, endBar: b };
         song.sections.push({ ...currentSection, name: `Section ${String.fromCharCode(65 + sectionIdx)}` });
         currentSection = null;
         sectionIdx++;
@@ -343,13 +348,38 @@ export function midiToBlueprintSong(midi: ParsedMidi, title: string): BlueprintS
       }
 
       if (currentSection.bars >= MIN_BARS_PER_SECTION * 3) {
+        sectionBarRanges[sectionIdx] = { startBar: b - currentSection.bars + 1, endBar: b + 1 };
         song.sections.push({ ...currentSection, name: `Section ${String.fromCharCode(65 + sectionIdx)}` });
         currentSection = null;
         sectionIdx++;
       }
     }
     if (currentSection) {
+      sectionBarRanges[sectionIdx] = { startBar: numBars - currentSection.bars, endBar: numBars };
       song.sections.push({ ...currentSection, name: `Section ${String.fromCharCode(65 + sectionIdx)}` });
+    }
+
+    // Now detect chords for each section by slicing the notes that fall
+    // within that section's bar range and running the chord detector.
+    for (let i = 0; i < song.sections.length && i < sectionBarRanges.length; i++) {
+      const { startBar, endBar } = sectionBarRanges[i];
+      const sectionStartTick = startBar * ticksPerBar;
+      const sectionEndTick = endBar * ticksPerBar;
+      const sectionDurationBeats = (sectionEndTick - sectionStartTick) / midi.ticksPerQuarter;
+
+      // Collect notes that fall within this section's tick range
+      const sectionNotes: ParsedMidi["notes"] = [];
+      for (const n of midi.notes) {
+        if (n.endTick > sectionStartTick && n.startTick < sectionEndTick) {
+          sectionNotes.push(n);
+        }
+      }
+
+      if (sectionNotes.length > 0 && sectionDurationBeats > 0) {
+        const timedNotes = parserNotesToTimed(sectionNotes, midi.ticksPerQuarter, sectionStartTick);
+        const chords = detectMidiChords(timedNotes, 0, sectionDurationBeats, midi.timeSigNum, midi.key);
+        song.sections[i] = { ...song.sections[i], chords };
+      }
     }
 
     // Add arrangement entries

@@ -40,6 +40,7 @@ export default function Dashboard() {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [sortKey, setSortKey] = useState<SortKey>("updatedAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [importingBulk, setImportingBulk] = useState(false);
 
   // Auto-load built-in dirs if none configured
   useEffect(() => {
@@ -55,16 +56,10 @@ export default function Dashboard() {
         label: "Lalo Chezia",
         isDefault: false,
       });
-      store.addDirectory({
-        path: "/Users/Matthew/mcgill_jcrd_salami_Billboard",
-        label: "McGill JCRD (742)",
-        isDefault: false,
-      });
-      store.addDirectory({
-        path: "/Users/Matthew/Rock Corpus-TDC",
-        label: "Rock Corpus TDC (196)",
-        isDefault: false,
-      });
+      // Add your own local directories via the DirSetupModal (gear icon in sidebar)
+      // or by adding entries below following the same pattern as the Beatles/Lalo dirs.
+      // Example:
+      // store.addDirectory({ path: "/Users/you/corpus", label: "My Corpus", isDefault: false });
     }
   }, [dirs.length]);
 
@@ -139,6 +134,32 @@ export default function Dashboard() {
     return counts;
   }, [filteredSongs]);
 
+  // Bulk import all parseable files in the current directory listing
+  async function handleBulkImport() {
+    if (!selectedDir) return;
+    setImportingBulk(true);
+    const importable = filteredDirEntries.filter(
+      (e) => e.type === "blueprint" || e.type === "jcrd" || e.type === "midi" || e.type === "audio" || e.type === "lyrics",
+    );
+    let imported = 0;
+    let skipped = 0;
+    for (const entry of importable) {
+      try {
+        const result = await parseFile(selectedDir, entry);
+        if (result.ok) {
+          importSong(result.song);
+          imported++;
+        } else {
+          skipped++;
+        }
+      } catch {
+        skipped++;
+      }
+    }
+    setImportingBulk(false);
+    alert(`Imported ${imported} song(s). ${skipped > 0 ? `Skipped ${skipped} file(s) with errors.` : ""}`);
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
@@ -175,6 +196,13 @@ export default function Dashboard() {
                   <span>
                     {isLoadingDir ? "Loading…" : `${filteredDirEntries.length} files`}
                   </span>
+                  <button
+                    className="text-xs bg-panelAlt border border-edge text-inkMuted hover:text-ink px-2 py-0.5 rounded disabled:opacity-40"
+                    onClick={handleBulkImport}
+                    disabled={importingBulk || isLoadingDir}
+                  >
+                    {importingBulk ? "Importing…" : "Import All"}
+                  </button>
                   <Link to="/ui-kit-sandbox" className="hover:text-ink">
                     UI Kit
                   </Link>
@@ -224,18 +252,29 @@ export default function Dashboard() {
                     {filteredDirEntries.map((entry) => {
                       const typeBadge = TYPE_BADGES[entry.type ?? "unknown"] ?? TYPE_BADGES.unknown;
                       const hasParser = entry.type === "blueprint" || entry.type === "jcrd" || entry.type === "midi" || entry.type === "audio" || entry.type === "lyrics";
+                      const isDir = entry.type === "directory";
                       return (
                         <tr
                           key={entry.file}
                           className={`${
-                            hasParser ? "hover:bg-panelAlt/50 cursor-pointer" : "opacity-50"
+                            hasParser || isDir ? "hover:bg-panelAlt/50 cursor-pointer" : "opacity-50"
                           }`}
                           onClick={() => {
-                            if (hasParser) importDirFile(selectedDir!, entry);
+                            if (hasParser) {
+                              importDirFile(selectedDir!, entry);
+                            } else if (isDir && selectedDir) {
+                              // Navigate into subdirectory
+                              const subPath = selectedDir.endsWith("/")
+                                ? `${selectedDir}${entry.file}`
+                                : `${selectedDir}/${entry.file}`;
+                              setSelectedDir(subPath);
+                            }
                           }}
                         >
                           <td className="px-3 py-1.5">
-                            <span className="text-xs font-medium">{entry.title}</span>
+                            <span className="text-xs font-medium">
+                              {isDir ? "📁 " : ""}{entry.title}
+                            </span>
                             <span className="text-[10px] text-inkMuted ml-2">{entry.file}</span>
                           </td>
                           <td className="px-3 py-1.5">
