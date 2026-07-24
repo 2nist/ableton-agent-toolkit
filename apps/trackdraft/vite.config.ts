@@ -231,8 +231,72 @@ function youtubePlugin(): Plugin {
   };
 }
 
+/**
+ * ChordMiniApp proxy — accepts an audio file upload from the browser,
+ * proxies it to the Python ChordMiniApp server, and returns a BlueprintSong
+ * JSON ready for import. Only runs under `vite dev`.
+ */
+function chordMiniAppPlugin(): Plugin {
+  return {
+    name: "chordmini-proxy-dev-endpoint",
+    configureServer(server) {
+      server.middlewares.use("/__chordmini-analyze", async (req, res) => {
+        if (req.method !== "POST") {
+          res.statusCode = 405;
+          res.end("Method not allowed");
+          return;
+        }
+
+        // Read the raw request body (multipart or binary audio)
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.from(chunk));
+        }
+        const bodyBuffer = Buffer.concat(chunks);
+
+        const CHORDMINI_URL = process.env.CHORDMINI_URL ?? "http://localhost:5000/analyze";
+
+        try {
+          // Proxy to ChordMiniApp Python server
+          const proxyRes = await fetch(CHORDMINI_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/octet-stream" },
+            body: bodyBuffer,
+          });
+
+          if (!proxyRes.ok) {
+            res.statusCode = 502;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: `ChordMiniApp returned ${proxyRes.status}` }));
+            return;
+          }
+
+          const json = await proxyRes.json();
+          // Return the raw analysis JSON — the browser will convert it to BlueprintSong
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(json));
+        } catch {
+          res.statusCode = 503;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({
+            error: "Could not reach ChordMiniApp. Make sure the Python server is running at " +
+              (process.env.CHORDMINI_URL ?? "localhost:5000"),
+          }));
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [vitePluginSaveSandboxLayout(), react(), localDirPlugin(), catalogBrowserPlugin(), youtubePlugin()],
+  plugins: [
+    vitePluginSaveSandboxLayout(),
+    react(),
+    localDirPlugin(),
+    catalogBrowserPlugin(),
+    youtubePlugin(),
+    chordMiniAppPlugin(),
+  ],
   server: {
     port: 5183,
   },
