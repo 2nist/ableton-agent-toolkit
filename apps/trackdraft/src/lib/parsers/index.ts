@@ -12,6 +12,7 @@ import { audioToBlueprintSong, textToBlueprintSong } from "./parseAudio";
 import { parseMcgillJcrd, parseRockCorpusJcrd } from "./parseJcrd";
 import { searchLrclib, parseSyncedLyrics } from "../youtube";
 import { buildLyricDocument, detectRepeatedBlocks, assignLinesToSection, mergeLinesIntoSection } from "../lyrics/sectionize";
+import { alsToBlueprintSong } from "./parseAbleton";
 
 export type ParseResult =
   | { ok: true; song: BlueprintSong }
@@ -196,6 +197,10 @@ export async function parseFile(dirPath: string, entry: DirectoryEntry): Promise
       }
       case "lyrics": {
         song = textToBlueprintSong(await res.text(), title);
+        break;
+      }
+      case "ableton": {
+        song = await alsToBlueprintSong(await res.arrayBuffer(), title);
         break;
       }
       default: {
