@@ -9,6 +9,26 @@ import type {
 
 export type { ArrangementEntry, SectionChord, SectionRole, DrumPattern, VelocityPreset };
 
+// Re-export the adapters module so consumers (youtubeFullImport.ts,
+// chordmini-bridge.ts) import from one place.
+export { parseChordName, parseSyncedLyrics, chordMiniAppToBlueprintSong } from "./adapters";
+export type { ChordMiniAppResult, LrclibData } from "./adapters";
+export { assembleBlueprint } from "./assembler";
+export type { AssemblyOptions } from "./assembler";
+
+/** Maps ChordMiniApp segment labels → BlueprintSection roles. */
+export const SECTION_ROLE_MAP: Record<string, SectionRole> = {
+  intro: "intro",
+  verse: "verse",
+  chorus: "chorus",
+  pre_chorus: "verse",
+  prechorus: "verse",
+  bridge: "bridge",
+  outro: "outro",
+  solo: "solo",
+  breakdown: "breakdown",
+};
+
 /** A single roman-numeral-analysis lyric row, matching the schema already
  *  present (unused) in lalo-chezia's per-song lyrics .xlsx files. */
 export interface LyricMetricalRow {

@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "ingest": "tsx scripts/ingest-lalo-chezia.ts"
+    "ingest": "tsx scripts/ingest-lalo-chezia.ts",
+    "start": "bash start-all.sh"
   },
   "dependencies": {
     "@devkit/puck-engine": "0.1.0",

@@ -1,11 +1,33 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { vitePluginSaveSandboxLayout } from "@devkit/puck-engine";
 
 const CATALOG_DIR = path.join(import.meta.dirname, "scripts", "output", "catalog");
+
+/** Resolve absolute path to yt-dlp binary so execFile works regardless of PATH. */
+function resolveYtDlpPath(): string {
+  // Common install locations
+  const candidates = [
+    "/usr/local/bin/yt-dlp",
+    "/opt/homebrew/bin/yt-dlp",
+    "/usr/bin/yt-dlp",
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  // Fallback — try `which yt-dlp`
+  try {
+    return execFileSync("which", ["yt-dlp"], { encoding: "utf8" }).trim();
+  } catch {
+    // Last resort — return bare name and let execFile fail with a clear error
+    return "yt-dlp";
+  }
+}
+
+const YT_DLP_PATH = resolveYtDlpPath();
 
 function fileTypeInfo(file: string): { category: string; loadable: boolean } {
   const ext = path.extname(file).toLowerCase();
@@ -266,22 +288,21 @@ function youtubeDownloadPlugin(): Plugin {
           return;
         }
 
+        // Catch async error events on response — these kill the process if unhandled.
+        res.on("error", () => {});
+
         const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-        // Spawn yt-dlp: download best audio, convert to mp3, pipe to stdout
-        // -f bestaudio: best audio-only format
-        // --extract-audio --audio-format mp3: convert to mp3
-        // --audio-quality 192k: good quality without massive files
+        // Download native m4a audio (no ffmpeg dependency).
+        // -f "bestaudio[ext=m4a]/bestaudio/best": prefer native m4a, fall back to best audio
         // -o -: output to stdout
-        const proc = execFile("yt-dlp", [
-          "-f", "bestaudio",
-          "--extract-audio",
-          "--audio-format", "mp3",
-          "--audio-quality", "192k",
+        const proc = execFile(YT_DLP_PATH, [
+          "-f", "bestaudio[ext=m4a]/bestaudio/best",
           "-o", "-",
           "--no-playlist",
           ytUrl,
         ], {
+          encoding: null, // Node v24+: force raw Buffer on stdout
           timeout: 120_000, // 2 minute timeout for download
           maxBuffer: 200 * 1024 * 1024, // 200MB max buffer
         });
@@ -294,12 +315,10 @@ function youtubeDownloadPlugin(): Plugin {
           stderr += data.toString();
         });
 
-        proc.on("error", () => {
+        proc.on("error", (err) => {
           res.statusCode = 503;
           res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({
-            error: "yt-dlp not found. Install it: brew install yt-dlp",
-          }));
+          res.end(JSON.stringify({ error: `yt-dlp error: ${err.message}` }));
         });
 
         proc.on("close", (code) => {
@@ -316,7 +335,7 @@ function youtubeDownloadPlugin(): Plugin {
             res.end(JSON.stringify({ error: "Download produced empty audio" }));
             return;
           }
-          res.setHeader("Content-Type", "audio/mpeg");
+          res.setHeader("Content-Type", "audio/mp4");
           res.setHeader("Content-Length", audio.length.toString());
           res.end(audio);
         });
@@ -366,48 +385,66 @@ function youtubeFullImportPlugin(): Plugin {
           return;
         }
 
-        // SSE streaming for progress updates
+        // SSE streaming for progress updates.
+        // Wrap send() so a disconnected client never crashes the server.
         res.setHeader("Content-Type", "text/event-stream");
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Connection", "keep-alive");
 
-        const send = (event: string, data: Record<string, unknown>) => {
-          res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        let streamClosed = false;
+        req.on("close", () => { streamClosed = true; });
+        // Catch async error events on response — these kill the process if unhandled.
+        res.on("error", () => { streamClosed = true; });
+
+        const sendSafe = (event: string, data: Record<string, unknown>) => {
+          if (streamClosed) return;
+          try {
+            res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+          } catch {
+            streamClosed = true;
+          }
+        };
+
+        const endSafe = () => {
+          if (!streamClosed) {
+            try { res.end(); } catch { /* stream already gone */ }
+            streamClosed = true;
+          }
         };
 
         try {
           // Step 1: Fetch YouTube metadata
-          send("progress", { step: "metadata", message: "Fetching YouTube metadata…" });
+          sendSafe("progress", { step: "metadata", message: "Fetching YouTube metadata…" });
           const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
           const oembedRes = await fetch(oembedUrl);
           if (!oembedRes.ok) {
-            send("error", { error: "Video not found or unavailable" });
-            res.end();
+            sendSafe("error", { error: "Video not found or unavailable" });
+            endSafe();
             return;
           }
           const oembed = await oembedRes.json() as { title: string; author_name: string };
-          send("progress", { step: "metadata", message: `Found: "${oembed.title}" by ${oembed.author_name}`, title: oembed.title, artist: oembed.author_name });
+          sendSafe("progress", { step: "metadata", message: `Found: "${oembed.title}" by ${oembed.author_name}`, title: oembed.title, artist: oembed.author_name });
 
-          // Step 2: Download audio via yt-dlp (reuse the download endpoint logic)
-          send("progress", { step: "download", message: "Downloading audio…" });
+          // Step 2: Download audio via yt-dlp
+          sendSafe("progress", { step: "download", message: "Downloading audio…" });
           const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
           const audioBuffer = await new Promise<Buffer>((resolve, reject) => {
-            const proc = execFile("yt-dlp", [
-              "-f", "bestaudio",
-              "--extract-audio",
-              "--audio-format", "mp3",
-              "--audio-quality", "192k",
+            const proc = execFile(YT_DLP_PATH, [
+              "-f", "bestaudio[ext=m4a]/bestaudio/best",
               "-o", "-",
               "--no-playlist",
               ytUrl,
-            ], { timeout: 120_000, maxBuffer: 200 * 1024 * 1024 });
+            ], { encoding: null, timeout: 120_000, maxBuffer: 200 * 1024 * 1024 });
 
             const parts: Buffer[] = [];
+            let stderr = "";
             proc.stdout?.on("data", (chunk: Buffer) => parts.push(chunk));
-            proc.on("error", () => reject(new Error("yt-dlp not found. Install: brew install yt-dlp")));
+            proc.stderr?.on("data", (data: Buffer) => { stderr += data.toString(); });
+            proc.on("error", (err) => reject(new Error(`yt-dlp error: ${err.message}`)));
             proc.on("close", (code) => {
               if (code !== 0) {
-                reject(new Error(`yt-dlp exited with code ${code}`));
+                const tail = stderr.split("\n").slice(-3).join("; ").slice(0, 300);
+                reject(new Error(`yt-dlp exited with code ${code}${tail ? `: ${tail}` : ""}`));
               } else {
                 const buf = Buffer.concat(parts);
                 if (buf.length === 0) reject(new Error("Download produced empty audio"));
@@ -415,40 +452,84 @@ function youtubeFullImportPlugin(): Plugin {
               }
             });
           });
-          send("progress", { step: "download", message: `Audio downloaded (${(audioBuffer.length / 1024 / 1024).toFixed(1)} MB)` });
+          sendSafe("progress", { step: "download", message: `Audio downloaded (${(audioBuffer.length / 1024 / 1024).toFixed(1)} MB as m4a)` });
+
+          // Step 2.5: Convert m4a → wav via ffmpeg (ChordMiniApp often can't handle m4a)
+          sendSafe("progress", { step: "convert", message: "Converting to WAV for ChordMiniApp…" });
+          let audioForAnalysis = audioBuffer;
+          try {
+            audioForAnalysis = await new Promise<Buffer>((resolve, reject) => {
+              const ffmpegProc = execFile("ffmpeg", [
+                "-i", "pipe:0",   // read from stdin
+                "-f", "wav",       // force WAV output
+                "-ar", "44100",    // 44.1kHz sample rate
+                "-ac", "1",        // mono
+                "pipe:1",          // output to stdout
+              ], { encoding: null, timeout: 60_000, maxBuffer: 500 * 1024 * 1024 });
+
+              const parts: Buffer[] = [];
+              ffmpegProc.stdout?.on("data", (chunk: Buffer) => parts.push(chunk));
+              let ffStderr = "";
+              ffmpegProc.stderr?.on("data", (data: Buffer) => { ffStderr += data.toString(); });
+              ffmpegProc.on("error", (err) => reject(new Error(`ffmpeg error: ${err.message}`)));
+              ffmpegProc.on("close", (code) => {
+                if (code !== 0) {
+                  console.error(`[youtube-full-import] ffmpeg conversion failed (code ${code}), falling back to raw m4a. stderr: ${ffStderr.slice(0, 200)}`);
+                  resolve(audioBuffer); // fall back to raw m4a
+                } else {
+                  const wav = Buffer.concat(parts);
+                  console.error(`[youtube-full-import] ffmpeg: m4a=${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB → wav=${(wav.length / 1024 / 1024).toFixed(1)}MB`);
+                  resolve(wav);
+                }
+              });
+              // Pipe m4a to ffmpeg stdin
+              ffmpegProc.stdin?.write(audioBuffer);
+              ffmpegProc.stdin?.end();
+            });
+          } catch {
+            console.error("[youtube-full-import] ffmpeg unavailable, sending raw m4a to ChordMiniApp");
+          }
+          sendSafe("progress", { step: "convert", message: `Ready for analysis (${(audioForAnalysis.length / 1024 / 1024).toFixed(1)} MB WAV)` });
 
           // Step 3: ChordMiniApp analysis
-          send("progress", { step: "analyze", message: "Analyzing with ChordMiniApp…" });
+          sendSafe("progress", { step: "analyze", message: "Analyzing with ChordMiniApp…" });
           const CHORDMINI_URL = process.env.CHORDMINI_URL ?? "http://localhost:5000/analyze";
           let chordMiniData: Record<string, unknown>;
           try {
             const analyzeRes = await fetch(CHORDMINI_URL, {
               method: "POST",
               headers: { "Content-Type": "application/octet-stream" },
-              body: audioBuffer,
+              body: audioForAnalysis,
             });
             if (!analyzeRes.ok) {
-              send("error", { error: `ChordMiniApp returned ${analyzeRes.status}. Make sure the Python server is running.` });
-              res.end();
+              sendSafe("error", { error: `ChordMiniApp returned ${analyzeRes.status}. Make sure the Python server is running.` });
+              endSafe();
               return;
             }
             chordMiniData = await analyzeRes.json();
+            // Diagnostic: log raw ChordMiniApp response to server console
+            const chordCount = Array.isArray(chordMiniData.chords) ? chordMiniData.chords.length : 0;
+            const segmentCount = Array.isArray(chordMiniData.segments) ? chordMiniData.segments.length : 0;
+            console.error(`[youtube-full-import] ChordMiniApp raw: key=${chordMiniData.key}, bpm=${chordMiniData.bpm}, scale=${chordMiniData.scale}, chords=${chordCount}, segments=${segmentCount}`);
+            if (chordCount === 0 && segmentCount === 0) {
+              console.error(`[youtube-full-import] WARNING: ChordMiniApp returned empty analysis. Audio buffer size: ${audioBuffer.length} bytes (${(audioBuffer.length / 1024 / 1024).toFixed(1)} MB). Check that the audio format is supported by ChordMiniApp.`);
+            }
           } catch {
-            send("error", { error: "Could not reach ChordMiniApp at " + (process.env.CHORDMINI_URL ?? "localhost:5000") });
-            res.end();
+            sendSafe("error", { error: "Could not reach ChordMiniApp at " + (process.env.CHORDMINI_URL ?? "localhost:5000") });
+            endSafe();
             return;
           }
 
           const chordCount = Array.isArray(chordMiniData.chords) ? chordMiniData.chords.length : 0;
           const segmentCount = Array.isArray(chordMiniData.segments) ? chordMiniData.segments.length : 0;
-          send("progress", {
+          sendSafe("progress", {
             step: "analyze",
             message: `Analysis complete: ${chordCount} chords, ${segmentCount} segments, key: ${chordMiniData.key ?? "?"}, BPM: ${chordMiniData.bpm ?? "?"}`,
             ...chordMiniData,
           });
 
           // Step 4: LRCLIB lyrics
-          send("progress", { step: "lyrics", message: "Searching for synced lyrics…" });
+          sendSafe("progress", { step: "lyrics", message: "Searching for synced lyrics…" });
           let lrclibData: Record<string, unknown> | null = null;
           try {
             const lrclibParams = new URLSearchParams({ track_name: oembed.title });
@@ -459,33 +540,33 @@ function youtubeFullImportPlugin(): Plugin {
               const synced = results.find((r) => r.syncedLyrics);
               if (synced) {
                 lrclibData = synced;
-                send("progress", { step: "lyrics", message: "Synced lyrics found" });
+                sendSafe("progress", { step: "lyrics", message: "Synced lyrics found" });
               } else if (results.length > 0) {
                 lrclibData = results[0];
-                send("progress", { step: "lyrics", message: "Plain lyrics found (no timestamps)" });
+                sendSafe("progress", { step: "lyrics", message: "Plain lyrics found (no timestamps)" });
               } else {
-                send("progress", { step: "lyrics", message: "No lyrics found on LRCLIB" });
+                sendSafe("progress", { step: "lyrics", message: "No lyrics found on LRCLIB" });
               }
             }
           } catch {
-            send("progress", { step: "lyrics", message: "LRCLIB search failed (network?)" });
+            sendSafe("progress", { step: "lyrics", message: "LRCLIB search failed (network?)" });
           }
 
           // Step 5: Assemble complete BlueprintSong
-          send("progress", { step: "assemble", message: "Building song blueprint…" });
+          sendSafe("progress", { step: "assemble", message: "Building song blueprint…" });
 
           // Send the final result with all pieces
-          send("result", {
+          sendSafe("result", {
             title: oembed.title,
             artist: oembed.author_name,
             chordMiniData,
             lrclibData,
           });
 
-          res.end();
+          endSafe();
         } catch (err) {
-          send("error", { error: err instanceof Error ? err.message : "Import failed" });
-          res.end();
+          sendSafe("error", { error: err instanceof Error ? err.message : "Import failed" });
+          endSafe();
         }
       });
     },

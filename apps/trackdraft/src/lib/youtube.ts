@@ -5,6 +5,9 @@
  */
 
 import type { BlueprintSong } from "../types/blueprint";
+import type { LyricsTimelineEntry } from "@music-theory/song-blueprint";
+import { parseSyncedLyrics } from "@music-theory/song-blueprint";
+export { parseSyncedLyrics };
 
 interface YoutubeMetadata {
   title: string;
@@ -108,33 +111,6 @@ export async function getLrclibById(id: number): Promise<LrclibResult | null> {
   } catch {
     return null;
   }
-}
-
-/**
- * Parse LRCLIB synced lyrics into BlueprintSong's LyricsTimelineEntry[] format.
- * LRCLIB synced lyrics format: [mm:ss.xx]Line text\n[mm:ss.xx]Next line...
- */
-export function parseSyncedLyrics(syncedLyrics: string, bpm: number = 120): Array<{
-  startBeat: number;
-  text: string;
-}> {
-  const lines = syncedLyrics.split("\n");
-  const timeline: Array<{ startBeat: number; text: string }> = [];
-  const secondsPerBeat = 60 / bpm;
-
-  for (const line of lines) {
-    const match = line.match(/^\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)$/);
-    if (match) {
-      const minutes = parseInt(match[1], 10);
-      const seconds = parseInt(match[2], 10);
-      const centiseconds = parseInt(match[3], 10);
-      const totalSeconds = minutes * 60 + seconds + centiseconds / (match[3].length === 3 ? 1000 : 100);
-      const startBeat = totalSeconds / secondsPerBeat;
-      timeline.push({ startBeat: Math.round(startBeat * 100) / 100, text: match[4].trim() });
-    }
-  }
-
-  return timeline;
 }
 
 /**

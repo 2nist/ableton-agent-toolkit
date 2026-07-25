@@ -126,7 +126,8 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
           )}
           {spans.map((span, i) => {
             const style = roleStyle(span.section.role);
-            const width = Math.max(MIN_BLOCK_WIDTH, span.durationBeats * PX_PER_BEAT);
+            const rawWidth = span.durationBeats * PX_PER_BEAT;
+            const width = isFinite(rawWidth) ? Math.max(MIN_BLOCK_WIDTH, rawWidth) : MIN_BLOCK_WIDTH;
             return (
               <button
                 key={`${span.sectionId}-${span.occurrenceIndex}-${i}`}

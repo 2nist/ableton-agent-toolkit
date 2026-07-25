@@ -5,6 +5,7 @@ import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { updateSection } from "../../lib/sections";
 import { transposeChords } from "../../lib/harmony/honeycombWalk";
+import { downloadSongMidi } from "../../lib/midiExport";
 import FloatingToolbar from "./FloatingToolbar";
 import ChordEditorPopover from "./ChordEditorPopover";
 import InstrumentPanel from "./InstrumentPanel";
@@ -63,6 +64,13 @@ export default function HarmonyDockTools() {
       <div className="p-3 border-b border-edge space-y-3">
         <InstrumentPanel />
         <DrumKitPanel />
+        <button
+          onClick={() => downloadSongMidi(song)}
+          className="w-full border border-accent/50 text-accent rounded px-3 py-1.5 text-xs hover:bg-accent/10 font-medium"
+          title="Export as Standard MIDI File — drag into Ableton, Logic, or any DAW"
+        >
+          ⬇ Download MIDI
+        </button>
       </div>
       {editorChord ? (
         <ChordEditorPopover

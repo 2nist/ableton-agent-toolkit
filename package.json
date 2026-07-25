@@ -18,5 +18,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "cli": "node packages/cli/dist/cli.js",
     "bridge": "npm run start -w packages/osc-bridge"
+  },
+  "devDependencies": {
+    "fast-xml-parser": "^5.10.1"
   }
 }

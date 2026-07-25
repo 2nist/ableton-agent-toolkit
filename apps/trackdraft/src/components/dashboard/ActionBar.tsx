@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useSongStore } from "../../store/songStore";
 import { readSongFile } from "../../lib/exportImport";
 import { extractVideoId } from "../../lib/youtube";
-import { chordMiniAppToBlueprintSong } from "../../lib/youtubeFullImport";
+import { assembleBlueprint } from "../../lib/youtubeFullImport";
 import type { ChordMiniAppResult, LrclibData } from "../../lib/youtubeFullImport";
 
 // ---------------------------------------------------------------------------
@@ -116,11 +116,10 @@ export default function ActionBar() {
       }
 
       const lrclib = resultData.lrclibData as LrclibData | undefined;
-      const song = chordMiniAppToBlueprintSong(
+      const song = assembleBlueprint(
         resultData.chordMiniData,
         resultData.title,
-        resultData.artist,
-        lrclib,
+        { lrclibData: lrclib, maxSections: 16, minSectionDuration: 8 },
       );
 
       importSong(song);
@@ -153,7 +152,7 @@ export default function ActionBar() {
         return;
       }
       const title = file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ");
-      const song = chordMiniAppToBlueprintSong(json, title);
+      const song = assembleBlueprint(json, title, { maxSections: 16, minSectionDuration: 8 });
       importSong(song);
       navigate(`/song/${song.id}`);
     } catch (err) {
