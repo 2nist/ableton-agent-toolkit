@@ -12,6 +12,7 @@ import {
 } from "../../lib/playback/drumPreview";
 import { VOICE_COLOR, VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
 import { TRANSITION_COLOR, TRANSITION_LABEL } from "./transitionStyle";
+import { SECTION_ROLE_COLOR } from "./sectionRoleStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
 import DrumsDockTools from "./DrumsDockTools";
 import { planSectionHandoffFills, FILL_DATA, type HandoffSectionInput, type KitVoice } from "@drum/library";
@@ -145,6 +146,7 @@ export default function DrumsView() {
               const x = barToX(r.span.startBar);
               const w = barToX(r.span.startBar + r.span.bars) - x;
               const isSelected = r.span.section.id === selectedSectionId;
+              const roleColor = SECTION_ROLE_COLOR[r.span.section.role] ?? SECTION_ROLE_COLOR.custom;
               return (
                 <g
                   key={`band-${i}`}
@@ -156,11 +158,19 @@ export default function DrumsView() {
                     y={TOP_PAD - 8}
                     width={w}
                     height={laneStackHeight + 8}
-                    fill={i % 2 === 0 ? "#1A1D24" : "#16181E"}
-                    stroke={isSelected ? "#E8B54A" : "none"}
-                    strokeWidth={isSelected ? 2 : 0}
+                    fill={roleColor.fill}
+                    stroke={isSelected ? "#E8B54A" : roleColor.rim}
+                    strokeWidth={isSelected ? 2 : 1}
+                    strokeOpacity={isSelected ? 1 : 0.5}
                   />
-                  <text x={x + w / 2} y={TOP_PAD - 14} textAnchor="middle" fontSize={10} fontFamily="monospace" fill={isSelected ? "#E8B54A" : "#8B94A1"}>
+                  <text
+                    x={x + w / 2}
+                    y={TOP_PAD - 14}
+                    textAnchor="middle"
+                    fontSize={10}
+                    fontFamily="'IBM Plex Mono', monospace"
+                    fill={isSelected ? "#E8B54A" : roleColor.rim}
+                  >
                     {r.span.section.name}
                     {r.span.occurrenceIndex > 0 ? ` ·${r.span.occurrenceIndex + 1}` : ""}
                   </text>
@@ -173,7 +183,7 @@ export default function DrumsView() {
               const y = TOP_PAD + li * LANE_H + LANE_H / 2;
               return (
                 <g key={`lane-${voice}`}>
-                  <text x={X0 - 16} y={y + 3} textAnchor="end" fontSize={9} fontFamily="monospace" fill={VOICE_COLOR[voice] ?? "#8B94A1"}>
+                  <text x={X0 - 16} y={y + 3} textAnchor="end" fontSize={9} fontFamily="'IBM Plex Mono', monospace" fill={VOICE_COLOR[voice] ?? "#8B94A1"}>
                     {VOICE_LABEL[voice]}
                   </text>
                   <line x1={barToX(0)} y1={y} x2={barToX(bars)} y2={y} stroke="#2E2E34" strokeWidth={1} />
@@ -233,7 +243,7 @@ export default function DrumsView() {
                     strokeDasharray={model ? undefined : "2 3"}
                     opacity={model ? 0.9 : 0.6}
                   />
-                  <text x={x} y={yBottom + 12} textAnchor="middle" fontSize={8} fontFamily="monospace" fill={color}>
+                  <text x={x} y={yBottom + 12} textAnchor="middle" fontSize={8} fontFamily="'IBM Plex Mono', monospace" fill={color}>
                     {model ? TRANSITION_LABEL[model].toUpperCase() : "FILL"}
                   </text>
                 </g>
