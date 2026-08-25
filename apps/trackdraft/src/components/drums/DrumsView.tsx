@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
 import { useDockStore } from "../../store/dockStore";
+import { updateSection } from "../../lib/sections";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
 import {
   resolveSectionVoiceNecklaces,
@@ -14,9 +15,10 @@ import { VOICE_COLOR, VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
 import { TRANSITION_COLOR, TRANSITION_LABEL } from "./transitionStyle";
 import { SECTION_ROLE_COLOR } from "./sectionRoleStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
+import TransitionPopover from "./TransitionPopover";
 import DrumsDockTools from "./DrumsDockTools";
 import { planSectionHandoffFills, FILL_DATA, type HandoffSectionInput, type KitVoice } from "@drum/library";
-import type { BlueprintSection } from "../../types/blueprint";
+import type { BlueprintSection, DrumTransitionModel } from "../../types/blueprint";
 
 /** A stable identity for a section's *resolved* drum content — same
  *  preset+variant, or same outline cells/voicing, means literally the
@@ -67,15 +69,24 @@ interface ResolvedSpan {
  *  separately; `structure/DrumNecklacePreview.tsx` is the same idea
  *  scoped to one section, living next to the picker that controls it.
  *  Clicking a section selects it (shared via `drumsSelectionStore`, same
- *  pattern as Harmony's canvas/dock split) — its pattern + variant + the
- *  transition into the *next* section then edit from the dock's Tools
- *  panel via `DrumsDockTools`, not inline on the canvas, so the timeline
- *  itself stays a clean read of the whole song. */
+ *  pattern as Harmony's canvas/dock split) — its pattern + variant then
+ *  edit from the dock's Tools panel via `DrumsDockTools`. A boundary's
+ *  transition can *also* be set right where it happens — clicking the
+ *  handoff line itself opens `TransitionPopover` in place, matching the
+ *  design reference's click-the-timeline interaction — rather than only
+ *  through the dock's Transition block once a section is selected. Both
+ *  write the same `drumTransitionModel`/`drumTransitionBars` fields, so
+ *  neither is a fork of the other. */
 export default function DrumsView() {
   const song = useSongStore((s) => s.currentSong());
+  const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const selectedSectionId = useDrumsSelectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useDrumsSelectionStore((s) => s.setSelectedSectionId);
   const setTools = useDockStore((s) => s.setTools);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [transitionPopover, setTransitionPopover] = useState<{ sectionId: string; left: number; top: number } | null>(
+    null,
+  );
 
   // Registered once — DrumsDockTools reads the shared selection store
   // itself and re-renders on its own, same reasoning as HarmonyDockTools.
@@ -84,7 +95,36 @@ export default function DrumsView() {
     return () => setTools(null);
   }, [setTools]);
 
+  // Closes the popover on any click outside it or outside a handoff hit
+  // target — the hit targets themselves stopPropagation so re-clicking a
+  // (possibly different) boundary while one's already open just retargets
+  // it instead of closing then needing a second click to reopen.
+  useEffect(() => {
+    if (!transitionPopover) return;
+    function handleOutsideClick(e: MouseEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-transition-popover]')) return;
+      setTransitionPopover(null);
+    }
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, [transitionPopover]);
+
   if (!song) return null;
+
+  function setBoundaryTransitionModel(sectionId: string, model: DrumTransitionModel | null) {
+    updateCurrentSong((s) =>
+      updateSection(s, sectionId, (sec) => ({
+        ...sec,
+        drumTransitionModel: model ?? undefined,
+        drumTransitionBars: model ? (sec.drumTransitionBars ?? 1) : undefined,
+      })),
+    );
+  }
+
+  function setBoundaryTransitionBars(sectionId: string, bars: number) {
+    updateCurrentSong((s) => updateSection(s, sectionId, (sec) => ({ ...sec, drumTransitionBars: Math.max(1, bars) })));
+  }
 
   const spans = sectionSpans(song);
 
@@ -129,15 +169,15 @@ export default function DrumsView() {
         <h2 className="font-medium text-sm">Drums</h2>
         <p className="text-xs text-inkMuted">
           The whole song's resolved groove, one lane per voice — a repeat of the exact same pattern+variant just
-          continues the line instead of redrawing its necklace. Click a section to edit its pattern and its
-          transition into the next one, in the dock.
+          continues the line instead of redrawing its necklace. Click a section to edit its pattern in the dock, or
+          click a boundary line to set what happens at that handoff, right there.
         </p>
       </div>
 
       {usedVoices.length === 0 ? (
         <p className="text-inkMuted text-sm">No drum voices resolve for this song yet.</p>
       ) : (
-        <div className="overflow-x-auto border border-edge rounded bg-panel">
+        <div ref={wrapRef} className="relative overflow-x-auto border border-edge rounded bg-panel">
           <svg width={width} height={height} className="block">
             {/* section bands — click any occurrence to select its section
                 (all occurrences of the same section highlight together,
@@ -223,11 +263,15 @@ export default function DrumsView() {
                 the section has one chosen, else the automatic handoff fill
                 every long-enough section gets by default. The last span
                 never gets either: there's nothing after it to hand off to,
-                same as the real export. */}
+                same as the real export. Every boundary (not just ones with
+                a marker already) carries a wide invisible click target, so
+                a silent/auto-fill boundary is exactly as clickable as one
+                that already has an explicit transition — clicking opens
+                `TransitionPopover` right there to set or change it. */}
             {resolved.slice(0, -1).map((r, i) => {
               const model = r.span.section.drumTransitionModel;
               const hasAutoFill = handoffPlans[i]?.fillStart !== null;
-              if (!model && !hasAutoFill) return null;
+              const sectionId = r.span.section.id;
 
               const x = barToX(r.span.startBar + r.span.bars);
               const yTop = TOP_PAD - 8;
@@ -236,20 +280,64 @@ export default function DrumsView() {
 
               return (
                 <g key={`handoff-${i}`}>
-                  <line
-                    x1={x} y1={yTop} x2={x} y2={yBottom}
-                    stroke={color}
-                    strokeWidth={model ? 2 : 1.4}
-                    strokeDasharray={model ? undefined : "2 3"}
-                    opacity={model ? 0.9 : 0.6}
+                  {(model || hasAutoFill) && (
+                    <>
+                      <line
+                        x1={x} y1={yTop} x2={x} y2={yBottom}
+                        stroke={color}
+                        strokeWidth={model ? 2 : 1.4}
+                        strokeDasharray={model ? undefined : "2 3"}
+                        opacity={model ? 0.9 : 0.6}
+                      />
+                      <text x={x} y={yBottom + 12} textAnchor="middle" fontSize={8} fontFamily="'IBM Plex Mono', monospace" fill={color}>
+                        {model ? TRANSITION_LABEL[model].toUpperCase() : "FILL"}
+                      </text>
+                    </>
+                  )}
+                  <rect
+                    data-transition-popover
+                    x={x - 9}
+                    y={yTop}
+                    width={18}
+                    height={yBottom - yTop}
+                    fill="transparent"
+                    style={{ cursor: "pointer" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const wrapEl = wrapRef.current;
+                      if (!wrapEl) return;
+                      const rect = wrapEl.getBoundingClientRect();
+                      setTransitionPopover({
+                        sectionId,
+                        left: Math.min(e.clientX - rect.left + 12, rect.width - 232),
+                        top: Math.max(4, e.clientY - rect.top - 10),
+                      });
+                    }}
                   />
-                  <text x={x} y={yBottom + 12} textAnchor="middle" fontSize={8} fontFamily="'IBM Plex Mono', monospace" fill={color}>
-                    {model ? TRANSITION_LABEL[model].toUpperCase() : "FILL"}
-                  </text>
                 </g>
               );
             })}
           </svg>
+
+          {transitionPopover && (() => {
+            const activeSection = resolved.find((r) => r.span.section.id === transitionPopover.sectionId)?.span
+              .section;
+            if (!activeSection) return null;
+            return (
+              <div data-transition-popover>
+                <TransitionPopover
+                  sectionName={activeSection.name}
+                  currentModel={activeSection.drumTransitionModel}
+                  currentBars={activeSection.drumTransitionBars}
+                  left={transitionPopover.left}
+                  top={transitionPopover.top}
+                  onSetModel={(model) => setBoundaryTransitionModel(transitionPopover.sectionId, model)}
+                  onSetBars={(bars) => setBoundaryTransitionBars(transitionPopover.sectionId, bars)}
+                  onClose={() => setTransitionPopover(null)}
+                />
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
