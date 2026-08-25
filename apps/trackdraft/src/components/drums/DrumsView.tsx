@@ -37,7 +37,12 @@ const X0 = 140;
 const BAR_PX = 26;
 const LANE_H = 46;
 const TOP_PAD = 34;
-const BOTTOM_PAD = 26;
+// Wide enough that the handoff label (drawn at yBottom+12) clears a real,
+// space-reserving horizontal scrollbar (~15-17px on most non-macOS/non-
+// overlay-scrollbar setups) — this container scrolls horizontally on any
+// song wider than the viewport, so that scrollbar is the common case, not
+// an edge case, and 26px of pad left the label sitting right under it.
+const BOTTOM_PAD = 44;
 const NECK_R = 15;
 
 function barToX(bar: number): number {
@@ -296,9 +301,9 @@ export default function DrumsView() {
                   )}
                   <rect
                     data-transition-popover
-                    x={x - 9}
+                    x={x - 14}
                     y={yTop}
-                    width={18}
+                    width={28}
                     height={yBottom - yTop}
                     fill="transparent"
                     style={{ cursor: "pointer" }}
