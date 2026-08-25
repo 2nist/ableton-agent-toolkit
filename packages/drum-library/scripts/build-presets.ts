@@ -74,7 +74,8 @@ async function main(): Promise<void> {
   const presets: Partial<Record<DrumPattern, PackedPreset>> = {};
 
   for (const pattern of Object.keys(PRESETS) as DrumPattern[]) {
-    if (!PRESETS[pattern]) continue; // no corpus target — 'none', '78' and the synth-only machine idioms
+    const preset = PRESETS[pattern];
+    if (!preset) continue; // no corpus target — 'none', '78' and the synth-only machine idioms
     const started = Date.now();
 
     const variants: PackedVariant[] = [];
@@ -86,9 +87,16 @@ async function main(): Promise<void> {
 
       const resolved = resolveGrooveNotes(index, spec);
       const folded = foldForAbleton(resolved);
-      if (folded.notes.length === 0) continue;
+      // A pitch-filtered preset (e.g. kick_only, whose "feet" limb
+      // legitimately includes pedal hi-hat) can select a take that turns out
+      // to have none of its kept pitches at all — that's a bad take for this
+      // preset specifically, so skip it rather than baking a silent variant.
+      const keptNotes = preset.pitchFilter
+        ? folded.notes.filter((n) => preset.pitchFilter!.includes(n.pitch))
+        : folded.notes;
+      if (keptNotes.length === 0) continue;
 
-      const packed: PackedNote[] = folded.notes.map((n) => [round4(n.beat), n.pitch, n.velocity]);
+      const packed: PackedNote[] = keptNotes.map((n) => [round4(n.beat), n.pitch, n.velocity]);
       const key = JSON.stringify(packed);
       if (seen.has(key)) continue; // small pools can repeat; keep variants distinct
       seen.add(key);

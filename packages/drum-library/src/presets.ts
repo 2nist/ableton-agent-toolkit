@@ -1,4 +1,5 @@
 import type { FeelFeatures, Limb, TimeSignature } from "./types.js";
+import { ABLETON_SAFE_NOTES } from "./ableton.js";
 
 /**
  * TrackDraft's existing per-section drum dropdown — see
@@ -36,6 +37,16 @@ export interface PresetTarget {
   limbs: Limb[];
   /** Required time signature, if the preset means one specific meter rather than "whatever the song is in". */
   timeSignature?: TimeSignature;
+  /**
+   * Post-fold Ableton-safe pitches (see `ableton.ts`) to keep; every other
+   * pitch is dropped. Needed because a limb can legitimately contain more
+   * than its name promises — the "feet" limb includes the pedal hi-hat
+   * (a real foot-played articulation, see `limbs.ts`), which after folding
+   * lands on the same pitch as an ordinary closed hat. Without this, a
+   * `kick_only` section can bake a take that's mostly or entirely pedal-hat
+   * chatter — a "kick only" groove with no kick in it.
+   */
+  pitchFilter?: number[];
 }
 
 /**
@@ -60,6 +71,7 @@ export const PRESETS: Record<DrumPattern, PresetTarget | null> = {
     feel: {},
     limbs: ["feet"],
     timeSignature: { numerator: 4, denominator: 4 },
+    pitchFilter: [ABLETON_SAFE_NOTES.kick],
   },
 
   standard: {

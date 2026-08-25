@@ -45,6 +45,18 @@ describe("PRESET_DATA (merged library)", () => {
     }
   });
 
+  it("kick_only contains only kick hits, no leaked pedal-hat/cymbal notes", () => {
+    // The "feet" limb it draws from legitimately includes the pedal hi-hat
+    // (a real foot-played articulation), which folds onto the same pitch as
+    // an ordinary closed hat (see ableton.ts) — without pitchFilter, a
+    // "kick only" section could bake a take that's mostly or entirely
+    // pedal-hat chatter with no kick in it at all.
+    for (const variant of PRESET_DATA.kick_only!.variants) {
+      const pitches = new Set(variant.notes.map((n) => n[1]));
+      expect([...pitches], "kick_only variant pitches").toEqual([36]);
+    }
+  });
+
   it("carries bake provenance", () => {
     expect(PRESET_META.corpus).toBe("e-gmd-v1.0.0");
     expect(PRESET_META.generatedAt).toBeTruthy();
