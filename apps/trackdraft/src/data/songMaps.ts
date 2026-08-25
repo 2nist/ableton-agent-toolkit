@@ -10,13 +10,14 @@ import type { NoteName, ScaleType } from "@music-theory/core";
  *  Formula's general shape, not a verified port.
  *
  *  The optional musical fields let a genre map shape more than narrative:
- *  bars, dynamics and per-section meter. They matter doubly since drums
- *  went heuristic — role + velocity + meter are exactly the signals the
- *  Ableton extension reads, so a map that sets them is effectively
- *  programming the drum arrangement without any drum-specific field.
- *  Slots never carry ids: sections are minted fresh per apply (ids seed
- *  deterministic generation downstream, so reused ids would make every
- *  song stamped from one template generate identical parts). */
+ *  bars, dynamics, per-section meter, chord movement, and rhythmic feel.
+ *  They matter doubly since drums went heuristic — role + velocity + meter
+ *  are exactly the signals the Ableton extension reads, so a map that
+ *  sets them is effectively programming the drum arrangement without any
+ *  drum-specific field. Slots never carry ids: sections are minted fresh
+ *  per apply (ids seed deterministic generation downstream, so reused
+ *  ids would make every song stamped from one template generate
+ *  identical parts). */
 export interface MapSlot {
   role: SectionRole;
   label: string;
@@ -27,6 +28,43 @@ export interface MapSlot {
   timeSignatureNumerator?: number;
   /** Denominator as a power of two, matching BlueprintSection (2 = /4, 3 = /8). */
   timeSignatureDenPower?: number;
+  /** Roman-numeral chord cycle for this section, relative to the map's
+   *  (or variant's) key/scale — e.g. ["i", "bVI", "bVII", "i"]. Case
+   *  signals triad quality (uppercase = major, lowercase = minor) and a
+   *  leading "b"/"#" signals the root's distance from the parallel major
+   *  scale, matching how the exemplar prompts already describe chords in
+   *  free text (e.g. blues.json's "HARMONIC BLUEPRINT" or neo-soul's
+   *  "bIII7 to bII7"). Chord quality/extension suffixes can be appended
+   *  directly (e.g. "V7", "ii7b5", "IVmaj7"); a chord that's
+   *  intentionally borrowed/chromatic relative to the stated scale
+   *  (e.g. a jazz backdoor "iv7" in a major key) is written in its
+   *  actual sounding quality, not the diatonic one.
+   *  The chord generator loops this cycle to fill the section's bars at
+   *  the rate set by beatsPerChord — it's a repeating cell, not a
+   *  bar-by-bar transcription. Omit for slots with no distinct harmonic
+   *  identity; the generator falls back to walking the scale as it does
+   *  today. */
+  progression?: string[];
+  /** Short, keyword-rich prose describing this section's beat/rhythm
+   *  character — keyword-scanned by the drum engine the same way
+   *  `concept` is, but scoped to this slot so the pattern can change
+   *  section to section (e.g. "four-on-the-floor, no swing, gated snare
+   *  on 2 and 4" vs. "half-time trap hats with triplet rolls"). This is
+   *  where the drum-pattern prose that used to get folded into `purpose`
+   *  (see the existing catalog's "TRICK:" lines) belongs instead, so
+   *  `purpose` can stay focused on FEEL and non-rhythmic production
+   *  moves. */
+  groove?: string;
+  /** Swing/shuffle amount applied to this section's subdivision, 0-100
+   *  (0 = fully straight, ~58-67 = triplet swing, negative-feeling
+   *  "drag" pockets are described in `groove` instead since this field
+   *  is magnitude-only). Omit for straight time. */
+  swing?: number;
+  /** Marks this section as safe to drop for a shorter arrangement (e.g.
+   *  a radio edit) without breaking the song's arc. Consumers that don't
+   *  render short-edit mode can ignore this and treat the section as
+   *  always included, matching today's behavior. */
+  optional?: boolean;
 }
 
 /** Song-level defaults a map may establish. `concept` doubles as the
@@ -40,12 +78,29 @@ export interface SongMapDefaults {
   concept?: string;
 }
 
+/** A fully alternate section structure for a map — same song identity
+ *  (tempo/key/concept still come from the map's `defaults`), different
+ *  form. Added for genres that genuinely have more than one canonical
+ *  shape (e.g. EBM's instrumental "club loop" vs. a vocal-hook,
+ *  song-oriented cut) rather than forcing one map to average across
+ *  both, or splitting them into two same-genre catalog entries. */
+export interface SongMapVariant {
+  name: string;
+  description?: string;
+  slots: MapSlot[];
+}
+
 export interface SongMap {
   id: string;
   name: string;
   description: string;
   slots: MapSlot[];
   defaults?: SongMapDefaults;
+  /** Additional alternate structures beyond the primary `slots` above.
+   *  `slots` remains the primary/default structure and is what any
+   *  consumer that doesn't yet know about `variants` keeps using
+   *  unchanged — this field is purely additive. */
+  variants?: SongMapVariant[];
 }
 
 export const SONG_MAPS: SongMap[] = [

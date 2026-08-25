@@ -1,0 +1,78 @@
+{
+  "id": "genre-synthwave",
+  "name": "Synthwave",
+  "description": "80s-retrofuturist arc — an arpeggiated ignition, a driving night-drive verse, a soaring gated-reverb chorus, and a guitar-like synth-lead solo.",
+  "defaults": {
+    "bpm": 108,
+    "key": "A",
+    "scale": "dorian",
+    "concept": "Synthwave — analog-modeled synth arpeggios, a huge gated-reverb snare, a driving sequenced bassline, and wide chorused pads under a soaring synth lead. Neon-nostalgic 80s film-score atmosphere: mechanically precise, quantized, and unswung, with wide stereo imaging."
+  },
+  "slots": [
+    {
+      "role": "intro",
+      "label": "Arpeggio Ignition",
+      "purpose": "FEEL: Neon dusk, engine idling. TRICK: Let the arpeggio run alone for a few bars before the gated snare's first hit lands — that first snare crack should feel like headlights switching on.",
+      "bars": 8,
+      "velocity": "mp",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i"],
+      "groove": "Arpeggiated 16th-note synth pulse alone; gated-reverb snare hits punctuate every other bar before the full kit locks in.",
+      "swing": 0
+    },
+    {
+      "role": "verse",
+      "label": "Night Drive Pocket",
+      "purpose": "FEEL: Driving, nocturnal, cinematic. PRODUCTION NOTE: Keep the low end mono and centered (bass plus kick) while the arpeggio and pads spread wide in stereo, for that driving-down-an-empty-highway image.",
+      "bars": 16,
+      "velocity": "mf",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i", "IV", "bVII", "i"],
+      "groove": "Driving four-on-the-floor kick (1 and 3 emphasis), gated-reverb snare cracking on 2 and 4, arpeggiated bass in steady 8ths — fully quantized, zero swing.",
+      "swing": 0
+    },
+    {
+      "role": "chorus",
+      "label": "The Gated Hook",
+      "purpose": "FEEL: Soaring, triumphant, widescreen. TRICK: Double the lead synth an octave up and drench it in the same gated-reverb chain as the snare, so the whole chorus reads as one massive hit.",
+      "bars": 8,
+      "velocity": "f",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i", "bVII", "bIII", "IV"],
+      "groove": "The gated snare doubles in size (longer gate decay), a wide chorused pad blooms, and the arpeggio thickens with a second interlocking layer.",
+      "swing": 0
+    },
+    {
+      "role": "solo",
+      "label": "The Synth-Lead Solo",
+      "purpose": "FEEL: Heroic, guitar-like defiance. PRODUCTION NOTE: Route the lead synth through light analog-style saturation and a slow pitch-bend on held notes to mimic an electric guitar solo.",
+      "bars": 8,
+      "velocity": "ff",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i", "bVII", "bIII", "IV"],
+      "groove": "Rhythm section holds the verse groove steady while a mono synth lead takes over with pitch-bent, guitar-like phrasing.",
+      "swing": 0
+    },
+    {
+      "role": "outro",
+      "label": "Fading Signal",
+      "purpose": "FEEL: Fading into the neon horizon. TRICK: Automate a slow low-pass filter close over the full mix bus rather than a volume fade, so the ending feels like driving out of range of a radio signal.",
+      "bars": 8,
+      "velocity": "p",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i", "IV", "i"],
+      "groove": "Low-pass filter slowly closes over the arpeggio and pad until only a soft glow remains.",
+      "swing": 0
+    }
+  ]
+}

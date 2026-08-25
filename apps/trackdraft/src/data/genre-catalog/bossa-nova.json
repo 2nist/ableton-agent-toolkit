@@ -1,0 +1,78 @@
+{
+  "id": "genre-bossa-nova",
+  "name": "Bossa Nova",
+  "description": "Classic AABA jazz-samba form — syncopated nylon-guitar clave, extended ii-V-I harmony, and a chromatic Jobim-style passing chord in the bridge.",
+  "defaults": {
+    "bpm": 120,
+    "key": "F",
+    "scale": "ionian",
+    "concept": "Bossa nova — a syncopated nylon-string 'violao' clave pattern (thumb on 1 and 3, fingers picking chord tones on the syncopated off-beats), soft brushed drums or rim clicks, warm upright bass, and breathy, intimate vocals. Lush extended 7th/9th chords throughout — plain triads never appear. Always straight eighth notes, precise and unhurried, never swung."
+  },
+  "slots": [
+    {
+      "role": "intro",
+      "label": "Solo Clave",
+      "purpose": "FEEL: Intimate, unhurried, the room settling. PRODUCTION NOTE: Nylon guitar alone, dry and close-mic'd, no reverb yet — let the clave pattern itself be the whole introduction.",
+      "bars": 4,
+      "velocity": "p",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["Imaj7"],
+      "groove": "Solo nylon-string clave — thumb alternates bass notes on 1 and 3 while fingers pick syncopated chord tones on the off-beat 16ths; strictly straight eighths.",
+      "swing": 0
+    },
+    {
+      "role": "verse",
+      "label": "The A Section",
+      "purpose": "FEEL: Conversational, warm, a breath-close vocal. PRODUCTION NOTE: Vocal sits just above a whisper in the mix, with guitar and upright bass given equal presence — nothing should compete for attention.",
+      "bars": 8,
+      "velocity": "mp",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["Imaj7", "vi7", "ii7", "V7"],
+      "groove": "Full clave locks in with a soft brushed snare or rim-click on the 'and' of 2; upright bass walks gently on 1 and 3.",
+      "swing": 0
+    },
+    {
+      "role": "bridge",
+      "label": "The B Section Lift",
+      "purpose": "FEEL: A gentle harmonic surprise, wistful. TRICK: Bring in a soft flute or vibraphone doubling the melody's highest notes to mark the section without raising the overall energy.",
+      "bars": 8,
+      "velocity": "mf",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["IVmaj7", "iv7", "Imaj7", "bIImaj7"],
+      "groove": "Same clave continues under the harmonic lift; the cymbal wash opens slightly to mark the section without breaking the pocket.",
+      "swing": 0
+    },
+    {
+      "role": "solo",
+      "label": "The A Section, Improvised",
+      "purpose": "FEEL: Effortless, exploratory. PRODUCTION NOTE: The rhythm section holds completely steady while the solo instrument is given the only real freedom in the arrangement — the contrast is the point.",
+      "bars": 16,
+      "velocity": "mf",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["Imaj7", "vi7", "ii7", "V7"],
+      "groove": "Clave and bass hold steady while a lead instrument (flute, sax, or nylon guitar) improvises over the A-section changes.",
+      "swing": 0
+    },
+    {
+      "role": "outro",
+      "label": "Vamp and Fade",
+      "purpose": "FEEL: Settling, unresolved but at peace. TRICK: Let the guitar clave repeat and slowly recede rather than resolving hard to a final chord — the room, not the harmony, ends the song.",
+      "bars": 4,
+      "velocity": "p",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["Imaj7"],
+      "groove": "Guitar clave alone, vamping on the tonic, receding in volume until it fades rather than cutting.",
+      "swing": 0
+    }
+  ]
+}

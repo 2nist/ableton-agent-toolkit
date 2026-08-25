@@ -1,0 +1,78 @@
+{
+  "id": "genre-trap-metal",
+  "name": "Trap Metal",
+  "description": "Hybrid trap/metal arc — a rolling hi-hat verse over a droning 808, pivoting hard into a half-time down-tuned breakdown at the metal-tempo equivalent.",
+  "defaults": {
+    "bpm": 145,
+    "key": "D",
+    "scale": "phrygian",
+    "concept": "Trap metal — a droning, pitch-glided 808 sub-bass functioning as both percussion and harmonic anchor under rapid triplet hi-hat rolls and a rapped verse, then a hard pivot to a half-time down-tuned guitar breakdown with palm-muted chugs and screamed vocals. Dark, Phrygian, distorted, internet-native aggression."
+  },
+  "slots": [
+    {
+      "role": "intro",
+      "label": "808 Dread",
+      "purpose": "FEEL: Dread, anticipation. TRICK: 808 alone with a heavy pitch-glide, plus a distant detuned guitar harmonic or metallic scrape — signal both genres are coming before either fully commits.",
+      "bars": 4,
+      "velocity": "p",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i"],
+      "groove": "808 sub drone with pitch glides, distant metallic clangs, no drums yet.",
+      "swing": 0
+    },
+    {
+      "role": "verse",
+      "label": "The Rolling Hats",
+      "purpose": "FEEL: Menacing, hypnotic, internet-native aggression. PRODUCTION NOTE: Keep the rap vocal dry and forward in the mix; let the hi-hat rolls carry the rhythmic complexity so the flow itself can stay simple and hard-hitting.",
+      "bars": 16,
+      "velocity": "mf",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i"],
+      "groove": "Triplet/32nd-note trap hi-hat rolls over a sparse 808-driven kick pattern; snare lands on beat 3 (half-time placement) under the verse.",
+      "swing": 0
+    },
+    {
+      "role": "chorus",
+      "label": "Screamed Hook",
+      "purpose": "FEEL: Screamed catharsis. TRICK: Stack a clean rapped ad-lib underneath a distorted screamed hook — the contrast between the two vocal textures is the hook's whole appeal.",
+      "bars": 8,
+      "velocity": "f",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i", "bVI", "bIII", "i"],
+      "groove": "Hats push to double-time (snare now on 2 and 4), 808 hits harder and more distorted, screamed ad-libs stack over the rapped hook.",
+      "swing": 0
+    },
+    {
+      "role": "breakdown",
+      "label": "The Half-Time Pivot",
+      "purpose": "FEEL: Crushing, physical, mosh-ready. TRICK: This is the half-time pivot — the track's felt pulse effectively halves to the metal-tempo equivalent (roughly 72 BPM); down-tuned guitars enter in full for the first time here, not before.",
+      "bars": 8,
+      "velocity": "fff",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i"],
+      "groove": "Hard pivot to half-time — down-tuned, palm-muted power-chord chugs lock with a double-kick pattern; hi-hat rolls drop out entirely.",
+      "swing": 0
+    },
+    {
+      "role": "outro",
+      "label": "Hard Cut",
+      "purpose": "FEEL: Abrupt, unresolved. TRICK: No fade — cut everything on the breakdown's final hit, leaving a half-second of dead air before silence.",
+      "bars": 4,
+      "velocity": "p",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i"],
+      "groove": "Distortion and noise wash swallow the last chord; cuts hard, no fade.",
+      "swing": 0
+    }
+  ]
+}

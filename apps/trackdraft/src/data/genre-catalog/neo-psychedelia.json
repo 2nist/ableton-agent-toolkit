@@ -1,0 +1,77 @@
+{
+  "id": "genre-neo-psychedelia",
+  "name": "Neo-Psychedelia",
+  "description": "A hypnotic modal groove that blooms into a phased instrumental freakout before dissolving into tape-warped decay.",
+  "defaults": {
+    "bpm": 100,
+    "key": "D",
+    "scale": "mixolydian",
+    "concept": "Neo-psychedelia — warm analog synths and fuzzed guitars drenched in phaser/flanger modulation, thickly layered vocal harmonies soaked in reverb, and a hypnotic, head-nodding groove sitting just behind the beat. Tape-warped textures throughout, building to an extended instrumental freakout mid-song before dissolving into decay."
+  },
+  "slots": [
+    {
+      "role": "intro",
+      "label": "The Phased Wash",
+      "purpose": "FEEL: Disorienting, submerged. TRICK: Run the entire intro through a slow phaser sweep so nothing sits still in the stereo field before the groove locks in.",
+      "bars": 8,
+      "velocity": "mp",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["I"],
+      "groove": "Phased, swirling synth pad wash with a lazy filtered drum loop easing in; no strong downbeat yet.",
+      "swing": 0
+    },
+    {
+      "role": "verse",
+      "label": "The Hypnotic Pocket",
+      "purpose": "FEEL: Hypnotic, submerged in a warm haze. PRODUCTION NOTE: Bury the vocal slightly under the instrumental bed with heavy plate reverb, so lyrics are felt more than parsed.",
+      "bars": 16,
+      "velocity": "mf",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["I", "bVII", "IV", "I"],
+      "groove": "Thick, compressed drums sitting just behind the beat; phaser sweeping slowly across the hi-hats.",
+      "swing": 12
+    },
+    {
+      "role": "chorus",
+      "label": "Blooming Wide",
+      "purpose": "FEEL: Blooming, wider, more saturated. TRICK: Stack the vocal in parallel thirds and fifths and drench it in a longer reverb tail than the verse to open the space up.",
+      "bars": 8,
+      "velocity": "f",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["I", "v", "bVII", "IV"],
+      "groove": "Drums open up and saturate harder; layered vocal harmonies stack in wide reverb, groove still sits behind the beat but hits harder.",
+      "swing": 10
+    },
+    {
+      "role": "breakdown",
+      "label": "The Freakout",
+      "purpose": "FEEL: Full freakout — disorienting and euphoric at once. TRICK: Introduce a backwards guitar or vocal swell and a tape-speed wobble across the whole mix bus. This section can be trimmed for a shorter edit without breaking the song's arc.",
+      "bars": 16,
+      "velocity": "ff",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["I", "bVII"],
+      "groove": "Backwards swells, tape-warped pitch wobble, and a loose, exploratory fill pattern replace the steady pocket entirely.",
+      "optional": true
+    },
+    {
+      "role": "outro",
+      "label": "Tape Dissolve",
+      "purpose": "FEEL: Dissolving, a comedown. TRICK: Let tape saturation and wow/flutter increase gradually until the mix sounds like it's physically decaying rather than fading via a volume automation.",
+      "bars": 8,
+      "velocity": "p",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["I", "bVII", "I"],
+      "groove": "Everything dissolves into tape hiss and decaying reverb tails; the groove slows and unravels rather than cutting."
+    }
+  ]
+}

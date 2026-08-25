@@ -10,8 +10,18 @@ import type { SongMap } from "../songMaps";
 //   "name": "Human-readable genre name",
 //   "description": "One-line summary of the template's shape",
 //   "defaults": { "bpm", "key", "scale", "concept" } (all optional),
-//   "slots": [{ "role", "label", "purpose", "bars?", "velocity?", "beatsPerChord?", "timeSignatureNumerator?", "timeSignatureDenPower?" }]
+//   "slots": [{ "role", "label", "purpose", "bars?", "velocity?", "beatsPerChord?",
+//               "timeSignatureNumerator?", "timeSignatureDenPower?",
+//               "progression?", "groove?", "swing?", "optional?" }],
+//   "variants": [{ "name", "description?", "slots": [...] }] (optional — alternate
+//               structures for genres with more than one canonical form, e.g. a
+//               loop-based vs. song-oriented shape; shares this file's "defaults")
 // }
+//
+// Note: filenames here are the short genre slug (e.g. "math-rock.json"), which
+// doesn't always match what genreMapFilename() in genre-prompt.ts would derive
+// from a longer id like "genre-math-rock-78" (it would produce "math-rock-78.json").
+// These files predate/bypass that helper — worth reconciling one way or the other.
 
 import mathRock from "./math-rock.json";
 import stonerSludge from "./stoner-sludge.json";
@@ -21,6 +31,12 @@ import neoSoul from "./neo-soul.json";
 import boomBap from "./boom-bap.json";
 import indieFolk from "./indie-folk.json";
 import blues from "./blues.json";
+import industrial from "./industrial.json";
+import electroIndustrialEbm from "./electro-industrial-ebm.json";
+import trapMetal from "./trap-metal.json";
+import bossaNova from "./bossa-nova.json";
+import neoPsychedelia from "./neo-psychedelia.json";
+import synthwave from "./synthwave.json";
 
 /** All genre maps in the catalog, keyed by map id for O(1) lookup. */
 export const GENRE_CATALOG: SongMap[] = [
@@ -32,6 +48,12 @@ export const GENRE_CATALOG: SongMap[] = [
   boomBap,
   indieFolk,
   blues,
+  industrial,
+  electroIndustrialEbm,
+  trapMetal,
+  bossaNova,
+  neoPsychedelia,
+  synthwave,
 ] as SongMap[];
 
 /** Look up a genre map by its catalog id. Returns undefined if not found. */

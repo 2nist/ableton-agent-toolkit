@@ -1,0 +1,138 @@
+{
+  "id": "genre-electro-industrial-ebm",
+  "name": "Electro-Industrial & EBM",
+  "description": "A loop-based, track-oriented club structure driven by a relentless sequenced bassline; includes an alternate vocal-hook variant for more song-oriented crossover cuts.",
+  "defaults": {
+    "bpm": 128,
+    "key": "A",
+    "scale": "aeolian",
+    "concept": "Electro-industrial/EBM — a relentless 16th-note sequenced mono-synth bassline that almost never rests, a rigid four-on-the-floor kick, barked/commanding vocals, and clipped military percussion. Built for the dancefloor, not the verse-chorus formula: harmonic movement stays minimal while rhythmic density stays high."
+  },
+  "slots": [
+    {
+      "role": "intro",
+      "label": "Sequencer Warm-Up",
+      "purpose": "FEEL: Cold anticipation, a machine warming up. TRICK: Let the sequencer run alone for the full section before any percussion enters — establish the loop itself as the song's real subject.",
+      "bars": 8,
+      "velocity": "mp",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i"],
+      "groove": "Sequenced 16th-note mono-bassline alone, no kit; rigid and unswung from the first note.",
+      "swing": 0
+    },
+    {
+      "role": "verse",
+      "label": "The Militant Loop",
+      "purpose": "FEEL: Militant, physical, unrelenting. PRODUCTION NOTE: Keep the vocal barked and close-mic'd/dry against the wet, reverbed synths, so the voice reads as another mechanical command layer, not a lead performance.",
+      "bars": 16,
+      "velocity": "mf",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i", "i", "i", "bVII"],
+      "groove": "Relentless 16th-note sequenced bassline that never rests, rigid four-on-the-floor kick, clipped metallic percussion accenting the off-beats.",
+      "swing": 0
+    },
+    {
+      "role": "breakdown",
+      "label": "The Filtered Strip-Down",
+      "purpose": "FEEL: Stripped, tense, waiting. TRICK: Cut the kick and bassline out entirely for two bars, leaving only a slow filter-swept pad, before slamming the groove back in on the downbeat.",
+      "bars": 8,
+      "velocity": "p",
+      "beatsPerChord": 16,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i", "bVI"],
+      "groove": "Kick and bassline drop out; only a filtered pad and sparse metallic clangs remain, tension building via a slow filter sweep.",
+      "swing": 0
+    },
+    {
+      "role": "chorus",
+      "label": "Full-Throttle Climax",
+      "purpose": "FEEL: Full-throttle, physical climax. PRODUCTION NOTE: Double the sequencer line an octave up as a second interlocking part — this is the 'everybody move' moment the track has been building toward.",
+      "bars": 16,
+      "velocity": "ff",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i", "i", "bVII", "bVI"],
+      "groove": "Full sequencer returns doubled an octave with a second interlocking 16th-note counter-line; shouted vocal stabs land on the downbeats.",
+      "swing": 0
+    }
+  ],
+  "variants": [
+    {
+      "name": "Vocal-Hook EBM",
+      "description": "A more song-oriented crossover form with a distinct chant-along chorus, for EBM that leans toward the dancefloor-pop side of the genre.",
+      "slots": [
+        {
+          "role": "intro",
+          "label": "Sequencer Warm-Up",
+          "purpose": "FEEL: Cold anticipation, a machine warming up. TRICK: Let the sequencer run alone before any percussion enters.",
+          "bars": 8,
+          "velocity": "mp",
+          "beatsPerChord": 8,
+          "timeSignatureNumerator": 4,
+          "timeSignatureDenPower": 2,
+          "progression": ["i"],
+          "groove": "Sequenced 16th-note mono-bassline alone, no kit; rigid and unswung.",
+          "swing": 0
+        },
+        {
+          "role": "verse",
+          "label": "The Militant Loop",
+          "purpose": "FEEL: Militant, physical, unrelenting. PRODUCTION NOTE: Keep the vocal barked and dry against wet, reverbed synths.",
+          "bars": 16,
+          "velocity": "mf",
+          "beatsPerChord": 8,
+          "timeSignatureNumerator": 4,
+          "timeSignatureDenPower": 2,
+          "progression": ["i", "i", "i", "bVII"],
+          "groove": "Relentless sequenced 16th-note bassline, rigid four-on-the-floor kick, clipped percussion on the off-beats.",
+          "swing": 0
+        },
+        {
+          "role": "pre_chorus",
+          "label": "The Coiling Sweep",
+          "purpose": "FEEL: Coiling, anticipatory. TRICK: Introduce a rising filter sweep on the pad and a snare roll borrowed from industrial-dance conventions, signaling the hook is about to land.",
+          "bars": 4,
+          "velocity": "f",
+          "beatsPerChord": 4,
+          "timeSignatureNumerator": 4,
+          "timeSignatureDenPower": 2,
+          "progression": ["i", "bVII"],
+          "groove": "Rising filter sweep on the pad layered over an accelerating snare roll; the sequencer holds steady underneath.",
+          "swing": 0
+        },
+        {
+          "role": "chorus",
+          "label": "The Chant Hook",
+          "purpose": "FEEL: Anthemic and chant-able — the crowd-participation moment. TRICK: Layer a group-shouted gang-vocal on the hook line, panned wide, so it reads as call-and-response rather than a lead vocal.",
+          "bars": 8,
+          "velocity": "ff",
+          "beatsPerChord": 4,
+          "timeSignatureNumerator": 4,
+          "timeSignatureDenPower": 2,
+          "progression": ["i", "bVI", "bVII", "i"],
+          "groove": "Full sequencer plus a doubled bass layer; gang-shouted chant vocal panned wide across the stereo field.",
+          "swing": 0
+        },
+        {
+          "role": "outro",
+          "label": "Loop Receding",
+          "purpose": "FEEL: The loop receding into the dark. TRICK: Let the sequencer keep running under a long fade rather than a hard stop — EBM tracks are DJ tools first, so they should be mixable out.",
+          "bars": 8,
+          "velocity": "mp",
+          "beatsPerChord": 8,
+          "timeSignatureNumerator": 4,
+          "timeSignatureDenPower": 2,
+          "progression": ["i"],
+          "groove": "Sequencer loop continues under a long fade; percussion thins out gradually rather than cutting.",
+          "swing": 0
+        }
+      ]
+    }
+  ]
+}

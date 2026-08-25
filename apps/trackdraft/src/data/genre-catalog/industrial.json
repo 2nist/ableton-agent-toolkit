@@ -1,0 +1,78 @@
+{
+  "id": "genre-industrial",
+  "name": "Industrial",
+  "description": "Mechanized rock arc — sampled machine-noise intro, grinding chug verse, gang-shout chorus, a harsh noise breakdown, and a staged mechanical shutdown.",
+  "defaults": {
+    "bpm": 130,
+    "key": "E",
+    "scale": "aeolian",
+    "concept": "Industrial rock/metal — detuned, monolithic guitar chugs locked in unison with a sequenced sub-bass, rigid quantized drum-machine precision, heavily processed/shouted vocals, and sampled factory noise. Cold, dystopian, mechanically relentless."
+  },
+  "slots": [
+    {
+      "role": "intro",
+      "label": "Machine Room Intro",
+      "purpose": "FEEL: Cold, ominous, pre-industrial hum. TRICK: Open on foley/sample hits alone — steam hiss, metal clangs, a distant conveyor loop — before any melodic element enters, so the machine introduces the song rather than a musician.",
+      "bars": 4,
+      "velocity": "mp",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i"],
+      "groove": "Irregular sampled machine hits and clangs over a slow sub-bass pulse; no kit yet, tension building through volume alone.",
+      "swing": 0
+    },
+    {
+      "role": "verse",
+      "label": "The Grinding Pocket",
+      "purpose": "FEEL: Grinding, oppressive, relentless. PRODUCTION NOTE: Layer the sequenced sub-bass in unison with the guitar's low string so the riff reads as one machine, not a band.",
+      "bars": 12,
+      "velocity": "f",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i", "bVII", "bVI", "bVII"],
+      "groove": "Rigid quantized four-on-the-floor kick under palm-muted 16th-note guitar chugs; programmed snare cracks hard on 2 and 4, zero swing.",
+      "swing": 0
+    },
+    {
+      "role": "chorus",
+      "label": "Gang-Shout Catharsis",
+      "purpose": "FEEL: Anthemic but still mechanical — catharsis, not release. TRICK: Double the lead vocal with a heavily bit-crushed parallel take to simulate a PA-announcement or radio-transmission quality underneath the clean vocal.",
+      "bars": 8,
+      "velocity": "ff",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i", "bIII", "bVII", "iv"],
+      "groove": "Double-time snare hits, gang-shouted vocal stabs on the downbeats, sequenced bass doubling the guitar riff in tight unison.",
+      "swing": 0
+    },
+    {
+      "role": "breakdown",
+      "label": "The Noise Wall",
+      "purpose": "FEEL: Disorienting, a wall of industrial noise. TRICK: Replace the kit entirely with processed machine samples (hydraulic presses, grinding metal) panned hard and swelling in volume to build dread before the final section.",
+      "bars": 8,
+      "velocity": "mp",
+      "beatsPerChord": 8,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i"],
+      "groove": "Noise/machine-clang wash replaces the drum kit; a single distorted pulse throbs underneath, no defined backbeat.",
+      "swing": 0
+    },
+    {
+      "role": "outro",
+      "label": "Powering Down",
+      "purpose": "FEEL: Terminal, a machine shutting off. TRICK: Cut instruments out one at a time from the top of the frequency spectrum down, like a factory floor powering off floor by floor, ending on sub-bass alone before a hard cut.",
+      "bars": 4,
+      "velocity": "p",
+      "beatsPerChord": 4,
+      "timeSignatureNumerator": 4,
+      "timeSignatureDenPower": 2,
+      "progression": ["i"],
+      "groove": "Mechanical shutdown — kit elements drop out in stages; ends on a dead stop, no fade.",
+      "swing": 0
+    }
+  ]
+}
