@@ -83,11 +83,9 @@ class SongTransport {
   private isPlaying = false;
   private tickListeners = new Set<(tick: TransportTick) => void>();
   private abletonUnsub: (() => void) | null = null;
-  /** The Ableton beat that counts as "song beat 0" — set by `calibrate()`.
-   *  Nothing maps Ableton's raw transport position to "beats into this
-   *  song" automatically, so this is a one-click manual anchor: click it
-   *  right as the song starts playing in Live. */
-  private abletonOffsetBeat = 0;
+  /** Which clock is driving — set by StudioView from the persisted store
+   *  before calling play()/syncToAbleton(). */
+  clockSource: "internal" | "ableton" = "internal";
 
   private getChannel(): BroadcastChannel {
     if (!this.channel) this.channel = new BroadcastChannel(TRANSPORT_CHANNEL_NAME);
@@ -108,8 +106,10 @@ class SongTransport {
   }
 
   /** Start playing `song` from the top. Any playback already in progress
-   *  (this song or another) is stopped first. */
+   *  (this song or another) is stopped first. If `clockSource` is
+   *  "ableton" this is a no-op — Ableton sync must use syncToAbleton(). */
   play(song: BlueprintSong): void {
+    if (this.clockSource === "ableton") return;
     this.stop();
     this.spans = sectionSpans(song);
     if (this.spans.length === 0) return;
@@ -234,34 +234,78 @@ class SongTransport {
    *  `{ beat, isPlaying, sectionIndex }` shape `play()` emits, so every
    *  consumer (playhead, popout) works identically either way. Connects
    *  `abletonClock` if it isn't already (safe to call repeatedly — it
-   *  no-ops once connected). Call `calibrate()` once Ableton is actually
-   *  playing the song, to anchor "song beat 0" to wherever Ableton's
-   *  transport is at that moment. */
+   *  no-ops once connected). The offset comes from `song.beatOffset ?? 0`
+   *  so it survives page refreshes. Call `calibrate()` to anchor it.
+   *
+   *  `osc-bridge` only pushes a message once per *whole* beat — there is
+   *  no fractional/sub-beat position in the wire protocol (confirmed: its
+   *  own `apc-sequencer` client has the same gap, flagged there as
+   *  "full phase-lock needs osc-bridge songTime"). Emitting only on each
+   *  real message made this mode's playhead visibly step once per beat
+   *  instead of moving continuously — jarring next to `play()`'s smooth
+   *  60fps internal clock, and the likely source of "the timing feels
+   *  buggy" reports specifically when following real Ableton playback.
+   *  Fixed the same way any networked-clock UI handles a sparse position
+   *  feed: keep emitting exactly on every real update (so the position is
+   *  always eventually correct, never just guessed), and *additionally*
+   *  extrapolate a smooth estimate on every animation frame in between,
+   *  using the song's own bpm as the assumed rate — reasonable since
+   *  Ableton's tempo is normally driven *from* this song's bpm via the
+   *  blueprint push path, and safely self-correcting either way: each
+   *  real beat message resets the estimate's anchor, so any drift from a
+   *  slightly-off bpm assumption never accumulates past one beat. */
   syncToAbleton(song: BlueprintSong): void {
     this.stop();
     this.spans = sectionSpans(song);
     if (this.spans.length === 0) return;
 
+    const offset = song.beatOffset ?? 0;
+    const secPerBeat = 60 / song.bpm;
     const clock = getAbletonClock();
     clock.connect();
     this.isPlaying = true;
+
+    // Interpolation anchor: the last real beat message and the wall-clock
+    // moment it arrived. `reallyPlaying` gates the animation loop so a
+    // paused transport doesn't keep extrapolating forward from a stale beat.
+    let lastBeat: number | null = null;
+    let lastBeatAtMs = 0;
+    let reallyPlaying = false;
+
+    const tickLoop = () => {
+      if (!this.isPlaying) return;
+      if (reallyPlaying && lastBeat !== null) {
+        const estimatedAbletonBeat = lastBeat + (performance.now() - lastBeatAtMs) / (secPerBeat * 1000);
+        const beat = Math.max(0, estimatedAbletonBeat - offset);
+        this.emit({ beat, isPlaying: true, sectionIndex: sectionIndexAt(this.spans, beat) });
+      }
+      this.schedulerId = requestAnimationFrame(tickLoop);
+    };
+
     this.abletonUnsub = clock.onChange((state) => {
       if (!this.isPlaying) return;
+      reallyPlaying = state.isPlaying;
       if (state.abletonBeat === null) {
+        lastBeat = null;
         this.emit({ beat: 0, isPlaying: state.isPlaying, sectionIndex: -1 });
         return;
       }
-      const beat = Math.max(0, state.abletonBeat - this.abletonOffsetBeat);
+      lastBeat = state.abletonBeat;
+      lastBeatAtMs = performance.now();
+      const beat = Math.max(0, state.abletonBeat - offset);
       this.emit({ beat, isPlaying: state.isPlaying, sectionIndex: sectionIndexAt(this.spans, beat) });
     });
+
+    this.schedulerId = requestAnimationFrame(tickLoop);
   }
 
-  /** Anchor "song beat 0" to Ableton's current transport position. A
-   *  no-op (offset stays 0) if nothing's been received from the bridge
-   *  yet — there's nothing meaningful to anchor to. */
-  calibrate(): void {
+  /** Anchor "song beat 0" to Ableton's current transport position. Returns
+   *  the new offset (Ableton beat) so StudioView can persist it to the
+   *  song. A no-op returning null if nothing's been received from the
+   *  bridge yet — there's nothing meaningful to anchor to. */
+  calibrate(): number | null {
     const beat = getAbletonClock().getState().abletonBeat;
-    if (beat !== null) this.abletonOffsetBeat = beat;
+    return beat;
   }
 
   /** Stop playback (self-clock or Ableton-synced) and silence everything

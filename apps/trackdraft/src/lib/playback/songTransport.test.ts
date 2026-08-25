@@ -27,6 +27,89 @@ vi.mock("./audioContext", () => ({
   getSharedAudioContext: () => ({ get currentTime() { return performance.now() / 1000; } }),
 }));
 
+// `createTimerWorker()` constructs a real `Worker` from a Blob — Workers
+// run in their own execution context with their own timer realm, which
+// doesn't exist in this (non-jsdom) test environment and, more
+// fundamentally, wouldn't be drivable by `vi.advanceTimersByTime` even if
+// it did (a real Worker's internal `setInterval` lives outside the main
+// thread vitest fakes). Stub `Worker` with a plain class that runs the
+// *exact same* ready/not-ready predicate as `clockWorker.ts`'s inline
+// script, but using the test's own (fake-timer-controlled) `setInterval`
+// and `performance.now()` — same scheduling behavior, same thread, so
+// `vi.advanceTimersByTime` drives it exactly like it drives everything else.
+const PRECISION_MS = 4;
+class MockWorker {
+  onmessage: ((msg: MessageEvent) => void) | null = null;
+  private events: { id: number; fireAtMs: number }[] = [];
+  private intervalId: ReturnType<typeof setInterval> | null = null;
+
+  postMessage(data: { type: string; events?: { id: number; fireAtMs: number }[] }): void {
+    if (data.type !== "schedule" || !data.events) return;
+    this.events = data.events.slice();
+    if (this.intervalId === null) this.intervalId = setInterval(() => this.tick(), PRECISION_MS);
+  }
+
+  terminate(): void {
+    if (this.intervalId !== null) clearInterval(this.intervalId);
+    this.intervalId = null;
+  }
+
+  private tick(): void {
+    const now = performance.now();
+    const ready = this.events.filter((e) => e.fireAtMs - now <= PRECISION_MS);
+    for (const e of ready) this.onmessage?.({ data: { type: "fire", id: e.id } } as MessageEvent);
+    this.events = this.events.filter((e) => e.fireAtMs - now > PRECISION_MS);
+    if (this.events.length === 0 && this.intervalId !== null) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+}
+vi.stubGlobal("Worker", MockWorker);
+
+// requestAnimationFrame/cancelAnimationFrame are browser-only too, and were
+// masked entirely until now — every test that reached this call previously
+// threw on `Worker` first. Shim via `setTimeout`, which fake timers already
+// control directly, at a plausible ~60fps interval.
+let nextRafId = 0;
+const rafTimeouts = new Map<number, ReturnType<typeof setTimeout>>();
+vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+  const id = ++nextRafId;
+  const timeoutId = setTimeout(() => {
+    rafTimeouts.delete(id);
+    cb(performance.now());
+  }, 16);
+  rafTimeouts.set(id, timeoutId);
+  return id;
+});
+vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+  const timeoutId = rafTimeouts.get(id);
+  if (timeoutId !== undefined) {
+    clearTimeout(timeoutId);
+    rafTimeouts.delete(id);
+  }
+});
+
+// `syncToAbleton()` connects through `abletonClock.ts`'s WebSocket
+// singleton — stub it the same way `audioPreview`/`drumPreview` are
+// stubbed above, exposing the `onChange` listener so tests can simulate
+// osc-bridge's sparse integer-beat messages directly.
+type FakeAbletonState = { abletonBeat: number | null; isPlaying: boolean };
+let abletonChangeListener: ((state: FakeAbletonState) => void) | null = null;
+const abletonConnect = vi.fn();
+vi.mock("./abletonClock", () => ({
+  getAbletonClock: () => ({
+    connect: abletonConnect,
+    onChange: (listener: (state: FakeAbletonState) => void) => {
+      abletonChangeListener = listener;
+      return () => {
+        abletonChangeListener = null;
+      };
+    },
+    getState: () => ({ connected: true, abletonBeat: null, isPlaying: false }),
+  }),
+}));
+
 const { getSongTransport, TRANSPORT_CHANNEL_NAME } = await import("./songTransport");
 
 function makeChord(overrides: Partial<Chord> & { beats: number }): Chord {
@@ -92,10 +175,14 @@ describe("SongTransport.play", () => {
     ]);
 
     getSongTransport().play(song);
-    vi.advanceTimersByTime(0); // flush the offset-0 setTimeout for section A's chord
+    // The worker's own tick only runs every PRECISION_MS (4ms) — a
+    // beat-0 event's fireAtMs is already "due" the instant it's scheduled
+    // (it's SCHEDULE_LOOKAHEAD_MS in the past relative to "now"), but
+    // nothing evaluates that until the first interval tick actually runs.
+    vi.advanceTimersByTime(10); // let that first worker tick fire
     expect(playChordObject).toHaveBeenCalledTimes(1);
 
-    vi.advanceTimersByTime(4000); // 8 beats at 120bpm = 4s
+    vi.advanceTimersByTime(4000); // 8 beats at 120bpm = 4s, minus the 10ms already advanced
     expect(playChordObject).toHaveBeenCalledTimes(2); // section B's chord has now fired
   });
 
@@ -140,6 +227,100 @@ describe("SongTransport.play", () => {
 
     vi.advanceTimersByTime(10_000);
     expect(playChordObject).not.toHaveBeenCalled();
+  });
+});
+
+describe("SongTransport.syncToAbleton", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    abletonChangeListener = null;
+  });
+
+  afterEach(() => {
+    getSongTransport().stop();
+    vi.useRealTimers();
+  });
+
+  it("emits exactly on each real beat message", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120);
+    const ticks: { beat: number }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
+
+    getSongTransport().syncToAbleton(song);
+    abletonChangeListener?.({ abletonBeat: 4, isPlaying: true });
+
+    expect(ticks[ticks.length - 1]?.beat).toBe(4);
+    unsub();
+  });
+
+  it("interpolates a smooth estimate between sparse integer-beat updates instead of stepping", () => {
+    // 120bpm -> 0.5s/beat. Real update at beat 4; 250ms later (half a
+    // beat, no new message yet) the estimate should read ~4.5, not still 4.
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120);
+    const ticks: { beat: number }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
+
+    getSongTransport().syncToAbleton(song);
+    abletonChangeListener?.({ abletonBeat: 4, isPlaying: true });
+    ticks.length = 0; // drop the exact-on-message tick, only care about the interpolated ones now
+
+    vi.advanceTimersByTime(250);
+    const midpoint = ticks[ticks.length - 1]?.beat ?? 0;
+    expect(midpoint).toBeGreaterThan(4);
+    expect(midpoint).toBeLessThan(5);
+    expect(midpoint).toBeCloseTo(4.5, 1);
+
+    unsub();
+  });
+
+  it("self-corrects to the real position on the next message rather than compounding drift", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120);
+    const ticks: { beat: number }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
+
+    getSongTransport().syncToAbleton(song);
+    abletonChangeListener?.({ abletonBeat: 4, isPlaying: true });
+    vi.advanceTimersByTime(250); // interpolating around ~4.5
+
+    // A real update lands with a slightly different value than the estimate
+    // would have predicted (e.g. Ableton's tempo isn't exactly 120) — the
+    // next emitted tick must be exactly the real value, not a blend.
+    abletonChangeListener?.({ abletonBeat: 5, isPlaying: true });
+    expect(ticks[ticks.length - 1]?.beat).toBe(5);
+
+    unsub();
+  });
+
+  it("stops extrapolating once paused, instead of drifting forward from a stale beat", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120);
+    const ticks: { beat: number }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
+
+    getSongTransport().syncToAbleton(song);
+    abletonChangeListener?.({ abletonBeat: 4, isPlaying: true });
+    abletonChangeListener?.({ abletonBeat: 4, isPlaying: false }); // paused
+    ticks.length = 0;
+
+    vi.advanceTimersByTime(1000); // would be 2 full beats further if still extrapolating
+    expect(ticks).toHaveLength(0);
+
+    unsub();
+  });
+
+  it("applies the song's beatOffset to both the exact and the interpolated position", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120);
+    song.beatOffset = 4;
+    const ticks: { beat: number }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
+
+    getSongTransport().syncToAbleton(song);
+    abletonChangeListener?.({ abletonBeat: 4, isPlaying: true });
+    expect(ticks[ticks.length - 1]?.beat).toBe(0); // 4 - offset(4)
+
+    vi.advanceTimersByTime(250);
+    expect(ticks[ticks.length - 1]?.beat).toBeCloseTo(0.5, 1); // 4.5 - offset(4)
+
+    unsub();
   });
 });
 

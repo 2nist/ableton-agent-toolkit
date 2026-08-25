@@ -12,29 +12,24 @@
  * matches what the Ableton extension would generate — without depending on
  * the extension package (which lives in a separate workspace the web app
  * has no dependency on).
- *
- * The performance-effect transforms (strum/pulse/arp) are duplicated inline
- * from extensions/trackdraft-bridge/src/chordClips.ts for the same reason:
- * avoiding a cross-package dependency. The two copies share the same
- * documented parameter defaults and are kept in sync.
  */
 
-import { chordToMidiNotes, pitchClass, type ChordQuality } from "@music-theory/core";
+import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
-import type { BlueprintSong, Chord, ChordPerformanceEffect } from "../types/blueprint";
+import type { BlueprintSong, Chord } from "../types/blueprint";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 /** A single MIDI note event — the common shape all three stem generators
- *  produce. `startBeat` and `durationBeats` are in song beats (quarter-note
+ *  produce. `startTime` and `duration` are in song beats (quarter-note
  *  based, same as every other beat count in the blueprint schema). */
 interface MidiNote {
   pitch: number;
-  startBeat: number;
-  durationBeats: number;
+  startTime: number;
+  duration: number;
   velocity: number;
 }
 
@@ -49,7 +44,7 @@ const TICKS_PER_QUARTER = 480;
 /** Default MIDI velocities, matching the bridge's chordClips.ts / bassLine.ts. */
 const CHORD_VELOCITY = 96;
 const BASS_VELOCITY = 100;
-const DRUM_HIT_DURATION_BEATS = 0.25;
+const DRUM_HIT_DURATION = 0.25;
 
 /** Octave 5 in @music-theory/core's numbering = MIDI 60 (middle C octave).
  *  Matches chordClips.ts DEFAULT_OCTAVE. */
@@ -89,74 +84,6 @@ function loopChordsToFill(chords: Chord[], durationBeats: number): ChordOccurren
 }
 
 // ---------------------------------------------------------------------------
-// Performance effects (duplicated from bridge's chordClips.ts)
-// ---------------------------------------------------------------------------
-
-function applyStrum(notes: MidiNote[], strumMs: number): MidiNote[] {
-  if (notes.length < 2) return notes;
-  const sorted = [...notes].sort((a, b) => a.pitch - b.pitch);
-  // Convert strum delay from ms to beats — need BPM, but at export time
-  // we don't have it per-note. Use a fixed small stagger in ticks instead.
-  // 150ms at 120bpm = 0.3 beats; approximate as a fraction of note duration.
-  const staggerBeats = (strumMs / 1000) * 2; // rough: 150ms ≈ 0.3 beats at 120bpm
-  const interval = staggerBeats / Math.max(1, sorted.length - 1);
-  return sorted.map((n, i) => ({
-    ...n,
-    startBeat: n.startBeat + i * interval,
-    durationBeats: Math.max(0.05, n.durationBeats - i * interval),
-  }));
-}
-
-function applyPulse(notes: MidiNote[], subdivision: number): MidiNote[] {
-  if (notes.length === 0) return notes;
-  return notes.flatMap((n) => {
-    const hitDuration = n.durationBeats / subdivision;
-    const hits: MidiNote[] = [];
-    for (let i = 0; i < subdivision; i++) {
-      const position = i / Math.max(1, subdivision - 1);
-      const factor = 1 - Math.abs(position - 0.5) * 2;
-      hits.push({
-        pitch: n.pitch,
-        startBeat: n.startBeat + i * hitDuration,
-        durationBeats: hitDuration,
-        velocity: Math.round(n.velocity * (0.6 + factor * 0.4)),
-      });
-    }
-    return hits;
-  });
-}
-
-function applyArp(notes: MidiNote[], subdivision: number): MidiNote[] {
-  if (notes.length === 0) return notes;
-  const sorted = [...notes].sort((a, b) => a.pitch - b.pitch);
-  const stepDuration = notes[0].durationBeats / subdivision;
-  const hits: MidiNote[] = [];
-  for (let i = 0; i < subdivision; i++) {
-    const note = sorted[i % sorted.length];
-    hits.push({
-      pitch: note.pitch,
-      startBeat: notes[0].startBeat + i * stepDuration,
-      durationBeats: stepDuration,
-      velocity: note.velocity,
-    });
-  }
-  return hits;
-}
-
-function applyPerformanceEffect(notes: MidiNote[], perf: ChordPerformanceEffect): MidiNote[] {
-  switch (perf.style) {
-    case "strum":
-      return applyStrum(notes, perf.params?.strumMs ?? 150);
-    case "pulse":
-      return applyPulse(notes, perf.params?.subdivision ?? 4);
-    case "arp":
-      return applyArp(notes, perf.params?.subdivision ?? 4);
-    default:
-      return notes;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Stem generators
 // ---------------------------------------------------------------------------
 
@@ -170,8 +97,8 @@ function planChordStem(spans: SectionSpan[]): MidiNote[] {
       const chordPitches = chordToMidiNotes(rootPc, occ.chord.quality as ChordQuality, CHORD_OCTAVE);
       let chordNotes: MidiNote[] = chordPitches.map((pitch) => ({
         pitch,
-        startBeat: span.startBeat + occ.startTime,
-        durationBeats: occ.duration,
+        startTime: span.startBeat + occ.startTime,
+        duration: occ.duration,
         velocity: CHORD_VELOCITY,
       }));
 
@@ -179,12 +106,12 @@ function planChordStem(spans: SectionSpan[]): MidiNote[] {
         // Apply effect relative to the section, then offset back to absolute
         const sectionRelative = chordNotes.map((n) => ({
           ...n,
-          startBeat: n.startBeat - span.startBeat,
+          startTime: n.startTime - span.startBeat,
         }));
         const effected = applyPerformanceEffect(sectionRelative, occ.chord.performance);
         chordNotes = effected.map((n) => ({
           ...n,
-          startBeat: n.startBeat + span.startBeat,
+          startTime: n.startTime + span.startBeat,
         }));
       }
       notes.push(...chordNotes);
@@ -201,8 +128,8 @@ function planBassStem(spans: SectionSpan[]): MidiNote[] {
     for (const occ of occurrences) {
       notes.push({
         pitch: BASS_OCTAVE * 12 + pitchClass(occ.chord.root),
-        startBeat: span.startBeat + occ.startTime,
-        durationBeats: occ.duration,
+        startTime: span.startBeat + occ.startTime,
+        duration: occ.duration,
         velocity: BASS_VELOCITY,
       });
     }
@@ -211,8 +138,12 @@ function planBassStem(spans: SectionSpan[]): MidiNote[] {
 }
 
 /** Drum notes — placeholder: generates a simple kick/snare pattern.
- *  The full drum library (@drum/library) is available in the bridge but
- *  not in the web app; for standalone MIDI export we emit a basic
+ *  `@drum/library` (the real pattern/outline/transition engine used by
+ *  `extensions/drum-studio` and this app's own live-preview path in
+ *  `playback/drumPreview.ts`) is a real, declared dependency here now —
+ *  this placeholder exists only because nothing has wired a real
+ *  `renderStudioResult`-based render into MIDI export yet, not because the
+ *  library is unavailable. Until that lands, we emit a basic
  *  four-on-the-floor pattern scaled to the section's velocity. */
 function planDrumStem(spans: SectionSpan[]): MidiNote[] {
   const notes: MidiNote[] = [];
@@ -227,8 +158,8 @@ function planDrumStem(spans: SectionSpan[]): MidiNote[] {
       for (let beat = 0; beat < beatsPerBar; beat++) {
         notes.push({
           pitch: 36, // kick
-          startBeat: barStart + beat,
-          durationBeats: DRUM_HIT_DURATION_BEATS,
+          startTime: barStart + beat,
+          duration: DRUM_HIT_DURATION,
           velocity: beat === 0 ? velocity : Math.round(velocity * 0.9),
         });
       }
@@ -238,8 +169,8 @@ function planDrumStem(spans: SectionSpan[]): MidiNote[] {
         if (beat < beatsPerBar) {
           notes.push({
             pitch: 38, // snare
-            startBeat: barStart + beat,
-            durationBeats: DRUM_HIT_DURATION_BEATS,
+            startTime: barStart + beat,
+            duration: DRUM_HIT_DURATION,
             velocity: Math.round(velocity * 0.85),
           });
         }
@@ -249,8 +180,8 @@ function planDrumStem(spans: SectionSpan[]): MidiNote[] {
       for (let i = 0; i < eighthCount; i++) {
         notes.push({
           pitch: 42, // closed hat
-          startBeat: barStart + i * 0.5,
-          durationBeats: DRUM_HIT_DURATION_BEATS,
+          startTime: barStart + i * 0.5,
+          duration: DRUM_HIT_DURATION,
           velocity: Math.round(velocity * 0.5),
         });
       }
@@ -355,8 +286,8 @@ function buildTrackChunk(events: RawMidiEvent[], trackName?: string): number[] {
 function notesToEvents(notes: MidiNote[], channel: number): RawMidiEvent[] {
   const events: RawMidiEvent[] = [];
   for (const note of notes) {
-    const startTick = Math.round(note.startBeat * TICKS_PER_QUARTER);
-    const durationTicks = Math.max(1, Math.round(note.durationBeats * TICKS_PER_QUARTER));
+    const startTick = Math.round(note.startTime * TICKS_PER_QUARTER);
+    const durationTicks = Math.max(1, Math.round(note.duration * TICKS_PER_QUARTER));
     const endTick = startTick + durationTicks;
     const vel = Math.max(1, Math.min(127, note.velocity));
 
