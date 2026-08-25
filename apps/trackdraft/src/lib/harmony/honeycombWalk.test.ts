@@ -547,20 +547,18 @@ describe("buildWalk", () => {
     expect(walk[3]).toEqual(walk[1]); // 4th chord reuses the 2nd chord's hex
   });
 
-  it("deflects a coincidental non-adjacent collision to a fresh hex", () => {
+  it("returns to origin when progression closes home", () => {
     // I → IV → vii → IV → I. The IV→vii→IV bounce is an immediate
-    // reversal (fine, reuses the IV hex). But vii→IV→I does NOT reverse
-    // the IV→vii move, even though the naive computation would coincide
-    // with the very first "I" hex several chords back — that coincidence
-    // should be deflected to a new, unvisited hex instead of silently
-    // merging two unrelated "I" chords onto one cell.
+    // reversal (fine, reuses the IV hex). The final I lands back at
+    // (0,0) — the same hex as the first I — because the contiguous
+    // walk should let a returning tonic go home, not exile it.
     const { steps } = parseProgression("I IV vii IV I");
     const walk = buildWalk(steps);
     expect(walk).toHaveLength(5);
     expect(walk[0]).toEqual({ q: 0, r: 0 }); // first I
     expect(walk[3]).toEqual(walk[1]); // IV reuses the IV hex via reversal
     expect(degreeAt(walk[4].q, walk[4].r)).toBe(0); // last I is still degree 0
-    expect(walk[4]).not.toEqual(walk[0]); // but NOT the same hex as the first I
+    expect(walk[4]).toEqual(walk[0]); // returns to origin — tonic goes home
   });
 });
 
