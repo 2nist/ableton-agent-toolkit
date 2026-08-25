@@ -206,6 +206,12 @@ export default function Dashboard() {
                   <Link to="/ui-kit-sandbox" className="hover:text-ink">
                     UI Kit
                   </Link>
+                  <Link to="/sandbox" className="hover:text-ink">
+                    Sandbox
+                  </Link>
+                  <Link to="/canvas" className="hover:text-ink">
+                    Canvas
+                  </Link>
                 </div>
               </header>
 
@@ -327,6 +333,12 @@ export default function Dashboard() {
                   </span>
                   <Link to="/ui-kit-sandbox" className="hover:text-ink">
                     UI Kit
+                  </Link>
+                  <Link to="/sandbox" className="hover:text-ink">
+                    Sandbox
+                  </Link>
+                  <Link to="/canvas" className="hover:text-ink">
+                    Canvas
                   </Link>
                 </div>
               </header>

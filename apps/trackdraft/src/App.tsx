@@ -12,6 +12,7 @@ import LyricsView from "./components/lyrics/LyricsView";
 import LivePreviewSandbox from "./pages/LivePreviewSandbox";
 import GenreWorkbench from "./pages/GenreWorkbench";
 import UiKitSandbox from "./pages/UiKitSandbox";
+import RenderCanvasLayout from "./components/RenderCanvasLayout";
 import LyricChordPopout from "./components/popout/LyricChordPopout";
 
 function App() {
@@ -45,6 +46,7 @@ function App() {
               glanced at from across a room while playing. */}
           <Route path="/song/:songId/popout" element={<LyricChordPopout />} />
           <Route path="/sandbox" element={<LivePreviewSandbox />} />
+          <Route path="/canvas" element={<RenderCanvasLayout />} />
           <Route path="/genre-workbench" element={<GenreWorkbench />} />
           <Route path="/ui-kit-sandbox" element={<UiKitSandbox />} />
           <Route path="*" element={<Navigate to="/" replace />} />
