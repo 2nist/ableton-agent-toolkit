@@ -7,7 +7,15 @@ import { planDrumClips } from "./drumClips.js";
 import { planBassLine } from "./bassLine.js";
 import { buildPickerHtml } from "./picker.js";
 import { buildViewerHtml } from "./viewer.js";
-import { buildProbeHtml, CLOSE_SCRIPT, findDrumRack, probeDrumRack } from "./drumRackProbe.js";
+import {
+  buildProbeHtml,
+  CLOSE_SCRIPT,
+  findDrumRack,
+  findDrumRackWithKitFallback,
+  probeDrumRack,
+  resolvePadMapping,
+  remapPitch,
+} from "@drum/rack-kit";
 
 const APPLY_COMMAND_ID = "trackdraftBridge.applySongBlueprint";
 const VIEW_COMMAND_ID = "trackdraftBridge.viewSongBlueprint";
@@ -116,6 +124,37 @@ export function activate(activation: ActivationContext) {
     return context.getObjectFromHandle(trackHandle as Handle, MidiTrack) ?? undefined;
   }
 
+  /**
+   * Real pad mapping for a track, falling back to the project's `kit`
+   * track when the target itself has no DrumRack — returns an empty
+   * mapping (no remapping applied) when neither has one, rather than
+   * failing the whole "Generate Drum Clips" command over a missing rack.
+   */
+  async function resolveTrackPadMapping(track: MidiTrack<"1.0.0">) {
+    const song = context.application.song;
+    const rack = song ? findDrumRackWithKitFallback(track, song) : findDrumRack(track);
+    if (!rack) return {};
+    const report = await probeDrumRack(track, rack);
+    return resolvePadMapping(report);
+  }
+
+  /**
+   * Remaps every note's pitch in a clip plan through a resolved pad mapping.
+   * No-op for an empty mapping — and, as things stand, also a no-op for any
+   * *non*-empty mapping `resolvePadMapping` can currently produce (see its
+   * docstring in `@drum/rack-kit`): it can only confirm a pad already sits
+   * at its assumed note, never discover it sitting somewhere else. Kept
+   * wired so a future role-classification improvement to `resolvePadMapping`
+   * (e.g. from sample names) doesn't need new plumbing here.
+   */
+  function remapClipPlanPitches(plan: ClipPlanEntry[], mapping: ReturnType<typeof resolvePadMapping>): ClipPlanEntry[] {
+    if (Object.keys(mapping).length === 0) return plan;
+    return plan.map((entry) => ({
+      ...entry,
+      notes: entry.notes.map((note) => ({ ...note, pitch: remapPitch(note.pitch, mapping) })),
+    }));
+  }
+
   // Reports a loaded Drum Rack's real pad layout and velocity parameters.
   // Read-only by design: it answers what the rack is, and changes nothing.
   context.commands.registerCommand(
@@ -208,7 +247,9 @@ export function activate(activation: ActivationContext) {
       const blueprints = loadBlueprints(context.environment.storageDirectory);
       const blueprint = await pickBlueprint(blueprints);
       if (!blueprint) return;
-      await applyClipPlan(track, planDrumClips(blueprint));
+      const plan = planDrumClips(blueprint);
+      const mapping = await resolveTrackPadMapping(track);
+      await applyClipPlan(track, remapClipPlanPitches(plan, mapping));
     }),
   );
 

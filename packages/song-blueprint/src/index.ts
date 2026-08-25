@@ -9,6 +9,27 @@ import type {
 
 export type { ArrangementEntry, SectionChord, SectionRole, DrumPattern, VelocityPreset };
 
+/**
+ * A meter built from 2-beat ("apple") and 3-beat ("galloping") groups, per
+ * Kevin Ferguson's "Mastering Odd, Complex Time Signatures and Rhythms" —
+ * how Balkan/Hindustani rhythmic cycles (5/16, 7/16, 11/16...) and large
+ * irregular meters (25/16, 27/16) actually get built and counted.
+ *
+ * Structurally identical to `@drum/library`'s `MeterOutline`, but declared
+ * here independently rather than imported — same reasoning this file
+ * already applies to `DrumPattern` (see `@music-theory/song-structure`'s
+ * own copy of that type): this is a schema package, and it stays decoupled
+ * from the runtime pattern-generation library on purpose.
+ */
+export interface MeterOutline {
+  /** Quarter-note-beat span of one cell: 0.5 for x/8 meters, 0.25 for x/16. */
+  cellBeats: number;
+  /** Ordered 2s/3s whose sum is the meter's numerator, in cell units. */
+  cells: (2 | 3)[];
+  /** Mnemonic counting text, e.g. "1 2 1 2 3" for 5/8 grouped as 2+3. */
+  label: string;
+}
+
 // Re-export the adapters module so consumers (youtubeFullImport.ts,
 // chordmini-bridge.ts) import from one place.
 export { parseChordName, parseSyncedLyrics, chordMiniAppToBlueprintSong } from "./adapters";
@@ -112,6 +133,13 @@ export interface BlueprintSection {
    *  time). Absent → the extension picks a variant deterministically from
    *  the section's id, same as before manual control existed. */
   drumVariantIndex?: number;
+  /** Meter built from 2s/3s (Drum Studio's odd-meter outline authoring),
+   *  for a section whose time signature has no corpus/preset analogue at
+   *  all (9/8, 11/16, 25/16, ...). When set, this overrides pattern
+   *  selection entirely for the section — a parallel path to
+   *  `drumPattern`, not a replacement for it; sections using the existing
+   *  4/4/6/8/5/4/7/8 presets are untouched by this field. */
+  drumMeterOutline?: MeterOutline;
   velocity: VelocityPreset;
   timeSignatureNumerator: number;
   timeSignatureDenPower: number;
@@ -320,6 +348,12 @@ export interface BlueprintSong {
   sections: BlueprintSection[];
   arrangement: ArrangementRepeat[];
 
+  /** When the clock source is Ableton, the Ableton transport beat that
+   *  corresponds to "song beat 0" — subtract to get a song-relative
+   *  position. Set by Studio's Calibrate button; editable as a small
+   *  numeric input. Default 0 means no offset applied. */
+  beatOffset?: number;
+
   concept?: string;
   notes?: SongNotes;
   additionalIdeas?: string[];
@@ -345,6 +379,7 @@ export function createEmptySong(title: string): BlueprintSong {
     timeSignatureDenominator: 4,
     sections: [],
     arrangement: [],
+    beatOffset: 0,
     createdAt: now,
     updatedAt: now,
   };

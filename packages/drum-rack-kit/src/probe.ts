@@ -1,4 +1,4 @@
-import { DrumRack, RackDevice, Simpler, type ApiVersion, type Device, type MidiTrack } from "@ableton-extensions/sdk";
+import { DrumRack, MidiTrack, RackDevice, Simpler, type ApiVersion, type Device, type Song } from "@ableton-extensions/sdk";
 
 /**
  * Read a Drum Rack's actual pad layout and velocity configuration.
@@ -12,6 +12,14 @@ import { DrumRack, RackDevice, Simpler, type ApiVersion, type Device, type MidiT
  *
  * So rather than reason about Ableton's behaviour, this reports what a real
  * loaded rack says about itself.
+ *
+ * Shared between `trackdraft-bridge` (blueprint-driven "Generate Drum
+ * Clips") and `drum-studio` (interactive pattern/outline picker) — both
+ * need to write notes that land on a specific kit's actual pads, not an
+ * assumed GM layout, and this logic is Extensions-SDK-coupled (imports
+ * `DrumRack`/`MidiTrack`/`Simpler` directly), so it lives in its own small
+ * package rather than in `@drum/library` (which stays SDK-free and
+ * DAW-agnostic) or duplicated per extension.
  */
 
 export interface PadParameter {
@@ -95,6 +103,97 @@ function searchDevices(devices: Device<ApiVersion>[]): DrumRack<ApiVersion> | nu
   return null;
 }
 
+/**
+ * Look for a Drum Rack on the given track first; if it has none, fall back
+ * to a track literally named "kit" (case-insensitive) anywhere in the song.
+ *
+ * Matthew's project template fixes the Drum Rack on a track named `kit`
+ * (first in the track order). A caller invoked from elsewhere — the
+ * `chord` track, or a Session slot — would otherwise find nothing and fall
+ * all the way back to the `ASSUMED` table. This fallback is the template
+ * convention, not a hard requirement: a project with its own DrumRack on
+ * the targeted track always wins, since that's the more specific answer.
+ */
+export function findDrumRackWithKitFallback(
+  track: MidiTrack<ApiVersion>,
+  song: Song<ApiVersion>,
+): DrumRack<ApiVersion> | null {
+  const direct = findDrumRack(track);
+  if (direct) return direct;
+  const kitTrack = song.tracks.find(
+    (t): t is MidiTrack<ApiVersion> => t instanceof MidiTrack && /^kit$/i.test(t.name),
+  );
+  return kitTrack ? findDrumRack(kitTrack) : null;
+}
+
+/** Roles this fold-down currently recognizes — matches the keys of `ASSUMED` below. */
+export type LogicalDrumRole =
+  | "kick"
+  | "rim"
+  | "snare"
+  | "clap"
+  | "closed hat"
+  | "mid tom"
+  | "open hat"
+  | "hi tom"
+  | "crash"
+  | "ride";
+
+/**
+ * Role → actual receiving note on a real, probed rack — the inverse of
+ * `ASSUMED`, restricted to roles this rack demonstrably has a pad for at
+ * the expected note.
+ *
+ * IMPORTANT, non-obvious limitation: because a pad's role is derived FROM
+ * its receiving note via `ASSUMED` (the only signal available without
+ * guessing from a sample name), `mapping[role]` can only ever equal the
+ * same note `ASSUMED` already assigns that role — there is no way for this
+ * function to discover that, say, a kit's "kick" sound has been placed on
+ * note 40 instead of 36, because nothing here identifies a pad as "the
+ * kick" other than it already sitting at 36. Concretely: for any report,
+ * `remapPitch(pitch, resolvePadMapping(report))` is mathematically
+ * equivalent to `pitch` — every note that resolves a mapping entry at all
+ * resolves to itself. This is confirmed both by proof (see above) and by
+ * `drum-studio`'s own extension tests, where the "remap" case and the
+ * "no rack found" case produce identical output.
+ *
+ * What this *does* legitimately do: confirm whether a rack has a pad at
+ * each expected note at all (useful to know a sparse/partial kit exists,
+ * even though — see `remapPitch` — it changes no note values today) and
+ * provide the plumbing (`findDrumRack`/`probeDrumRack`/`resolvePadMapping`/
+ * `remapPitch`, already wired end-to-end into both `trackdraft-bridge` and
+ * `drum-studio`) that a real fix could slot into. A real fix needs an
+ * independent way to identify a pad's role that doesn't start from the
+ * note it already occupies — most plausibly, matching each pad's
+ * `PadReport.samplePath` against role-indicative filename keywords — which
+ * is new work, not implemented here, and deliberately not guessed at:
+ * this file's whole design principle is reporting what a rack says about
+ * itself rather than reasoning about what it "should" be, and a fuzzy
+ * filename match would cross that line.
+ */
+export function resolvePadMapping(report: RackReport): Partial<Record<LogicalDrumRole, number>> {
+  const mapping: Partial<Record<LogicalDrumRole, number>> = {};
+  for (const pad of report.pads) {
+    const role = ASSUMED[pad.receivingNote] as LogicalDrumRole | undefined;
+    if (role) mapping[role] = pad.receivingNote;
+  }
+  return mapping;
+}
+
+/**
+ * Remap a generated note's pitch through a resolved pad mapping. See
+ * `resolvePadMapping`'s docstring for an important caveat: for any mapping
+ * that function can actually produce, this is currently a no-op — it
+ * returns `pitch` unchanged in every case. Kept as the intended call site
+ * for when `resolvePadMapping` gains real role-classification power, so
+ * callers (`trackdraft-bridge`, `drum-studio`) don't need to change again.
+ */
+export function remapPitch(pitch: number, mapping: Partial<Record<LogicalDrumRole, number>>): number {
+  const role = ASSUMED[pitch] as LogicalDrumRole | undefined;
+  if (!role) return pitch;
+  return mapping[role] ?? pitch;
+}
+
 export async function probeDrumRack(
   track: MidiTrack<ApiVersion>,
   rack: DrumRack<ApiVersion>,
@@ -114,7 +213,13 @@ export async function probeDrumRack(
     }
 
     pads.push({
-      receivingNote: chain.receivingNote,
+      // The SDK's native layer can surface this as BigInt even though it's
+      // typed `number` (same story as `Song.rootNote` elsewhere in this
+      // codebase) — never observed until pad mapping started going through
+      // real DrumChain objects instead of plain test fixtures, but worth
+      // guarding unconditionally since a BigInt receivingNote would silently
+      // poison every downstream `===`/object-key comparison.
+      receivingNote: Number(chain.receivingNote),
       devices: devices.map((device) => device.name),
       samplePath,
       velocityParameters: allParameters.filter((parameter) => isVelocityRelated(parameter.name)),
@@ -203,7 +308,8 @@ export function buildProbeHtml(report: RackReport): string {
  * `close_and_send` message through its host bridge — there is no default
  * window chrome for this. Every dialog this extension shows needs it, or
  * the only way out is force-quitting the window. Exported so every hand-
- * built dialog string in this extension can share the one implementation.
+ * built dialog string in a consuming extension can share the one
+ * implementation.
  */
 export const CLOSE_SCRIPT = `
 function sendClose() {

@@ -1,0 +1,30 @@
+{
+  "name": "drum-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/extension.js",
+  "description": "Drum Studio — pattern/fill picker (webview modal) powered by @drum/library. Browse curated grooves (incl. odd meters), preview, and render as a MIDI clip in Arrangement or Session.",
+  "scripts": {
+    "build": "tsc --noEmit && tsx build.ts",
+    "start": "tsx build.ts && extensions-cli run",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ableton-extensions/sdk": "file:../../vendor/ableton-extensions-sdk-1.0.0-beta.0.tgz",
+    "@drum/library": "0.1.0",
+    "@drum/rack-kit": "0.1.0",
+    "@music-theory/song-structure": "0.1.0",
+    "@platform/ui-kit": "0.0.0"
+  },
+  "devDependencies": {
+    "@ableton-extensions/cli": "file:../../vendor/ableton-extensions-cli-1.0.0-beta.0.tgz",
+    "@platform/test-harness": "0.0.0",
+    "@types/node": "^25.0.10",
+    "esbuild": "0.28.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.0.0"
+  }
+}

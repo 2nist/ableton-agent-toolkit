@@ -9,7 +9,9 @@
     { "name": "@groove/capture", "path": "packages/groove-capture" },
     { "name": "@daw/virtual-reaper", "path": "packages/virtual-reaper" },
     { "name": "@daw/routing-matrix", "path": "packages/routing-matrix" },
-    { "name": "@hardware/controller-bridge", "path": "packages/controller-bridge" }
+    { "name": "@hardware/controller-bridge", "path": "packages/controller-bridge" },
+    { "name": "@hardware/step-sequencer", "path": "packages/step-sequencer" },
+    { "name": "@drum/rack-kit", "path": "packages/drum-rack-kit" }
   ],
   "templates": [
     {

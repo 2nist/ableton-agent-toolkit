@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DrumPattern, PackedPreset, PackedVariant } from "@drum/library";
+import type { MeterOutline } from "@music-theory/song-blueprint";
 import { planDrumClips, type FillLibrary } from "../src/drumClips.js";
 import { makeSection, makeSong } from "./helpers.js";
 
@@ -7,6 +8,9 @@ const KICK = 36;
 const SNARE = 38;
 const TOM_HIGH = 47;
 const CRASH = 49;
+const CLOSED_HAT = 42;
+
+const SEVEN_SIXTEEN: MeterOutline = { cellBeats: 0.25, cells: [2, 2, 3], label: "1 2 1 2 1 2 3" };
 
 /**
  * Tiny fixture presets standing in for the real merged `PRESET_DATA` — see
@@ -352,5 +356,115 @@ describe("planDrumClips — fills and transitions", () => {
     });
     const [clip] = planDrumClips(song, fixturePresets(), fixtureFills());
     expect(clip.notes.some((n) => n.pitch === TOM_HIGH)).toBe(false);
+  });
+});
+
+describe("planDrumClips — drumMeterOutline (odd-meter outline authoring)", () => {
+  it("generates a click pattern spanning the outline's own beats-per-bar, not the preset engine", () => {
+    // 7/16 as 2+2+3, cellBeats 0.25 -> beatsPerBar 1.75. bars is derived
+    // from the section's own timeSignatureNumerator/bars via sectionSpans,
+    // independent of the outline — durationBeats below just confirms the
+    // outline's click pattern actually tiled to fill it.
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        makeSection({
+          id: "1",
+          name: "Odd",
+          bars: 4,
+          timeSignatureNumerator: 7,
+          timeSignatureDenPower: 4, // 7/16
+          drumMeterOutline: SEVEN_SIXTEEN,
+        }),
+      ],
+    });
+    const [clip] = planDrumClips(song, fixturePresets(), emptyFills);
+    expect(clip.durationBeats).toBeCloseTo(7); // 4 bars * 1.75 beats/bar
+    expect(clip.notes.length).toBeGreaterThan(0);
+    expect(clip.notes.every((n) => n.pitch === CLOSED_HAT)).toBe(true);
+  });
+
+  it("accents the first subdivision of each 2s/3s cell", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        makeSection({ id: "1", name: "Odd", bars: 1, timeSignatureNumerator: 7, timeSignatureDenPower: 4, drumMeterOutline: SEVEN_SIXTEEN }),
+      ],
+    });
+    const [clip] = planDrumClips(song, fixturePresets(), emptyFills);
+    const peak = Math.max(...clip.notes.map((n) => n.velocity ?? 0));
+    const accented = clip.notes.filter((n) => (n.velocity ?? 0) === peak).map((n) => n.startTime);
+    // Cells [2, 2, 3] at cellBeats 0.25 start at beats 0, 0.5, 1 — the loudest
+    // hits (post velocity-scaling, still relatively the loudest) should be
+    // exactly those three cell-start subdivisions.
+    expect(accented).toEqual(expect.arrayContaining([0, 0.5, 1]));
+  });
+
+  it("drumMeterOutline takes priority over drumPattern when both are set", () => {
+    const dnb: PackedPreset = {
+      variants: [{ lengthBeats: 4, beatsPerBar: 4, notes: [[0, TOM_HIGH, 120]], source: { origin: "synth" } }],
+    };
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        makeSection({
+          id: "1",
+          name: "Odd",
+          bars: 1,
+          timeSignatureNumerator: 7,
+          timeSignatureDenPower: 4,
+          drumPattern: "dnb",
+          drumMeterOutline: SEVEN_SIXTEEN,
+        }),
+      ],
+    });
+    const [clip] = planDrumClips(song, fixturePresets({ dnb }), emptyFills);
+    expect(clip.notes.some((n) => n.pitch === TOM_HIGH)).toBe(false);
+    expect(clip.notes.every((n) => n.pitch === CLOSED_HAT)).toBe(true);
+  });
+
+  it("gets a synthesized fill at a handoff, even though FILL_DATA has nothing for its fractional beats-per-bar", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        makeSection({
+          id: "a",
+          name: "Odd",
+          bars: 4, // >= 2 bars of the outline's own 1.75-beat meter
+          timeSignatureNumerator: 7,
+          timeSignatureDenPower: 4,
+          drumMeterOutline: SEVEN_SIXTEEN,
+        }),
+        makeSection({ id: "b", name: "Next", bars: 2, timeSignatureNumerator: 4 }),
+      ],
+    });
+    // fixtureFills() has no "1.75" key at all — the fallback generator must
+    // supply one via synthesizeOutlineFill, not silently produce no fill.
+    const [first, second] = planDrumClips(song, fixturePresets(), fixtureFills());
+    expect(first.notes.some((n) => n.pitch === KICK || n.pitch === SNARE)).toBe(true); // synthesizeOutlineFill's kick+snare punch
+    const opener = second.notes.find((n) => n.pitch === CRASH && n.startTime === 0);
+    expect(opener).toBeDefined();
+  });
+
+  it("a preset-driven section elsewhere in the same song is unaffected", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        makeSection({ id: "1", name: "Odd", bars: 2, timeSignatureNumerator: 7, timeSignatureDenPower: 4, drumMeterOutline: SEVEN_SIXTEEN }),
+        makeSection({ id: "2", name: "Verse", bars: 1, timeSignatureNumerator: 4 }),
+      ],
+    });
+    const [, secondClip] = planDrumClips(song, fixturePresets(), emptyFills);
+    expect(secondClip.notes.some((n) => n.pitch === KICK)).toBe(true); // the "standard" fixture preset, untouched
   });
 });

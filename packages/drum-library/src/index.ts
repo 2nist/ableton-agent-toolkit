@@ -14,3 +14,6 @@ export * from "./synthesize.js";
 export * from "./infer.js";
 export * from "./vary.js";
 export * from "./groove.js";
+export * from "./handoffs.js";
+export * from "./meter.js";
+export * from "./transitions.js";

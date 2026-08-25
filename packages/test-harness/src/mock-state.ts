@@ -5,6 +5,19 @@
  * mock-native-module.ts just checks `kind === className` — the real SDK's
  * DataModelObjectRegistry does the rest (it walks its own class list,
  * specific-before-generic, e.g. MidiTrack before Track).
+ *
+ * `kind` must match the real SDK class's *`static className`*, not its
+ * exported identifier — those differ for three classes (`DrumRack`'s is
+ * `"DrumRackDevice"`, `TrackMixer`'s is `"MixerDevice"`, `ChainMixer`'s is
+ * `"ChainMixerDevice"`; verified against the vendored SDK's compiled
+ * `dist/index.mjs`). A mismatch here doesn't fail loudly at creation time —
+ * `createObject` accepts any `Kind` string — it fails later, deep inside
+ * the *real* SDK's own `DataModelObjectRegistry.getOrCreateObjectFromHandle`
+ * with a generic "Unknown object type", the first time something actually
+ * resolves the handle (e.g. `track.devices`). Found via drum-studio's Phase
+ * 3 pad-mapping tests, the first real exercise of drum-rack mocking this
+ * harness has had — its own fidelity note above already flagged this
+ * family as untested against real behavior.
  */
 
 import type { Handle } from "@ableton-extensions/sdk";
@@ -20,7 +33,7 @@ export type Kind =
   | "ClipSlot"
   | "TakeLane"
   | "Simpler"
-  | "DrumRack"
+  | "DrumRackDevice"
   | "RackDevice"
   | "Device"
   | "Sample"
@@ -29,8 +42,8 @@ export type Kind =
   | "Scene"
   | "CuePoint"
   | "DeviceParameter"
-  | "TrackMixer"
-  | "ChainMixer";
+  | "MixerDevice"
+  | "ChainMixerDevice";
 
 interface MockObject {
   id: bigint;

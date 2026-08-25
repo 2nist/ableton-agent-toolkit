@@ -117,7 +117,7 @@ export function createMockNativeModule(options: MockNativeModuleOptions = {}): M
     trackGetArrangementClips: (h) => state.getRefs(h, "arrangementClips"),
     trackGetDevices: (h) => state.getRefs(h, "devices"),
     trackGetMixerDevice: (h) =>
-      state.getOrCreateChild(h, "mixer", "TrackMixer", { volume: undefined, panning: undefined, sends: [] }),
+      state.getOrCreateChild(h, "mixer", "MixerDevice", { volume: undefined, panning: undefined, sends: [] }),
     trackCreateTakeLane: (h, onResult) => {
       const lane = state.createObject("TakeLane", { name: "Take", clips: [] }, h.id);
       state.pushRef(h, "takeLanes", lane.id);
@@ -276,7 +276,7 @@ export function createMockNativeModule(options: MockNativeModuleOptions = {}): M
 
     chainGetDevices: (h) => state.getRefs(h, "devices"),
     chainGetMixerDevice: (h) =>
-      state.getOrCreateChild(h, "mixer", "ChainMixer", { volume: undefined, panning: undefined, sends: [] }),
+      state.getOrCreateChild(h, "mixer", "ChainMixerDevice", { volume: undefined, panning: undefined, sends: [] }),
     chainInsertDevice: (h, deviceName, index, onResult) => {
       const device = state.createObject("Device", { name: deviceName, parameters: [] }, h.id);
       state.insertRef(h, "devices", device.id, Number(index));
