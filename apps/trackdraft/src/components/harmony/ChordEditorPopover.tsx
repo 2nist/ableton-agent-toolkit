@@ -3,7 +3,6 @@ import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord, ChordPerformanceEffect } from "../../types/blueprint";
 import { getSubstitutionMenu } from "../../lib/harmony/substitutions";
 import { chordDisplayName, CHORD_QUALITIES } from "../../lib/harmony/chordBuilder";
-import { getPreviewPlayer } from "../../lib/harmony/audioPreview";
 
 // Chromatic subs (tritone/secondary-dominant) aren't diatonic, so there's no
 // scale degree to label them with — derive a key-relative roman numeral from
@@ -139,11 +138,6 @@ export default function ChordEditorPopover({
   const menu = getSubstitutionMenu(scale, chord.romanNumeral, rootPc);
   const isNonDiatonic = menu.modeAware.length === 0;
 
-  function auditionAndApply(next: Chord) {
-    onChange(next);
-    getPreviewPlayer().playChordObject(next, 1);
-  }
-
   return (
     <div className="p-2 text-xs h-full flex flex-col gap-2">
       <div className="flex items-baseline justify-between shrink-0">
@@ -159,7 +153,7 @@ export default function ChordEditorPopover({
             title="Flatten root (♭)"
             onClick={() => {
               const newRootPc = ((rootPc - 1) % 12 + 12) % 12;
-              auditionAndApply({
+              onChange({
                 ...chord,
                 root: noteName(newRootPc, keyName),
                 romanNumeral: chromaticDegreeLabel(keyPc, newRootPc),
@@ -175,7 +169,7 @@ export default function ChordEditorPopover({
             title="Sharpen root (♯)"
             onClick={() => {
               const newRootPc = (rootPc + 1) % 12;
-              auditionAndApply({
+              onChange({
                 ...chord,
                 root: noteName(newRootPc, keyName),
                 romanNumeral: chromaticDegreeLabel(keyPc, newRootPc),
@@ -209,7 +203,7 @@ export default function ChordEditorPopover({
                 className="text-2xs border border-edge rounded px-1.5 py-0.5 hover:bg-panelAlt hover:border-inkMuted"
                 title={sub.explanation}
                 onClick={() =>
-                  auditionAndApply({
+                  onChange({
                     ...chord,
                     root: noteName((keyPc + sub.root) % 12, keyName),
                     quality: sub.quality,
@@ -228,7 +222,7 @@ export default function ChordEditorPopover({
                 className="text-2xs border border-edge rounded px-1.5 py-0.5 hover:bg-panelAlt hover:border-inkMuted"
                 title={sub.explanation}
                 onClick={() =>
-                  auditionAndApply({
+                  onChange({
                     ...chord,
                     root: noteName(sub.root, keyName),
                     quality: sub.quality,
@@ -247,7 +241,7 @@ export default function ChordEditorPopover({
                 className="text-2xs border border-accent/50 text-accent rounded px-1.5 py-0.5 hover:bg-accent/10"
                 title={`from ${candidate.sourceMode}`}
                 onClick={() =>
-                  auditionAndApply({
+                  onChange({
                     ...chord,
                     root: noteName((keyPc + candidate.root) % 12, keyName),
                     quality: candidate.triad,

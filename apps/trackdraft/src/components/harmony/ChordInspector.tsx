@@ -3,7 +3,6 @@ import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord, ChordPerformanceEffect } from "../../types/blueprint";
 import { getSubstitutionMenu } from "../../lib/harmony/substitutions";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
-import { getPreviewPlayer } from "../../lib/harmony/audioPreview";
 
 const PERFORMANCE_STYLES: ChordPerformanceEffect["style"][] = ["strum", "pulse", "arp"];
 
@@ -46,11 +45,6 @@ export default function ChordInspector({ chord, keyName, scale, onChange }: Chor
   const menu = getSubstitutionMenu(scale, chord.romanNumeral, rootPc);
   const isNonDiatonic = menu.modeAware.length === 0;
 
-  function auditionAndApply(next: Chord) {
-    onChange(next);
-    getPreviewPlayer().playChordObject(next, 1);
-  }
-
   return (
     <div className="border border-edge rounded bg-panel p-3 space-y-3">
       <div>
@@ -73,7 +67,7 @@ export default function ChordInspector({ chord, keyName, scale, onChange }: Chor
                 key={sub.degreeLabel}
                 className="block w-full text-left hover:bg-panelAlt px-2 py-1 rounded text-xs"
                 onClick={() =>
-                  auditionAndApply({
+                  onChange({
                     ...chord,
                     root: noteName((keyPc + sub.root) % 12, keyName),
                     quality: sub.quality,
@@ -101,7 +95,7 @@ export default function ChordInspector({ chord, keyName, scale, onChange }: Chor
               key={sub.label}
               className="block w-full text-left hover:bg-panelAlt px-2 py-1 rounded text-xs"
               onClick={() =>
-                auditionAndApply({
+                onChange({
                   ...chord,
                   root: noteName(sub.root, keyName),
                   quality: sub.quality,
@@ -128,7 +122,7 @@ export default function ChordInspector({ chord, keyName, scale, onChange }: Chor
                 className="text-[11px] border border-accent/50 text-accent rounded px-2 py-1 hover:bg-accent/10"
                 title={`from ${candidate.sourceMode}`}
                 onClick={() =>
-                  auditionAndApply({
+                  onChange({
                     ...chord,
                     root: noteName((keyPc + candidate.root) % 12, keyName),
                     quality: candidate.triad,
@@ -165,23 +159,13 @@ export default function ChordInspector({ chord, keyName, scale, onChange }: Chor
                   ? "border-accent text-accent bg-accent/10"
                   : "border-edge text-inkMuted hover:text-ink"
               }`}
-              onClick={() => {
-                const next = { ...chord, performance: { style } };
-                onChange(next);
-                getPreviewPlayer().playChordObject(next, 1);
-              }}
+              onClick={() => onChange({ ...chord, performance: { style } })}
             >
               {style}
             </button>
           ))}
         </div>
-        {chord.performance && (
-          <PerformanceParams
-            chord={chord}
-            onChange={onChange}
-            onAudition={() => getPreviewPlayer().playChordObject(chord, 1)}
-          />
-        )}
+        {chord.performance && <PerformanceParams chord={chord} onChange={onChange} />}
       </div>
     </div>
   );
@@ -223,11 +207,9 @@ function ParamSlider({
 function PerformanceParams({
   chord,
   onChange,
-  onAudition,
 }: {
   chord: Chord;
   onChange: (chord: Chord) => void;
-  onAudition: () => void;
 }) {
   const style = chord.performance!.style;
   const params = chord.performance!.params ?? {};
@@ -241,39 +223,98 @@ function PerformanceParams({
 
   if (style === "strum") {
     return (
-      <ParamSlider
-        label="Strum speed (ms)"
-        value={params.strumMs ?? 150}
-        min={100}
-        max={300}
-        step={5}
-        onChange={(v) => { setParam("strumMs", v); onAudition(); }}
-      />
+      <div className="space-y-1.5">
+        <ParamSlider
+          label="Speed (ms)"
+          value={params.strumMs ?? 150}
+          min={20}
+          max={500}
+          step={5}
+          onChange={(v) => setParam("strumMs", v)}
+        />
+        <ParamSlider
+          label="Vel decay"
+          value={params.velocityDecay ?? 0}
+          min={0}
+          max={1}
+          step={0.05}
+          onChange={(v) => setParam("velocityDecay", v)}
+        />
+      </div>
     );
   }
 
   if (style === "pulse") {
     return (
+      <div className="space-y-1.5">
+        <ParamSlider
+          label="Subdivision"
+          value={params.subdivision ?? 4}
+          min={1}
+          max={16}
+          step={1}
+          onChange={(v) => setParam("subdivision", v)}
+        />
+        <ParamSlider
+          label="Vel depth"
+          value={params.velocityDepth ?? 0.4}
+          min={0}
+          max={1}
+          step={0.05}
+          onChange={(v) => setParam("velocityDepth", v)}
+        />
+        <ParamSlider
+          label="Duty cycle"
+          value={params.dutyCycle ?? 0.5}
+          min={0}
+          max={1}
+          step={0.05}
+          onChange={(v) => setParam("dutyCycle", v)}
+        />
+      </div>
+    );
+  }
+
+  // arp
+  return (
+    <div className="space-y-1.5">
       <ParamSlider
         label="Subdivision"
         value={params.subdivision ?? 4}
         min={1}
         max={16}
         step={1}
-        onChange={(v) => { setParam("subdivision", v); onAudition(); }}
+        onChange={(v) => setParam("subdivision", v)}
       />
-    );
-  }
-
-  // arp
-  return (
-    <ParamSlider
-      label="Subdivision"
-      value={params.subdivision ?? 4}
-      min={1}
-      max={16}
-      step={1}
-      onChange={(v) => { setParam("subdivision", v); onAudition(); }}
-    />
+      <ParamSlider
+        label="Octaves"
+        value={params.octaves ?? 1}
+        min={1}
+        max={4}
+        step={1}
+        onChange={(v) => setParam("octaves", v)}
+      />
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-[10px] text-inkMuted w-28 shrink-0">Direction</span>
+        <select
+          className="flex-1 bg-panelAlt border border-edge rounded px-1.5 py-0.5 text-[10px] text-ink"
+          value={params.direction ?? 0}
+          onChange={(e) => setParam("direction", Number(e.target.value))}
+        >
+          <option value={0}>Up</option>
+          <option value={1}>Down</option>
+          <option value={2}>Up/Down</option>
+          <option value={3}>Random</option>
+        </select>
+      </div>
+      <ParamSlider
+        label="Rate offset"
+        value={params.rateOffset ?? 0}
+        min={-0.5}
+        max={0.5}
+        step={0.05}
+        onChange={(v) => setParam("rateOffset", v)}
+      />
+    </div>
   );
 }

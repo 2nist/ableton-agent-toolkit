@@ -1,76 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { BlueprintSong, BlueprintSection, Chord } from "../../types/blueprint";
 
-// getPreviewPlayer() reaches for `window.AudioContext`, which doesn't
-// exist in this (non-jsdom) test environment — stub it so `play()`'s
-// chord-triggering calls are observable without needing a real browser.
-const playChordObject = vi.fn();
-const playerStop = vi.fn();
-vi.mock("../harmony/audioPreview", () => ({
-  getPreviewPlayer: () => ({ playChordObject, stop: playerStop }),
-}));
-
-// playDrumHits() ultimately reaches for window.AudioContext too (via
-// drumPreview.ts's own lazy DrumMachine) — same reasoning as above.
-const playDrumHits = vi.fn().mockResolvedValue(undefined);
-vi.mock("./drumPreview", () => ({
-  playDrumHits,
-  inferPatternForSection: () => "standard",
-}));
-
-// songTransport.ts now schedules against the shared AudioContext's own
-// clock directly (see audioContext.ts) rather than performance.now() —
-// stub a minimal fake whose `currentTime` tracks vitest's faked
-// performance.now() (seconds vs. ms), so `vi.advanceTimersByTime` drives
-// it the same way it always drove the old wall-clock-based version.
-vi.mock("./audioContext", () => ({
-  getSharedAudioContext: () => ({ get currentTime() { return performance.now() / 1000; } }),
-}));
-
-// `createTimerWorker()` constructs a real `Worker` from a Blob — Workers
-// run in their own execution context with their own timer realm, which
-// doesn't exist in this (non-jsdom) test environment and, more
-// fundamentally, wouldn't be drivable by `vi.advanceTimersByTime` even if
-// it did (a real Worker's internal `setInterval` lives outside the main
-// thread vitest fakes). Stub `Worker` with a plain class that runs the
-// *exact same* ready/not-ready predicate as `clockWorker.ts`'s inline
-// script, but using the test's own (fake-timer-controlled) `setInterval`
-// and `performance.now()` — same scheduling behavior, same thread, so
-// `vi.advanceTimersByTime` drives it exactly like it drives everything else.
-const PRECISION_MS = 4;
-class MockWorker {
-  onmessage: ((msg: MessageEvent) => void) | null = null;
-  private events: { id: number; fireAtMs: number }[] = [];
-  private intervalId: ReturnType<typeof setInterval> | null = null;
-
-  postMessage(data: { type: string; events?: { id: number; fireAtMs: number }[] }): void {
-    if (data.type !== "schedule" || !data.events) return;
-    this.events = data.events.slice();
-    if (this.intervalId === null) this.intervalId = setInterval(() => this.tick(), PRECISION_MS);
-  }
-
-  terminate(): void {
-    if (this.intervalId !== null) clearInterval(this.intervalId);
-    this.intervalId = null;
-  }
-
-  private tick(): void {
-    const now = performance.now();
-    const ready = this.events.filter((e) => e.fireAtMs - now <= PRECISION_MS);
-    for (const e of ready) this.onmessage?.({ data: { type: "fire", id: e.id } } as MessageEvent);
-    this.events = this.events.filter((e) => e.fireAtMs - now > PRECISION_MS);
-    if (this.events.length === 0 && this.intervalId !== null) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
-  }
-}
-vi.stubGlobal("Worker", MockWorker);
-
-// requestAnimationFrame/cancelAnimationFrame are browser-only too, and were
-// masked entirely until now — every test that reached this call previously
-// threw on `Worker` first. Shim via `setTimeout`, which fake timers already
-// control directly, at a plausible ~60fps interval.
+// requestAnimationFrame/cancelAnimationFrame are browser-only and don't
+// exist in this (non-jsdom) test environment. Shim via `setTimeout`, which
+// fake timers already control directly, at a plausible ~60fps interval.
 let nextRafId = 0;
 const rafTimeouts = new Map<number, ReturnType<typeof setTimeout>>();
 vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
@@ -91,9 +24,8 @@ vi.stubGlobal("cancelAnimationFrame", (id: number) => {
 });
 
 // `syncToAbleton()` connects through `abletonClock.ts`'s WebSocket
-// singleton — stub it the same way `audioPreview`/`drumPreview` are
-// stubbed above, exposing the `onChange` listener so tests can simulate
-// osc-bridge's sparse integer-beat messages directly.
+// singleton — stub it so tests can simulate osc-bridge's sparse
+// integer-beat messages directly.
 type FakeAbletonState = { abletonBeat: number | null; isPlaying: boolean };
 let abletonChangeListener: ((state: FakeAbletonState) => void) | null = null;
 const abletonConnect = vi.fn();
@@ -148,8 +80,6 @@ function makeSong(sections: BlueprintSection[], bpm = 120): BlueprintSong {
 describe("SongTransport.play", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    playChordObject.mockClear();
-    playerStop.mockClear();
   });
 
   afterEach(() => {
@@ -166,24 +96,17 @@ describe("SongTransport.play", () => {
     unsub();
   });
 
-  it("triggers every chord across every section, offset by that section's startBeat", () => {
-    // Section A: 2 bars/4/4 = 8 beats, one 8-beat chord. Section B starts
-    // at beat 8, its own chord should fire at 8 beats-in = 4s at 120bpm.
-    const song = makeSong([
-      makeSection({ id: "a", bars: 2, chords: [makeChord({ beats: 8 })] }),
-      makeSection({ id: "b", bars: 2, chords: [makeChord({ beats: 8 })] }),
-    ]);
+  it("advances the beat position over time at the song's tempo", () => {
+    // 120bpm -> 0.5s/beat. 2s in should read ~4 beats.
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120);
+    const ticks: { beat: number }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
 
     getSongTransport().play(song);
-    // The worker's own tick only runs every PRECISION_MS (4ms) — a
-    // beat-0 event's fireAtMs is already "due" the instant it's scheduled
-    // (it's SCHEDULE_LOOKAHEAD_MS in the past relative to "now"), but
-    // nothing evaluates that until the first interval tick actually runs.
-    vi.advanceTimersByTime(10); // let that first worker tick fire
-    expect(playChordObject).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(2000);
 
-    vi.advanceTimersByTime(4000); // 8 beats at 120bpm = 4s, minus the 10ms already advanced
-    expect(playChordObject).toHaveBeenCalledTimes(2); // section B's chord has now fired
+    expect(ticks[ticks.length - 1]?.beat).toBeCloseTo(4, 0);
+    unsub();
   });
 
   it("emits ticks with the correct sectionIndex as playback crosses a section boundary", () => {
@@ -204,7 +127,7 @@ describe("SongTransport.play", () => {
     unsub();
   });
 
-  it("stops on its own at the end of the song and calls the player's stop()", () => {
+  it("stops on its own at the end of the song", () => {
     const song = makeSong([makeSection({ id: "a", bars: 1, chords: [] })]); // 4 beats = 2s at 120bpm
     const ticks: { isPlaying: boolean }[] = [];
     const unsub = getSongTransport().onTick((t) => ticks.push(t));
@@ -213,20 +136,21 @@ describe("SongTransport.play", () => {
     vi.advanceTimersByTime(2500);
 
     expect(ticks[ticks.length - 1]?.isPlaying).toBe(false);
-    expect(playerStop).toHaveBeenCalled();
     expect(getSongTransport().getIsPlaying()).toBe(false);
 
     unsub();
   });
 
-  it("stop() silences pending chord timeouts scheduled by play()", () => {
-    const song = makeSong([makeSection({ id: "a", bars: 4, chords: [makeChord({ beats: 16 })] })]);
+  it("stop() halts further tick emission", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 4, chords: [] })]);
+    const ticks: unknown[] = [];
     getSongTransport().play(song);
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
     getSongTransport().stop();
-    playChordObject.mockClear();
 
     vi.advanceTimersByTime(10_000);
-    expect(playChordObject).not.toHaveBeenCalled();
+    expect(ticks).toHaveLength(1); // just the stop() tick itself
+    unsub();
   });
 });
 

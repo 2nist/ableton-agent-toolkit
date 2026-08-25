@@ -3,7 +3,6 @@ import { pitchClass } from "@music-theory/core";
 import type { ScaleType, ChordQuality, NoteName } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
 import { chordFromDegree, chordsToHoneycombText, chordDisplayName } from "../../lib/harmony/chordBuilder";
-import { getPreviewPlayer } from "../../lib/harmony/audioPreview";
 import {
   parseProgression,
   buildWalk,
@@ -177,7 +176,6 @@ export default function HoneycombWheel({
     const updated = [...chords, newChord];
     onChangeChords(updated);
     onSelectChord(newChord.id);
-    getPreviewPlayer().playChordObject(newChord, 1);
   }, [chords, keyPc, keyName, intervals, diatonicByDegree, beatsPerChord, onChangeChords, onSelectChord]);
 
   const selectChordAtCell = useCallback((q: number, r: number) => {
@@ -187,7 +185,6 @@ export default function HoneycombWheel({
         const chord = chords[i];
         if (chord) {
           onSelectChord(chord.id);
-          getPreviewPlayer().playChordObject(chord, 1);
         }
         return;
       }

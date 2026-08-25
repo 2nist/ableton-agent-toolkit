@@ -8,8 +8,6 @@ import { transposeChords } from "../../lib/harmony/honeycombWalk";
 import { downloadSongMidi } from "../../lib/midiExport";
 import FloatingToolbar from "./FloatingToolbar";
 import ChordEditorPopover from "./ChordEditorPopover";
-import InstrumentPanel from "./InstrumentPanel";
-import DrumKitPanel from "../structure/DrumKitPanel";
 
 /** The Harmony tab's dock content — registered once by HarmonyView and
  *  fully self-sufficient from there (reads `useSongStore` +
@@ -58,12 +56,7 @@ export default function HarmonyDockTools() {
 
   return (
     <div className="flex flex-col">
-      {/* Playback-wide, not song data — stays visible across both branches
-         below rather than living inside either one, so switching voices
-         mid-edit doesn't require deselecting the chord you're working on. */}
-      <div className="p-3 border-b border-edge space-y-3">
-        <InstrumentPanel />
-        <DrumKitPanel />
+      <div className="p-3 border-b border-edge">
         <button
           onClick={() => downloadSongMidi(song)}
           className="w-full border border-accent/50 text-accent rounded px-3 py-1.5 text-xs hover:bg-accent/10 font-medium"

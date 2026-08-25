@@ -4,7 +4,6 @@ import { CSS } from "@dnd-kit/utilities";
 import { pitchClass } from "@music-theory/core";
 import type { Chord, ChordPerformanceEffect } from "../../types/blueprint";
 import { chordDisplayName, chordFunction, CHORD_QUALITIES, functionColorHex } from "../../lib/harmony/chordBuilder";
-import { getPreviewPlayer } from "../../lib/harmony/audioPreview";
 import type { NoteName, ScaleType } from "@music-theory/core";
 
 type EditProperty = "none" | "quality" | "beats" | "performance";
@@ -52,10 +51,6 @@ export default function ChordCard({
     ...(hex ? { borderColor: hex, backgroundColor: `${hex}1a` } : {}),
   };
 
-  function audition() {
-    getPreviewPlayer().playChordObject(chord, 1);
-  }
-
   return (
     <div
       ref={setNodeRef}
@@ -63,10 +58,7 @@ export default function ChordCard({
       className={`relative border rounded px-2 py-2 min-w-[110px] text-center cursor-pointer ${
         hex ? "" : "border-edge bg-panelAlt"
       } ${isSelected ? "ring-2 ring-accent" : ""} ${isSounding ? "ring-2 ring-accent/70" : ""}`}
-      onClick={() => {
-        onSelect();
-        audition();
-      }}
+      onClick={() => onSelect()}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();

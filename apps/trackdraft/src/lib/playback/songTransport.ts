@@ -1,20 +1,6 @@
-import { getPreviewPlayer } from "../harmony/audioPreview";
-import { playDrumHits, inferPatternForSection } from "./drumPreview";
-import { getSharedAudioContext } from "./audioContext";
-import { createTimerWorker } from "./clockWorker";
 import { sectionSpans, type SectionSpan } from "../arrangement";
 import { getAbletonClock } from "./abletonClock";
 import type { BlueprintSong } from "../../types/blueprint";
-
-/** How far ahead of an event's precise intended time its `setTimeout` is
- *  allowed to fire — submitting to WebAudio a little early means small
- *  JS-timer jitter (a `setTimeout` running a few ms late, a busy tab)
- *  doesn't shift the *audible* result, since the actual start time is the
- *  precise one computed from the shared AudioContext, not "whenever this
- *  callback happened to run." 200ms is generous but still inaudibly early
- *  — it covers worst-case main-thread blockages (DevTools open, heavy
- *  React reconciliation) while keeping scheduling crisp. */
-const SCHEDULE_LOOKAHEAD_MS = 200;
 
 /** A song-wide playback position, emitted on every tick while playing and
  *  once more (isPlaying: false) when play stops or reaches the end. */
@@ -41,44 +27,21 @@ function sectionIndexAt(spans: SectionSpan[], beat: number): number {
   return spans.findIndex((s) => beat >= s.startBeat && beat < s.startBeat + s.durationBeats);
 }
 
-/** Walks a song's full arrangement (`sectionSpans`) and plays every
- *  section's chords *and* drums in sequence, offset by that section's
- *  `startBeat` — the "whole track" version of
- *  `PreviewPlayer.playProgression`, which only ever knew about one
- *  section's chords at a time, with no concept of drums at all. Reuses
- *  `PreviewPlayer.playChordObject`/`playDrumHits` as the actual
- *  sound-triggering primitives (same sampler/DrumMachine, same
- *  performance-effect and pattern/variant resolution as every other
- *  preview in the app) rather than duplicating voice scheduling here —
- *  this class only owns *when*, not *how*, something sounds.
+/** Walks a song's full arrangement (`sectionSpans`) and advances a
+ *  song-relative beat position at display refresh rate — a silent
+ *  playhead for reviewing arrangement/timing while editing. TrackDraft
+ *  itself no longer makes sound (see `syncToAbleton` below and the
+ *  project's MIDI-only direction): actual audio always comes from
+ *  Ableton once a song's chords/drums are committed there, so this
+ *  clock's only job is *position*, not *sound*.
  *
- *  Chords and drums schedule against the *same* shared AudioContext
- *  (`audioContext.ts` — previously each maintained its own, independently
- *  created, with no relationship between their clocks) and against a
- *  single precise time reference (`audioStartTime`, snapshotted once at
- *  `play()`) rather than each event computing its own "now" at whatever
- *  imprecise moment its `setTimeout` happens to fire. Every `setTimeout`
- *  fires `SCHEDULE_LOOKAHEAD_MS` *before* an event's intended time and
- *  hands WebAudio that exact precomputed time, so ordinary JS-timer
- *  jitter doesn't shift the audible result — this is the standard
- *  "schedule ahead, let the audio clock do the precise part" pattern
- *  ("A Tale of Two Clocks"), not a naive "fire and let it land whenever."
- *
- *  The position ticks that drive the playhead/popout read the *same*
- *  shared AudioContext clock too (`ctx.currentTime - audioStartTime`),
- *  not a separate `performance.now()` estimate — so what the UI shows is
- *  the same clock the audio is actually scheduled against, not a
- *  close-but-different approximation of it. Ticks are broadcast on a
- *  `BroadcastChannel` so a same-origin popout window (a separate JS
- *  realm — no shared React/Zustand state) can follow along without a
- *  server round-trip. */
+ *  Ticks are broadcast on a `BroadcastChannel` so a same-origin popout
+ *  window (a separate JS realm — no shared React/Zustand state) can
+ *  follow along without a server round-trip. */
 class SongTransport {
   private channel: BroadcastChannel | null = null;
   private schedulerId: ReturnType<typeof requestAnimationFrame> | null = null;
-  private timerWorker: Worker | null = null;
-  private eventCallbacks = new Map<number, () => void>();
-  private nextEventId = 0;
-  private audioStartTime = 0;
+  private startedAtMs = 0;
   private spans: SectionSpan[] = [];
   private isPlaying = false;
   private tickListeners = new Set<(tick: TransportTick) => void>();
@@ -105,9 +68,10 @@ class SongTransport {
     return this.isPlaying;
   }
 
-  /** Start playing `song` from the top. Any playback already in progress
-   *  (this song or another) is stopped first. If `clockSource` is
-   *  "ableton" this is a no-op — Ableton sync must use syncToAbleton(). */
+  /** Start a silent playhead scrub through `song` from the top — no audio,
+   *  see the class doc. Any playback already in progress (this song or
+   *  another) is stopped first. If `clockSource` is "ableton" this is a
+   *  no-op — Ableton sync must use syncToAbleton(). */
   play(song: BlueprintSong): void {
     if (this.clockSource === "ableton") return;
     this.stop();
@@ -119,104 +83,16 @@ class SongTransport {
     const totalBeats = lastSpan.startBeat + lastSpan.durationBeats;
     if (totalBeats <= 0) return;
 
-    const ctx = getSharedAudioContext();
-    this.audioStartTime = ctx.currentTime;
+    this.startedAtMs = performance.now();
     this.isPlaying = true;
-
-    // Map AudioContext seconds to wall-clock ms (performance.now()
-    // timebase).  `ctx.currentTime` is seconds since AC creation;
-    // `performance.now()` is ms since page start.  The offset is
-    // stable for the life of the AC — snapshot it once and every
-    // `preciseTime` can be converted to a real-world fire-at moment.
-    const acOffsetMs = performance.now() - ctx.currentTime * 1000;
-
-    // Spin up a Web Worker whose sole job is firing callbacks at
-    // precise wall-clock intervals — unblocked by main-thread activity
-    // (React renders, GC, DevTools).  Built from an inline Blob so
-    // TypeScript doesn't need a .ts module at all.
-    const w = createTimerWorker();
-    w.onmessage = (msg: MessageEvent<{ type: string; id: number }>) => {
-      if (msg.data.type === "fire") {
-        const cb = this.eventCallbacks.get(msg.data.id);
-        if (cb && this.isPlaying) cb();
-        this.eventCallbacks.delete(msg.data.id);
-      }
-    };
-    this.timerWorker = w;
-
-    // Schedules `fn(preciseAudioTime)` to run via the worker timer,
-    // which will post back `{type:"fire", id}` roughly
-    // `SCHEDULE_LOOKAHEAD_MS` before `beat`'s exact moment.  The
-    // callback wraps `fn` in a `Math.max(preciseTime, ctx.currentTime)`
-    // clamp — same late-timeout guard as before, just now the
-    // scheduling delay isn't itself subject to main-thread jitter.
-    // Accumulate events locally, then post them all at once — the
-    // worker replaces its entire queue on each `schedule` message, so
-    // sending them one at a time would silently drop every event
-    // except the last.
-    const pendingEvents: { id: number; fireAtMs: number }[] = [];
-
-    const scheduleAt = (beat: number, fn: (preciseTime: number) => void) => {
-      const preciseTime = this.audioStartTime + beat * secPerBeat;
-      // preciseTime is AudioContext seconds (relative to AC creation).
-      // Convert to wall-clock ms via the snapshotted offset, then
-      // subtract the lookahead so the worker fires early.
-      const fireAtMs = preciseTime * 1000 + acOffsetMs - SCHEDULE_LOOKAHEAD_MS;
-      const id = this.nextEventId++;
-      this.eventCallbacks.set(id, () => {
-        fn(Math.max(preciseTime, getSharedAudioContext().currentTime));
-      });
-      pendingEvents.push({ id, fireAtMs });
-    };
-
-    const player = getPreviewPlayer();
-    for (const span of this.spans) {
-      // Loop the progression to fill the section (matching export's loopChordsToFill).
-      // Two-pass: build occurrences first so closure-over-loop-variable is impossible.
-      if (span.section.chords.length > 0) {
-        const chordHits: { chord: typeof span.section.chords[number]; startBeat: number; chordBeats: number }[] = [];
-        let cursorBeat = 0;
-        while (cursorBeat < span.durationBeats) {
-          for (const chord of span.section.chords) {
-            if (cursorBeat >= span.durationBeats) break;
-            const chordBeats = Math.min(chord.beats, span.durationBeats - cursorBeat);
-            chordHits.push({ chord, startBeat: span.startBeat + cursorBeat, chordBeats });
-            cursorBeat += chordBeats;
-          }
-        }
-        for (const hit of chordHits) {
-          scheduleAt(hit.startBeat, (preciseTime) => {
-            player.playChordObject(hit.chord, hit.chordBeats * secPerBeat, preciseTime);
-          });
-        }
-      }
-
-      // Drums for the section, starting when it does — same
-      // explicit-override-else-heuristic resolution `drumClips.ts` uses for
-      // export (so Studio playback previews what Ableton will actually
-      // get), and tiled by `resolveDrumHits` to fill the section's full
-      // bar length rather than one loop then silence.
-      const pattern = span.section.drumPattern ?? inferPatternForSection(span.section);
-      scheduleAt(span.startBeat, (preciseTime) => {
-        void playDrumHits(pattern, span.section.drumVariantIndex, span.section, secPerBeat, preciseTime);
-      });
-    }
-
-    // Post the full event queue atomically — the worker replaces its
-    // internal array on every schedule message, so this must be done
-    // once after the entire schedule is built.
-    if (pendingEvents.length > 0) {
-      this.timerWorker!.postMessage({ type: "schedule", events: pendingEvents });
-    }
 
     // Playhead position ticks at display refresh rate (60fps) so the
     // visual cursor moves smoothly, not at a choppy 10Hz. The
     // BroadcastChannel still fires at ~60fps too — the popout window
-    // handles that rate fine and it looks dramatically better than a
-    // jumpy 100ms update.
+    // handles that rate fine.
     const tickLoop = () => {
       if (!this.isPlaying) return;
-      const beat = (ctx.currentTime - this.audioStartTime) / secPerBeat;
+      const beat = (performance.now() - this.startedAtMs) / 1000 / secPerBeat;
       if (beat >= totalBeats) {
         this.stop();
         return;
@@ -308,23 +184,17 @@ class SongTransport {
     return beat;
   }
 
-  /** Stop playback (self-clock or Ableton-synced) and silence everything
-   *  self-clock might have triggered — safe to call whether or not
-   *  playback is currently running (unmount/cleanup calls this
-   *  unconditionally, same as `PreviewPlayer.stop()`). Deliberately does
-   *  *not* disconnect `abletonClock` — that connection is meant to
-   *  persist across stop/resync so reconnecting doesn't need a fresh
-   *  handshake every time playback toggles. */
+  /** Stop playback (self-clock or Ableton-synced) — safe to call whether
+   *  or not playback is currently running (unmount/cleanup calls this
+   *  unconditionally). Deliberately does *not* disconnect `abletonClock`
+   *  — that connection is meant to persist across stop/resync so
+   *  reconnecting doesn't need a fresh handshake every time playback
+   *  toggles. */
   stop(): void {
     if (this.schedulerId !== null) {
       cancelAnimationFrame(this.schedulerId);
       this.schedulerId = null;
     }
-    if (this.timerWorker) {
-      this.timerWorker.terminate();
-      this.timerWorker = null;
-    }
-    this.eventCallbacks.clear();
     if (this.abletonUnsub) {
       this.abletonUnsub();
       this.abletonUnsub = null;
@@ -333,7 +203,6 @@ class SongTransport {
     const wasPlaying = this.isPlaying;
     this.isPlaying = false;
     if (wasPlaying) {
-      getPreviewPlayer().stop();
       this.emit({ beat: 0, isPlaying: false, sectionIndex: -1 });
     }
   }
@@ -346,9 +215,9 @@ class SongTransport {
 
 let sharedTransport: SongTransport | null = null;
 
-/** One transport per page, same reasoning as `getPreviewPlayer()` — Studio
- *  Play always means "play this song," interrupting whatever was already
- *  playing rather than layering on top of it. */
+/** One transport per page — Studio Play always means "play this song,"
+ *  interrupting whatever was already playing rather than layering on
+ *  top of it. */
 export function getSongTransport(): SongTransport {
   if (!sharedTransport) sharedTransport = new SongTransport();
   return sharedTransport;

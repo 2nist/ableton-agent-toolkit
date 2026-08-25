@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -14,9 +13,6 @@ import type { NoteName, ScaleType } from "@music-theory/core";
 import type { BlueprintSection, Chord, ChordPerformanceEffect } from "../../types/blueprint";
 import { beatsPerBar, describeProgressionFit } from "../../types/blueprint";
 import { chordDisplayName, chordFunction, functionColorHex } from "../../lib/harmony/chordBuilder";
-import { getPreviewPlayer, buildSchedule } from "../../lib/harmony/audioPreview";
-import { playDrumHits, inferPatternForSection } from "../../lib/playback/drumPreview";
-import { getSharedAudioContext } from "../../lib/playback/audioContext";
 
 const CELL_W = 78;
 
@@ -101,7 +97,6 @@ function SortableChordCell({
   keyName,
   scale,
   isSelected,
-  isSounding,
   onSelect,
   onRemove,
 }: {
@@ -109,7 +104,6 @@ function SortableChordCell({
   keyName: NoteName;
   scale: ScaleType;
   isSelected: boolean;
-  isSounding: boolean;
   onSelect: () => void;
   onRemove: () => void;
 }) {
@@ -131,7 +125,7 @@ function SortableChordCell({
       }}
       className={`relative h-[50px] shrink-0 rounded-[5px] border bg-panelAlt cursor-pointer overflow-hidden pt-1.5 px-2 ${
         isSelected ? "border-accent ring-2 ring-accent" : "border-edge hover:border-inkMuted"
-      } ${isSounding ? "ring-2 ring-accent/70" : ""}`}
+      }`}
       onClick={() => onSelect()}
     >
       <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: stripe }} />
@@ -172,21 +166,7 @@ export default function ProgressionTrack({
   onSetBars,
 }: ProgressionTrackProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
-  const drumIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const drumLoopCountRef = useRef(0);
   const fit = describeProgressionFit(section);
-
-  useEffect(() => {
-    return () => {
-      getPreviewPlayer().stop();
-      if (drumIntervalRef.current !== null) {
-        clearInterval(drumIntervalRef.current);
-        drumIntervalRef.current = null;
-      }
-    };
-  }, [section.id]);
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -195,63 +175,6 @@ export default function ProgressionTrack({
     const to = section.chords.findIndex((c) => c.id === over.id);
     if (from === -1 || to === -1) return;
     onChangeChords(arrayMove(section.chords, from, to));
-  }
-
-  function togglePlay() {
-    const player = getPreviewPlayer();
-    if (isPlaying) {
-      player.stop();
-      setIsPlaying(false);
-      setPlayingIndex(null);
-      if (drumIntervalRef.current !== null) {
-        clearInterval(drumIntervalRef.current);
-        drumIntervalRef.current = null;
-      }
-      return;
-    }
-    setIsPlaying(true);
-
-    // Chords: use the existing playProgression (its setTimeout jitter is
-    // only visual for the highlight — chord audio is scheduled via
-    // playChordObject which hands it to WebAudio at a precise time).
-    player.playProgression(section.chords, bpm, { loop: true, onChordStart: setPlayingIndex });
-
-    // Drums: one loop at a time via setInterval — same pattern as
-    // playProgression's internal scheduler. Each call triggers drums
-    // relative to its own "now" (no startAt), avoiding the async pileup
-    // and interleaving of 150+ simultaneous playDrumHits calls.
-    const schedule = buildSchedule(section.chords, bpm);
-    const loopDurSec = schedule.length > 0
-      ? schedule[schedule.length - 1].startSec + schedule[schedule.length - 1].durSec
-      : 0;
-
-    if (loopDurSec > 0) {
-      const secPerBeat = 60 / bpm;
-      const drumPattern = section.drumPattern ?? inferPatternForSection(section);
-      const progressionTotalBeats = schedule.reduce((sum, c) => sum + section.chords[c.index].beats, 0);
-      const ctx = getSharedAudioContext();
-      const startTime = ctx.currentTime;
-      drumLoopCountRef.current = 0;
-
-      // Fire the first loop immediately (setInterval doesn't fire its
-      // callback until after the first interval, but loop 0 needs to
-      // start at startTime which is now).
-      void playDrumHits(drumPattern, section.drumVariantIndex, section, secPerBeat,
-        startTime, progressionTotalBeats);
-      drumLoopCountRef.current = 1;
-
-      // Subsequent loops fire a bit ahead — setInterval drift is harmless
-      // because drum hits are dispatched at precise absolute startAt
-      // times, so boundaries are gap-free.
-      const SCHEDULE_AHEAD_MS = 50;
-      const intervalMs = Math.max(10, loopDurSec * 1000 - SCHEDULE_AHEAD_MS);
-      drumIntervalRef.current = setInterval(() => {
-        const i = drumLoopCountRef.current;
-        void playDrumHits(drumPattern, section.drumVariantIndex, section, secPerBeat,
-          startTime + i * loopDurSec, progressionTotalBeats);
-        drumLoopCountRef.current++;
-      }, intervalMs);
-    }
   }
 
   const empty = section.chords.length === 0;
@@ -280,7 +203,6 @@ export default function ProgressionTrack({
                       keyName={keyName}
                       scale={scale}
                       isSelected={selectedChordId === chord.id}
-                      isSounding={playingIndex === i}
                       onSelect={() => onSelectChord(chord.id)}
                       onRemove={() => onChangeChords(section.chords.filter((c) => c.id !== chord.id))}
                     />
@@ -313,9 +235,6 @@ export default function ProgressionTrack({
                   onClick={() => {
                     const next = nextPerformanceEffect(chord.performance);
                     onUpdateChord(chord.id, { performance: next });
-                    if (next) {
-                      getPreviewPlayer().playChordObject({ ...chord, performance: next }, 1);
-                    }
                     onSelectChord(chord.id);
                   }}
                   onContextMenu={(e) => {
@@ -346,14 +265,6 @@ export default function ProgressionTrack({
           <span className="mr-auto font-mono text-[9px] tracking-wide text-inkMuted/70">
             click a hex to add · click a chord to edit
           </span>
-        )}
-        {!empty && (
-          <button
-            className="font-mono text-[10.5px] tracking-wide border border-edge rounded px-2 py-0.5 text-inkMuted hover:text-ink hover:bg-panelAlt"
-            onClick={togglePlay}
-          >
-            {isPlaying ? "■ Stop" : "▸ Play loop"}
-          </button>
         )}
       </div>
     </>

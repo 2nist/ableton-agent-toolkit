@@ -11,7 +11,6 @@
  */
 
 import { useSongStore } from "../../store/songStore";
-import { getPreviewPlayer } from "../harmony/audioPreview";
 import { getSongTransport } from "./songTransport";
 import { getAbletonClock } from "./abletonClock";
 import type {
@@ -107,16 +106,9 @@ function handleEncoder(target: EncoderTarget, rawValue: number, song: BlueprintS
       break;
     }
     case "chord_degree": {
-      // Advance the focused chord within the first section that has chords.
-      const section = song.sections.find((s) => s.chords.length > 0);
-      if (!section) return;
-      const targetIdx = rotateIndex(0, section.chords.length, delta);
-      if (section.chords[targetIdx]) {
-        getPreviewPlayer().playChordObject(
-          section.chords[targetIdx]!,
-          section.beatsPerChord * (60 / song.bpm),
-        );
-      }
+      // Placeholder — no local audio to preview against anymore (TrackDraft
+      // is MIDI-only; sound comes from Ableton). Nothing to advance here
+      // until this drives real selection state instead.
       break;
     }
     case "chord_quality": {
@@ -173,31 +165,9 @@ function handleEncoder(target: EncoderTarget, rawValue: number, song: BlueprintS
 // ---------------------------------------------------------------------------
 
 function handleDisplayButton(index: number, song: BlueprintSong) {
-  const player = getPreviewPlayer();
   const transport = getSongTransport();
 
   switch (index) {
-    case 0: {
-      // Trigger preview of first chord in first section.
-      const section = song.sections.find((s) => s.chords.length > 0);
-      if (section?.chords[0]) {
-        player.playChordObject(section.chords[0], section.beatsPerChord * (60 / song.bpm));
-      }
-      break;
-    }
-    case 1: {
-      // Cycle section focus — preview next section's first chord.
-      const sections = song.sections.filter((s) => s.chords.length > 0);
-      if (sections.length > 0) {
-        const currentIdx = 0; // first section as default
-        const nextIdx = (currentIdx + 1) % sections.length;
-        const next = sections[nextIdx]!;
-        if (next.chords[0]) {
-          player.playChordObject(next.chords[0], next.beatsPerChord * (60 / song.bpm));
-        }
-      }
-      break;
-    }
     case 2: {
       // Toggle transport playback.
       if (transport.getIsPlaying()) {
