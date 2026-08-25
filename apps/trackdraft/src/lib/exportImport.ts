@@ -1,6 +1,51 @@
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { BlueprintSong } from "../types/blueprint";
 
+// ---------------------------------------------------------------------------
+// File System Access API helper — returns a directory handle, or null if
+// the user cancelled or the API is not available.
+// ---------------------------------------------------------------------------
+
+declare global {
+  interface Window {
+    showDirectoryPicker?: (options?: { mode?: "read" | "readwrite" }) => Promise<FileSystemDirectoryHandle>;
+  }
+}
+
+interface FileSystemDirectoryHandle {
+  getFileHandle(name: string, options?: { create?: boolean }): Promise<FileSystemFileHandle>;
+}
+
+interface FileSystemFileHandle {
+  createWritable(): Promise<{ write(data: string): Promise<void>; close(): Promise<void> }>;
+}
+
+async function pickDirectory(): Promise<FileSystemDirectoryHandle | null> {
+  if (typeof window === "undefined" || !window.showDirectoryPicker) return null;
+  try {
+    return await window.showDirectoryPicker({ mode: "readwrite" });
+  } catch {
+    return null; // user cancelled
+  }
+}
+
+/** Writes every song in the store to a user-chosen directory via the
+ *  File System Access API. Overwrites by songId; does not delete files.
+ *  Serializes using the same JSON format as `downloadSongJson`. */
+export async function syncLibraryToFolder(songs: BlueprintSong[]): Promise<void> {
+  const dir = await pickDirectory();
+  if (!dir) return;
+
+  for (const song of songs) {
+    const filename = `${song.id}.blueprint.json`;
+    const fileHandle = await dir.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    const json = JSON.stringify(song, null, 2);
+    await writable.write(json);
+    await writable.close();
+  }
+}
+
 /** Triggers a browser download of a song as a standalone JSON file --
  *  the hand-off artifact Phase 6's Ableton extension consumes, and
  *  matching the original TrackDraft's documented "export complete JSON"

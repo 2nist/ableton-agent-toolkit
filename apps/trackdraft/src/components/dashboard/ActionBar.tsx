@@ -5,6 +5,7 @@ import { readSongFile } from "../../lib/exportImport";
 import { extractVideoId } from "../../lib/youtube";
 import { assembleBlueprint } from "../../lib/youtubeFullImport";
 import type { ChordMiniAppResult, LrclibData } from "../../lib/youtubeFullImport";
+import { syncLibraryToFolder } from "../../lib/exportImport";
 
 // ---------------------------------------------------------------------------
 // Component
@@ -190,24 +191,31 @@ export default function ActionBar() {
             Create
           </button>
         </form>
-        <button
-          className="border border-edge rounded px-3 py-1 text-xs text-inkMuted hover:text-ink hover:bg-panelAlt"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          Import .json
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json,.json"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleImportFile(file);
-            e.target.value = "";
-          }}
-        />
-      </div>
+          <button
+            className="border border-edge rounded px-3 py-1 text-xs text-inkMuted hover:text-ink hover:bg-panelAlt"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Import .json
+          </button>
+          <button
+            className="border border-edge rounded px-3 py-1 text-xs text-inkMuted hover:text-ink hover:bg-panelAlt"
+            onClick={() => syncLibraryToFolder(useSongStore.getState().songs)}
+            title="Export all songs to a directory as .blueprint.json files (overwrite by id, no deletion — for MCP server / external tool consumption)"
+          >
+            Sync library to folder
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImportFile(file);
+              e.target.value = "";
+            }}
+          />
+        </div>
 
       {/* Row 2: YouTube one-click full import */}
       <div className="flex items-center gap-2">
