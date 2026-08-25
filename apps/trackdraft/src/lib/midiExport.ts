@@ -145,10 +145,10 @@ function planBassStem(spans: SectionSpan[]): MidiNote[] {
  *  `resolveDrumHits` normally converts beat positions to seconds via
  *  `secPerBeat`; passing `1` here gets beat positions straight back
  *  unchanged, which is what a beat-based MIDI file needs. */
-function planDrumStem(spans: SectionSpan[]): MidiNote[] {
+function planDrumStem(spans: SectionSpan[], concept?: string): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
-    const pattern = span.section.drumPattern ?? inferPatternForSection(span.section);
+    const pattern = span.section.drumPattern ?? inferPatternForSection(span.section, concept);
     const hits = resolveDrumHits(pattern, span.section.drumVariantIndex, span.section, 1, span.durationBeats);
     if (!hits) continue;
     for (const hit of hits) {
@@ -305,7 +305,7 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
   // Generate stems
   const chordNotes = planChordStem(spans);
   const bassNotes = planBassStem(spans);
-  const drumNotes = planDrumStem(spans);
+  const drumNotes = planDrumStem(spans, song.concept);
 
   // --- Conductor track (tempo + time sig + key sig) ---
   const conductorEvents: RawMidiEvent[] = [];

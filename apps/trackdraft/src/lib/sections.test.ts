@@ -141,4 +141,76 @@ describe("applySongMap", () => {
     // The old section's repeats:5 doesn't leak into the new template (fresh ids, nothing to match).
     expect(song.arrangement.some((e) => e.sectionId === "old")).toBe(false);
   });
+
+  it("resolves a slot's progression into real chords in the map's key/scale", () => {
+    const map: SongMap = {
+      id: "test-map-chords",
+      name: "Test",
+      description: "",
+      defaults: { key: "A", scale: "aeolian" },
+      slots: [
+        { role: "verse", label: "Verse", purpose: "", beatsPerChord: 4, progression: ["i", "bVII", "bVI", "iv"] },
+        { role: "chorus", label: "Chorus", purpose: "" }, // no progression -> chords stay empty
+      ],
+    };
+    const song = applySongMap(makeSong([]), map);
+    expect(song.sections[0].chords).toHaveLength(4);
+    expect(song.sections[0].chords.map((c) => c.romanNumeral)).toEqual(["i", "♭VII", "♭VI", "iv"]);
+    // aeolian's i is minor, rooted on A itself.
+    expect(song.sections[0].chords[0].root).toBe("A");
+    expect(song.sections[0].chords[0].quality).toBe("min");
+    expect(song.sections[1].chords).toEqual([]);
+  });
+
+  it("sets an explicit drumPattern only when groove names something the legacy dropdown can represent", () => {
+    const map: SongMap = {
+      id: "test-map-groove",
+      name: "Test",
+      description: "",
+      slots: [
+        { role: "verse", label: "Verse", purpose: "", groove: "Hard pivot to half-time, everything drags." },
+        { role: "chorus", label: "Chorus", purpose: "", groove: "Warm pads, no strong beat signal here." },
+        { role: "bridge", label: "Bridge", purpose: "" }, // no groove at all
+      ],
+    };
+    const song = applySongMap(makeSong([]), map);
+    expect(song.sections[0].drumPattern).toBe("half_time");
+    expect(song.sections[1].drumPattern).toBeUndefined();
+    expect(song.sections[2].drumPattern).toBeUndefined();
+  });
+
+  it("applies a named variant's slots instead of the map's primary slots", () => {
+    const map: SongMap = {
+      id: "test-map-variant",
+      name: "Test",
+      description: "",
+      slots: [{ role: "verse", label: "Primary Verse", purpose: "" }],
+      variants: [
+        {
+          name: "Club Loop",
+          slots: [
+            { role: "intro", label: "Loop A", purpose: "" },
+            { role: "verse", label: "Loop B", purpose: "" },
+          ],
+        },
+      ],
+    };
+    const song = applySongMap(makeSong([]), map, { variantName: "Club Loop" });
+    expect(song.sections.map((s) => s.name)).toEqual(["Loop A", "Loop B"]);
+  });
+
+  it("drops slots marked optional when excludeOptional is set", () => {
+    const map: SongMap = {
+      id: "test-map-optional",
+      name: "Test",
+      description: "",
+      slots: [
+        { role: "verse", label: "Verse", purpose: "" },
+        { role: "solo", label: "Extended Solo", purpose: "", optional: true },
+        { role: "outro", label: "Outro", purpose: "" },
+      ],
+    };
+    const song = applySongMap(makeSong([]), map, { excludeOptional: true });
+    expect(song.sections.map((s) => s.name)).toEqual(["Verse", "Outro"]);
+  });
 });

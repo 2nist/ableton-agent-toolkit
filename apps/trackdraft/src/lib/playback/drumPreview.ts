@@ -11,7 +11,12 @@ import {
   type PackedNote,
   type KitVoice,
 } from "@drum/library";
-import { sectionDurationBeats, type BlueprintSection, type MeterOutline } from "../../types/blueprint";
+import {
+  sectionDurationBeats,
+  type BlueprintSection,
+  type MeterOutline,
+  type DrumPattern as SchemaDrumPattern,
+} from "../../types/blueprint";
 
 /**
  * A single drum hit resolved from a pattern/variant — the common shape
@@ -191,9 +196,9 @@ export function resolveOutlineVoiceNecklaces(outline: MeterOutline): VoiceNeckla
  * order `drumClips.ts` uses), or the heuristic pattern when neither is
  * set — so callers never need to know which mode a section is in.
  */
-export function resolveSectionVoiceNecklaces(section: BlueprintSection): VoiceNecklace[] | null {
+export function resolveSectionVoiceNecklaces(section: BlueprintSection, concept?: string): VoiceNecklace[] | null {
   if (section.drumMeterOutline) return resolveOutlineVoiceNecklaces(section.drumMeterOutline);
-  const pattern = section.drumPattern ?? inferPatternForSection(section);
+  const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
   return resolveVoiceNecklaces(pattern, section.drumVariantIndex);
 }
 
@@ -204,14 +209,14 @@ export function resolveSectionVoiceNecklaces(section: BlueprintSection): VoiceNe
  * handoff-fill planning) that needs the variant itself, not its onsets
  * already split by voice.
  */
-export function resolveSectionVariant(section: BlueprintSection): PackedVariant | null {
+export function resolveSectionVariant(section: BlueprintSection, concept?: string): PackedVariant | null {
   if (section.drumMeterOutline) {
     const outline = section.drumMeterOutline;
     const bpb = outlineBeatsPerBar(outline);
     const notes = outline.cellVoices ? outlineToGroovePattern(outline, outline.cellVoices) : outlineToClickPattern(outline);
     return { lengthBeats: bpb, beatsPerBar: bpb, notes, source: { origin: "synth", generator: outline.cellVoices ? "outline-groove" : "outline-click" } };
   }
-  const pattern = section.drumPattern ?? inferPatternForSection(section);
+  const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
   return resolveVariant(pattern, section.drumVariantIndex);
 }
 
@@ -234,8 +239,16 @@ export function variantCount(pattern: DrumPattern | undefined): number {
  * Heuristic pattern for a section — the same fallback `planDrumClips`
  * uses, exported so both `midiExport.ts` and (previously) live playback
  * can choose between explicit and inferred patterns consistently.
- */
-export function inferPatternForSection(section: BlueprintSection): DrumPattern {
+ *
+ * `concept` is the *song's* concept text (electronic-vs-acoustic style
+ * detection reads it, same as `extensions/trackdraft-bridge/src/
+ * drumClips.ts`'s `songSignals` already does for the real Ableton export)
+ * — optional and omittable so every existing caller keeps compiling, but
+ * every caller that has a `song` in scope should pass `song.concept`.
+ * Callers that don't pass it silently fall back to "acoustic" for every
+ * song regardless of what it actually describes, which is exactly the gap
+ * this parameter closes. */
+export function inferPatternForSection(section: BlueprintSection, concept?: string): DrumPattern {
   return inferDrumPattern(
     {
       role: section.role,
@@ -244,8 +257,33 @@ export function inferPatternForSection(section: BlueprintSection): DrumPattern {
       timeSignatureNumerator: section.timeSignatureNumerator,
       timeSignatureDenominator: 2 ** section.timeSignatureDenPower,
     },
-    {},
+    { concept },
   );
+}
+
+/**
+ * A small, deliberately conservative keyword table from a genre map slot's
+ * free-text `groove` description to an explicit, legacy-representable
+ * `DrumPattern` override — only for phrases specific enough that a wrong
+ * guess is unlikely. Returns `undefined` (no override) far more often than
+ * not; most groove intent either isn't representable as an explicit
+ * per-section choice (`four_on_floor`/`trap`/`breakbeat` aren't in the
+ * schema's `DrumPattern` union at all — see `presets.ts` in `@drum/library`
+ * for why) or is already well served by the concept-aware heuristic once
+ * `inferPatternForSection` actually receives the song's concept. Checked
+ * in order; first match wins. */
+export function inferGrooveOverride(groove: string | undefined): SchemaDrumPattern | undefined {
+  if (!groove) return undefined;
+  const table: [RegExp, SchemaDrumPattern][] = [
+    [/\bno (kit|drums?)\b[^.]*\byet\b|\bkick[- ]only\b|\bkick pulse\b/i, "kick_only"],
+    [/\bhalf[- ]time\b/i, "half_time"],
+    [/\bblast beat\b|\bwall of\b/i, "intense"],
+    [/\bdrum\s*(?:'n'|and|&)\s*bass\b|\bjungle\b/i, "dnb"],
+  ];
+  for (const [pattern, drumPattern] of table) {
+    if (pattern.test(groove)) return drumPattern;
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

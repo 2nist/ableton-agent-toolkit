@@ -21,12 +21,12 @@ import type { BlueprintSection } from "../../types/blueprint";
  *  preset+variant, or same outline cells/voicing, means literally the
  *  same note data, not just a similar-looking pattern. Drives whether a
  *  voice's necklace repeats on the timeline or the line just continues. */
-function sectionDrumKey(section: BlueprintSection): string {
+function sectionDrumKey(section: BlueprintSection, concept?: string): string {
   if (section.drumMeterOutline) {
     const o = section.drumMeterOutline;
     return `outline::${o.cellBeats}::${o.cells.join(",")}::${(o.cellVoices ?? []).join(",")}`;
   }
-  const pattern = section.drumPattern ?? inferPatternForSection(section);
+  const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
   return `${pattern}::${section.drumVariantIndex ?? 0}`;
 }
 
@@ -97,8 +97,8 @@ export default function DrumsView() {
 
   const resolved: ResolvedSpan[] = spans.map((span) => ({
     span,
-    key: sectionDrumKey(span.section),
-    necklaces: resolveSectionVoiceNecklaces(span.section),
+    key: sectionDrumKey(span.section, song.concept),
+    necklaces: resolveSectionVoiceNecklaces(span.section, song.concept),
   }));
 
   // Real handoff-fill planning — the same function trackdraft-bridge's
@@ -107,7 +107,7 @@ export default function DrumsView() {
   const handoffInputs: HandoffSectionInput[] = spans.map((span) => ({
     sectionId: span.sectionId,
     occurrenceIndex: span.occurrenceIndex,
-    variant: resolveSectionVariant(span.section),
+    variant: resolveSectionVariant(span.section, song.concept),
     durationBeats: span.durationBeats,
     velocityTarget: velocityNumber(span.section.velocity),
   }));

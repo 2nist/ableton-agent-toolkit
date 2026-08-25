@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { resolveDrumHits, resolveOutlineVoiceNecklaces, resolveSectionVoiceNecklaces } from "./drumPreview";
+import {
+  resolveDrumHits,
+  resolveOutlineVoiceNecklaces,
+  resolveSectionVoiceNecklaces,
+  inferPatternForSection,
+  inferGrooveOverride,
+} from "./drumPreview";
 import type { BlueprintSection, MeterOutline } from "../../types/blueprint";
 
 // "standard" is a real, always-present baked pattern (unlike "none", which
@@ -122,5 +128,46 @@ describe("resolveSectionVoiceNecklaces", () => {
   it("falls back to the heuristic pattern when neither drumPattern nor drumMeterOutline is set", () => {
     const section = makeSection();
     expect(resolveSectionVoiceNecklaces(section)).not.toBeNull();
+  });
+});
+
+describe("inferPatternForSection", () => {
+  it("without a concept, always reads as acoustic regardless of what the song actually is", () => {
+    const section = makeSection({ role: "verse", velocity: "mf" });
+    // Acoustic-family verse/mf pattern.
+    expect(inferPatternForSection(section)).toBe("standard");
+  });
+
+  it("an electronic concept routes to the electronic pattern family instead", () => {
+    const section = makeSection({ role: "verse", velocity: "mf" });
+    const acoustic = inferPatternForSection(section);
+    const electronic = inferPatternForSection(section, "Synthwave — analog synth arpeggios, gated-reverb snare.");
+    expect(acoustic).toBe("standard");
+    expect(electronic).toBe("four_on_floor");
+    expect(electronic).not.toBe(acoustic);
+  });
+});
+
+describe("inferGrooveOverride", () => {
+  it("returns undefined for prose with no unambiguous pattern signal", () => {
+    expect(inferGrooveOverride("Warm pads swirl, no strong downbeat yet.")).toBeUndefined();
+    expect(inferGrooveOverride(undefined)).toBeUndefined();
+  });
+
+  it("matches an explicit half-time mention", () => {
+    expect(inferGrooveOverride("Hard pivot to half-time, everything drags.")).toBe("half_time");
+  });
+
+  it("matches an explicit 'no kit yet' / kick-only mention", () => {
+    expect(inferGrooveOverride("Sub-bass pulse alone, no kit yet.")).toBe("kick_only");
+    expect(inferGrooveOverride("Just a kick pulse under the vamp.")).toBe("kick_only");
+  });
+
+  it("does not match patterns the legacy dropdown can't represent (four-on-the-floor, trap, breakbeat)", () => {
+    // These are real, common groove phrases from the new genre catalog
+    // entries — deliberately NOT matched, since "four_on_floor"/"trap"/
+    // "breakbeat" aren't in the schema's DrumPattern union at all.
+    expect(inferGrooveOverride("Rigid quantized four-on-the-floor kick, zero swing.")).toBeUndefined();
+    expect(inferGrooveOverride("Triplet trap hi-hat rolls over a sparse 808 kick.")).toBeUndefined();
   });
 });
