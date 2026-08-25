@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { KEY_ROOTS } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
-import { useSongStore } from "../../store/songStore";
+import { useSongStore, type ClockSource } from "../../store/songStore";
 import { downloadSongJson, pushSongToAbleton } from "../../lib/exportImport";
 import { downloadSongMidi } from "../../lib/midiExport";
 import { getSongTransport } from "../../lib/playback/songTransport";
 import { getAbletonClock } from "../../lib/playback/abletonClock";
 import ArrangementTimeline from "./ArrangementTimeline";
-
-type ClockSource = "app" | "ableton";
 
 const SCALES: ScaleType[] = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
 
@@ -18,8 +16,9 @@ const SCALES: ScaleType[] = ["ionian", "dorian", "phrygian", "lydian", "mixolydi
 export default function StudioView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
+  const clockSource = useSongStore((s) => s.clockSource);
+  const setClockSource = useSongStore((s) => s.setClockSource);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [clockSource, setClockSource] = useState<ClockSource>("app");
   const [abletonConnected, setAbletonConnected] = useState(false);
   const [abletonTelemetry, setAbletonTelemetry] = useState<{
     bpm?: number;
@@ -49,6 +48,12 @@ export default function StudioView() {
       transport.stop();
     };
   }, []);
+
+  // Keep the transport's clockSource in sync with the persisted store
+  // so play() no-ops and syncToAbleton() fires when appropriate.
+  useEffect(() => {
+    getSongTransport().clockSource = clockSource;
+  }, [clockSource]);
 
   // Only connects once the user actually picks Ableton sync — no reason to
   // open a WebSocket to a bridge that's probably not running for anyone
@@ -148,7 +153,7 @@ export default function StudioView() {
         {/* Right: clock source + transport + actions */}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1" title="Which clock drives playback position — the app's own player, or Ableton's transport over osc-bridge">
-            {(["app", "ableton"] as const).map((mode) => (
+            {(["internal", "ableton"] as const).map((mode) => (
               <button
                 key={mode}
                 className={`text-xs px-2 py-1 rounded border ${
@@ -161,7 +166,7 @@ export default function StudioView() {
                   setClockSource(mode);
                 }}
               >
-                {mode === "app" ? "App" : "Ableton"}
+                {mode === "internal" ? "App" : "Ableton"}
               </button>
             ))}
             {clockSource === "ableton" && (
@@ -174,9 +179,26 @@ export default function StudioView() {
                     {abletonTelemetry.rootNote} {abletonTelemetry.scale}, {abletonTelemetry.bpm} bpm
                   </span>
                 )}
+                <div className="flex items-center gap-0.5">
+                  <label className="text-3xs text-inkMuted uppercase tracking-wide font-mono">Offset</label>
+                  <input
+                    type="number"
+                    className="w-16 bg-panelAlt border border-edge rounded px-1 py-0.5 text-xs text-ink text-center"
+                    value={song.beatOffset ?? 0}
+                    step={0.1}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (!isNaN(val)) updateCurrentSong((s) => ({ ...s, beatOffset: val }));
+                    }}
+                    title="Ableton beat that maps to song beat 0 (subtracted from abletonBeat)"
+                  />
+                </div>
                 <button
                   className="text-xs px-2 py-1 rounded border border-edge text-inkMuted hover:text-ink disabled:opacity-40"
-                  onClick={() => getSongTransport().calibrate()}
+                  onClick={() => {
+                    const offset = getSongTransport().calibrate();
+                    if (offset !== null) updateCurrentSong((s) => ({ ...s, beatOffset: offset }));
+                  }}
                   disabled={!abletonConnected}
                   title="Click the instant Ableton starts playing this song — anchors song beat 0 to Ableton's current transport position"
                 >
