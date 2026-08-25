@@ -35,9 +35,9 @@ export default function StructureView() {
     <div className="p-6 max-w-3xl space-y-4">
       <MapPicker
         hasSections={song.sections.length > 0}
-        onApply={(mapId) => {
+        onApply={(mapId, options) => {
           const map = getSongMap(mapId) ?? getGenreMap(mapId);
-          if (map) updateCurrentSong((s) => applySongMap(s, map));
+          if (map) updateCurrentSong((s) => applySongMap(s, map, options));
         }}
       />
 

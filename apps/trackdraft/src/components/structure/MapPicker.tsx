@@ -1,23 +1,41 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { SONG_MAPS } from "../../data/songMaps";
 import { GENRE_CATALOG } from "../../data/genre-catalog/index";
+import type { ApplySongMapOptions } from "../../lib/sections";
 
 type MapSource = "narrative" | "genre";
 
 interface MapPickerProps {
-  onApply: (mapId: string) => void;
+  onApply: (mapId: string, options?: ApplySongMapOptions) => void;
   hasSections: boolean;
 }
+
+const PRIMARY_FORM = ""; // sentinel for "map.slots" in the variant <select>, vs. a real variant name
 
 export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
   const [source, setSource] = useState<MapSource>("narrative");
   const maps = useMemo(() => (source === "narrative" ? SONG_MAPS : GENRE_CATALOG), [source]);
   const [selected, setSelected] = useState(maps[0]?.id ?? "");
+  const [variantName, setVariantName] = useState<string>(PRIMARY_FORM);
+  const [excludeOptional, setExcludeOptional] = useState(false);
 
   // Keep selected in sync with the current source
   const map = maps.find((m) => m.id === selected) ?? maps[0];
   const effectiveId = map?.id ?? "";
+
+  // A map's variants (and which of its slots are optional) only make sense
+  // for the map currently selected — reset both whenever the selection
+  // changes underneath them, so a stale choice from a previous map can't
+  // silently carry over (e.g. a variant name that doesn't exist on the
+  // newly selected map).
+  useEffect(() => {
+    setVariantName(PRIMARY_FORM);
+    setExcludeOptional(false);
+  }, [effectiveId]);
+
+  const activeSlots = variantName ? (map?.variants?.find((v) => v.name === variantName)?.slots ?? map?.slots) : map?.slots;
+  const hasOptionalSlots = (activeSlots ?? []).some((slot) => slot.optional);
 
   function switchSource(newSource: MapSource) {
     setSource(newSource);
@@ -98,13 +116,44 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
             const currentMap = maps.find((m) => m.id === effectiveId);
             if (!currentMap) return;
             if (hasSections && !confirm(`Replace all sections with the "${currentMap.name}" template?`)) return;
-            onApply(effectiveId);
+            onApply(effectiveId, {
+              variantName: variantName || undefined,
+              excludeOptional,
+            });
           }}
         >
           Apply template
         </button>
       </div>
       {map && <p className="text-xs text-inkMuted">{map.description}</p>}
+      {/* Variants are alternate full structures a genre map can offer
+         (e.g. EBM's instrumental "club loop" vs. a vocal-hook form) —
+         only shown when the selected map actually has any. */}
+      {map && map.variants && map.variants.length > 0 && (
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-inkMuted">Form:</label>
+          <select
+            className="bg-panelAlt border border-edge rounded text-xs px-2 py-1 flex-1"
+            value={variantName}
+            onChange={(e) => setVariantName(e.target.value)}
+          >
+            <option value={PRIMARY_FORM}>{map.name} (default)</option>
+            {map.variants.map((v) => (
+              <option key={v.name} value={v.name}>{v.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      {hasOptionalSlots && (
+        <label className="flex items-center gap-1.5 text-xs text-inkMuted">
+          <input
+            type="checkbox"
+            checked={excludeOptional}
+            onChange={(e) => setExcludeOptional(e.target.checked)}
+          />
+          Shorter edit — drop sections marked optional
+        </label>
+      )}
     </div>
   );
 }
