@@ -223,15 +223,37 @@ export default function DrumsView() {
               );
             })}
 
-            {/* lane labels + baselines */}
+            {/* lane labels + baselines — each voice's own color, the way
+                the design reference draws it: a faint guide the full
+                width of the song (this voice *could* play here), with a
+                bold segment laid over just the bars it actually does.
+                Matches the reference's "quiet baseline" vs. active
+                "lane-baseline" distinction, not a single flat gray line. */}
             {usedVoices.map((voice, li) => {
               const y = TOP_PAD + li * LANE_H + LANE_H / 2;
+              const color = VOICE_COLOR[voice] ?? "#8B94A1";
               return (
                 <g key={`lane-${voice}`}>
-                  <text x={X0 - 16} y={y + 3} textAnchor="end" fontSize={9} fontFamily="'IBM Plex Mono', monospace" fill={VOICE_COLOR[voice] ?? "#8B94A1"}>
+                  <text x={X0 - 16} y={y + 3} textAnchor="end" fontSize={9} fontFamily="'IBM Plex Mono', monospace" fill={color}>
                     {VOICE_LABEL[voice]}
                   </text>
-                  <line x1={barToX(0)} y1={y} x2={barToX(bars)} y2={y} stroke="#2E2E34" strokeWidth={1} />
+                  <line x1={barToX(0)} y1={y} x2={barToX(bars)} y2={y} stroke={color} strokeWidth={1} strokeOpacity={0.25} />
+                  {resolved.map((r, i) => {
+                    const active = r.necklaces?.some((n) => n.voice === voice && n.count > 0);
+                    if (!active) return null;
+                    return (
+                      <line
+                        key={`active-${voice}-${i}`}
+                        x1={barToX(r.span.startBar)}
+                        y1={y}
+                        x2={barToX(r.span.startBar + r.span.bars)}
+                        y2={y}
+                        stroke={color}
+                        strokeWidth={2.5}
+                        strokeLinecap="round"
+                      />
+                    );
+                  })}
                 </g>
               );
             })}
