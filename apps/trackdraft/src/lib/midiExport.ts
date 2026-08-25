@@ -17,6 +17,7 @@
 import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
+import { resolveDrumHits, inferPatternForSection } from "./playback/drumPreview";
 import type { BlueprintSong, Chord } from "../types/blueprint";
 
 // ---------------------------------------------------------------------------
@@ -137,69 +138,29 @@ function planBassStem(spans: SectionSpan[]): MidiNote[] {
   return notes;
 }
 
-/** Drum notes — placeholder: generates a simple kick/snare pattern.
- *  `@drum/library` (the real pattern/outline/transition engine used by
- *  `extensions/drum-studio` and this app's own live-preview path in
- *  `playback/drumPreview.ts`) is a real, declared dependency here now —
- *  this placeholder exists only because nothing has wired a real
- *  `renderStudioResult`-based render into MIDI export yet, not because the
- *  library is unavailable. Until that lands, we emit a basic
- *  four-on-the-floor pattern scaled to the section's velocity. */
+/** Drum notes — the same explicit-override-else-heuristic pattern
+ *  resolution `drumClips.ts` uses for the bridge's export path, via
+ *  `playback/drumPreview.ts`'s `resolveDrumHits`/`inferPatternForSection`
+ *  (real @drum/library pattern/groove data, tiled to fill each section).
+ *  `resolveDrumHits` normally converts beat positions to seconds via
+ *  `secPerBeat`; passing `1` here gets beat positions straight back
+ *  unchanged, which is what a beat-based MIDI file needs. */
 function planDrumStem(spans: SectionSpan[]): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
-    const beatsPerBar = span.section.timeSignatureNumerator;
-    const totalBars = span.durationBeats / beatsPerBar;
-    const velocity = velocityToPeak(span.section.velocity);
-
-    for (let bar = 0; bar < totalBars; bar++) {
-      const barStart = span.startBeat + bar * beatsPerBar;
-      // Kick on each beat
-      for (let beat = 0; beat < beatsPerBar; beat++) {
-        notes.push({
-          pitch: 36, // kick
-          startTime: barStart + beat,
-          duration: DRUM_HIT_DURATION,
-          velocity: beat === 0 ? velocity : Math.round(velocity * 0.9),
-        });
-      }
-      // Snare on beats 2 and 4 (for 4/4) or beat 2 (for 3/4)
-      const snareBeats = beatsPerBar >= 4 ? [1, 3] : [1];
-      for (const beat of snareBeats) {
-        if (beat < beatsPerBar) {
-          notes.push({
-            pitch: 38, // snare
-            startTime: barStart + beat,
-            duration: DRUM_HIT_DURATION,
-            velocity: Math.round(velocity * 0.85),
-          });
-        }
-      }
-      // Closed hat on eighth notes
-      const eighthCount = beatsPerBar * 2;
-      for (let i = 0; i < eighthCount; i++) {
-        notes.push({
-          pitch: 42, // closed hat
-          startTime: barStart + i * 0.5,
-          duration: DRUM_HIT_DURATION,
-          velocity: Math.round(velocity * 0.5),
-        });
-      }
+    const pattern = span.section.drumPattern ?? inferPatternForSection(span.section);
+    const hits = resolveDrumHits(pattern, span.section.drumVariantIndex, span.section, 1, span.durationBeats);
+    if (!hits) continue;
+    for (const hit of hits) {
+      notes.push({
+        pitch: hit.midi,
+        startTime: span.startBeat + hit.offsetSec,
+        duration: DRUM_HIT_DURATION,
+        velocity: hit.velocity,
+      });
     }
   }
   return notes.filter((n) => GM_DRUM_PITCHES.has(n.pitch));
-}
-
-// ---------------------------------------------------------------------------
-// Velocity preset → MIDI peak (matches drumPreview.ts / song-structure)
-// ---------------------------------------------------------------------------
-
-const VELOCITY_TO_PEAK: Record<string, number> = {
-  ppp: 32, pp: 48, p: 64, mp: 80, mf: 96, f: 112, ff: 120, fff: 127,
-};
-
-function velocityToPeak(velocity: string): number {
-  return VELOCITY_TO_PEAK[velocity] ?? 96;
 }
 
 // ---------------------------------------------------------------------------
