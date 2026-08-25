@@ -9,6 +9,7 @@ const TABS = [
   { to: "studio", label: "Studio" },
   { to: "structure", label: "Structure" },
   { to: "harmony", label: "Harmony" },
+  { to: "drums", label: "Drums" },
   { to: "lyrics", label: "Lyrics" },
 ];
 

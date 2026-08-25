@@ -114,6 +114,119 @@ export function buildMeterOutline(numeratorValue: number, denominator: number, v
   return { cellBeats: cellBeatsForDenominator(denominator), cells, label: countLabel(cells) };
 }
 
+/* ============================================================
+   EUCLIDEAN CONSTRUCTION — a second, more general way to reach
+   the same 2s/3s cells `canonicalGroupings` curates by hand.
+
+   Bjorklund's algorithm (k pulses spread as evenly as possible
+   across n steps) turns out to *already produce* Ferguson's own
+   curated groupings for the numerators above — verified directly:
+   E(3,7) -> gaps [2,2,3]; E(4,9) -> [2,2,2,3]; E(3,9) -> [3,3,3].
+   That's not a coincidence: both are "maximal evenness" answers to
+   the same question, just parameterized differently (an explicit
+   2/3 sequence vs. a pulse count). This section generalizes that —
+   any numerator, any valid pulse count, not just the hand-curated
+   5/7/9/10/11/12 set — while staying inside the same 2s/3s cell
+   vocabulary `MeterOutline` already commits to.
+   ============================================================ */
+
+/**
+ * k pulses distributed as evenly as possible across n steps —
+ * Bjorklund's algorithm, the same construction behind son clave,
+ * tresillo, and most hardware "Euclidean" sequencer modes.
+ */
+export function euclideanPattern(pulses: number, steps: number): boolean[] {
+  if (pulses <= 0 || steps <= 0) return new Array(Math.max(steps, 0)).fill(false);
+  if (pulses >= steps) return new Array(steps).fill(true);
+
+  let a: number[][] = Array.from({ length: pulses }, () => [1]);
+  let b: number[][] = Array.from({ length: steps - pulses }, () => [0]);
+  while (b.length > 1) {
+    const m = Math.min(a.length, b.length);
+    const newA: number[][] = [];
+    for (let i = 0; i < m; i++) newA.push(a[i]!.concat(b[i]!));
+    const remA = a.slice(m);
+    const remB = b.slice(m);
+    a = newA;
+    b = remA.length ? remA : remB;
+  }
+  return a.concat(b).flat().map((v) => v === 1);
+}
+
+/**
+ * Every cell count a numerator can honestly be built from using only
+ * 2s and 3s (solving `2a + 3b = numeratorValue` for non-negative
+ * integers, returning each valid `a + b`) — e.g. 12 can be 4 cells (all
+ * 3s), 5 cells (three 2s, two 3s — the curated gankogui grouping), or 6
+ * cells (all 2s). `canonicalGroupings` only ever offered one hand-picked
+ * cell count per numerator; this is every one that's mathematically
+ * valid, ascending (fewer, larger cells first).
+ */
+export function twoThreeCellCounts(numeratorValue: number): number[] {
+  const counts = new Set<number>();
+  for (let b = 0; b * 3 <= numeratorValue; b++) {
+    const rem = numeratorValue - b * 3;
+    if (rem % 2 === 0) {
+      const a = rem / 2;
+      if (a + b >= 1) counts.add(a + b);
+    }
+  }
+  return Array.from(counts).sort((x, y) => x - y);
+}
+
+/**
+ * The cells for `numeratorValue` built from exactly `cellCount` 2s/3s,
+ * via `euclideanPattern` — the maximally-even arrangement, which is what
+ * makes this differ from just picking *a* valid combination: it's the
+ * same evenness the corpus's own real playing tends toward, not an
+ * arbitrary one. `rotation` cyclically shifts which cell is read first
+ * (0 = the arrangement `euclideanPattern` itself produces), a real
+ * musical choice — an accent pattern read starting from a different beat
+ * of its own cycle — not a destructive edit.
+ *
+ * Throws if `cellCount` isn't one of `twoThreeCellCounts(numeratorValue)`
+ * — every gap `euclideanPattern` produces for an invalid count won't be
+ * exactly 2 or 3 (e.g. `E(2,7)` gives gaps [3,4]), and silently clamping
+ * that into the 2/3 vocabulary would misrepresent the meter rather than
+ * fail loudly. Callers should offer only `twoThreeCellCounts`'s options.
+ */
+export function euclideanCells(numeratorValue: number, cellCount: number, rotation = 0): MeterCell[] {
+  const pattern = euclideanPattern(cellCount, numeratorValue);
+  const onsets: number[] = [];
+  pattern.forEach((hit, i) => { if (hit) onsets.push(i); });
+  if (onsets.length !== cellCount) {
+    throw new Error(`euclideanCells: ${cellCount} is not a valid 2s/3s cell count for numerator ${numeratorValue}`);
+  }
+
+  const gaps: MeterCell[] = onsets.map((onset, i) => {
+    const next = onsets[(i + 1) % onsets.length]!;
+    const gap = next > onset ? next - onset : numeratorValue - onset + next;
+    if (gap !== 2 && gap !== 3) {
+      throw new Error(`euclideanCells: ${cellCount} is not a valid 2s/3s cell count for numerator ${numeratorValue}`);
+    }
+    return gap;
+  });
+
+  const r = ((rotation % cellCount) + cellCount) % cellCount;
+  return [...gaps.slice(r), ...gaps.slice(0, r)];
+}
+
+/**
+ * The Euclidean equivalent of `buildMeterOutline` — same output shape,
+ * generalized cell selection (`twoThreeCellCounts`, not a curated
+ * 1-2-option table) and an explicit rotation instead of a fixed "first
+ * option" default.
+ */
+export function buildEuclideanOutline(
+  numeratorValue: number,
+  denominator: number,
+  cellCount: number,
+  rotation = 0,
+): MeterOutline {
+  const cells = euclideanCells(numeratorValue, cellCount, rotation);
+  return { cellBeats: cellBeatsForDenominator(denominator), cells, label: countLabel(cells) };
+}
+
 /**
  * Concatenate outlines into one larger meter — how the PDF builds
  * large/irregular meters like 25/16 (7+11+7, per the PDF's own opening

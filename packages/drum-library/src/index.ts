@@ -1,5 +1,6 @@
 export * from "./types.js";
 export * from "./limbs.js";
+export * from "./kit.js";
 export * from "./catalog.js";
 export * from "./take.js";
 export * from "./features.js";

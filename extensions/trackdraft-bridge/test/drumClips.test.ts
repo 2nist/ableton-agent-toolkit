@@ -359,6 +359,68 @@ describe("planDrumClips — fills and transitions", () => {
   });
 });
 
+describe("planDrumClips — drumTransitionModel (named transitions)", () => {
+  function twoSections(firstBars: number, overrides: Partial<ReturnType<typeof makeSection>> = {}) {
+    return makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        makeSection({ id: "a", name: "Verse", bars: firstBars, timeSignatureNumerator: 4, ...overrides }),
+        makeSection({ id: "b", name: "Next", bars: 2, timeSignatureNumerator: 4 }),
+      ],
+    });
+  }
+
+  it("cut replaces the tail bar with a single hit, then silence for the rest of the span", () => {
+    const [first] = planDrumClips(twoSections(2, { drumTransitionModel: "cut" }), fixturePresets(), fixtureFills());
+    const lastBar = first.notes.filter((n) => n.startTime >= 4);
+    expect(lastBar).toEqual([
+      expect.objectContaining({ pitch: KICK, startTime: 4 }),
+      expect.objectContaining({ pitch: SNARE, startTime: 4 }),
+    ]);
+  });
+
+  it("an explicit transition overrides the automatic handoff fill for the same span, not layered on top of it", () => {
+    const [first] = planDrumClips(twoSections(2, { drumTransitionModel: "cut" }), fixturePresets(), fixtureFills());
+    // fixtureFills()'s tom-heavy fill would normally land here (see the
+    // "fills and transitions" describe block above) — an explicit
+    // transition choice replaces it entirely.
+    expect(first.notes.some((n) => n.pitch === TOM_HIGH)).toBe(false);
+  });
+
+  it("dropOut silences the chosen voice across the span while keeping the rest of the groove", () => {
+    const [first] = planDrumClips(twoSections(2, { drumTransitionModel: "dropOut" }), fixturePresets(), emptyFills);
+    const lastBar = first.notes.filter((n) => n.startTime >= 4);
+    expect(lastBar.some((n) => n.pitch === KICK)).toBe(false); // dropOut's default is kick
+    expect(lastBar.some((n) => n.pitch === SNARE)).toBe(true); // everything else survives
+  });
+
+  it("respects drumTransitionBars — a 2-bar span replaces two bars, not one", () => {
+    const [first] = planDrumClips(
+      twoSections(3, { drumTransitionModel: "cut", drumTransitionBars: 2 }),
+      fixturePresets(),
+      emptyFills,
+    );
+    // 3 bars = 12 beats; a 2-bar span covers the last 8 beats, so the cut's
+    // one hit lands at beat 4 and nothing survives past it — while the
+    // section's untouched first bar (beats 0..4) keeps its original groove.
+    const fromBeat4 = first.notes.filter((n) => n.startTime >= 4);
+    expect(fromBeat4).toEqual([
+      expect.objectContaining({ pitch: KICK, startTime: 4 }),
+      expect.objectContaining({ pitch: SNARE, startTime: 4 }),
+    ]);
+    expect(first.notes.some((n) => n.startTime === 0 && n.pitch === KICK)).toBe(true);
+  });
+
+  it("never eats a section's only bar, same guard as the automatic fill", () => {
+    const clips = planDrumClips(twoSections(1, { drumTransitionModel: "cut" }), fixturePresets(), emptyFills);
+    // Unaffected: the groove's own notes are still there, no cut applied.
+    expect(clips[0].notes.some((n) => n.pitch === KICK && n.startTime === 0)).toBe(true);
+    expect(clips[0].notes.length).toBeGreaterThan(2);
+  });
+});
+
 describe("planDrumClips — drumMeterOutline (odd-meter outline authoring)", () => {
   it("generates a click pattern spanning the outline's own beats-per-bar, not the preset engine", () => {
     // 7/16 as 2+2+3, cellBeats 0.25 -> beatsPerBar 1.75. bars is derived
@@ -466,5 +528,59 @@ describe("planDrumClips — drumMeterOutline (odd-meter outline authoring)", () 
     });
     const [, secondClip] = planDrumClips(song, fixturePresets(), emptyFills);
     expect(secondClip.notes.some((n) => n.pitch === KICK)).toBe(true); // the "standard" fixture preset, untouched
+  });
+
+  describe("cellVoices — a real kick/snare groove instead of a flat click", () => {
+    const OUTLINE_WITH_VOICES: MeterOutline = {
+      ...SEVEN_SIXTEEN,
+      cellVoices: ["kick", "snare", "hat"], // cells are [2, 2, 3]
+    };
+
+    it("plays each cell's assigned voice on its downbeat", () => {
+      const song = makeSong({
+        id: "x",
+        title: "x",
+        bpm: 120,
+        sections: [
+          makeSection({ id: "1", name: "Odd", bars: 1, timeSignatureNumerator: 7, timeSignatureDenPower: 4, drumMeterOutline: OUTLINE_WITH_VOICES }),
+        ],
+      });
+      const [clip] = planDrumClips(song, fixturePresets(), emptyFills);
+      // Cells [2, 2, 3] at cellBeats 0.25 start at beats 0, 0.5, 1.
+      expect(clip.notes.some((n) => n.pitch === KICK && n.startTime === 0)).toBe(true);
+      expect(clip.notes.some((n) => n.pitch === SNARE && n.startTime === 0.5)).toBe(true);
+      // The third cell has no assigned voice ("hat") — its downbeat is a
+      // closed-hat accent, same as outlineToClickPattern would produce.
+      expect(clip.notes.some((n) => n.pitch === CLOSED_HAT && n.startTime === 1)).toBe(true);
+    });
+
+    it("every non-downbeat subdivision stays a closed-hat pulse, same backbone as the click-only path", () => {
+      const song = makeSong({
+        id: "x",
+        title: "x",
+        bpm: 120,
+        sections: [
+          makeSection({ id: "1", name: "Odd", bars: 1, timeSignatureNumerator: 7, timeSignatureDenPower: 4, drumMeterOutline: OUTLINE_WITH_VOICES }),
+        ],
+      });
+      const [clip] = planDrumClips(song, fixturePresets(), emptyFills);
+      // Cell 0 ([2] at beats 0, 0.25): beat 0 is the kick downbeat, beat
+      // 0.25 is the backbone hat pulse.
+      expect(clip.notes.some((n) => n.pitch === CLOSED_HAT && n.startTime === 0.25)).toBe(true);
+    });
+
+    it("an outline authored before cellVoices existed still renders as a plain click, unchanged", () => {
+      const song = makeSong({
+        id: "x",
+        title: "x",
+        bpm: 120,
+        sections: [
+          makeSection({ id: "1", name: "Odd", bars: 1, timeSignatureNumerator: 7, timeSignatureDenPower: 4, drumMeterOutline: SEVEN_SIXTEEN }),
+        ],
+      });
+      const [clip] = planDrumClips(song, fixturePresets(), emptyFills);
+      expect(clip.notes.every((n) => n.pitch === CLOSED_HAT)).toBe(true);
+      expect(clip.notes.some((n) => n.pitch === KICK || n.pitch === SNARE)).toBe(false);
+    });
   });
 });

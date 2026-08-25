@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMeterOutline,
+  buildEuclideanOutline,
   canonicalGroupings,
   composeMeter,
+  countLabel,
+  euclideanCells,
+  euclideanPattern,
   numerator,
   outlineBeatsPerBar,
   outlineToClickPattern,
   outlineToGroovePattern,
   synthesizeOutlineFill,
+  twoThreeCellCounts,
   type MeterOutline,
 } from "../src/meter.js";
 
@@ -192,5 +197,70 @@ describe("outlineToGroovePattern", () => {
     const groove = outlineToGroovePattern(outline, ["kick", "snare", "kick"]);
     const click = outlineToClickPattern(outline);
     expect(groove).toHaveLength(click.length);
+  });
+});
+
+describe("euclideanPattern", () => {
+  it("matches the tresillo shape for E(3,8)", () => {
+    expect(euclideanPattern(3, 8)).toEqual([true, false, false, true, false, false, true, false]);
+  });
+
+  it("matches the known E(5,13) result (Toussaint's own worked example)", () => {
+    expect(euclideanPattern(5, 13)).toEqual(
+      [true, false, false, true, false, true, false, false, true, false, true, false, false],
+    );
+  });
+
+  it("is all-true when pulses >= steps, all-false when pulses <= 0", () => {
+    expect(euclideanPattern(8, 8)).toEqual(new Array(8).fill(true));
+    expect(euclideanPattern(0, 8)).toEqual(new Array(8).fill(false));
+  });
+});
+
+describe("twoThreeCellCounts", () => {
+  it("gives the single valid cell count for numerators with only one 2s/3s decomposition", () => {
+    expect(twoThreeCellCounts(5)).toEqual([2]); // 2+3
+    expect(twoThreeCellCounts(7)).toEqual([3]); // 2+2+3
+  });
+
+  it("gives every valid cell count for a numerator with more than one decomposition", () => {
+    expect(twoThreeCellCounts(9)).toEqual([3, 4]); // 3+3+3, or 2+2+2+3
+    expect(twoThreeCellCounts(12)).toEqual([4, 5, 6]); // 3+3+3+3, 2+3+2+2+3-shape, or six 2s
+  });
+
+  it("excludes numerators (or remainders) with no 2s/3s decomposition at all", () => {
+    expect(twoThreeCellCounts(1)).toEqual([]);
+  });
+});
+
+describe("euclideanCells / buildEuclideanOutline", () => {
+  it("reproduces canonicalGroupings' own curated 7 and 9 groupings exactly", () => {
+    expect(euclideanCells(7, 3)).toEqual([2, 2, 3]);
+    expect(euclideanCells(9, 4)).toEqual([2, 2, 2, 3]);
+    expect(euclideanCells(9, 3)).toEqual([3, 3, 3]);
+  });
+
+  it("rotation cyclically shifts which cell reads first, without changing the multiset of cells", () => {
+    const base = euclideanCells(7, 3, 0);
+    const r1 = euclideanCells(7, 3, 1);
+    const r2 = euclideanCells(7, 3, 2);
+    expect(base).toEqual([2, 2, 3]);
+    expect(r1).toEqual([2, 3, 2]);
+    expect(r2).toEqual([3, 2, 2]); // matches rupak's own curated alternative grouping
+    for (const cells of [base, r1, r2]) {
+      expect(cells.reduce((sum, c) => sum + c, 0)).toBe(7);
+    }
+  });
+
+  it("throws for a cell count that isn't a valid 2s/3s decomposition of the numerator", () => {
+    expect(() => euclideanCells(7, 2)).toThrow();
+    expect(() => euclideanCells(7, 4)).toThrow();
+  });
+
+  it("buildEuclideanOutline produces the same shape buildMeterOutline does, generalized", () => {
+    const outline = buildEuclideanOutline(7, 8, 3, 0);
+    expect(outline.cells).toEqual([2, 2, 3]);
+    expect(outline.cellBeats).toBe(0.5); // 4/8
+    expect(outline.label).toBe(countLabel([2, 2, 3]));
   });
 });

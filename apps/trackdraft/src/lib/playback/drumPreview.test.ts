@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { resolveDrumHits } from "./drumPreview";
-import type { BlueprintSection } from "../../types/blueprint";
+import { resolveDrumHits, resolveOutlineVoiceNecklaces, resolveSectionVoiceNecklaces } from "./drumPreview";
+import type { BlueprintSection, MeterOutline } from "../../types/blueprint";
 
 // "standard" is a real, always-present baked pattern (unlike "none", which
 // has no preset at all) — used here for its stable *shape* (loops, has
@@ -60,9 +60,7 @@ describe("resolveDrumHits", () => {
 
     // A longer section tiles the same loop repeatedly, so it should have
     // meaningfully more hits and cover meaningfully more time — not just
-    // the one loop's worth regardless of section length (the original bug
-    // this locks in against: playDrumHits played one loop and went silent
-    // for the rest of a longer section).
+    // the one loop's worth regardless of section length.
     expect(longHits.length).toBeGreaterThan(shortHits.length);
     const lastShort = Math.max(...shortHits.map((h) => h.offsetSec));
     const lastLong = Math.max(...longHits.map((h) => h.offsetSec));
@@ -76,5 +74,53 @@ describe("resolveDrumHits", () => {
     const section = makeSection();
     expect(() => resolveDrumHits(PATTERN, 999, section, 0.5)).not.toThrow();
     expect(resolveDrumHits(PATTERN, 999, section, 0.5)).not.toBeNull();
+  });
+});
+
+const SEVEN_EIGHT: MeterOutline = { cellBeats: 0.5, cells: [2, 2, 3], label: "1 2 1 2 1 2 3" };
+
+describe("resolveOutlineVoiceNecklaces", () => {
+  it("with no cellVoices, every onset is a closed-hat click", () => {
+    const necklaces = resolveOutlineVoiceNecklaces(SEVEN_EIGHT)!;
+    expect(necklaces).toHaveLength(1);
+    expect(necklaces[0].voice).toBe("closedHat");
+  });
+
+  it("with cellVoices, splits into separate kick/snare/hat necklaces", () => {
+    const outline: MeterOutline = { ...SEVEN_EIGHT, cellVoices: ["kick", "snare", "hat"] };
+    const necklaces = resolveOutlineVoiceNecklaces(outline)!;
+    const voices = necklaces.map((n) => n.voice).sort();
+    expect(voices).toEqual(["closedHat", "kick", "snare"]);
+    // Exactly one kick onset (cell 0's downbeat) and one snare onset
+    // (cell 1's downbeat) — the rest of cell 0/1's subdivisions and all
+    // of cell 2 (voice "hat") are closed-hat.
+    expect(necklaces.find((n) => n.voice === "kick")!.count).toBe(1);
+    expect(necklaces.find((n) => n.voice === "snare")!.count).toBe(1);
+  });
+
+  it("onset fractions are relative to the outline's own beats-per-bar, not a fixed 4-beat assumption", () => {
+    // [2,2,3] at cellBeats 0.5 -> beatsPerBar 3.5. The kick (cell 0's
+    // downbeat) sits at beat 0 -> fraction 0.
+    const outline: MeterOutline = { ...SEVEN_EIGHT, cellVoices: ["kick"] };
+    const necklaces = resolveOutlineVoiceNecklaces(outline)!;
+    expect(necklaces.find((n) => n.voice === "kick")!.hits).toEqual([0]);
+  });
+});
+
+describe("resolveSectionVoiceNecklaces", () => {
+  it("drumMeterOutline takes priority over drumPattern, same order the export uses", () => {
+    const section = makeSection({
+      drumPattern: PATTERN,
+      drumMeterOutline: { ...SEVEN_EIGHT, cellVoices: ["kick", "snare", "hat"] },
+    });
+    const necklaces = resolveSectionVoiceNecklaces(section)!;
+    // Only the outline's three voices should appear — if drumPattern had
+    // won instead, "standard"'s own baked voices would show up too.
+    expect(necklaces.map((n) => n.voice).sort()).toEqual(["closedHat", "kick", "snare"]);
+  });
+
+  it("falls back to the heuristic pattern when neither drumPattern nor drumMeterOutline is set", () => {
+    const section = makeSection();
+    expect(resolveSectionVoiceNecklaces(section)).not.toBeNull();
   });
 });

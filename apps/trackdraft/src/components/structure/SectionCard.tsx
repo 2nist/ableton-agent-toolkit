@@ -1,24 +1,18 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { BlueprintSection, SectionRole, VelocityPreset, DrumPattern } from "../../types/blueprint";
-import { PRESET_DATA } from "@drum/library";
+import { DRUM_PATTERN_OPTIONS, variantCount } from "../../lib/playback/drumPreview";
+import DrumNecklacePreview from "./DrumNecklacePreview";
 
 const ROLES: SectionRole[] = [
   "intro", "verse", "pre_chorus", "chorus", "bridge", "solo", "breakdown", "outro", "custom",
 ];
 const VELOCITIES: VelocityPreset[] = ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"];
-const DRUM_PATTERNS: DrumPattern[] = [
-  "none", "kick_only", "standard", "half_time", "driving", "bridge_sparse", "intense", "dnb", "78", "68", "54",
-];
 // song-structure's SongSection stores the denominator as a power of two
 // (denPower 2 == denominator 4, i.e. 4/4) rather than the raw number --
 // matches the S() DSL's ts_den_power convention. Converted to/from a
 // real denominator here so the UI shows "4" not "2".
 const DENOMINATOR_OPTIONS = [2, 4, 8, 16];
-
-function variantCount(pattern: DrumPattern | undefined): number {
-  return PRESET_DATA[pattern as DrumPattern]?.variants.length ?? 0;
-}
 
 interface SectionCardProps {
   section: BlueprintSection;
@@ -135,27 +129,36 @@ export default function SectionCard({ section, repeats, onChange, onChangeRepeat
             onChange={(e) => onChangeRepeats(Number(e.target.value))}
           />
         </label>
-        <label className="flex items-center gap-1" title="Override the heuristic drum pattern for this section. Leave empty to use automatic inference from role, velocity and meter.">
-          Drums
-          <select
-            className="bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink"
-            value={section.drumPattern ?? ""}
-            onChange={(e) => {
-              const val = e.target.value;
-              onChange((s) => ({
-                ...s,
-                drumPattern: val ? (val as DrumPattern) : undefined,
-                drumVariantIndex: val ? 0 : undefined,
-              }));
-            }}
+        {section.drumMeterOutline ? (
+          <span
+            className="flex items-center gap-1 text-xs text-inkMuted"
+            title="This section uses an odd-meter outline instead of a named pattern — edit it in the Drums tab, not here."
           >
-            <option value="">auto (heuristic)</option>
-            {DRUM_PATTERNS.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </label>
-        {section.drumPattern && (
+            Drums <span className="text-accent">outline · {section.drumMeterOutline.label}</span>
+          </span>
+        ) : (
+          <label className="flex items-center gap-1" title="Override the heuristic drum pattern for this section. Leave empty to use automatic inference from role, velocity and meter.">
+            Drums
+            <select
+              className="bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink"
+              value={section.drumPattern ?? ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                onChange((s) => ({
+                  ...s,
+                  drumPattern: val ? (val as DrumPattern) : undefined,
+                  drumVariantIndex: val ? 0 : undefined,
+                }));
+              }}
+            >
+              <option value="">auto (heuristic)</option>
+              {DRUM_PATTERN_OPTIONS.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        {!section.drumMeterOutline && section.drumPattern && (
           <span className="flex items-center gap-1 text-xs text-inkMuted" title="Which variant of the selected pattern to use.">
             <button
               className="px-1 hover:text-ink select-none"
@@ -197,6 +200,10 @@ export default function SectionCard({ section, repeats, onChange, onChangeRepeat
           </select>
         </label>
       </div>
+
+      {section.drumPattern && (
+        <DrumNecklacePreview pattern={section.drumPattern} variantIndex={section.drumVariantIndex} />
+      )}
 
       <textarea
         className="w-full bg-panelAlt border border-edge rounded px-2 py-1 text-xs text-inkMuted resize-y"

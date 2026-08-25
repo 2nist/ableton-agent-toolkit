@@ -7,6 +7,7 @@ import SongEditorLayout from "./components/layout/SongEditorLayout";
 import StudioView from "./components/studio/StudioView";
 import StructureView from "./components/structure/StructureView";
 import HarmonyView from "./components/harmony/HarmonyView";
+import DrumsView from "./components/drums/DrumsView";
 import LyricsView from "./components/lyrics/LyricsView";
 import LivePreviewSandbox from "./pages/LivePreviewSandbox";
 import GenreWorkbench from "./pages/GenreWorkbench";
@@ -36,6 +37,7 @@ function App() {
             <Route path="studio" element={<StudioView />} />
             <Route path="structure" element={<StructureView />} />
             <Route path="harmony" element={<HarmonyView />} />
+            <Route path="drums" element={<DrumsView />} />
             <Route path="lyrics" element={<LyricsView />} />
           </Route>
           {/* Top-level, not nested under SongEditorLayout — deliberately

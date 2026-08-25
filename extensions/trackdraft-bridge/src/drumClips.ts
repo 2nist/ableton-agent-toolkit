@@ -11,15 +11,21 @@ import {
   planSectionHandoffFills,
   outlineBeatsPerBar,
   outlineToClickPattern,
+  outlineToGroovePattern,
   synthesizeOutlineFill,
+  synthesizeTransition,
+  extractGroove,
+  applyGroove,
   type DrumPattern,
+  type DrumNote,
   type FillLibrary,
   type HandoffSectionInput,
   type PackedPreset,
   type PackedVariant,
+  type PackedNote,
 } from "@drum/library";
 import { getVelocity } from "@music-theory/song-structure";
-import type { MeterOutline } from "@music-theory/song-blueprint";
+import type { MeterOutline, DrumTransitionModel, BlueprintSection } from "@music-theory/song-blueprint";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
 
 export interface DrumClipPlan {
@@ -34,20 +40,119 @@ export type { FillLibrary };
 /** A short, un-sustained hit — not a block chord — regardless of how dense the underlying groove is. */
 const HIT_DURATION = 0.25;
 
+function round4(n: number): number {
+  return Math.round(n * 10000) / 10000;
+}
+
+type TiledDrumNote = { beat: number; pitch: number; velocity: number };
+
+/**
+ * Splices `section.drumTransitionModel` into a section's final bars,
+ * replacing whatever's there — including an automatic handoff fill from
+ * `planSectionHandoffFills`, spliced in just before this runs. An explicit
+ * transition is a deliberate authorial choice and wins over the default
+ * fill, not a second thing layered on top of it.
+ *
+ * Mirrors `extensions/drum-studio/src/render-drum-studio.ts`'s own
+ * `applyTransition` (single-clip authoring) so the same section-boundary
+ * vocabulary behaves identically whether it's driving one standalone clip
+ * or a whole song's worth of them. Doesn't yet support that function's
+ * `nextGridDenominator` meter-modulation pickup — `BlueprintSection` has
+ * no field for it yet, so there's nothing for this to read.
+ */
+function applyTransition(
+  tiled: TiledDrumNote[],
+  section: BlueprintSection,
+  durationBeats: number,
+  variant: PackedVariant,
+  velocityTarget: number,
+): TiledDrumNote[] {
+  const model: DrumTransitionModel | undefined = section.drumTransitionModel;
+  if (!model) return tiled;
+
+  const barBeats = variant.beatsPerBar;
+  const gridBeats = section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25;
+
+  const maxBars = Math.floor(durationBeats / barBeats);
+  if (maxBars < 1) return tiled;
+  const spanBars = Math.max(1, Math.min(Math.round(section.drumTransitionBars ?? 1), maxBars));
+  if (spanBars >= maxBars && maxBars < 2) return tiled; // never eat the section's only bar
+
+  const spanBeats = spanBars * barBeats;
+  const fillStart = durationBeats - spanBeats;
+  const baseNotes: PackedNote[] = tiled
+    .filter((n) => n.beat >= fillStart)
+    .map((n): PackedNote => [round4(n.beat - fillStart), n.pitch, n.velocity]);
+
+  const generated = synthesizeTransition(model, { spanBeats, gridBeats, velocityTarget, baseNotes });
+
+  const kept = tiled.filter((n) => n.beat < fillStart);
+  const added: TiledDrumNote[] = generated.map(([beat, pitch, velocity]) => ({ beat: round4(beat + fillStart), pitch, velocity }));
+  return [...kept, ...added];
+}
+
+function toDrumNotes(notes: PackedNote[]): DrumNote[] {
+  return notes.map(([beat, pitch, velocity]) => ({ beat, pitch, velocity }));
+}
+
+function toPackedNotes(notes: DrumNote[]): PackedNote[] {
+  return notes.map((n): PackedNote => [n.beat, n.pitch, n.velocity]);
+}
+
+/**
+ * Borrows real human timing/velocity character from an actual corpus
+ * performance and imposes it on an outline's mathematically-precise
+ * onsets — real feel for a meter the corpus has no recording of at all,
+ * via the same `extractGroove`/`applyGroove` template system used
+ * elsewhere in this library to keep other parts in the drums' pocket.
+ *
+ * Extracted per-*beat*, not per-bar: the reference's own bar length has
+ * nothing to do with the outline's (a 7/8 bar isn't 4 beats), but "how
+ * a human's timing wobbles within one beat" generalizes across any bar
+ * length, so `extractGroove` is called with `lengthBeats: 1` — every
+ * beat of the outline inherits the same borrowed character, rather than
+ * needing bar-position-specific data that wouldn't transfer between
+ * differently-shaped meters anyway.
+ *
+ * Always draws from the `standard` preset's first variant — a real,
+ * always-baked E-GMD performance, generic rather than stylistically
+ * matched to the section. Falls back to the untouched notes if that
+ * preset is missing (a test's fixture `presetData`, say) rather than
+ * throwing — humanization is a real improvement, not a hard dependency.
+ */
+function humanizeOutlineNotes(
+  notes: PackedNote[],
+  cellBeats: number,
+  presetData: Partial<Record<DrumPattern, PackedPreset>>,
+): PackedNote[] {
+  const reference = presetData.standard?.variants[0];
+  if (!reference || reference.notes.length === 0) return notes;
+  const groove = extractGroove(toDrumNotes(reference.notes), 1, cellBeats);
+  if (groove.points.length === 0) return notes;
+  return toPackedNotes(applyGroove(toDrumNotes(notes), groove));
+}
+
 /**
  * Turns a section's `drumMeterOutline` into a `PackedVariant` shaped like
- * any corpus/synth preset variant — one click/hi-hat hit per 2s/3s cell
- * subdivision, accented on each cell's first subdivision — so it can flow
- * through the exact same scale/tile/handoff pipeline as every other
- * pattern, with no special-casing downstream.
+ * any corpus/synth preset variant, so it can flow through the exact same
+ * scale/tile/handoff pipeline as every other pattern, with no
+ * special-casing downstream. When the outline carries `cellVoices` (a
+ * per-cell kick/snare assignment, authored in TrackDraft's Drums tab or
+ * Drum Studio's Outline mode), each cell's downbeat plays that voice
+ * instead of a flat click — a real groove, not just a hi-hat count-along.
+ * Absent `cellVoices` (or an outline authored before that field existed)
+ * falls back to `outlineToClickPattern`, identical to before. Either way,
+ * the result is then humanized (`humanizeOutlineNotes`) rather than left
+ * on a mathematically perfect grid.
  */
-function outlineVariant(outline: MeterOutline): PackedVariant {
+function outlineVariant(outline: MeterOutline, presetData: Partial<Record<DrumPattern, PackedPreset>>): PackedVariant {
   const bpb = outlineBeatsPerBar(outline);
+  const rawNotes = outline.cellVoices ? outlineToGroovePattern(outline, outline.cellVoices) : outlineToClickPattern(outline);
   return {
     lengthBeats: bpb,
     beatsPerBar: bpb,
-    notes: outlineToClickPattern(outline),
-    source: { origin: "synth", generator: "outline-click" },
+    notes: humanizeOutlineNotes(rawNotes, outline.cellBeats, presetData),
+    source: { origin: "synth", generator: outline.cellVoices ? "outline-groove" : "outline-click" },
   };
 }
 
@@ -55,13 +160,15 @@ function outlineVariant(outline: MeterOutline): PackedVariant {
  * One clip per section. Pattern and variant selection, in priority order:
  *
  * - When `section.drumMeterOutline` is set (built in Drum Studio's Outline
- *   tab, for a meter the corpus has no analogue for at all — 9/8, 11/16,
- *   25/16...), a click/hi-hat pattern is generated from it directly. This
- *   is Drum Studio's "sync together" answer with the rest of the
- *   arrangement pipeline: the same blueprint field a section already
- *   carries, driving the same per-section clip this function has always
- *   produced, on the same track, at the same `sectionSpans()` boundaries
- *   chords and bass already use.
+ *   tab or TrackDraft's Drums tab, for a meter the corpus has no analogue
+ *   for at all — 9/8, 11/16, 25/16...), a pattern is generated from it
+ *   directly — a real kick/snare groove when the outline carries
+ *   `cellVoices`, a plain accented click otherwise (see `outlineVariant`).
+ *   This is the "sync together" answer with the rest of the arrangement
+ *   pipeline: the same blueprint field a section already carries, driving
+ *   the same per-section clip this function has always produced, on the
+ *   same track, at the same `sectionSpans()` boundaries chords and bass
+ *   already use.
  * - Otherwise, when `section.drumPattern` is set (user has chosen a
  *   preset pattern in TrackDraft's Structure tab), that pattern is used
  *   directly — overriding the heuristic. `section.drumVariantIndex` picks
@@ -85,6 +192,11 @@ function outlineVariant(outline: MeterOutline): PackedVariant {
  * `planSectionHandoffFills`'s own fill-pool lookup finds it with no
  * special-casing there either.
  *
+ * When `section.drumTransitionModel` is also set, `applyTransition`
+ * (below) then overwrites that same tail span with one of the four named
+ * transition models instead — an explicit choice always wins over the
+ * automatic handoff fill for the bars it covers, it doesn't stack with it.
+ *
  * `presetData`/`fillData` default to the real library and only need
  * overriding in tests, which use small fixture presets instead of asserting
  * against actual baked content — that content legitimately changes shape
@@ -101,7 +213,7 @@ export function planDrumClips(
   // First pass: choose pattern + variant per section, so the handoff planner
   // can look at the *next* section's resolved target too.
   const resolved = spans.map(({ section, occurrenceIndex }) => {
-    if (section.drumMeterOutline) return outlineVariant(section.drumMeterOutline);
+    if (section.drumMeterOutline) return outlineVariant(section.drumMeterOutline, presetData);
 
     const pattern = section.drumPattern ?? inferDrumPattern(
       {
@@ -174,6 +286,8 @@ export function planDrumClips(
         tiled.push({ beat, pitch, velocity });
       }
     }
+
+    tiled = applyTransition(tiled, section, durationBeats, variant, velocityTarget);
 
     // A fill resolves onto a crash — put it on this section's downbeat when
     // the previous section built into it, unless the groove already opens

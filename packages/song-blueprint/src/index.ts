@@ -21,6 +21,12 @@ export type { ArrangementEntry, SectionChord, SectionRole, DrumPattern, Velocity
  * own copy of that type): this is a schema package, and it stays decoupled
  * from the runtime pattern-generation library on purpose.
  */
+/** Which voice a cell's downbeat plays — structurally identical to
+ *  `@drum/library`'s `CellVoice`, declared here independently for the
+ *  same schema-decoupling reason as `MeterOutline` itself. `"hat"` means
+ *  no special voice: just the plain accented click every cell gets. */
+export type DrumCellVoice = "kick" | "snare" | "hat";
+
 export interface MeterOutline {
   /** Quarter-note-beat span of one cell: 0.5 for x/8 meters, 0.25 for x/16. */
   cellBeats: number;
@@ -28,7 +34,31 @@ export interface MeterOutline {
   cells: (2 | 3)[];
   /** Mnemonic counting text, e.g. "1 2 1 2 3" for 5/8 grouped as 2+3. */
   label: string;
+  /** Per-cell downbeat voice, same length/order as `cells` — a real
+   *  kick/snare/hat groove instead of a flat click. Absent (or shorter
+   *  than `cells`) treats the missing entries as `"hat"`, matching
+   *  `@drum/library`'s `outlineToGroovePattern` convention exactly, so an
+   *  outline authored before this field existed renders identically to
+   *  before: a plain accented click on every cell. */
+  cellVoices?: DrumCellVoice[];
 }
+
+/**
+ * Named transition models for a section's final bars — the production
+ * vocabulary a section boundary actually gets built from. Structurally
+ * identical to `@drum/library`'s `TransitionModel`, declared here
+ * independently for the same reason `MeterOutline` is: this schema package
+ * stays decoupled from the runtime pattern-generation library.
+ *
+ * - `buildUp` — density/velocity ramp up toward the boundary, landing on
+ *   a strong hit that launches the next section.
+ * - `breakDown` — texture thins out approaching the boundary (energy
+ *   draining out, not one voice silenced — that's `dropOut`).
+ * - `cut` — one sharp hit, then dead silence for the rest of the span.
+ * - `dropOut` — the groove continues, but one or more voices (kick by
+ *   default) are silenced for the span — an EDM-style drop.
+ */
+export type DrumTransitionModel = "buildUp" | "breakDown" | "cut" | "dropOut";
 
 // Re-export the adapters module so consumers (youtubeFullImport.ts,
 // chordmini-bridge.ts) import from one place.
@@ -140,6 +170,16 @@ export interface BlueprintSection {
    *  `drumPattern`, not a replacement for it; sections using the existing
    *  4/4/6/8/5/4/7/8 presets are untouched by this field. */
   drumMeterOutline?: MeterOutline;
+  /** A named transition for this section's final bars — a deliberate
+   *  authorial choice, distinct from the automatic handoff fill every
+   *  long-enough section already gets at export time regardless of this
+   *  field. Absent → no named transition; the section still gets its
+   *  automatic fill if it qualifies for one. */
+  drumTransitionModel?: DrumTransitionModel;
+  /** Bars at the section's end devoted to `drumTransitionModel`. Ignored
+   *  when `drumTransitionModel` is absent. Defaults to 1 at export time
+   *  when the field is set but this isn't. */
+  drumTransitionBars?: number;
   velocity: VelocityPreset;
   timeSignatureNumerator: number;
   timeSignatureDenPower: number;
