@@ -6,6 +6,13 @@ import { downloadSongJson, pushSongToAbleton } from "../../lib/exportImport";
 import { downloadSongMidi } from "../../lib/midiExport";
 import { getSongTransport } from "../../lib/playback/songTransport";
 import { getAbletonClock } from "../../lib/playback/abletonClock";
+import {
+  getLiveMidiScheduler,
+  getMidiOutput,
+  listMidiOutputs,
+  midiOutSupported,
+  type MidiOutputInfo,
+} from "../../lib/playback/liveMidiOut";
 import ArrangementTimeline from "./ArrangementTimeline";
 
 const SCALES: ScaleType[] = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
@@ -19,12 +26,25 @@ export default function StudioView() {
   const clockSource = useSongStore((s) => s.clockSource);
   const setClockSource = useSongStore((s) => s.setClockSource);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [sendingToAbleton, setSendingToAbleton] = useState(false);
   const [abletonConnected, setAbletonConnected] = useState(false);
   const [abletonTelemetry, setAbletonTelemetry] = useState<{
     bpm?: number;
     scale?: string;
     rootNote?: string;
   }>({});
+  const [midiOutputs, setMidiOutputs] = useState<MidiOutputInfo[]>([]);
+  const [midiOutputId, setMidiOutputId] = useState<string>("");
+
+  // Populated once on mount — Web MIDI's permission prompt (where the
+  // browser requires one at all) fires from this call, not from Play, so
+  // hitting Play never has to wait on a permission dialog mid-transport.
+  useEffect(() => {
+    if (!midiOutSupported()) return;
+    listMidiOutputs()
+      .then(setMidiOutputs)
+      .catch(() => setMidiOutputs([]));
+  }, []);
 
   function openPopout() {
     if (!currentSong) return;
@@ -46,6 +66,7 @@ export default function StudioView() {
     return () => {
       unsubscribe();
       transport.stop();
+      getLiveMidiScheduler().stop();
     };
   }, []);
 
@@ -75,14 +96,23 @@ export default function StudioView() {
   if (!currentSong) return null;
   const song = currentSong;
 
-  function togglePlayback() {
+  async function togglePlayback() {
     const transport = getSongTransport();
     if (isPlaying) {
       transport.stop();
-    } else if (clockSource === "ableton") {
+      getLiveMidiScheduler().stop();
+      return;
+    }
+    if (clockSource === "ableton") {
       transport.syncToAbleton(song);
-    } else {
-      transport.play(song);
+      return;
+    }
+    transport.play(song);
+    // Live MIDI-out is opt-in via the port picker — no port selected means
+    // Play stays exactly what it's always been, a silent playhead.
+    if (midiOutputId) {
+      const output = await getMidiOutput(midiOutputId);
+      if (output) getLiveMidiScheduler().start(song, output);
     }
   }
 
@@ -207,6 +237,20 @@ export default function StudioView() {
               </>
             )}
           </div>
+          {midiOutSupported() && (
+            <select
+              className="bg-panelAlt border border-edge rounded text-xs px-2 py-1 text-inkMuted"
+              value={midiOutputId}
+              onChange={(e) => setMidiOutputId(e.target.value)}
+              disabled={isPlaying}
+              title="Stream chords/bass/drums as live MIDI to this port while playing — chords on ch.1, bass on ch.2, drums on ch.10. Point Ableton tracks' MIDI input at this same port (and the matching channel) to hear it. Leave on 'Off' for a silent playhead only."
+            >
+              <option value="">MIDI Out: Off</option>
+              {midiOutputs.map((o) => (
+                <option key={o.id} value={o.id}>MIDI Out: {o.name}</option>
+              ))}
+            </select>
+          )}
           <button
             className="bg-accent text-black text-xs font-medium px-3 py-1.5 rounded disabled:opacity-40"
             onClick={togglePlayback}
@@ -235,18 +279,28 @@ export default function StudioView() {
             Export MIDI
           </button>
           <button
-            className="bg-accent text-black text-xs font-medium px-3 py-1.5 rounded"
+            className="bg-accent text-black text-xs font-medium px-3 py-1.5 rounded disabled:opacity-40"
+            disabled={sendingToAbleton}
             onClick={async () => {
+              // Ableton's cue-point creation isn't safe against two
+              // near-simultaneous applyBlueprint runs for the same song
+              // (observed directly: it can crash the whole extension
+              // host) — disabling while a request's in flight keeps an
+              // accidental double-click from recreating that race.
+              if (sendingToAbleton) return;
+              setSendingToAbleton(true);
               try {
                 const result = await pushSongToAbleton(song);
-                alert(`Sent "${result.title}" to Ableton — cue points, tempo, and clip scaffolds are ready. Right-click any track → "Apply Song Blueprint" to place cue points, or "Generate Chord Clips" / "Generate Drum Clips" to build MIDI.`);
+                alert(`Sent "${result.title}" to Ableton — cue points, tempo, and Chords/Bass/Drums tracks are being populated with real MIDI now (the extension polls its command queue every 2s). Load an instrument on each track in Ableton to hear it.`);
               } catch (err) {
                 alert(`Couldn't reach the Ableton bridge (osc-bridge at localhost:5200). Make sure it's running, then try again.\n\nError: ${err instanceof Error ? err.message : String(err)}`);
+              } finally {
+                setSendingToAbleton(false);
               }
             }}
-            title="Push this song's blueprint directly to Ableton via the osc-bridge — writes the .trackdraft.json to the extension's storage directory so it appears in the right-click picker immediately, no manual sync script needed"
+            title="Push this song's blueprint to Ableton via the osc-bridge — the bridge itself queues an apply command, which creates/reuses Chords, Bass, and Drums MIDI tracks and fills them with real clips, no manual right-clicking needed"
           >
-            Send to Ableton
+            {sendingToAbleton ? "Sending…" : "Send to Ableton"}
           </button>
         </div>
       </div>

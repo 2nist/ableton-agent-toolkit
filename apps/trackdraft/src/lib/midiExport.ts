@@ -27,7 +27,7 @@ import type { BlueprintSong, Chord } from "../types/blueprint";
 /** A single MIDI note event — the common shape all three stem generators
  *  produce. `startTime` and `duration` are in song beats (quarter-note
  *  based, same as every other beat count in the blueprint schema). */
-interface MidiNote {
+export interface MidiNote {
   pitch: number;
   startTime: number;
   duration: number;
@@ -89,7 +89,7 @@ function loopChordsToFill(chords: Chord[], durationBeats: number): ChordOccurren
 // ---------------------------------------------------------------------------
 
 /** Chord notes for one section — block chords with performance effects. */
-function planChordStem(spans: SectionSpan[]): MidiNote[] {
+export function planChordStem(spans: SectionSpan[]): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
     const occurrences = loopChordsToFill(span.section.chords ?? [], span.durationBeats);
@@ -122,7 +122,7 @@ function planChordStem(spans: SectionSpan[]): MidiNote[] {
 }
 
 /** Bass notes — one sustained root per chord, octave 3. */
-function planBassStem(spans: SectionSpan[]): MidiNote[] {
+export function planBassStem(spans: SectionSpan[]): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
     const occurrences = loopChordsToFill(span.section.chords ?? [], span.durationBeats);
@@ -145,7 +145,7 @@ function planBassStem(spans: SectionSpan[]): MidiNote[] {
  *  `resolveDrumHits` normally converts beat positions to seconds via
  *  `secPerBeat`; passing `1` here gets beat positions straight back
  *  unchanged, which is what a beat-based MIDI file needs. */
-function planDrumStem(spans: SectionSpan[], concept?: string): MidiNote[] {
+export function planDrumStem(spans: SectionSpan[], concept?: string): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
     const pattern = span.section.drumPattern ?? inferPatternForSection(span.section, concept);
