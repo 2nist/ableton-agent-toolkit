@@ -5,17 +5,19 @@ import type { BlueprintSong } from "../../types/blueprint";
 /** 1-based MIDI channels (1-16, matching how Ableton's UI numbers them) —
  *  one per generated stem, so each Ableton track can listen on its own
  *  channel of the same shared virtual port instead of everything landing
- *  on channel 1. Defaults match the drumstudio1.als template: `chord`
- *  already listens to all channels so 1 works out of the box; `crave`
- *  (bass) and `kit` (drums) need a one-time "MIDI From" repoint in
- *  Ableton to this port, filtered to their own channel. */
+ *  on channel 1. Defaults match drumstudio1.als's actual track order (1
+ *  kit, 2 crave, 3 chord, ...), so channel number = track number for the
+ *  three tracks TrackDraft drives: `kit` (drums, ch.1), `crave` (bass,
+ *  ch.2), `chord` (ch.3 — it already listens to all channels, so this
+ *  works with no Ableton-side change; `kit`/`crave` need a one-time "MIDI
+ *  From" repoint to this port, filtered to their own channel). */
 export interface LiveMidiChannelMap {
   chords: number;
   bass: number;
   drums: number;
 }
 
-export const DEFAULT_LIVE_MIDI_CHANNELS: LiveMidiChannelMap = { chords: 1, bass: 2, drums: 10 };
+export const DEFAULT_LIVE_MIDI_CHANNELS: LiveMidiChannelMap = { drums: 1, bass: 2, chords: 3 };
 
 export interface MidiOutputInfo {
   id: string;

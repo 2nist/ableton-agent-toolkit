@@ -243,7 +243,7 @@ export default function StudioView() {
               value={midiOutputId}
               onChange={(e) => setMidiOutputId(e.target.value)}
               disabled={isPlaying}
-              title="Stream chords/bass/drums as live MIDI to this port while playing — chords on ch.1, bass on ch.2, drums on ch.10. Point Ableton tracks' MIDI input at this same port (and the matching channel) to hear it. Leave on 'Off' for a silent playhead only."
+              title="Stream chords/bass/drums as live MIDI to this port while playing — drums on ch.1, bass on ch.2, chords on ch.3. Point Ableton tracks' MIDI input at this same port (and the matching channel) to hear it. Leave on 'Off' for a silent playhead only."
             >
               <option value="">MIDI Out: Off</option>
               {midiOutputs.map((o) => (
