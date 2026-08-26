@@ -125,6 +125,27 @@ export function activate(activation: ActivationContext) {
   }
 
   /**
+   * Finds an existing MIDI track named exactly `name` (case-insensitive), or
+   * creates a fresh one — so repeatedly applying a blueprint from the browser
+   * (the command-queue path, not the manual per-track context-menu commands)
+   * reuses the same three tracks instead of piling up duplicates on every
+   * "Send to Ableton". Naming happens directly after creation, unwrapped —
+   * same pattern `progression-studio`'s extension already uses for this,
+   * unlike clip creation/mutation which the SDK requires as two separate
+   * transactions.
+   */
+  async function findOrCreateMidiTrack(name: string): Promise<MidiTrack<"1.0.0">> {
+    const song = context.application.song;
+    const existing = song.tracks.find(
+      (t): t is MidiTrack<"1.0.0"> => t instanceof MidiTrack && t.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (existing) return existing;
+    const track = await song.createMidiTrack();
+    track.name = name;
+    return track;
+  }
+
+  /**
    * Real pad mapping for a track, falling back to the project's `kit`
    * track when the target itself has no DrumRack — returns an empty
    * mapping (no remapping applied) when neither has one, rather than
@@ -348,7 +369,25 @@ export function activate(activation: ActivationContext) {
             created.forEach((c, i) => (c.name = cuePlan[i].name));
             song.tempo = blueprint.bpm;
           });
-          console.log(`[trackdraft-bridge] queue: applied blueprint "${blueprint.title}"`);
+
+          // Real playable MIDI, not just markers — the whole point of
+          // triggering this from the browser instead of requiring the user
+          // to right-click three separate tracks inside Live and pick the
+          // blueprint from a dialog each time. Reuses the exact same
+          // generators/clearing logic the manual "Generate X Clips" commands
+          // already use, just aimed at three dedicated, reused-by-name
+          // tracks instead of whatever track the user right-clicked.
+          const chordsTrack = await findOrCreateMidiTrack("Chords");
+          await applyClipPlan(chordsTrack, planChordClips(blueprint));
+
+          const bassTrack = await findOrCreateMidiTrack("Bass");
+          await applyClipPlan(bassTrack, planBassLine(blueprint));
+
+          const drumsTrack = await findOrCreateMidiTrack("Drums");
+          const drumMapping = await resolveTrackPadMapping(drumsTrack);
+          await applyClipPlan(drumsTrack, remapClipPlanPitches(planDrumClips(blueprint), drumMapping));
+
+          console.log(`[trackdraft-bridge] queue: applied blueprint "${blueprint.title}" (cue points + chords/bass/drums)`);
           break;
         }
       }
