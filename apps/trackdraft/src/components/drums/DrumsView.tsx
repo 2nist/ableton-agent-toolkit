@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
-import { useDockStore } from "../../store/dockStore";
 import { updateSection } from "../../lib/sections";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
 import {
@@ -16,7 +15,7 @@ import { TRANSITION_COLOR, TRANSITION_LABEL } from "./transitionStyle";
 import { SECTION_ROLE_COLOR } from "./sectionRoleStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
 import TransitionPopover from "./TransitionPopover";
-import DrumsDockTools from "./DrumsDockTools";
+import SectionDrumsPopover from "./SectionDrumsPopover";
 import { planSectionHandoffFills, FILL_DATA, type HandoffSectionInput, type KitVoice } from "@drum/library";
 import type { BlueprintSection, DrumTransitionModel } from "../../types/blueprint";
 
@@ -73,9 +72,10 @@ interface ResolvedSpan {
  *  This is the first real home for the drum-arrangement concept explored
  *  separately; `structure/DrumNecklacePreview.tsx` is the same idea
  *  scoped to one section, living next to the picker that controls it.
- *  Clicking a section selects it (shared via `drumsSelectionStore`, same
- *  pattern as Harmony's canvas/dock split) — its pattern + variant then
- *  edit from the dock's Tools panel via `DrumsDockTools`. A boundary's
+ *  Clicking a section selects it (shared via `drumsSelectionStore`) and
+ *  opens its editor in place via `SectionDrumsPopover` — the design
+ *  reference's modal-on-timeline-click, replacing the old dock panel.
+ *  A boundary's
  *  transition can *also* be set right where it happens — clicking the
  *  handoff line itself opens `TransitionPopover` in place, matching the
  *  design reference's click-the-timeline interaction — rather than only
@@ -87,33 +87,28 @@ export default function DrumsView() {
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const selectedSectionId = useDrumsSelectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useDrumsSelectionStore((s) => s.setSelectedSectionId);
-  const setTools = useDockStore((s) => s.setTools);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [transitionPopover, setTransitionPopover] = useState<{ sectionId: string; left: number; top: number } | null>(
     null,
   );
-
-  // Registered once — DrumsDockTools reads the shared selection store
-  // itself and re-renders on its own, same reasoning as HarmonyDockTools.
-  useEffect(() => {
-    setTools(<DrumsDockTools />);
-    return () => setTools(null);
-  }, [setTools]);
+  const [sectionPopover, setSectionPopover] = useState<{ left: number; top: number } | null>(null);
 
   // Closes the popover on any click outside it or outside a handoff hit
   // target — the hit targets themselves stopPropagation so re-clicking a
   // (possibly different) boundary while one's already open just retargets
   // it instead of closing then needing a second click to reopen.
   useEffect(() => {
-    if (!transitionPopover) return;
+    if (!transitionPopover && !sectionPopover) return;
     function handleOutsideClick(e: MouseEvent) {
       const target = e.target as HTMLElement | null;
-      if (target?.closest('[data-transition-popover]')) return;
+      if (target?.closest("[data-transition-popover]")) return;
+      if (target?.closest("[data-section-drums-popover]")) return;
       setTransitionPopover(null);
+      setSectionPopover(null);
     }
     document.addEventListener("click", handleOutsideClick);
     return () => document.removeEventListener("click", handleOutsideClick);
-  }, [transitionPopover]);
+  }, [transitionPopover, sectionPopover]);
 
   if (!song) return null;
 
@@ -174,15 +169,15 @@ export default function DrumsView() {
         <h2 className="font-medium text-sm">Drums</h2>
         <p className="text-xs text-inkMuted">
           The whole song's resolved groove, one lane per voice — a repeat of the exact same pattern+variant just
-          continues the line instead of redrawing its necklace. Click a section to edit its pattern in the dock, or
-          click a boundary line to set what happens at that handoff, right there.
+          continues the line instead of redrawing its necklace. Click a section to edit its drums in place, or click a
+          boundary line to set what happens at that handoff, right there.
         </p>
       </div>
 
       {usedVoices.length === 0 ? (
         <p className="text-inkMuted text-sm">No drum voices resolve for this song yet.</p>
       ) : (
-        <div ref={wrapRef} className="relative overflow-x-auto border border-edge rounded bg-panel">
+        <div ref={wrapRef} className="relative overflow-x-auto border border-edge rounded bg-black">
           <svg width={width} height={height} className="block">
             {/* section bands — click any occurrence to select its section
                 (all occurrences of the same section highlight together,
@@ -195,7 +190,17 @@ export default function DrumsView() {
               return (
                 <g
                   key={`band-${i}`}
-                  onClick={() => setSelectedSectionId(r.span.section.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedSectionId(r.span.section.id);
+                    const wrapEl = wrapRef.current;
+                    if (!wrapEl) return;
+                    const rect = wrapEl.getBoundingClientRect();
+                    setSectionPopover({
+                      left: Math.max(4, Math.min(e.clientX - rect.left + 12, rect.width - 330)),
+                      top: Math.max(4, e.clientY - rect.top - 10),
+                    });
+                  }}
                   style={{ cursor: "pointer" }}
                 >
                   <rect
@@ -222,6 +227,22 @@ export default function DrumsView() {
                 </g>
               );
             })}
+
+            {/* subtle bar markers — faint vertical gridlines so odd
+                meters and section lengths read against the plain black
+                field, matching the design reference's understated grid */}
+            {Array.from({ length: bars + 1 }).map((_, b) => (
+              <line
+                key={`bar-marker-${b}`}
+                x1={barToX(b)}
+                y1={TOP_PAD - 8}
+                x2={barToX(b)}
+                y2={TOP_PAD - 8 + laneStackHeight + 8}
+                stroke="#FFFFFF"
+                strokeOpacity={b % 4 === 0 ? 0.09 : 0.05}
+                strokeWidth={1}
+              />
+            ))}
 
             {/* lane labels + baselines — each voice's own color, the way
                 the design reference draws it: a faint guide the full
@@ -316,6 +337,11 @@ export default function DrumsView() {
                         strokeDasharray={model ? undefined : "2 3"}
                         opacity={model ? 0.9 : 0.6}
                       />
+                      {/* handoff node — a small circular control point at
+                          the boundary's vertical midpoint, the design
+                          reference's "node" affordance for fills and
+                          transitions */}
+                      <circle cx={x} cy={(yTop + yBottom) / 2} r={3} fill={color} opacity={model ? 1 : 0.6} />
                       <text x={x} y={yBottom + 12} textAnchor="middle" fontSize={8} fontFamily="'IBM Plex Mono', monospace" fill={color}>
                         {model ? TRANSITION_LABEL[model].toUpperCase() : "FILL"}
                       </text>
@@ -365,6 +391,16 @@ export default function DrumsView() {
               </div>
             );
           })()}
+
+          {sectionPopover && (
+            <div data-section-drums-popover>
+              <SectionDrumsPopover
+                left={sectionPopover.left}
+                top={sectionPopover.top}
+                onClose={() => setSectionPopover(null)}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

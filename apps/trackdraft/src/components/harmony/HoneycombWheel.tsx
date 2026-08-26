@@ -1,6 +1,7 @@
 import { useMemo, useCallback, useState } from "react";
 import { pitchClass } from "@music-theory/core";
 import type { ScaleType, ChordQuality, NoteName } from "@music-theory/core";
+import { resolveFlavor, BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR } from "@platform/progression-engine";
 import type { Chord } from "../../types/blueprint";
 import { chordFromDegree, chordsToHoneycombText, chordDisplayName } from "../../lib/harmony/chordBuilder";
 import {
@@ -38,6 +39,12 @@ interface HoneycombWheelProps {
    *  component used to have to open directly. */
   onSelectChord: (id: string | null) => void;
   onChangeChords: (chords: Chord[]) => void;
+  /** Active section's bi-tonal color flavor — renders a small badge on each
+   *  chord hex showing the color-extension that chord maps to under it. */
+  colorFlavor?: string;
+  /** Called when a chord is clicked or added, so the host can audition it
+   *  through the selected MIDI port. */
+  onPreviewChord?: (chord: Chord) => void;
 }
 
 export default function HoneycombWheel({
@@ -48,6 +55,8 @@ export default function HoneycombWheel({
   selectedChordId,
   onSelectChord,
   onChangeChords,
+  colorFlavor,
+  onPreviewChord,
 }: HoneycombWheelProps) {
   const keyPc = pitchClass(keyName);
   const scaleKey = MODE_TO_SCALE_KEY[scale as keyof typeof MODE_TO_SCALE_KEY] ?? "major";
@@ -176,7 +185,8 @@ export default function HoneycombWheel({
     const updated = [...chords, newChord];
     onChangeChords(updated);
     onSelectChord(newChord.id);
-  }, [chords, keyPc, keyName, intervals, diatonicByDegree, beatsPerChord, onChangeChords, onSelectChord]);
+    onPreviewChord?.(newChord);
+  }, [chords, keyPc, keyName, intervals, diatonicByDegree, beatsPerChord, onChangeChords, onSelectChord, onPreviewChord]);
 
   const selectChordAtCell = useCallback((q: number, r: number) => {
     if (!displayWalk.length) return;
@@ -185,11 +195,12 @@ export default function HoneycombWheel({
         const chord = chords[i];
         if (chord) {
           onSelectChord(chord.id);
+          onPreviewChord?.(chord);
         }
         return;
       }
     }
-  }, [displayWalk, chords, onSelectChord]);
+  }, [displayWalk, chords, onSelectChord, onPreviewChord]);
 
   const handleCellClick = useCallback((cell: RevealedCell) => {
     if (cell.type === "choice") addChordAtDegree(cell.d);
@@ -260,6 +271,20 @@ export default function HoneycombWheel({
           const isChoice = type === "choice";
           const isSelected = selectedStep >= 0 && displayWalk[selectedStep].q === q && displayWalk[selectedStep].r === r;
 
+          // Color-flavor badge: the bi-tonal color extension this chord maps
+          // to under the section's flavor, shown as a small square badge like
+          // the step-order badge. Skipped when the flavor doesn't apply to
+          // this chord's quality (the engine resolves those to "Unison").
+          const chordAtCell = isCurrent
+            ? chords[displayWalk.findIndex((p) => p.q === q && p.r === r)]
+            : undefined;
+          const flavorLabel = chordAtCell
+            ? resolveFlavor(BI_TONAL_MATRIX, chordAtCell.quality, colorFlavor ?? DEFAULT_COLOR_FLAVOR).label
+            : null;
+          const badgeLabel = flavorLabel && flavorLabel !== "Unison"
+            ? (flavorLabel.length > 7 ? `${flavorLabel.slice(0, 6)}…` : flavorLabel)
+            : null;
+
           const romanLabel = diatonicByDegree[d].triad.minor ? ROMAN_UP[d].toLowerCase() : ROMAN_UP[d];
           const rootPc = intervals[d];
           const subLabel = chordDisplayName((keyPc + rootPc) % 12, diatonicByDegree[d].triad.minor ? "min" : "maj", keyName);
@@ -292,6 +317,29 @@ export default function HoneycombWheel({
                 fill={isChoice ? "#57606D" : hue.rim} style={{ pointerEvents: "none" }}>
                 {subLabel}
               </text>
+              {badgeLabel && (
+                <g style={{ pointerEvents: "none" }}>
+                  <rect
+                    x={-S * 0.8}
+                    y={-S * 0.82}
+                    width={badgeLabel.length * 5 + 6}
+                    height={12}
+                    rx={3}
+                    fill="#10141C"
+                    stroke="#5B84C4"
+                    strokeWidth={1}
+                  />
+                  <text
+                    x={-S * 0.8 + 3}
+                    y={-S * 0.82 + 9}
+                    fontFamily="'IBM Plex Mono', monospace"
+                    fontSize={7.5}
+                    fill="#8FB7E8"
+                  >
+                    {badgeLabel}
+                  </text>
+                </g>
+              )}
             </g>
           );
         })}

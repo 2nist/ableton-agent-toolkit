@@ -1,0 +1,98 @@
+[
+ {
+  "degree": "I",
+  "tension": 0.39352340323946167,
+  "functional": 0,
+  "empirical": 0.7870468064789233,
+  "entropy": 0.7560414648435086,
+  "finality": 0.18194785188566212
+ },
+ {
+  "degree": "V",
+  "tension": 0.75151850597642,
+  "functional": 0.75,
+  "empirical": 0.75303701195284,
+  "entropy": 0.777483848747353,
+  "finality": 0.27140982484167286
+ },
+ {
+  "degree": "♭VII",
+  "tension": 0.735312368384418,
+  "functional": 0.65,
+  "empirical": 0.820624736768836,
+  "entropy": 0.7842288767441534,
+  "finality": 0.14297940320648142
+ },
+ {
+  "degree": "IV",
+  "tension": 0.6326053841943805,
+  "functional": 0.45,
+  "empirical": 0.8152107683887609,
+  "entropy": 0.7592513422205527,
+  "finality": 0.12882980544303074
+ },
+ {
+  "degree": "♭III",
+  "tension": 0.6845090987130663,
+  "functional": 0.5,
+  "empirical": 0.8690181974261326,
+  "entropy": 0.7815692299067527,
+  "finality": 0.043532835054487365
+ },
+ {
+  "degree": "iv",
+  "tension": 0.7282535106191754,
+  "functional": 0.6,
+  "empirical": 0.856507021238351,
+  "entropy": 0.7675014048319253,
+  "finality": 0.05448736235522337
+ },
+ {
+  "degree": "vi",
+  "tension": 0.5002850217065314,
+  "functional": 0.15,
+  "empirical": 0.850570043413063,
+  "entropy": 0.7409643579506766,
+  "finality": 0.03982427112455069
+ },
+ {
+  "degree": "ii",
+  "tension": 0.7215453958510504,
+  "functional": 0.55,
+  "empirical": 0.8930907917021007,
+  "entropy": 0.8113427632980795,
+  "finality": 0.025161179893878016
+ },
+ {
+  "degree": "♭VI",
+  "tension": 0.6839064864364549,
+  "functional": 0.55,
+  "empirical": 0.8178129728729098,
+  "entropy": 0.700725506423631,
+  "finality": 0.06509956067781138
+ },
+ {
+  "degree": "♭II",
+  "tension": 0.8655746368165904,
+  "functional": 0.85,
+  "empirical": 0.8811492736331807,
+  "entropy": 0.7817542441911063,
+  "finality": 0.019455696924744678
+ },
+ {
+  "degree": "iii",
+  "tension": 0.5836726847045232,
+  "functional": 0.3,
+  "empirical": 0.8673453694090464,
+  "entropy": 0.7531194488083934,
+  "finality": 0.01842870999030068
+ },
+ {
+  "degree": "vii°",
+  "tension": 0.9193415678609398,
+  "functional": 0.9,
+  "empirical": 0.9386831357218794,
+  "entropy": 0.8862097700459155,
+  "finality": 0.008843498602156672
+ }
+]

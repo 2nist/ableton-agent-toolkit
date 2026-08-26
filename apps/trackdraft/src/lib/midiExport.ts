@@ -6,6 +6,7 @@
  *   Track 1: Chords (block chords + performance effects)
  *   Track 2: Bass (root notes, one octave below chord clips)
  *   Track 3: Drums (GM drum map, one note per hit)
+ *   Track 4: Color (the bi-tonal "Color Chord" layer, per-section flavor)
  *
  * Reuses the same `sectionSpans` math the app already has (lib/arrangement.ts)
  * and the same `loopChordsToFill` cycle the bridge uses, so the exported MIDI
@@ -18,6 +19,7 @@ import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
 import { resolveDrumHits, inferPatternForSection } from "./playback/drumPreview";
+import { planColorStem } from "./colorStem";
 import type { BlueprintSong, Chord } from "../types/blueprint";
 
 // ---------------------------------------------------------------------------
@@ -287,11 +289,12 @@ function keySignature(song: BlueprintSong): { sharps: number; major: boolean } {
 
 /** Converts a BlueprintSong to a Standard MIDI File as a Uint8Array.
  *
- *  Produces a Type-1 SMF with 4 tracks:
+ *  Produces a Type-1 SMF with 5 tracks:
  *  - Track 0: Conductor (tempo, time signature, key signature)
  *  - Track 1: Chords
  *  - Track 2: Bass
  *  - Track 3: Drums
+ *  - Track 4: Color (bi-tonal Color Chord layer)
  *
  *  The tempo is set from `song.bpm`, time signature from the song's
  *  numerator/denominator, and key signature from `song.key`/`song.scale`.
@@ -306,6 +309,7 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
   const chordNotes = planChordStem(spans);
   const bassNotes = planBassStem(spans);
   const drumNotes = planDrumStem(spans, song.concept);
+  const colorNotes = planColorStem(spans);
 
   // --- Conductor track (tempo + time sig + key sig) ---
   const conductorEvents: RawMidiEvent[] = [];
@@ -347,9 +351,13 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
     notesToEvents(drumNotes, 9), // channel 10 = GM drums
     "Drums",
   );
+  const colorTrack = buildTrackChunk(
+    notesToEvents(colorNotes, 2),
+    "Color",
+  );
 
   // --- Assemble SMF ---
-  const numTracks = 4;
+  const numTracks = 5;
   const header = [
     0x4d, 0x54, 0x68, 0x64, // "MThd"
     ...writeU32(6),          // header length
@@ -358,7 +366,7 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
     ...writeU16(TICKS_PER_QUARTER),
   ];
 
-  const allBytes = [...header, ...conductorTrack, ...chordTrack, ...bassTrack, ...drumTrack];
+  const allBytes = [...header, ...conductorTrack, ...chordTrack, ...bassTrack, ...drumTrack, ...colorTrack];
   return new Uint8Array(allBytes);
 }
 

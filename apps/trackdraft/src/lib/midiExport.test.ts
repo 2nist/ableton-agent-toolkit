@@ -48,14 +48,14 @@ describe("songToMidi", () => {
     expect(bytes[3]).toBe(0x64); // d
   });
 
-  it("produces a Type-1 SMF with 4 tracks", () => {
+  it("produces a Type-1 SMF with 5 tracks", () => {
     const bytes = songToMidi(testSong());
     const parsed = parseMidiBytes(bytes);
     // Format = 1 (multi-track)
     const format = (bytes[8] << 8) | bytes[9];
     expect(format).toBe(1);
-    // 4 tracks: conductor, chords, bass, drums
-    expect(parsed.tracks.length).toBe(4);
+    // 5 tracks: conductor, chords, bass, drums, color
+    expect(parsed.tracks.length).toBe(5);
   });
 
   it("encodes the correct tempo", () => {
@@ -135,6 +135,19 @@ describe("songToMidi", () => {
     expect(pitches.has(42)).toBe(true); // closed hat
   });
 
+  it("generates a Color track (Track 4) with bi-tonal notes", () => {
+    const bytes = songToMidi(testSong());
+    const parsed = parseMidiBytes(bytes);
+
+    // Track 4 = Color (index 4). The bi-tonal layer should sit above the
+    // chord octave (octave 6 = MIDI 72+), so at least one note should
+    // register in that register.
+    const colorTrack = parsed.tracks[4];
+    const colorNoteOns = colorTrack.events.filter((e) => e.type === "noteOn" && e.note !== undefined);
+    expect(colorNoteOns.length).toBeGreaterThan(0);
+    expect(colorNoteOns.some((e) => (e.note ?? 0) >= 72)).toBe(true);
+  });
+
   it("round-trips: exported MIDI parses back without errors", () => {
     const bytes = songToMidi(testSong());
     // Should not throw
@@ -147,8 +160,8 @@ describe("songToMidi", () => {
     song.sections[0].chords = [];
     const bytes = songToMidi(song);
     const parsed = parseMidiBytes(bytes);
-    // Should still have 4 tracks, just with fewer notes
-    expect(parsed.tracks.length).toBe(4);
+    // Should still have 5 tracks, just with fewer notes
+    expect(parsed.tracks.length).toBe(5);
   });
 
   it("handles a song with multiple sections and repeats", () => {
@@ -186,7 +199,7 @@ describe("songToMidi", () => {
     ];
     const bytes = songToMidi(song);
     const parsed = parseMidiBytes(bytes);
-    expect(parsed.tracks.length).toBe(4);
+    expect(parsed.tracks.length).toBe(5);
     expect(parsed.notes.length).toBeGreaterThan(0);
   });
 

@@ -46,6 +46,11 @@ let liveStateCache: AbletonState = {
   timestamp: Date.now(),
 };
 
+// Optional listener invoked whenever a fresh M4L telemetry payload arrives
+// (wired by cli.ts to push the same state into the WebSocket bridge, so
+// browser clients get tempo/key/scale over the single ws:8081 channel).
+let onLiveState: ((state: AbletonState) => void) | undefined;
+
 // 1. Initialize OSC over UDP Listener
 const udpPort = new osc.UDPPort({
   localAddress: "127.0.0.1",
@@ -63,6 +68,7 @@ udpPort.on("message", (oscMsg: any) => {
         rootNote: payload.rootNote || liveStateCache.rootNote,
         timestamp: Date.now(),
       };
+      onLiveState?.(liveStateCache);
     } catch (err) {
       console.error("[OSC-BRIDGE] Failed to parse Max for Live JSON payload:", err);
     }
@@ -81,6 +87,21 @@ app.get("/api/ableton/state", (_req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.json(liveStateCache);
+});
+
+// 2b. Liveness probe — lets the TrackDraft app tell "bridge process down"
+//     (connection refused) apart from "bridge up but AbletonOSC/M4L not
+//     sending yet" (no fresh live state), so the Studio status widget can
+//     show the right hint instead of a bare "waiting…".
+app.get("/health", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.json({
+    ok: true,
+    service: "osc-bridge",
+    now: Date.now(),
+    liveState: liveStateCache,
+  });
 });
 
 // 3. UI Command Queue Router -> Writes to Shared Directory
@@ -173,8 +194,13 @@ app.use((req, res, next) => {
   next();
 });
 
-/** Start the telemetry server (kept as exported factory for composability). */
-export function startTelemetryServer() {
+/** Start the telemetry server (kept as exported factory for composability).
+ *  `liveStateListener` is invoked on every fresh M4L telemetry payload —
+ *  the CLI passes it through to `bridge.setTelemetry` so the WebSocket
+ *  channel carries tempo/key/scale too, keeping the app on a single
+ *  connection. */
+export function startTelemetryServer(liveStateListener?: (state: AbletonState) => void) {
+  if (liveStateListener) onLiveState = liveStateListener;
   app.listen(PORT, () => {
     console.log(`[OSC-BRIDGE] REST Telemetry server active on http://localhost:${PORT}`);
   });

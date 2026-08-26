@@ -1,3 +1,5 @@
+import { getBridgeWsUrl } from "../bridgeHost";
+
 /** Wire shape of `osc-bridge`'s WebSocket relay
  *  (packages/osc-bridge/src/bridge.ts, already shipping — no changes
  *  needed there or in packages/osc-bridge/src/protocol.ts, which this
@@ -25,7 +27,9 @@ export interface AbletonClockState {
   abletonRootNote?: string;
 }
 
-const DEFAULT_URL = "ws://127.0.0.1:8081";
+// Follows the page host — 127.0.0.1 when opened locally, the Mac's LAN IP
+// when opened from an iPad via `start-all.sh lan`.
+const DEFAULT_URL = getBridgeWsUrl();
 const RECONNECT_DELAY_MS = 2000;
 
 /** Thin client for `osc-bridge`'s position relay. Reconnects on close/

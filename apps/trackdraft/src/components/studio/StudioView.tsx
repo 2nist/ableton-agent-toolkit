@@ -6,14 +6,11 @@ import { downloadSongJson, pushSongToAbleton } from "../../lib/exportImport";
 import { downloadSongMidi } from "../../lib/midiExport";
 import { getSongTransport } from "../../lib/playback/songTransport";
 import { getAbletonClock } from "../../lib/playback/abletonClock";
-import {
-  getLiveMidiScheduler,
-  getMidiOutput,
-  listMidiOutputs,
-  midiOutSupported,
-  type MidiOutputInfo,
-} from "../../lib/playback/liveMidiOut";
+import { getLiveMidiScheduler, getMidiOutput } from "../../lib/playback/liveMidiOut";
+import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 import ArrangementTimeline from "./ArrangementTimeline";
+import AbletonStatus from "./AbletonStatus";
+import MidiSetupPanel from "./MidiSetupPanel";
 
 const SCALES: ScaleType[] = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
 
@@ -33,18 +30,9 @@ export default function StudioView() {
     scale?: string;
     rootNote?: string;
   }>({});
-  const [midiOutputs, setMidiOutputs] = useState<MidiOutputInfo[]>([]);
-  const [midiOutputId, setMidiOutputId] = useState<string>("");
-
-  // Populated once on mount — Web MIDI's permission prompt (where the
-  // browser requires one at all) fires from this call, not from Play, so
-  // hitting Play never has to wait on a permission dialog mid-transport.
-  useEffect(() => {
-    if (!midiOutSupported()) return;
-    listMidiOutputs()
-      .then(setMidiOutputs)
-      .catch(() => setMidiOutputs([]));
-  }, []);
+  const [showMidiSetup, setShowMidiSetup] = useState(false);
+  const midiOutputId = useMidiSettingsStore((s) => s.midiOutputId);
+  const midiChannels = useMidiSettingsStore((s) => s.channels);
 
   function openPopout() {
     if (!currentSong) return;
@@ -108,11 +96,19 @@ export default function StudioView() {
       return;
     }
     transport.play(song);
-    // Live MIDI-out is opt-in via the port picker — no port selected means
-    // Play stays exactly what it's always been, a silent playhead.
+    // Live MIDI-out is opt-in via the MIDI setup panel — no port selected
+    // means Play stays exactly what it's always been, a silent playhead.
     if (midiOutputId) {
       const output = await getMidiOutput(midiOutputId);
-      if (output) getLiveMidiScheduler().start(song, output);
+      if (output) {
+        getLiveMidiScheduler().start(song, output, midiChannels);
+      } else {
+        // The saved port id is stale (Web MIDI ids change between browser
+        // restarts) — don't fail silently; re-picking in the panel fixes it.
+        getLiveMidiScheduler().stop();
+        transport.stop();
+        alert("The selected MIDI port is no longer available. Open the MIDI setup panel, re-select a port, then Play again.");
+      }
     }
   }
 
@@ -201,9 +197,7 @@ export default function StudioView() {
             ))}
             {clockSource === "ableton" && (
               <>
-                <span className={`text-[10px] font-mono ${abletonConnected ? "text-green-400" : "text-inkMuted/60"}`}>
-                  {abletonConnected ? "● connected" : "○ waiting…"}
-                </span>
+                <AbletonStatus connected={abletonConnected} />
                 {abletonConnected && abletonTelemetry.bpm !== undefined && (
                   <span className="text-[10px] text-inkMuted font-mono ml-1">
                     {abletonTelemetry.rootNote} {abletonTelemetry.scale}, {abletonTelemetry.bpm} bpm
@@ -237,20 +231,14 @@ export default function StudioView() {
               </>
             )}
           </div>
-          {midiOutSupported() && (
-            <select
-              className="bg-panelAlt border border-edge rounded text-xs px-2 py-1 text-inkMuted"
-              value={midiOutputId}
-              onChange={(e) => setMidiOutputId(e.target.value)}
-              disabled={isPlaying}
-              title="Stream chords/bass/drums as live MIDI to this port while playing — drums on ch.1, bass on ch.2, chords on ch.3. Point Ableton tracks' MIDI input at this same port (and the matching channel) to hear it. Leave on 'Off' for a silent playhead only."
-            >
-              <option value="">MIDI Out: Off</option>
-              {midiOutputs.map((o) => (
-                <option key={o.id} value={o.id}>MIDI Out: {o.name}</option>
-              ))}
-            </select>
-          )}
+          <button
+            className="border border-edge text-inkMuted hover:text-ink rounded px-2 py-1 text-xs font-mono"
+            onClick={() => setShowMidiSetup(true)}
+            title="MIDI Out setup — port, per-track channels (kit/crave/chord/color), and test"
+          >
+            MIDI{midiOutputId ? " ●" : ""}
+          </button>
+          {showMidiSetup && <MidiSetupPanel onClose={() => setShowMidiSetup(false)} />}
           <button
             className="bg-accent text-black text-xs font-medium px-3 py-1.5 rounded disabled:opacity-40"
             onClick={togglePlayback}
@@ -291,14 +279,14 @@ export default function StudioView() {
               setSendingToAbleton(true);
               try {
                 const result = await pushSongToAbleton(song);
-                alert(`Sent "${result.title}" to Ableton — cue points, tempo, and Chords/Bass/Drums tracks are being populated with real MIDI now (the extension polls its command queue every 2s). Load an instrument on each track in Ableton to hear it.`);
+                alert(`Sent "${result.title}" to Ableton — cue points, tempo, and the template's chord/crave/kit/color tracks are being populated with real MIDI now (the extension polls its command queue every 2s). Load an instrument on each track in Ableton to hear it.`);
               } catch (err) {
                 alert(`Couldn't reach the Ableton bridge (osc-bridge at localhost:5200). Make sure it's running, then try again.\n\nError: ${err instanceof Error ? err.message : String(err)}`);
               } finally {
                 setSendingToAbleton(false);
               }
             }}
-            title="Push this song's blueprint to Ableton via the osc-bridge — the bridge itself queues an apply command, which creates/reuses Chords, Bass, and Drums MIDI tracks and fills them with real clips, no manual right-clicking needed"
+            title="Push this song's blueprint to Ableton via the osc-bridge — the bridge itself queues an apply command, which reuses the template's chord, crave, kit, and color MIDI tracks (creating them if absent) and fills them with real clips — no manual right-clicking needed"
           >
             {sendingToAbleton ? "Sending…" : "Send to Ableton"}
           </button>

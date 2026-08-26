@@ -3,6 +3,7 @@
   "sharedPackages": [
     { "name": "@music-theory/core", "path": "packages/music-theory" },
     { "name": "@music-theory/song-structure", "path": "packages/song-structure" },
+    { "name": "@platform/progression-engine", "path": "packages/progression-engine" },
     { "name": "@platform/ui-kit", "path": "packages/ui-kit" },
     { "name": "@platform/test-harness", "path": "packages/test-harness" },
     { "name": "@platform/osc-bridge", "path": "packages/osc-bridge" },

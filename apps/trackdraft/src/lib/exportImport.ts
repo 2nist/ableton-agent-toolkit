@@ -1,5 +1,6 @@
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { BlueprintSong } from "../types/blueprint";
+import { getBridgeHttpBase } from "./bridgeHost";
 
 // ---------------------------------------------------------------------------
 // File System Access API helper — returns a directory handle, or null if
@@ -140,7 +141,9 @@ export async function readSongFile(file: File): Promise<BlueprintSong> {
   return parseImportedSong(raw);
 }
 
-const ABLETON_BRIDGE_URL = "http://127.0.0.1:5200";
+// Follows the page host — 127.0.0.1 when opened locally, the Mac's LAN IP
+// when opened from an iPad via `start-all.sh lan`.
+const ABLETON_BRIDGE_URL = getBridgeHttpBase();
 
 /** Post the full song blueprint to the osc-bridge's REST API so it lands in
  *  the extension's storage directory — no manual sync-script step needed.

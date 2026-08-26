@@ -60,8 +60,14 @@ function presetForMeter(numeratorValue: number, denominator: number): DrumPatter
  *  — mirroring exactly the priority `drumClips.ts`'s real export already
  *  uses (`drumMeterOutline` beats `drumPattern` beats the heuristic), so
  *  switching modes here always writes a combination of fields the export
- *  will interpret the same way this panel just previewed. */
-export default function DrumsDockTools() {
+ *  will interpret the same way this panel just previewed.
+ *
+ *  Hosted either in the bottom dock (`compact=false`, the old home) or
+ *  inside `SectionDrumsPopover` on the timeline (`compact=true`), which
+ *  tightens spacing to fit the popover's width. Same props either way —
+ *  selection comes from the shared `useDrumsSelectionStore`, so the host
+ *  only supplies the container, never the data. */
+export default function DrumsDockTools({ compact = false }: { compact?: boolean }) {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const selectedSectionId = useDrumsSelectionStore((s) => s.selectedSectionId);
@@ -255,10 +261,10 @@ export default function DrumsDockTools() {
   const selectedCell = outline ? Math.max(0, Math.min(selectedCellIndex, outline.cells.length - 1)) : null;
 
   return (
-    <div className="p-3 space-y-3">
+    <div className={compact ? "space-y-2" : "p-3 space-y-3"}>
       <div>
         <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Section</span>
-        <p className="text-sm font-medium">{section.name}</p>
+        <p className={compact ? "text-sm font-medium" : "text-sm font-medium"}>{section.name}</p>
       </div>
 
       <div>

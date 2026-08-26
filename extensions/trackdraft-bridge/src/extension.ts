@@ -5,6 +5,7 @@ import { cuePointNamesFor, planCuePoints, sectionSpans, type BlueprintSong } fro
 import { planChordClips } from "./chordClips.js";
 import { planDrumClips } from "./drumClips.js";
 import { planBassLine } from "./bassLine.js";
+import { planColorClips } from "./colorClips.js";
 import { buildPickerHtml } from "./picker.js";
 import { buildViewerHtml } from "./viewer.js";
 import {
@@ -134,12 +135,53 @@ export function activate(activation: ActivationContext) {
    * unlike clip creation/mutation which the SDK requires as two separate
    * transactions.
    */
+  /** Normalize a track name for comparison — trim, lowercase, collapse
+   *  internal whitespace so "chord " and " Chord" both match "chord". */
+  function normalizedName(n: string): string {
+    return (n ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  /** Alias lists per stem — the template's canonical name first, then the
+   *  looser names a user's set might still use (e.g. "Chords" from pre-
+   *  template pushes, "Drums"/"Drum Rack" for the kit track). Matched in
+   *  order, so the canonical name always wins when both exist (e.g. crave
+   *  is preferred over a plain "bass" track). */
+  const STEM_ALIASES: Record<string, string[]> = {
+    kit: ["kit", "drums", "drum"],
+    crave: ["crave", "bass"],
+    chord: ["chord", "chords"],
+    color: ["color", "colour"],
+  };
+
   async function findOrCreateMidiTrack(name: string): Promise<MidiTrack<"1.0.0">> {
     const song = context.application.song;
-    const existing = song.tracks.find(
-      (t): t is MidiTrack<"1.0.0"> => t instanceof MidiTrack && t.name.toLowerCase() === name.toLowerCase(),
+    const midiTracks = song.tracks.filter((t): t is MidiTrack<"1.0.0"> => t instanceof MidiTrack);
+    const aliases = STEM_ALIASES[name] ?? [name];
+
+    // 1) Exact normalized match, alias in preference order.
+    for (const a of aliases) {
+      const hit = midiTracks.find((t) => normalizedName(t.name) === a);
+      if (hit) {
+        console.log(`[trackdraft-bridge] findOrCreateMidiTrack("${name}") → reused "${hit.name}"`);
+        return hit;
+      }
+    }
+    // 2) Word-boundary fallback: "chord 2", "my chord", "Drum Rack", ...
+    for (const a of aliases) {
+      const hit = midiTracks.find((t) => {
+        const n = normalizedName(t.name);
+        return n === a || n.startsWith(`${a} `) || n.includes(` ${a} `) || n.endsWith(` ${a}`);
+      });
+      if (hit) {
+        console.log(`[trackdraft-bridge] findOrCreateMidiTrack("${name}") → fuzzy-matched "${hit.name}"`);
+        return hit;
+      }
+    }
+
+    const existing = midiTracks.map((t) => `"${t.name}"`).join(", ");
+    console.log(
+      `[trackdraft-bridge] findOrCreateMidiTrack("${name}") → no match, creating. Existing MIDI tracks: ${existing || "(none)"}`,
     );
-    if (existing) return existing;
     const track = await song.createMidiTrack();
     track.name = name;
     return track;
@@ -375,19 +417,25 @@ export function activate(activation: ActivationContext) {
           // to right-click three separate tracks inside Live and pick the
           // blueprint from a dialog each time. Reuses the exact same
           // generators/clearing logic the manual "Generate X Clips" commands
-          // already use, just aimed at three dedicated, reused-by-name
-          // tracks instead of whatever track the user right-clicked.
-          const chordsTrack = await findOrCreateMidiTrack("Chords");
+          // already use, just aimed at the template set's named tracks
+          // (lowercase `kit`/`crave`/`chord`/`color`) instead of whatever
+          // track the user right-clicked — `findOrCreateMidiTrack` matches
+          // case-insensitively, so the template's existing tracks get
+          // reused rather than duplicated.
+          const chordsTrack = await findOrCreateMidiTrack("chord");
           await applyClipPlan(chordsTrack, planChordClips(blueprint));
 
-          const bassTrack = await findOrCreateMidiTrack("Bass");
+          const bassTrack = await findOrCreateMidiTrack("crave");
           await applyClipPlan(bassTrack, planBassLine(blueprint));
 
-          const drumsTrack = await findOrCreateMidiTrack("Drums");
+          const drumsTrack = await findOrCreateMidiTrack("kit");
           const drumMapping = await resolveTrackPadMapping(drumsTrack);
           await applyClipPlan(drumsTrack, remapClipPlanPitches(planDrumClips(blueprint), drumMapping));
 
-          console.log(`[trackdraft-bridge] queue: applied blueprint "${blueprint.title}" (cue points + chords/bass/drums)`);
+          const colorTrack = await findOrCreateMidiTrack("color");
+          await applyClipPlan(colorTrack, planColorClips(blueprint));
+
+          console.log(`[trackdraft-bridge] queue: applied blueprint "${blueprint.title}" (cue points + chord/crave/kit/color)`);
           break;
         }
       }

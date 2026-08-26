@@ -153,6 +153,14 @@ export interface BlueprintSection {
   bars: number;
   chords: Chord[];
   beatsPerChord: number;
+  /** Bi-tonal "color" layer flavor for this section's chord progression
+   *  (the Color Chord track). One of the @platform/progression-engine
+   *  flavor ids — "cinematic_shimmer", "sci_fi_wonder",
+   *  "bittersweet_drama", "neo_soul_glow", "ambient_ocean",
+   *  "altered_tension". Absent → defaults to "neo_soul_glow" at export
+   *  time. Drives the Color track in MIDI export / Send to Ableton /
+   *  real-time MIDI out. */
+  colorFlavor?: string;
   /** Per-section drum pattern override. When absent the Ableton extension
    *  still picks a pattern heuristically (role + velocity + meter + tempo);
    *  set this to choose a specific engine pattern instead. Paired with

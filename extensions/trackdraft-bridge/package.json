@@ -16,7 +16,8 @@
     "@drum/rack-kit": "0.1.0",
     "@music-theory/core": "0.1.0",
     "@music-theory/song-blueprint": "0.1.0",
-    "@music-theory/song-structure": "0.1.0"
+    "@music-theory/song-structure": "0.1.0",
+    "@platform/progression-engine": "0.1.0"
   },
   "devDependencies": {
     "@ableton-extensions/cli": "file:../../vendor/ableton-extensions-cli-1.0.0-beta.0.tgz",

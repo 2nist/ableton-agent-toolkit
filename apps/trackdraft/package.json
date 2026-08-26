@@ -27,6 +27,7 @@
     "@music-theory/song-blueprint": "0.1.0",
     "@music-theory/song-structure": "0.1.0",
     "@music-theory/song-taxonomy": "0.1.0",
+    "@platform/progression-engine": "0.1.0",
     "@platform/ui-kit": "0.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

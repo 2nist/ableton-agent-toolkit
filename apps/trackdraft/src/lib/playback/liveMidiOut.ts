@@ -1,23 +1,25 @@
 import { sectionSpans } from "../arrangement";
 import { planChordStem, planBassStem, planDrumStem, type MidiNote } from "../midiExport";
+import { planColorStem } from "../colorStem";
 import type { BlueprintSong } from "../../types/blueprint";
 
 /** 1-based MIDI channels (1-16, matching how Ableton's UI numbers them) —
  *  one per generated stem, so each Ableton track can listen on its own
  *  channel of the same shared virtual port instead of everything landing
- *  on channel 1. Defaults match drumstudio1.als's actual track order (1
- *  kit, 2 crave, 3 chord, ...), so channel number = track number for the
- *  three tracks TrackDraft drives: `kit` (drums, ch.1), `crave` (bass,
- *  ch.2), `chord` (ch.3 — it already listens to all channels, so this
- *  works with no Ableton-side change; `kit`/`crave` need a one-time "MIDI
- *  From" repoint to this port, filtered to their own channel). */
+ *  on channel 1. Defaults match the template set's actual track order, so
+ *  channel number = track number for the four tracks TrackDraft drives:
+ *  `kit` (drums, ch.1), `crave` (bass, ch.2), `chord` (ch.3 — it already
+ *  listens to all channels, so this works with no Ableton-side change;
+ *  `kit`/`crave`/`color` need a one-time "MIDI From" repoint to this
+ *  port, filtered to their own channel). */
 export interface LiveMidiChannelMap {
   chords: number;
   bass: number;
   drums: number;
+  color: number;
 }
 
-export const DEFAULT_LIVE_MIDI_CHANNELS: LiveMidiChannelMap = { drums: 1, bass: 2, chords: 3 };
+export const DEFAULT_LIVE_MIDI_CHANNELS: LiveMidiChannelMap = { drums: 1, bass: 2, chords: 3, color: 4 };
 
 export interface MidiOutputInfo {
   id: string;
@@ -52,6 +54,19 @@ export async function listMidiOutputs(): Promise<MidiOutputInfo[]> {
 export async function getMidiOutput(id: string): Promise<MIDIOutput | null> {
   const access = await getMidiAccess();
   return access.outputs.get(id) ?? null;
+}
+
+/** Sends one short MIDI note on a 1-based `channel` through `output` — a
+ *  quick way to verify a port + channel actually reaches a Live track
+ *  before hitting Play. Note on, then note off ~300ms later, both
+ *  future-timestamped so they dispatch on time even if the tab is busy. */
+export function sendTestNote(output: MIDIOutput, channel: number, pitch = 60, velocity = 100): void {
+  const ch = Math.max(0, Math.min(15, channel - 1));
+  const now = performance.now() + 50;
+  const p = Math.max(0, Math.min(127, Math.round(pitch)));
+  const v = Math.max(1, Math.min(127, Math.round(velocity)));
+  output.send([0x90 | ch, p, v], now);
+  output.send([0x80 | ch, p, 0], now + 300);
 }
 
 const LOOKAHEAD_MS = 400;
@@ -103,6 +118,7 @@ class LiveMidiScheduler {
       ...planChordStem(spans).map((note) => ({ note, channel: channelMap.chords })),
       ...planBassStem(spans).map((note) => ({ note, channel: channelMap.bass })),
       ...planDrumStem(spans, song.concept).map((note) => ({ note, channel: channelMap.drums })),
+      ...planColorStem(spans).map((note) => ({ note, channel: channelMap.color })),
     ];
     scheduled.sort((a, b) => a.note.startTime - b.note.startTime);
     this.notes = scheduled;
@@ -152,7 +168,7 @@ class LiveMidiScheduler {
   stop(): void {
     this.stopPolling();
     if (this.output) {
-      const channels = new Set([this.channelMap.chords, this.channelMap.bass, this.channelMap.drums]);
+      const channels = new Set([this.channelMap.chords, this.channelMap.bass, this.channelMap.drums, this.channelMap.color]);
       for (const channel of channels) {
         const ch = Math.max(0, Math.min(15, channel - 1));
         this.output.send([0xb0 | ch, ALL_NOTES_OFF_CC, 0]);

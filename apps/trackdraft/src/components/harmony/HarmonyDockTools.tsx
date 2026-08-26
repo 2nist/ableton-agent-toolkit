@@ -6,8 +6,19 @@ import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { updateSection } from "../../lib/sections";
 import { transposeChords } from "../../lib/harmony/honeycombWalk";
 import { downloadSongMidi } from "../../lib/midiExport";
+import { BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR } from "@platform/progression-engine";
 import FloatingToolbar from "./FloatingToolbar";
 import ChordEditorPopover from "./ChordEditorPopover";
+
+/** Every bi-tonal flavor in the engine's matrix, deduped to `[id, label]`
+ *  — the options for the per-section Color Chord flavor picker. */
+const COLOR_FLAVORS = Array.from(
+  new Map(
+    Object.values(BI_TONAL_MATRIX)
+      .flatMap((family) => Object.entries(family))
+      .map(([id, def]) => [id, def.label]),
+  ),
+);
 
 /** The Harmony tab's dock content — registered once by HarmonyView and
  *  fully self-sufficient from there (reads `useSongStore` +
@@ -54,16 +65,40 @@ export default function HarmonyDockTools() {
 
   const editorChord = selectedChordId ? activeSection.chords.find((c) => c.id === selectedChordId) ?? null : null;
 
+  function setColorFlavor(flavor: string | undefined) {
+    updateCurrentSong((s) =>
+      updateSection(s, activeSection!.id, (sec) => ({ ...sec, colorFlavor: flavor })),
+    );
+  }
+
   return (
     <div className="flex flex-col">
       <div className="p-3 border-b border-edge">
         <button
           onClick={() => downloadSongMidi(song)}
           className="w-full border border-accent/50 text-accent rounded px-3 py-1.5 text-xs hover:bg-accent/10 font-medium"
-          title="Export as Standard MIDI File — drag into Ableton, Logic, or any DAW"
+          title="Export as Standard MIDI File — Chords, Bass, Drums, and Color tracks; drag into Ableton, Logic, or any DAW"
         >
           ⬇ Download MIDI
         </button>
+        <label
+          className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mt-2 mb-1"
+          title="Bi-tonal 'Color Chord' flavor for this section — the Color track in MIDI export, Send to Ableton, and real-time MIDI out"
+        >
+          Color flavor
+        </label>
+        <select
+          className="w-full bg-panelAlt border border-edge rounded px-2 py-1 text-xs text-ink"
+          value={activeSection.colorFlavor ?? ""}
+          onChange={(e) => setColorFlavor(e.target.value || undefined)}
+        >
+          <option value="">Default ({DEFAULT_COLOR_FLAVOR})</option>
+          {COLOR_FLAVORS.map(([id, label]) => (
+            <option key={id} value={id}>
+              {id.replace(/_/g, " ")} · {label}
+            </option>
+          ))}
+        </select>
       </div>
       {editorChord ? (
         <ChordEditorPopover

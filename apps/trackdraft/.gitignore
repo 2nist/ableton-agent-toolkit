@@ -1,2 +1,3 @@
 scripts/output/
 vite.config.ts.timestamp-*.mjs
+.osc-bridge.log

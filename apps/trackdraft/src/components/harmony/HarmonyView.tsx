@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
@@ -10,6 +10,7 @@ import { updateSection } from "../../lib/sections";
 import HoneycombWheel from "./HoneycombWheel";
 import ProgressionTrack from "./ProgressionTrack";
 import HarmonyDockTools from "./HarmonyDockTools";
+import { previewProgression, previewChord } from "../../lib/playback/previewMidi";
 
 /** The Harmony tab's canvas: the hex wheel and the linear progression
  *  track. Song/section settings (key, scale, presets) and the selected
@@ -26,6 +27,13 @@ export default function HarmonyView() {
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
   const setTools = useDockStore((s) => s.setTools);
+
+  // Which layers the progression preview sends — chords always, bass and
+  // color opt-in via the toggles (default on for a fuller sketch).
+  const [previewLayers, setPreviewLayers] = useState<{ bass: boolean; color: boolean }>({
+    bass: true,
+    color: true,
+  });
 
   // The dock's tools panel is registered once and reads the shared
   // selection store directly — it re-renders itself on selection/song
@@ -102,6 +110,48 @@ export default function HarmonyView() {
 
   return (
     <div className="p-4 max-w-5xl space-y-3">
+      {/* Progression preview — auditions the active section through the
+         selected MIDI port (desktop Chrome + a port in the MIDI panel).
+         Chords always play; bass/color layer toggles opt in per channel. */}
+      <div className="flex items-center justify-end gap-2">
+        <div
+          className="flex items-center gap-1"
+          title="Which layers the preview sends — each on its own MIDI channel (bass ch.2, color ch.4)"
+        >
+          {(["bass", "color"] as const).map((layer) => (
+            <button
+              key={layer}
+              aria-pressed={previewLayers[layer]}
+              className={`font-mono text-2xs rounded px-2 py-1 border ${
+                previewLayers[layer]
+                  ? "border-accent text-accent bg-accent/10"
+                  : "border-edge text-inkMuted hover:text-ink"
+              }`}
+              onClick={() => setPreviewLayers((s) => ({ ...s, [layer]: !s[layer] }))}
+            >
+              {layer}
+            </button>
+          ))}
+        </div>
+        <button
+          className="border border-edge text-inkMuted hover:text-ink rounded px-2.5 py-1 text-xs font-mono"
+          onClick={() => {
+            if (!activeSection) return;
+            void previewProgression(
+              activeSection.chords,
+              song.bpm,
+              activeSection.beatsPerChord,
+              previewLayers,
+              activeSection.colorFlavor,
+            );
+          }}
+          disabled={!activeSection || activeSection.chords.length === 0}
+          title="Audition this section's progression through the selected MIDI port — chords on its channel, plus bass and/or color if toggled"
+        >
+          ▶ Progression
+        </button>
+      </div>
+
       {/* Hex canvas — full room to wander now that song/section settings
          live in the dock instead of an overlay on top of it. */}
       <div className="border border-edge rounded-lg bg-[#0e1218] overflow-hidden min-h-[420px]">
@@ -115,6 +165,8 @@ export default function HarmonyView() {
               selectedChordId={selectedChordId}
               onSelectChord={setSelectedChordId}
               onChangeChords={updateChords}
+              colorFlavor={activeSection.colorFlavor}
+              onPreviewChord={(chord) => void previewChord(chord)}
             />
           )}
         </div>
