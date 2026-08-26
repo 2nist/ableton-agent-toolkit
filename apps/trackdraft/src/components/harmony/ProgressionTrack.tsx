@@ -11,7 +11,6 @@ import { CSS } from "@dnd-kit/utilities";
 import { pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { BlueprintSection, Chord, ChordPerformanceEffect } from "../../types/blueprint";
-import { beatsPerBar, describeProgressionFit } from "../../types/blueprint";
 import { chordDisplayName, chordFunction, functionColorHex } from "../../lib/harmony/chordBuilder";
 
 const CELL_W = 78;
@@ -31,13 +30,6 @@ function nextPerformanceEffect(
     (e) => e?.style === current?.style && (e === undefined) === (current === undefined),
   );
   return EFFECT_CYCLE[(idx + 1) % EFFECT_CYCLE.length];
-}
-
-/** Trims a beat count to at most 2 decimal places (chord beats can be
- *  half-steps, and non-4/4 time signatures can make beatsPerBar itself
- *  fractional) without showing "4.00" for the common whole-number case. */
-function fmtBeats(n: number): string {
-  return Number(n.toFixed(2)).toString();
 }
 
 /** Small shape-in-time glyph for a performance effect — legible at a glance in
@@ -77,7 +69,6 @@ interface ProgressionTrackProps {
   section: BlueprintSection;
   keyName: NoteName;
   scale: ScaleType;
-  bpm: number;
   selectedChordId: string | null;
   /** Selecting a chord (from a cell) opens its editor in the dock,
    *  driven by the shared harmonySelectionStore. */
@@ -86,10 +77,6 @@ interface ProgressionTrackProps {
   /** Update a single chord in-place — used by the effect lane so a
    *  quick effect toggle doesn't force a full array replacement. */
   onUpdateChord: (id: string, update: Partial<Chord>) => void;
-  /** Snap the section's `bars` to exactly one clean pass of the current
-   *  progression — the one action the fit indicator's button performs,
-   *  regardless of whether the section currently loops or overflows it. */
-  onSetBars: (bars: number) => void;
 }
 
 function SortableChordCell({
@@ -123,7 +110,7 @@ function SortableChordCell({
         opacity: isDragging ? 0.5 : 1,
         width: CELL_W,
       }}
-      className={`relative h-[50px] shrink-0 rounded-[5px] border bg-panelAlt cursor-pointer overflow-hidden pt-1.5 px-2 ${
+      className={`relative h-[40px] shrink-0 rounded-[5px] border bg-panelAlt cursor-pointer overflow-hidden pt-1 px-2 ${
         isSelected ? "border-accent ring-2 ring-accent" : "border-edge hover:border-inkMuted"
       }`}
       onClick={() => onSelect()}
@@ -158,15 +145,12 @@ export default function ProgressionTrack({
   section,
   keyName,
   scale,
-  bpm,
   selectedChordId,
   onSelectChord,
   onChangeChords,
   onUpdateChord,
-  onSetBars,
 }: ProgressionTrackProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
-  const fit = describeProgressionFit(section);
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -187,9 +171,9 @@ export default function ProgressionTrack({
           <span className="font-mono text-[9px] uppercase tracking-wider text-inkMuted">Progression</span>
           {!empty && <span className="font-mono text-[8.5px] text-inkMuted/70">{section.chords.length}</span>}
         </div>
-        <div className="px-3 py-2 overflow-x-auto">
+        <div className="px-3 py-1.5 overflow-x-auto">
           {empty ? (
-            <p className="text-xs text-inkMuted py-2">
+            <p className="text-xs text-inkMuted py-1.5">
               No chords yet — click a dashed cell on the honeycomb above to add one.
             </p>
           ) : (
@@ -219,7 +203,7 @@ export default function ProgressionTrack({
         <div className="flex items-center justify-end px-3 border-r border-edge">
           <span className="font-mono text-[9px] uppercase tracking-wider text-inkMuted">Effects</span>
         </div>
-        <div className="px-3 py-2 overflow-x-auto">
+        <div className="px-3 py-1.5 overflow-x-auto">
           {empty ? (
             <div className="h-[32px]" />
           ) : (
@@ -257,63 +241,6 @@ export default function ProgressionTrack({
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-end gap-2.5 px-3 py-1.5 border-t border-edge bg-[#131318]">
-        {fit ? (
-          <FitStatus section={section} fit={fit} onSetBars={onSetBars} />
-        ) : (
-          <span className="mr-auto font-mono text-[9px] tracking-wide text-inkMuted/70">
-            click a hex to add · click a chord to edit
-          </span>
-        )}
-      </div>
     </>
-  );
-}
-
-/** The progression-vs-section-length relationship, computed with the exact
- *  same arithmetic loopChordsToFill() applies at export time — surfaced
- *  here for the first time so a progression's actual fit is never a
- *  surprise. "Fit" always means "set bars to exactly one clean pass of the
- *  current progression," a single unambiguous action regardless of
- *  whether the section currently loops or overflows it. */
-function FitStatus({
-  section,
-  fit,
-  onSetBars,
-}: {
-  section: BlueprintSection;
-  fit: NonNullable<ReturnType<typeof describeProgressionFit>>;
-  onSetBars: (bars: number) => void;
-}) {
-  const fitBars = () => onSetBars(Math.max(1, Math.ceil(fit.cycleBeats / beatsPerBar(section))));
-
-  let message: string;
-  let showFitButton = false;
-
-  if (fit.overflowBeats > 0) {
-    message = `${fmtBeats(fit.cycleBeats)} beats — overflows this ${section.bars}-bar section by ${fmtBeats(fit.overflowBeats)} beats; the extra will be cut off at export.`;
-    showFitButton = true;
-  } else if (fit.remainderBeats > 0) {
-    message = `Loops ×${fit.wholeCycles} plus a ${fmtBeats(fit.remainderBeats)}-beat partial repeat to fill this section.`;
-    showFitButton = true;
-  } else if (fit.wholeCycles > 1) {
-    message = `Loops ×${fit.wholeCycles} to fill this section exactly.`;
-  } else {
-    message = "Fills this section exactly.";
-  }
-
-  return (
-    <span className="mr-auto flex items-center gap-2 font-mono text-[9px] tracking-wide text-inkMuted/70">
-      {message}
-      {showFitButton && (
-        <button
-          className="text-accent border border-accent/50 rounded px-1.5 py-0.5 hover:bg-accent/10 normal-case tracking-normal"
-          onClick={fitBars}
-        >
-          Fit to {Math.max(1, Math.ceil(fit.cycleBeats / beatsPerBar(section)))} bars
-        </button>
-      )}
-    </span>
   );
 }

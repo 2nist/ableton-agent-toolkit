@@ -32,7 +32,7 @@ export default function StructureView() {
   }
 
   return (
-    <div className="p-6 max-w-3xl space-y-4">
+    <div className="p-4 max-w-3xl space-y-3">
       <MapPicker
         hasSections={song.sections.length > 0}
         onApply={(mapId, options) => {
@@ -64,7 +64,7 @@ export default function StructureView() {
 
       <div className="flex items-center gap-2">
         <button
-          className="border border-edge rounded px-3 py-2 text-sm text-inkMuted hover:text-ink hover:bg-panelAlt"
+          className="border border-edge rounded px-2.5 py-1.5 text-sm text-inkMuted hover:text-ink hover:bg-panelAlt"
           onClick={() => updateCurrentSong((s) => addSection(s))}
         >
           + Add section

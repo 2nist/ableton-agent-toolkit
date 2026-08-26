@@ -287,8 +287,12 @@ export default function DrumsView() {
   return (
     <div className="px-2 pt-1.5 pb-3">
       {!anyLaneHits && <p className="text-inkMuted text-xs mb-2">No drum voices resolve for this song yet.</p>}
-      <div className="flex items-center justify-end mb-1.5 select-none">
-        <div className="flex items-center gap-0.5 border border-edge rounded bg-black px-1 py-0.5">
+      <div className="relative overflow-x-auto border border-edge rounded bg-black">
+        {/* Zoom controls live on the timeline's top row — floating at the
+            top-left corner of the viewport (the empty corner above the lane
+            labels) so they stay put while the timeline scrolls horizontally,
+            no dedicated row above. */}
+        <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-0.5 border border-edge rounded bg-black/90 px-1 py-0.5 select-none">
           <button
             className="w-5 h-5 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
             onClick={() => setZoom((z) => clampZoom(z / 1.2))}
@@ -307,8 +311,6 @@ export default function DrumsView() {
             +
           </button>
         </div>
-      </div>
-      <div className="relative overflow-x-auto border border-edge rounded bg-black">
         <svg width={width} height={height} className="block">
           <defs>
             <filter id="drums-glow" x="-60%" y="-60%" width="220%" height="220%">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
@@ -157,15 +157,17 @@ function StepView({ outline, color }: { outline: MeterOutline; color: string }) 
   );
 }
 
-/** Narrow step-sequencer strip for a free-form Euclidean pattern. */
-function EuclidStepView({ k, n, rotation, color }: { k: number; n: number; rotation: number; color: string }) {
+/** Narrow step-sequencer strip for a free-form Euclidean pattern. `large`
+ *  renders a bigger grid for the Voice-by-Voice editor's pattern display. */
+function EuclidStepView({ k, n, rotation, color, large }: { k: number; n: number; rotation: number; color: string; large?: boolean }) {
   const onsets = euclidOnsetSteps({ k, n, rotation });
+  const box = large ? "h-4 w-4 rounded-[3px]" : "h-3 w-3 rounded-[2px]";
   return (
     <div className="flex gap-px">
       {Array.from({ length: n }).map((_, i) => (
         <div
           key={i}
-          className="h-3 w-3 rounded-[2px]"
+          className={box}
           style={{ background: onsets.includes(i) ? color : "rgba(255,255,255,0.08)" }}
         />
       ))}
@@ -173,13 +175,18 @@ function EuclidStepView({ k, n, rotation, color }: { k: number; n: number; rotat
   );
 }
 
-/** The Drum tab's dock editor — a single "Pattern" tool replacing the old
- *  dock. Clicking a section on the timeline loads it here; every edit is
- *  written to a working draft that the timeline previews live (necklaces,
- *  step view, domes), and only committed to the song with Apply (undoable)
- *  or thrown away with Revert. Three sub-tabs — Pattern, Variation,
- *  Transition — each shows the Euclidean pattern display (necklace + step
- *  view) alongside its controls, labelled with intuitive names. */
+/** The Drum tab's dock editor. Clicking a section on the timeline loads it
+ *  here; every edit is written to a working draft the timeline previews
+ *  live, committed to the song with Apply (undoable) or thrown away with
+ *  Optimized for the horizontal bottom dock: the tab row also carries the
+ *  section-groove controls (Auto + Preset + Variant). The Pattern tab is
+ *  Voice-by-Voice first — voice chips | a large Euclidean pattern display |
+ *  the Length/Density/Offset sliders — with the whole-section Euclidean
+ *  editor tucked at the bottom for genuine outline/odd-meter sections.
+ *  Tabs: Pattern · Detour (ending rhythm detour) · Transition.
+ *  TODO: Transition models all render the same today — the model only
+ *  stores an energy label (build/break/cut/drop); the audible difference
+ *  is applied at export in the bridge, not previewed here yet. */
 export default function DrumPatternTools() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
@@ -190,12 +197,16 @@ export default function DrumPatternTools() {
   const clearDraft = useDrumsDraftStore((s) => s.clearDraft);
   const [tab, setTab] = useState<ToolTab>("pattern");
   const [voice, setVoice] = useState<KitVoice | null>(null);
+  // The preset to restore when Auto is toggled back off — kept locally so
+  // switching to Auto doesn't forget the groove you were just on.
+  const lastPresetRef = useRef<DrumPattern | null>(null);
 
   // Switching sections throws away any uncommitted draft — a draft is a
   // "this section, right now" working surface, not song data.
   useEffect(() => {
     clearDraft();
     setVoice(null);
+    lastPresetRef.current = null;
   }, [selectedSectionId, clearDraft]);
 
   if (!currentSong) return null;
@@ -217,10 +228,14 @@ export default function DrumPatternTools() {
   const eff = isDraft && draftSection ? draftSection : section;
   const mode = modeOf(eff);
   const outline = eff.drumMeterOutline;
-  const n = outline ? outlineNumerator(outline) : 7;
+  // Default length 8 (eighths) for non-outline sections — it has more than
+  // one valid density (3 or 4), so the always-on Euclid sliders are usable
+  // the moment a section is picked instead of a locked default.
+  const n = outline ? outlineNumerator(outline) : 8;
   const validCounts = twoThreeCellCounts(n);
   const k = outline ? outline.cells.length : (validCounts[0] ?? 3);
   const rotation = outline ? inferRotation(outline, n, k) : 0;
+  const baseDenom = outline ? Math.round(4 / outline.cellBeats) : DEFAULT_DENOM;
 
   const variation = eff.drumVariationOutline;
   const vDenom = variation ? Math.round(4 / variation.cellBeats) : DEFAULT_DENOM;
@@ -259,11 +274,20 @@ export default function DrumPatternTools() {
     clearDraft();
   }
 
-  function setMode(next: DrumMode) {
-    draftWith((sec) => {
-      if (next === "auto") return { ...sec, drumPattern: undefined, drumVariantIndex: undefined };
-      return { ...sec, drumPattern: sec.drumPattern ?? "standard", drumVariantIndex: sec.drumPattern ? sec.drumVariantIndex : 0 };
-    });
+  /** Auto toggles: on → let the engine pick the groove; clicking it again
+   *  turns it off and restores the last explicit preset (or "standard"). */
+  function toggleAuto() {
+    if (mode === "auto") {
+      const restore = lastPresetRef.current ?? "standard";
+      draftWith((sec) => ({
+        ...sec,
+        drumPattern: restore,
+        drumVariantIndex: sec.drumVariantIndex ?? 0,
+      }));
+    } else {
+      if (eff.drumPattern) lastPresetRef.current = eff.drumPattern;
+      draftWith((sec) => ({ ...sec, drumPattern: undefined, drumVariantIndex: undefined }));
+    }
   }
 
   function setPreset(val: string) {
@@ -283,6 +307,17 @@ export default function DrumPatternTools() {
       return { ...sec, drumVariantIndex: Math.max(0, Math.min(total - 1, cur + delta)) };
     });
   }
+
+  /** Regenerate the whole section's rhythm as a free-form Euclidean meter
+   *  outline (odd meters / hand-edited pulses) — shown right away with the
+   *  Euclid sliders. Mirrors the export priority: outline beats preset. */
+  function setOutline(nv: number, kv: number, rv: number) {
+    draftWith((sec) => ({
+      ...sec,
+      drumMeterOutline: buildEuclideanOutline(nv, baseDenom, kv, rv),
+    }));
+  }
+
 
   function setVariation(nv: number, kv: number, rv: number) {
     draftWith((sec) => ({
@@ -328,7 +363,7 @@ export default function DrumPatternTools() {
   }
 
   return (
-    <div className="p-3 space-y-3">
+    <div className="p-2.5 space-y-2.5">
       <div className="flex items-center justify-between">
         <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted">Pattern · {section.name}</span>
         {isDraft && (
@@ -336,127 +371,179 @@ export default function DrumPatternTools() {
         )}
       </div>
 
-      <div className="flex gap-1">
-        {(["pattern", "variation", "transition"] as ToolTab[]).map((t) => (
-          <button key={t} className={tab === t ? TAB_ON : TAB} onClick={() => setTab(t)}>
-            {t}
-          </button>
-        ))}
+      <div className="flex items-center gap-1.5">
+        <div className="flex gap-1 flex-1 min-w-0">
+          {(["pattern", "variation", "transition"] as ToolTab[]).map((t) => (
+            <button key={t} className={tab === t ? TAB_ON : TAB} onClick={() => setTab(t)}>
+              {t === "variation" ? "Detour" : t === "pattern" ? "Pattern" : "Transition"}
+            </button>
+          ))}
+        </div>
+        <button
+          className={mode === "auto" ? CHIP_ON : CHIP}
+          onClick={toggleAuto}
+          title={
+            mode === "auto"
+              ? "Auto is on — click to switch back to a preset groove"
+              : "Let the engine pick this section's groove from role / meter / velocity"
+          }
+        >
+          Auto
+        </button>
+        <select
+          className="w-40 shrink-0 bg-panelAlt border border-edge rounded px-2 py-1 text-xs text-ink"
+          value={mode === "preset" ? (eff.drumPattern ?? "") : ""}
+          onChange={(e) => setPreset(e.target.value)}
+          title="Named pattern preset for the whole section — Auto defers to the engine"
+        >
+          <option value="">Preset…</option>
+          <optgroup label="Common">
+            {["none", "kick_only", "standard", "half_time", "driving", "bridge_sparse", "intense", "dnb"].map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </optgroup>
+          <optgroup label="Odd meter">
+            {["78", "68", "54"].map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </optgroup>
+        </select>
+        {variantTotal > 1 && (
+          <div className="flex items-center gap-1 shrink-0" title="Which variant of this preset to use">
+            <button className={CHIP} onClick={() => stepVariant(-1)}>◀</button>
+            <span className="font-mono text-2xs tabular-nums text-ink min-w-[44px] text-center">
+              {(eff.drumVariantIndex ?? 0) + 1}/{variantTotal}
+            </span>
+            <button className={CHIP} onClick={() => stepVariant(1)}>▶</button>
+          </div>
+        )}
+        {isDraft && (
+          <div className="flex items-center gap-1 shrink-0" title="Commit or discard the working draft">
+            <button
+              className="font-mono text-2xs rounded px-2 py-1 border border-accent text-accent bg-accent/10 hover:bg-accent/20"
+              onClick={apply}
+            >
+              Apply
+            </button>
+            <button
+              className="font-mono text-2xs rounded px-2 py-1 border border-edge text-inkMuted hover:text-ink"
+              onClick={clearDraft}
+            >
+              Revert
+            </button>
+          </div>
+        )}
       </div>
 
-      {isDraft && (
-        <div className="flex gap-1">
-          <button
-            className="flex-1 font-mono text-2xs rounded px-2 py-1 border border-accent text-accent bg-accent/10 hover:bg-accent/20"
-            onClick={apply}
-          >
-            Apply
-          </button>
-          <button
-            className="flex-1 font-mono text-2xs rounded px-2 py-1 border border-edge text-inkMuted hover:text-ink"
-            onClick={clearDraft}
-          >
-            Revert
-          </button>
-        </div>
-      )}
-
       {tab === "pattern" && (
-        <div className="space-y-3">
-          <div>
-            <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Pattern</span>
-            {outline ? (
-              <div className="space-y-1.5">
-                <NecklaceRow necklaces={outlineNecklaces} />
-                <StepView outline={outline} color="#E8B54A" />
-                <p className="font-mono text-2xs text-inkMuted">{k} / {n} · rot {rotation} · {outline.label}</p>
-              </div>
-            ) : necklace ? (
-              <NecklaceRow necklaces={necklace} />
-            ) : (
-              <p className="text-3xs text-inkMuted italic">No resolvable hits.</p>
-            )}
-          </div>
-
-          <div className="flex gap-1">
-            {(["auto", "preset"] as DrumMode[]).map((m) => (
-              <button key={m} className={mode === m ? CHIP_ON : CHIP} onClick={() => setMode(m)}>
-                {m}
-              </button>
-            ))}
-          </div>
-
-          {mode === "preset" && (
-            <>
-              <div className="flex flex-wrap gap-1">
-                {DRUM_PATTERN_OPTIONS.map((p) => (
-                  <button key={p} className={eff.drumPattern === p ? CHIP_ON : CHIP} onClick={() => setPreset(p)}>
-                    {p}
+        <div className="space-y-2.5">
+          {/* Voice by voice — the primary shape editor, always on. All voice
+              chips on the left in two columns (7 / 6), the Euclidean pattern
+              in the middle, the Length/Density/Offset sliders on the right. */}
+          <div className="flex items-start gap-3">
+            {/* Left — all 13 voice chips, two columns (7 / 6). */}
+            <div className="flex gap-1.5 shrink-0">
+              <div className="flex flex-col items-stretch gap-0.5">
+                {voiceChoices.slice(0, 7).map((v) => (
+                  <button
+                    key={v}
+                    className={v === activeVoice ? CHIP_ON : CHIP}
+                    onClick={() => setVoice(v)}
+                    title={eff.drumVoicePatterns?.[v] ? "has its own pattern" : undefined}
+                  >
+                    {VOICE_LABEL[v] ?? v}
                   </button>
                 ))}
               </div>
-              {variantTotal > 1 && (
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Variant</span>
-                  <div className="flex items-center gap-2">
-                    <button className={CHIP} onClick={() => stepVariant(-1)}>−</button>
-                    <span className="font-mono text-2xs tabular-nums text-ink">{(eff.drumVariantIndex ?? 0) + 1} / {variantTotal}</span>
-                    <button className={CHIP} onClick={() => stepVariant(1)}>+</button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {mode === "auto" && (
-            <p className="text-2xs text-inkMuted leading-relaxed">
-              Voices without their own pattern use the engine's pick (role, meter, velocity).
-            </p>
-          )}
-
-          <div>
-            <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Voice by voice</span>
-            <div className="flex flex-wrap gap-1 mb-2">
-              {voiceChoices.map((v) => (
-                <button
-                  key={v}
-                  className={v === activeVoice ? CHIP_ON : CHIP}
-                  onClick={() => setVoice(v)}
-                  title={eff.drumVoicePatterns?.[v] ? "has its own pattern" : undefined}
-                >
-                  {VOICE_LABEL[v] ?? v}
-                </button>
-              ))}
+              <div className="flex flex-col items-stretch gap-0.5">
+                {voiceChoices.slice(7).map((v) => (
+                  <button
+                    key={v}
+                    className={v === activeVoice ? CHIP_ON : CHIP}
+                    onClick={() => setVoice(v)}
+                    title={eff.drumVoicePatterns?.[v] ? "has its own pattern" : undefined}
+                  >
+                    {VOICE_LABEL[v] ?? v}
+                  </button>
+                ))}
+              </div>
             </div>
-            {activeVoice &&
-              (voicePat ? (
-                <>
-                  <div className="space-y-1.5 mb-2">
-                    <NecklaceRow necklaces={necklace ? necklace.filter((n) => n.voice === activeVoice) : null} />
-                    <EuclidStepView k={voiceK} n={voiceN} rotation={voiceRot} color="#E8B54A" />
-                    <p className="font-mono text-2xs text-inkMuted">
-                      {voiceK} / {voiceN} · rot {voiceRot}
-                    </p>
-                  </div>
-                  <FreeSliders n={voiceN} k={voiceK} rotation={voiceRot} onChange={(nv, kv, rv) => setVoicePattern(activeVoice, nv, kv, rv)} />
+
+            {/* Middle — large Euclidean pattern display, centered in the
+                space between the chip columns and the sliders. */}
+            {activeVoice && (
+              <div className="flex-1 min-w-0 flex flex-col items-center gap-1.5">
+                <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted">
+                  {VOICE_LABEL[activeVoice]} · pattern
+                </span>
+                <NecklaceRow large necklaces={necklace ? necklace.filter((n) => n.voice === activeVoice) : null} />
+                <EuclidStepView k={voiceK} n={voiceN} rotation={voiceRot} color="#E8B54A" large />
+                <p className="font-mono text-2xs text-inkMuted">
+                  {voiceK} / {voiceN} · rot {voiceRot}
+                </p>
+                <p className="text-2xs text-inkMuted/70 text-center">
+                  {voicePat
+                    ? "This voice's own groove."
+                    : voiceHasBase
+                      ? "Uses the base pattern — drag a slider to give this voice its own."
+                      : "Not in this section's base — drag a slider to add it."}
+                </p>
+              </div>
+            )}
+
+            {/* Right — sliders. */}
+            {activeVoice && (
+              <div className="w-44 shrink-0">
+                <FreeSliders
+                  n={voiceN}
+                  k={voiceK}
+                  rotation={voiceRot}
+                  onChange={(nv, kv, rv) => setVoicePattern(activeVoice, nv, kv, rv)}
+                />
+                {voicePat ? (
                   <button
                     className="w-full font-mono text-2xs rounded px-2 py-1 border border-edge text-inkMuted hover:text-ink mt-2"
                     onClick={() => clearVoicePattern(activeVoice)}
                   >
                     Reset to base
                   </button>
-                </>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <p className="text-2xs text-inkMuted">
-                    {voiceHasBase ? "Uses the base pattern." : "Not in this section's base — give it its own."}
-                  </p>
-                  <button className={CHIP_ON} onClick={() => setVoicePattern(activeVoice, voiceN, voiceK, 0)}>
-                    Set custom
-                  </button>
-                </div>
-              ))}
+                ) : (
+                  <p className="text-2xs text-inkMuted/70 mt-1">Move a slider to give this voice its own pattern.</p>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* Whole-section Euclidean — at the bottom: it's only meaningful
+              for genuine outline/odd-meter sections (a named preset isn't
+              one k/n). For preset/auto sections just show a compact
+              overview of the resolved groove. */}
+          {outline ? (
+            <div className="border-t border-edge/60 pt-2.5 space-y-1.5">
+              <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block">
+                Euclidean · whole section
+              </span>
+              <div className="flex items-start gap-3">
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <NecklaceRow necklaces={outlineNecklaces} />
+                  <StepView outline={outline} color="#E8B54A" />
+                  <p className="font-mono text-2xs text-inkMuted">
+                    {k} / {n} · rot {rotation} · {outline.label}
+                  </p>
+                </div>
+                <div className="w-44 shrink-0">
+                  <EuclidSliders n={n} denom={baseDenom} k={k} rotation={rotation} onChange={setOutline} />
+                </div>
+              </div>
+            </div>
+          ) : necklace ? (
+            <div className="border-t border-edge/60 pt-2.5">
+              <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+                Pattern · whole section
+              </span>
+              <NecklaceRow necklaces={necklace} />
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -464,7 +551,7 @@ export default function DrumPatternTools() {
         <div className="space-y-3">
           <div>
             <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
-              Variation · this section's ending detour
+              Detour · this section's ending rhythm detour
             </span>
             {variation ? (
               <div className="space-y-2">
@@ -504,6 +591,10 @@ export default function DrumPatternTools() {
             <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
               Transition · this section's ending
             </span>
+            <p className="text-2xs text-inkMuted/70 italic mb-2">
+              ⚠ TODO — the models share one preview today; the build/break/cut/drop
+              difference is only applied at export, not shown here yet.
+            </p>
             <div className="flex flex-wrap gap-1 mb-2">
               <button className={!eff.drumTransitionModel ? CHIP_ON : CHIP} onClick={() => setTransitionModel(null)}>
                 none

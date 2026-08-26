@@ -1,8 +1,9 @@
-import { useMemo, useCallback, useState } from "react";
+import { useMemo, useCallback } from "react";
 import { pitchClass } from "@music-theory/core";
 import type { ScaleType, ChordQuality, NoteName } from "@music-theory/core";
 import { resolveFlavor, BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR } from "@platform/progression-engine";
 import type { Chord } from "../../types/blueprint";
+import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { chordFromDegree, chordsToHoneycombText, chordDisplayName } from "../../lib/harmony/chordBuilder";
 import {
   parseProgression,
@@ -22,8 +23,6 @@ import {
   DIRS,
   type RevealedCell,
 } from "../../lib/harmony/honeycombWalk";
-
-type HoneycombViewMode = "linear" | "loop";
 
 const S = 34;
 
@@ -76,7 +75,10 @@ export default function HoneycombWheel({
   // order/count, just reused coordinates. Rendering and click-hit-testing
   // below key off `displayWalk`; `walk` stays the source of truth for
   // indexing into `chords`/`steps` (both arrays share its length/order).
-  const [viewMode, setViewMode] = useState<HoneycombViewMode>("linear");
+  // View mode lives in the shared selection store (not local state) so the
+  // Linear/Loop toggle in the dock's Tools panel and the wheel stay in sync
+  // without HarmonyView re-registering dock content on every toggle.
+  const viewMode = useHarmonySelectionStore((s) => s.honeycombMode);
   const displayWalk = useMemo(
     () => (viewMode === "loop" ? collapseRepeatsForLoopView(walk, steps) : walk),
     [viewMode, walk, steps],
@@ -131,9 +133,9 @@ export default function HoneycombWheel({
   }, [displayWalk]);
 
   const loop = useMemo(() => detectLoop(steps, displayWalk), [steps, displayWalk]);
-  const loopVec = loop?.translated
-    ? { x: loop.dq * S * Math.sqrt(3), y: loop.dr * S * 1.5 }
-    : null;
+  // The loop's translation vector in pixel space, under the same projection
+  // as the cells themselves (hexToPixel handles the flat-top mapping).
+  const loopVec = loop?.translated ? hexToPixel(loop.dq, loop.dr, S) : null;
 
   const pathD = useMemo(
     () => getWalkPathD(displayWalk, endStep, "full", S),
@@ -211,32 +213,6 @@ export default function HoneycombWheel({
 
   return (
     <div style={{ position: "relative" }}>
-      <div
-        style={{
-          position: "absolute", top: 4, right: 4, zIndex: 1,
-          display: "flex", gap: 2, fontFamily: "'IBM Plex Mono', monospace",
-        }}
-      >
-        {(["linear", "loop"] as const).map((mode) => (
-          <button
-            key={mode}
-            onClick={() => setViewMode(mode)}
-            style={{
-              fontSize: 9, padding: "2px 7px", borderRadius: 4, cursor: "pointer",
-              border: `1px solid ${viewMode === mode ? "#E8B54A" : "#3A3F4B"}`,
-              background: viewMode === mode ? "#3A2F16" : "transparent",
-              color: viewMode === mode ? "#F2D9A0" : "#8B94A1",
-            }}
-            title={
-              mode === "linear"
-                ? "One hex per chord (only immediate back-and-forth reuses a hex)"
-                : "Collapse repeating vamps onto a single lap"
-            }
-          >
-            {mode === "linear" ? "Linear" : "Loop"}
-          </button>
-        ))}
-      </div>
       <svg
         viewBox={vbStr}
         style={{ width: svgDims.w, height: svgDims.h, display: "block" }}

@@ -12,13 +12,20 @@ import { create } from "zustand";
 interface HarmonySelectionState {
   selectedSectionId: string | null;
   selectedChordId: string | null;
+  /** Honeycomb view mode — also lifted here so the wheel (in the canvas)
+   *  and the Linear/Loop toggle (in the dock's Tools panel) stay in sync
+   *  without HarmonyView re-registering dock content. */
+  honeycombMode: "linear" | "loop";
   setSelectedSectionId: (id: string | null) => void;
   setSelectedChordId: (id: string | null) => void;
+  setHoneycombMode: (mode: "linear" | "loop") => void;
 }
 
 export const useHarmonySelectionStore = create<HarmonySelectionState>((set) => ({
   selectedSectionId: null,
   selectedChordId: null,
+  honeycombMode: "linear",
   setSelectedSectionId: (id) => set({ selectedSectionId: id }),
   setSelectedChordId: (id) => set({ selectedChordId: id }),
+  setHoneycombMode: (mode) => set({ honeycombMode: mode }),
 }));

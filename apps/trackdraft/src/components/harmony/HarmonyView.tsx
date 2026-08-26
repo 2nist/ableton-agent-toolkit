@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
@@ -8,9 +8,9 @@ import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { useDockStore } from "../../store/dockStore";
 import { updateSection } from "../../lib/sections";
 import HoneycombWheel from "./HoneycombWheel";
-import ProgressionTrack from "./ProgressionTrack";
-import HarmonyDockTools from "./HarmonyDockTools";
-import { previewProgression, previewChord } from "../../lib/playback/previewMidi";
+import FitStatus from "./FitStatus";
+import { HarmonyMainMenu, HarmonyTools } from "./HarmonyDockTools";
+import { previewChord } from "../../lib/playback/previewMidi";
 
 /** The Harmony tab's canvas: the hex wheel and the linear progression
  *  track. Song/section settings (key, scale, presets) and the selected
@@ -26,23 +26,23 @@ export default function HarmonyView() {
   const setSelectedSectionId = useHarmonySelectionStore((s) => s.setSelectedSectionId);
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
+  const setPrimary = useDockStore((s) => s.setPrimary);
   const setTools = useDockStore((s) => s.setTools);
 
-  // Which layers the progression preview sends — chords always, bass and
-  // color opt-in via the toggles (default on for a fuller sketch).
-  const [previewLayers, setPreviewLayers] = useState<{ bass: boolean; color: boolean }>({
-    bass: true,
-    color: true,
-  });
-
-  // The dock's tools panel is registered once and reads the shared
-  // selection store directly — it re-renders itself on selection/song
-  // changes, so this effect never needs to re-run (and never risks the
-  // update-loop a content-recomputing effect here would create).
+  // The dock's panels are registered once and read the shared selection
+  // store directly — they re-render themselves on selection/song changes,
+  // so this effect never needs to re-run (and never risks the update-loop
+  // a content-recomputing effect here would create). The main menu is the
+  // dock's primary panel; Tools holds the settings toolbox (MIDI/color/key,
+  // the progression preview, the Linear/Loop toggle, and the chord editor).
   useEffect(() => {
-    setTools(<HarmonyDockTools />);
-    return () => setTools(null);
-  }, [setTools]);
+    setPrimary(<HarmonyMainMenu />);
+    setTools(<HarmonyTools />);
+    return () => {
+      setPrimary(null);
+      setTools(null);
+    };
+  }, [setPrimary, setTools]);
 
   if (!currentSong) return null;
   const song = currentSong;
@@ -87,15 +87,11 @@ export default function HarmonyView() {
     updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, chords })));
   }
 
+  // Snap the section's `bars` to one clean pass of its progression — wired
+  // to the fit status in the hex workspace's bottom-right corner.
   function setSectionBars(bars: number) {
     if (!activeSection) return;
     updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, bars })));
-  }
-
-  function updateSingleChord(chordId: string, update: Partial<Chord>) {
-    if (!activeSection) return;
-    const next = activeSection.chords.map((c) => (c.id === chordId ? { ...c, ...update } : c));
-    updateChords(next);
   }
 
   if (song.sections.length === 0) {
@@ -110,52 +106,11 @@ export default function HarmonyView() {
 
   return (
     <div className="p-4 max-w-5xl space-y-3">
-      {/* Progression preview — auditions the active section through the
-         selected MIDI port (desktop Chrome + a port in the MIDI panel).
-         Chords always play; bass/color layer toggles opt in per channel. */}
-      <div className="flex items-center justify-end gap-2">
-        <div
-          className="flex items-center gap-1"
-          title="Which layers the preview sends — each on its own MIDI channel (bass ch.2, color ch.4)"
-        >
-          {(["bass", "color"] as const).map((layer) => (
-            <button
-              key={layer}
-              aria-pressed={previewLayers[layer]}
-              className={`font-mono text-2xs rounded px-2 py-1 border ${
-                previewLayers[layer]
-                  ? "border-accent text-accent bg-accent/10"
-                  : "border-edge text-inkMuted hover:text-ink"
-              }`}
-              onClick={() => setPreviewLayers((s) => ({ ...s, [layer]: !s[layer] }))}
-            >
-              {layer}
-            </button>
-          ))}
-        </div>
-        <button
-          className="border border-edge text-inkMuted hover:text-ink rounded px-2.5 py-1 text-xs font-mono"
-          onClick={() => {
-            if (!activeSection) return;
-            void previewProgression(
-              activeSection.chords,
-              song.bpm,
-              activeSection.beatsPerChord,
-              previewLayers,
-              activeSection.colorFlavor,
-            );
-          }}
-          disabled={!activeSection || activeSection.chords.length === 0}
-          title="Audition this section's progression through the selected MIDI port — chords on its channel, plus bass and/or color if toggled"
-        >
-          ▶ Progression
-        </button>
-      </div>
-
-      {/* Hex canvas — full room to wander now that song/section settings
-         live in the dock instead of an overlay on top of it. */}
-      <div className="border border-edge rounded-lg bg-[#0e1218] overflow-hidden min-h-[420px]">
-        <div className="flex justify-center p-4 pt-6">
+      {/* Hex canvas — full room to wander now that the preview controls,
+         Linear/Loop toggle, and settings live in the dock's Tools panel.
+         The progression-fit status lives in this workspace's bottom-right. */}
+      <div className="border border-edge rounded-lg bg-[#0e1218] overflow-hidden min-h-[420px] flex flex-col">
+        <div className="flex-1 flex items-center justify-center p-4 pt-6">
           {activeSection && (
             <HoneycombWheel
               keyName={effectiveKey}
@@ -170,49 +125,12 @@ export default function HarmonyView() {
             />
           )}
         </div>
-      </div>
-
-      {/* One framed panel: three aligned tracks — sections / progression / effects */}
-      {activeSection && (
-        <div className="border border-edge rounded-lg bg-panel overflow-hidden">
-          <div className="grid grid-cols-[96px_1fr] items-stretch">
-            <div className="flex flex-col items-end justify-center gap-0.5 px-3 border-r border-edge">
-              <span className="font-mono text-[9px] uppercase tracking-wider text-inkMuted">Sections</span>
-              <span className="font-mono text-[8.5px] text-inkMuted/70">{song.sections.length}</span>
-            </div>
-            <div className="px-3 py-2 overflow-x-auto">
-              <div className="flex gap-1 flex-wrap">
-                {song.sections.map((section) => (
-                  <button
-                    key={section.id}
-                    className={`font-mono text-[11px] whitespace-nowrap rounded-[5px] border px-2.5 py-1 ${
-                      activeSection.id === section.id
-                        ? "border-accent text-accent bg-accent/10"
-                        : "border-edge text-inkMuted hover:text-ink hover:border-inkMuted"
-                    }`}
-                    onClick={() => setSelectedSectionId(section.id)}
-                  >
-                    {section.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+        {activeSection && (
+          <div className="flex items-center justify-end gap-2 px-3 py-1.5 border-t border-edge/60 bg-[#0a0d12]">
+            <FitStatus section={activeSection} onSetBars={setSectionBars} />
           </div>
-
-          <ProgressionTrack
-            key={activeSection.id}
-            section={activeSection}
-            keyName={effectiveKey}
-            scale={effectiveScale}
-            bpm={song.bpm}
-            selectedChordId={selectedChordId}
-            onSelectChord={setSelectedChordId}
-            onChangeChords={updateChords}
-            onUpdateChord={updateSingleChord}
-            onSetBars={setSectionBars}
-          />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

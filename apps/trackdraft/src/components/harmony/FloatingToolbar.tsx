@@ -44,7 +44,7 @@ export default function FloatingToolbar({
   onRekeySection,
 }: FloatingToolbarProps) {
   return (
-    <div className="p-3 space-y-4">
+    <div className="p-2.5 space-y-3">
       <div>
         <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Song key</span>
         <KeySelector

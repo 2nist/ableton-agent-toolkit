@@ -89,18 +89,20 @@ export function hexDistance(q: number, r: number): number {
    --------------------------------------------------------------- */
 export const HEX_SIZE = 46;
 
-/** Pointy-top axial → pixel centre. */
+/** Flat-top axial → pixel centre — the degree axis (r) runs horizontally,
+ *  so the walk reads left-to-right (wide) instead of top-to-bottom (tall),
+ *  matching the app's new horizontal layout. */
 export function hexToPixel(q: number, r: number, size = HEX_SIZE): Vec2 {
   return {
-    x: size * Math.sqrt(3) * (q + r / 2),
-    y: size * 1.5 * r,
+    x: size * 1.5 * r,
+    y: size * Math.sqrt(3) * (q + r / 2),
   };
 }
 
-/** SVG polygon points for a pointy-top hex centred at (0,0). */
+/** SVG polygon points for a flat-top hex centred at (0,0). */
 export function hexPoints(size = HEX_SIZE - 2.5): string {
   return Array.from({ length: 6 }, (_, i) => {
-    const a = (Math.PI / 180) * (60 * i - 30);
+    const a = (Math.PI / 180) * (60 * i);
     return `${(size * Math.cos(a)).toFixed(2)},${(size * Math.sin(a)).toFixed(2)}`;
   }).join(" ");
 }

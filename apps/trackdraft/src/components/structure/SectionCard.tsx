@@ -37,7 +37,7 @@ export default function SectionCard({ section, repeats, onChange, onChangeRepeat
     <div
       ref={setNodeRef}
       style={style}
-      className="border border-edge rounded bg-panel p-3 space-y-2"
+      className="border border-edge rounded bg-panel p-2.5 space-y-1.5"
     >
       <div className="flex items-center gap-2">
         <button
@@ -70,7 +70,7 @@ export default function SectionCard({ section, repeats, onChange, onChangeRepeat
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-3 text-xs text-inkMuted">
+      <div className="flex flex-wrap gap-2 text-xs text-inkMuted">
         <label className="flex items-center gap-1">
           Time sig
           <input

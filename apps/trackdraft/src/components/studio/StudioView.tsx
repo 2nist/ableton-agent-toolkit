@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { KEY_ROOTS } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import { useSongStore, type ClockSource } from "../../store/songStore";
-import { downloadSongJson, pushSongToAbleton } from "../../lib/exportImport";
-import { downloadSongMidi } from "../../lib/midiExport";
 import { getSongTransport } from "../../lib/playback/songTransport";
 import { getAbletonClock } from "../../lib/playback/abletonClock";
 import { getLiveMidiScheduler, getMidiOutput } from "../../lib/playback/liveMidiOut";
@@ -11,6 +9,7 @@ import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 import ArrangementTimeline from "./ArrangementTimeline";
 import AbletonStatus from "./AbletonStatus";
 import MidiSetupPanel from "./MidiSetupPanel";
+import ExportMenu from "./ExportMenu";
 
 const SCALES: ScaleType[] = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
 
@@ -23,7 +22,6 @@ export default function StudioView() {
   const clockSource = useSongStore((s) => s.clockSource);
   const setClockSource = useSongStore((s) => s.setClockSource);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [sendingToAbleton, setSendingToAbleton] = useState(false);
   const [abletonConnected, setAbletonConnected] = useState(false);
   const [abletonTelemetry, setAbletonTelemetry] = useState<{
     bpm?: number;
@@ -121,10 +119,12 @@ export default function StudioView() {
   }
 
   return (
-    <div className="p-6 max-w-5xl space-y-4">
-      <div className="flex items-center gap-4 border-b border-edge pb-3 flex-wrap">
+    <div className="p-4 max-w-5xl space-y-3">
+      {/* Single transport bar — key/tempo left, clock/transport/export
+          right, so nothing wraps into a second row above the arrangement. */}
+      <div className="flex items-center gap-2 border-b border-edge pb-2">
         {/* Left: key + tempo — editable "song identity" controls */}
-        <div className="flex items-center gap-3 mr-auto">
+        <div className="flex items-center gap-2 mr-auto">
           <div className="flex items-center gap-1">
             <label className="text-3xs text-inkMuted uppercase tracking-wide font-mono">Key</label>
             <select
@@ -177,7 +177,7 @@ export default function StudioView() {
         </div>
 
         {/* Right: clock source + transport + actions */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5">
           <div className="flex items-center gap-1" title="Which clock drives playback position — the app's own player, or Ableton's transport over osc-bridge">
             {(["internal", "ableton"] as const).map((mode) => (
               <button
@@ -240,56 +240,20 @@ export default function StudioView() {
           </button>
           {showMidiSetup && <MidiSetupPanel onClose={() => setShowMidiSetup(false)} />}
           <button
-            className="bg-accent text-black text-xs font-medium px-3 py-1.5 rounded disabled:opacity-40"
+            className="bg-accent text-black text-xs font-medium px-2.5 py-1 rounded disabled:opacity-40"
             onClick={togglePlayback}
             disabled={song.sections.length === 0}
           >
             {isPlaying ? "■ Stop" : clockSource === "ableton" ? "⟲ Sync" : "▶ Play"}
           </button>
           <button
-            className="border border-edge text-inkMuted hover:text-ink text-xs font-medium px-3 py-1.5 rounded"
+            className="border border-edge text-inkMuted hover:text-ink text-xs font-medium px-2.5 py-1 rounded"
             onClick={openPopout}
             title="Open a chrome-free lyric/chord window, synced to Studio playback — good for a second monitor"
           >
             Pop out lyrics/chords
           </button>
-          <button
-            className="bg-accent text-black text-xs font-medium px-3 py-1.5 rounded"
-            onClick={() => downloadSongJson(song)}
-          >
-            Export JSON
-          </button>
-          <button
-            className="bg-accent text-black text-xs font-medium px-3 py-1.5 rounded"
-            onClick={() => downloadSongMidi(song)}
-            title="Export this song as a multi-track MIDI file (.mid) — chords, bass, and drums. Works with any DAW."
-          >
-            Export MIDI
-          </button>
-          <button
-            className="bg-accent text-black text-xs font-medium px-3 py-1.5 rounded disabled:opacity-40"
-            disabled={sendingToAbleton}
-            onClick={async () => {
-              // Ableton's cue-point creation isn't safe against two
-              // near-simultaneous applyBlueprint runs for the same song
-              // (observed directly: it can crash the whole extension
-              // host) — disabling while a request's in flight keeps an
-              // accidental double-click from recreating that race.
-              if (sendingToAbleton) return;
-              setSendingToAbleton(true);
-              try {
-                const result = await pushSongToAbleton(song);
-                alert(`Sent "${result.title}" to Ableton — cue points, tempo, and the template's chord/crave/kit/color tracks are being populated with real MIDI now (the extension polls its command queue every 2s). Load an instrument on each track in Ableton to hear it.`);
-              } catch (err) {
-                alert(`Couldn't reach the Ableton bridge (osc-bridge at localhost:5200). Make sure it's running, then try again.\n\nError: ${err instanceof Error ? err.message : String(err)}`);
-              } finally {
-                setSendingToAbleton(false);
-              }
-            }}
-            title="Push this song's blueprint to Ableton via the osc-bridge — the bridge itself queues an apply command, which reuses the template's chord, crave, kit, and color MIDI tracks (creating them if absent) and fills them with real clips — no manual right-clicking needed"
-          >
-            {sendingToAbleton ? "Sending…" : "Send to Ableton"}
-          </button>
+          <ExportMenu song={song} />
         </div>
       </div>
 

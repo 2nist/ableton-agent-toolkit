@@ -111,9 +111,9 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
   const playheadLeft = playheadX(spans, lefts, tick);
 
   return (
-    <div className="border border-edge rounded-lg bg-panel p-4 space-y-2">
+    <div className="border border-edge rounded-lg bg-panel p-3 space-y-1.5">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-xs text-inkMuted uppercase tracking-wide">Arrangement</p>
+        <p className="text-[11px] text-inkMuted uppercase tracking-wide">Arrangement</p>
         <FormDisclosure song={song} />
       </div>
       <div className="overflow-x-auto">
@@ -131,7 +131,7 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
             return (
               <button
                 key={`${span.sectionId}-${span.occurrenceIndex}-${i}`}
-                className="h-14 shrink-0 rounded-[4px] flex flex-col items-start justify-center px-2 overflow-hidden hover:opacity-90 transition-opacity text-left"
+                className="h-12 shrink-0 rounded-[4px] flex flex-col items-start justify-center px-2 overflow-hidden hover:opacity-90 transition-opacity text-left"
                 style={{ width, background: style.bg, color: style.text }}
                 onMouseEnter={() => setHoveredIndex(i)}
                 onMouseLeave={() => setHoveredIndex((cur) => (cur === i ? null : cur))}

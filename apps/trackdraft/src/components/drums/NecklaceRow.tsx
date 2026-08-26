@@ -2,19 +2,22 @@ import { VOICE_COLOR, VOICE_LABEL } from "./voiceStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
 import type { VoiceNecklace } from "../../lib/playback/drumPreview";
 
-const R = 20;
-const PAD = 8;
-const SIZE = (R + PAD) * 2;
-
 /** One necklace per voice present in an already-resolved groove — pure
  *  presentation, no opinion about where the necklaces came from. Used by
- *  `structure/DrumNecklacePreview.tsx` (a preset+variant) and
+ *  `structure/DrumNecklacePreview.tsx` (a preset+variant),
  *  `DrumsDockTools.tsx` (either a preset+variant or a `drumMeterOutline`
- *  outline) so both authoring modes preview identically. */
-export default function NecklaceRow({ necklaces }: { necklaces: VoiceNecklace[] | null }) {
+ *  outline) and the Drum Pattern tab so both authoring modes preview
+ *  identically. `large` renders a bigger glyph for the primary per-voice
+ *  editor, where the pattern is the main focus rather than a compact
+ *  lane overview. */
+export default function NecklaceRow({ necklaces, large }: { necklaces: VoiceNecklace[] | null; large?: boolean }) {
   if (!necklaces || necklaces.length === 0) {
     return <p className="text-3xs text-inkMuted/70 italic">No resolvable hits.</p>;
   }
+
+  const R = large ? 28 : 20;
+  const PAD = large ? 10 : 8;
+  const SIZE = (R + PAD) * 2;
 
   return (
     <div className="flex flex-wrap gap-x-3 gap-y-1.5 items-end pt-1">

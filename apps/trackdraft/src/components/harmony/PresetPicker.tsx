@@ -15,6 +15,45 @@ interface PresetPickerProps {
 const PRESET_ENTRIES = Object.entries(PRESET_PROGRESSIONS);
 const STORAGE_KEY = "trackdraft-custom-presets";
 
+/** Family grouping for the preset dropdown — makes the long list scannable
+ *  instead of one flat wall. The presets carry no category field, so this
+ *  is inferred from the preset key; anything unlisted falls into "More". */
+const PRESET_CATEGORY: Record<string, string> = {
+  "50s_progression": "Starters",
+  pop_progression: "Starters",
+  axis_on_vi: "Starters",
+  blues: "Starters",
+  jazz_turnaround: "Starters",
+  one_four_five: "Starters",
+  axis_from_IV: "Pop / Axis",
+  axis_from_V: "Pop / Axis",
+  pop_four: "Pop / Axis",
+  pop_five: "Pop / Axis",
+  axis_five: "Pop / Axis",
+  axis_six: "Pop / Axis",
+  jazzy_pop: "Pop / Axis",
+  classic_turnaround: "Classic",
+  canon: "Classic",
+  andalusian: "Modal",
+  dorian_funk: "Modal",
+  mixolydian_rock: "Modal",
+  lydian_float: "Modal",
+  phrygian_dark: "Modal",
+  modal_rock: "Rock",
+  modal_rock_b: "Rock",
+  rock_bvi_bvii: "Rock",
+};
+
+const PRESET_GROUPS: { label: string; entries: [string, (typeof PRESET_PROGRESSIONS)[string]][] }[] = (() => {
+  const groups = new Map<string, [string, (typeof PRESET_PROGRESSIONS)[string]][]>();
+  for (const entry of PRESET_ENTRIES) {
+    const label = PRESET_CATEGORY[entry[0]] ?? "More";
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label)!.push(entry);
+  }
+  return Array.from(groups.entries()).map(([label, entries]) => ({ label, entries }));
+})();
+
 interface SavedPreset {
   id: string;
   name: string;
@@ -124,8 +163,12 @@ export default function PresetPicker({
           onChange={(e) => setSelected(e.target.value)}
           title={`${preset.degrees.join(" – ")} in ${SCALE_NAMES[preset.mode]}`}
         >
-          {PRESET_ENTRIES.map(([k, p]) => (
-            <option key={k} value={k}>{p.name}</option>
+          {PRESET_GROUPS.map((g) => (
+            <optgroup key={g.label} label={g.label}>
+              {g.entries.map(([k, p]) => (
+                <option key={k} value={k}>{p.name}</option>
+              ))}
+            </optgroup>
           ))}
         </select>
         <button className="bg-accent text-black font-medium px-2 py-1 rounded" onClick={handleApplyBuiltin}>
