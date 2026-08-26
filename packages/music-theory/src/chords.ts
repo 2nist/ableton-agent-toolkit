@@ -95,6 +95,77 @@ export function chordToMidiNotes(
   return intervals.map((interval) => base + rootPc + interval);
 }
 
+/** One note in a block chord — the shape every performance-effect input/
+ *  output shares (pitch/velocity untouched by the effect, only timing
+ *  redistributed). Structurally typed rather than importing
+ *  song-blueprint's `ChordPerformanceEffect`, since that package depends
+ *  on this one, not the other way around. */
+export interface PerformanceEffectNote {
+  pitch: number;
+  startTime: number;
+  duration: number;
+  velocity: number;
+}
+
+export interface PerformanceEffectInput {
+  style: "strum" | "pulse" | "arp";
+  params?: Record<string, number>;
+}
+
+/**
+ * Reshapes a block chord's simultaneous notes (same startTime/duration,
+ * different pitches) into a performed pattern:
+ *  - "strum": staggers onsets low-to-high across a short window
+ *    (`params.spreadBeats`, default 0.05 beats), trimming each note's
+ *    duration by its own offset so the chord still ends together.
+ *  - "arp": breaks the chord into a straight ascending sequence spanning
+ *    the original duration, each note getting an equal slice
+ *    (`params.noteBeats` overrides the slice length).
+ *  - "pulse": retriggers the full chord every `params.pulseBeats`
+ *    (default 1 beat) for the original duration, each retrigger cut
+ *    slightly short so consecutive hits don't legato together.
+ * Any other style is returned unchanged.
+ */
+export function applyPerformanceEffect<T extends PerformanceEffectNote>(
+  notes: T[],
+  effect: PerformanceEffectInput
+): T[] {
+  if (notes.length === 0) return notes;
+  const sorted = [...notes].sort((a, b) => a.pitch - b.pitch);
+  const startTime = sorted[0].startTime;
+  const duration = sorted[0].duration;
+
+  switch (effect.style) {
+    case "strum": {
+      const spreadBeats = effect.params?.spreadBeats ?? 0.05;
+      return sorted.map((n, i) => {
+        const offset = i * spreadBeats;
+        return { ...n, startTime: n.startTime + offset, duration: Math.max(0.05, n.duration - offset) };
+      });
+    }
+    case "arp": {
+      const noteBeats = effect.params?.noteBeats ?? duration / sorted.length;
+      return sorted.map((n, i) => ({
+        ...n,
+        startTime: startTime + i * noteBeats,
+        duration: noteBeats,
+      }));
+    }
+    case "pulse": {
+      const pulseBeats = effect.params?.pulseBeats ?? 1;
+      const pulseDuration = pulseBeats * 0.9;
+      const pulses: T[] = [];
+      for (let t = 0; t < duration - 1e-9; t += pulseBeats) {
+        const thisDuration = Math.min(pulseDuration, duration - t);
+        for (const n of sorted) pulses.push({ ...n, startTime: startTime + t, duration: thisDuration });
+      }
+      return pulses;
+    }
+    default:
+      return notes;
+  }
+}
+
 /**
  * Create a Chord object from a degree in a key/mode
  */
