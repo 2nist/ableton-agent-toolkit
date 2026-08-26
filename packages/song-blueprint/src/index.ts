@@ -27,6 +27,27 @@ export type { ArrangementEntry, SectionChord, SectionRole, DrumPattern, Velocity
  *  no special voice: just the plain accented click every cell gets. */
 export type DrumCellVoice = "kick" | "snare" | "hat";
 
+/** The drum voices a per-voice Euclidean pattern override can target —
+ *  mirrors `@drum/library`'s `KitVoice`, declared here independently for
+ *  the same schema-decoupling reason as `MeterOutline`/`DrumCellVoice`. */
+export type DrumVoiceName =
+  | "kick" | "snare" | "rim" | "clap" | "closedHat" | "openHat" | "pedalHat"
+  | "ride" | "rideBell" | "crash" | "tomLow" | "tomMid" | "tomHigh";
+
+/** A free-form Euclidean rhythm: `k` onsets spread as evenly as possible
+ *  across `n` steps, cyclically shifted by `rotation`. Unlike a
+ *  `MeterOutline` (constrained to 2s/3s cells for odd-meter authoring),
+ *  any k in 1..n is valid — this is the per-voice "one necklace per
+ *  voice" authoring path the drums timeline edits. */
+export interface EuclidPattern {
+  /** Number of onsets (pulses) — the pattern's density, freely 1..n. */
+  k: number;
+  /** Number of steps (the grid the onsets are spread across). */
+  n: number;
+  /** Cyclic shift of the onsets around the ring (0..n-1). */
+  rotation: number;
+}
+
 export interface MeterOutline {
   /** Quarter-note-beat span of one cell: 0.5 for x/8 meters, 0.25 for x/16. */
   cellBeats: number;
@@ -188,6 +209,27 @@ export interface BlueprintSection {
    *  when `drumTransitionModel` is absent. Defaults to 1 at export time
    *  when the field is set but this isn't. */
   drumTransitionBars?: number;
+  /** A deliberate Euclidean detour for this section's final bars — a
+   *  different k/n for a bar or two that then returns to the section's
+   *  base pattern, the way a drummer plays a fill that lands back in the
+   *  groove. Distinct from `drumTransitionModel`: a variation changes
+   *  the *shape* (the rhythm itself) for its span, while a transition
+   *  is an energy gesture (build/break/cut/drop) over an unchanged
+   *  pattern. Absent → no variation; the section plays its base pattern
+   *  straight through. */
+  drumVariationOutline?: MeterOutline;
+  /** Bars at the section's end devoted to `drumVariationOutline`.
+   *  Ignored when `drumVariationOutline` is absent. Defaults to 1 when
+   *  the field is set but this isn't. */
+  drumVariationBars?: number;
+  /** Per-voice Euclidean pattern overrides — each voice's own free-form
+   *  k/n rhythm, drawn as that voice's necklace on the timeline. A voice
+   *  with an entry here plays its own Euclidean pattern (`k` onsets spread
+   *  evenly across `n` steps, rotated by `rotation`) instead of whatever
+   *  the section's base pattern gives it; voices absent from this map keep
+   *  the base pattern (preset / outline / heuristic). This is the "edit
+   *  the drums voice by voice" path. */
+  drumVoicePatterns?: Partial<Record<DrumVoiceName, EuclidPattern>>;
   velocity: VelocityPreset;
   timeSignatureNumerator: number;
   timeSignatureDenPower: number;

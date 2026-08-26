@@ -3,6 +3,7 @@ import {
   resolveDrumHits,
   resolveOutlineVoiceNecklaces,
   resolveSectionVoiceNecklaces,
+  resolveVoiceNecklaces,
   inferPatternForSection,
   inferGrooveOverride,
 } from "./drumPreview";
@@ -111,6 +112,23 @@ describe("resolveOutlineVoiceNecklaces", () => {
     const necklaces = resolveOutlineVoiceNecklaces(outline)!;
     expect(necklaces.find((n) => n.voice === "kick")!.hits).toEqual([0]);
   });
+
+  it("labels each necklace with the outline's numerator as its steps (n in E(k,n))", () => {
+    const necklaces = resolveOutlineVoiceNecklaces(SEVEN_EIGHT)!;
+    expect(necklaces.length).toBeGreaterThan(0);
+    for (const n of necklaces) expect(n.steps).toBe(7);
+  });
+});
+
+describe("resolveVoiceNecklaces", () => {
+  it("labels each necklace with the loop's 16th-note grid (steps = loopBeats * 4)", () => {
+    const necklaces = resolveVoiceNecklaces(PATTERN, 0)!;
+    expect(necklaces.length).toBeGreaterThan(0);
+    for (const n of necklaces) {
+      expect(n.steps).toBeGreaterThan(0);
+      expect(Number.isInteger(n.steps)).toBe(true);
+    }
+  });
 });
 
 describe("resolveSectionVoiceNecklaces", () => {
@@ -125,9 +143,30 @@ describe("resolveSectionVoiceNecklaces", () => {
     expect(necklaces.map((n) => n.voice).sort()).toEqual(["closedHat", "kick", "snare"]);
   });
 
+  it("passes the outline's numerator through as steps when an outline resolves", () => {
+    const section = makeSection({ drumMeterOutline: SEVEN_EIGHT });
+    const necklaces = resolveSectionVoiceNecklaces(section)!;
+    for (const n of necklaces) expect(n.steps).toBe(7);
+  });
+
   it("falls back to the heuristic pattern when neither drumPattern nor drumMeterOutline is set", () => {
     const section = makeSection();
     expect(resolveSectionVoiceNecklaces(section)).not.toBeNull();
+  });
+
+  it("applies a per-voice Euclidean override on top of the base pattern, replacing that voice's necklace", () => {
+    const section = makeSection({
+      drumPattern: PATTERN,
+      drumVoicePatterns: { kick: { k: 3, n: 7, rotation: 0 } },
+    });
+    const necklaces = resolveSectionVoiceNecklaces(section)!;
+    const kick = necklaces.find((n) => n.voice === "kick");
+    // kick now comes from the free-form override (3 onsets over 7 steps)
+    expect(kick).toBeTruthy();
+    expect(kick!.steps).toBe(7);
+    expect(kick!.count).toBe(3);
+    // other preset voices still resolve from the base pattern
+    expect(necklaces.some((n) => n.voice === "snare")).toBe(true);
   });
 });
 

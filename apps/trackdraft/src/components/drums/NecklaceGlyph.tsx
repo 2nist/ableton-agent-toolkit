@@ -15,6 +15,11 @@ export default function NecklaceGlyph({
   radius,
   hits,
   color,
+  /** The ring's grid resolution — `n` in E(k,n). Draws `steps` small
+   *  reference ticks around the ring; the `hits` are the `k` onsets at
+   *  their true positions among them. Absent → just the dashed ring
+   *  (legacy data / unknown grid). */
+  steps,
   /** An opaque disc drawn first, so the glyph reads as a clean badge
    *  sitting on whatever's behind it (a lane line, a section band)
    *  rather than tangled with it. Omit for a plain per-glyph `<svg>`
@@ -26,6 +31,7 @@ export default function NecklaceGlyph({
   radius: number;
   hits: number[];
   color: string;
+  steps?: number;
   backdrop?: string;
 }) {
   const pt = (frac: number): [number, number] => {
@@ -36,18 +42,26 @@ export default function NecklaceGlyph({
 
   return (
     <g>
-      {backdrop && <circle cx={cx} cy={cy} r={radius + 6} fill={backdrop} />}
-      <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#3A3F4B" strokeWidth={1} strokeDasharray="2 3" />
+      {backdrop && <circle cx={cx} cy={cy} r={radius + 3} fill={backdrop} />}
+      <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#3A3F4B" strokeWidth={1.4} strokeDasharray="2 3" />
+      {steps && steps > 0 &&
+        Array.from({ length: steps }).map((_, i) => {
+          // Cap the grid so dense loops (16+ steps) don't blur into a solid
+          // ring — draw at most ~16 evenly-spaced reference ticks.
+          if (steps > 16 && i % Math.ceil(steps / 16) !== 0) return null;
+          const [gx, gy] = pt(i / steps);
+          return <circle key={`grid-${i}`} cx={gx} cy={gy} r={1} fill="#3A3F4B" fillOpacity={0.6} />;
+        })}
       {pts.length >= 2 && (
         <path
           d={"M " + pts.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L ") + (pts.length >= 3 ? " Z" : "")}
           fill="none"
           stroke={color}
-          strokeWidth={1.6}
+          strokeWidth={1.5}
         />
       )}
       {pts.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r={2.4} fill={color} />
+        <circle key={i} cx={x} cy={y} r={2} fill={color} />
       ))}
     </g>
   );

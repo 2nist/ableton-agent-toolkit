@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
-import { updateSection } from "../../lib/sections";
+import { useDockStore } from "../../store/dockStore";
+import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
+import { beatsPerBar, type BlueprintSection, type DrumTransitionModel, type DrumVoiceName } from "../../types/blueprint";
 import {
   resolveSectionVoiceNecklaces,
   resolveSectionVariant,
@@ -10,399 +12,556 @@ import {
   velocityNumber,
   type VoiceNecklace,
 } from "../../lib/playback/drumPreview";
-import { VOICE_COLOR, VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
+import { DRUM_LANES, type DrumLane } from "./laneStyle";
 import { TRANSITION_COLOR, TRANSITION_LABEL } from "./transitionStyle";
 import { SECTION_ROLE_COLOR } from "./sectionRoleStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
-import TransitionPopover from "./TransitionPopover";
-import SectionDrumsPopover from "./SectionDrumsPopover";
-import { planSectionHandoffFills, FILL_DATA, type HandoffSectionInput, type KitVoice } from "@drum/library";
-import type { BlueprintSection, DrumTransitionModel } from "../../types/blueprint";
+import DrumPatternTools from "./DrumPatternTools";
+import { planSectionHandoffFills, FILL_DATA, type HandoffSectionInput } from "@drum/library";
 
 /** A stable identity for a section's *resolved* drum content — same
- *  preset+variant, or same outline cells/voicing, means literally the
+ *  preset+variant (or same outline cells/voicing) means literally the
  *  same note data, not just a similar-looking pattern. Drives whether a
- *  voice's necklace repeats on the timeline or the line just continues. */
+ *  lane's necklace repeats on the timeline or the line just continues.
+ *  A section's `drumVariationOutline` is deliberately *not* part of this:
+ *  a variation is a detour at the section's end, drawn as its own
+ *  indicator, and doesn't change the main pattern's identity — a section
+ *  repeating the same base groove with a different detour still continues
+ *  the line. Per-voice overrides (`drumVoiceOutlines`) *are* part of it:
+ *  they change the resolved per-voice rhythm, so a section with different
+ *  voice patterns reads as a different groove. */
 function sectionDrumKey(section: BlueprintSection, concept?: string): string {
+  let key: string;
   if (section.drumMeterOutline) {
     const o = section.drumMeterOutline;
-    return `outline::${o.cellBeats}::${o.cells.join(",")}::${(o.cellVoices ?? []).join(",")}`;
+    key = `outline::${o.cellBeats}::${o.cells.join(",")}::${(o.cellVoices ?? []).join(",")}`;
+  } else {
+    const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
+    key = `${pattern}::${section.drumVariantIndex ?? 0}`;
   }
-  const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
-  return `${pattern}::${section.drumVariantIndex ?? 0}`;
+  const ov = section.drumVoicePatterns;
+  if (ov) {
+    const parts = Object.keys(ov)
+      .filter((v) => ov[v as DrumVoiceName])
+      .sort()
+      .map((v) => `${v}:${ov[v as DrumVoiceName]!.k}/${ov[v as DrumVoiceName]!.n}/${ov[v as DrumVoiceName]!.rotation}`);
+    if (parts.length > 0) key += `::vo::${parts.join("&")}`;
+  }
+  return key;
 }
 
-const X0 = 140;
-const BAR_PX = 26;
-const LANE_H = 46;
-const TOP_PAD = 34;
-// Wide enough that the handoff label (drawn at yBottom+12) clears a real,
-// space-reserving horizontal scrollbar (~15-17px on most non-macOS/non-
-// overlay-scrollbar setups) — this container scrolls horizontally on any
-// song wider than the viewport, so that scrollbar is the common case, not
-// an edge case, and 26px of pad left the label sitting right under it.
-const BOTTOM_PAD = 44;
-const NECK_R = 15;
+// Canvas geometry — a pure-black stage with a top annotation row, then
+// six thick voice tracks. Tuned so six voices fit comfortably and each
+// track has room for its internal beat/bar grid.
+const X0 = 104;
+const BAR_PX = 40;
+const TRACK_H = 36;
+const TOP_PAD = 40;
+const BOTTOM_PAD = 34;
+const NECK_R = 10.5;
+const STACK_TOP = TOP_PAD;
+const STACK_BOTTOM = TOP_PAD + DRUM_LANES.length * TRACK_H;
 
-function barToX(bar: number): number {
-  return X0 + bar * BAR_PX;
+const laneY = (li: number): number => TOP_PAD + li * TRACK_H + TRACK_H / 2;
+const trackBottom = (li: number): number => TOP_PAD + (li + 1) * TRACK_H;
+// Variation markers sit just under the voice line (fills dome above it).
+const laneBaseY = (li: number): number => laneY(li) + 7;
+
+/** Union of a lane's member voices' onsets in one resolved span — the
+ *  lane's own necklace. The HAT lane, for example, shows closed and open
+ *  hats together; `steps` is the largest grid any member reports (shared
+ *  within a span — outline numerator / loop sixteenths). */
+function laneNecklace(
+  lane: DrumLane,
+  necklaces: VoiceNecklace[] | null,
+): { hits: number[]; steps?: number } | null {
+  if (!necklaces) return null;
+  const member = necklaces.filter((n) => lane.voices.includes(n.voice) && n.count > 0);
+  if (member.length === 0) return null;
+  const hits = Array.from(new Set(member.flatMap((m) => m.hits))).sort((a, b) => a - b);
+  const steps = member.reduce((max, m) => Math.max(max, m.steps ?? 0), 0) || undefined;
+  return { hits, steps };
 }
 
 interface ResolvedSpan {
   span: SectionSpan;
-  /** Identity of the resolved groove — same preset *and* same variant
-   *  means literally the same note data, so two spans sharing this key
-   *  are provably the same pattern, not just similar-looking. Drives
-   *  whether a voice's necklace repeats or the line just continues. */
+  /** The section actually rendered — the committed section, or a working
+   *  draft from the Pattern editor that the timeline is previewing. */
+  section: BlueprintSection;
+  /** Identity of the resolved groove — see `sectionDrumKey`. */
   key: string;
   necklaces: VoiceNecklace[] | null;
 }
 
-/** Whole-song drum arrangement view: every section laid out left to
- *  right (real `sectionSpans` timing, so a repeated Chorus shows as
- *  separate blocks, matching what Ableton will actually get), one lane
- *  per drum voice actually used anywhere in the song, and one
- *  rhythm-necklace glyph per section per voice — the section's real,
- *  resolved groove, not a name in a dropdown. Section boundaries show
- *  what actually happens at the handoff: an explicit named transition
- *  (`drumTransitionModel`) if one's chosen, or the automatic fill every
- *  long-enough section gets by default (`planSectionHandoffFills`, the
- *  same real function `trackdraft-bridge`'s export uses) otherwise.
- *
- *  This is the first real home for the drum-arrangement concept explored
- *  separately; `structure/DrumNecklacePreview.tsx` is the same idea
- *  scoped to one section, living next to the picker that controls it.
- *  Clicking a section selects it (shared via `drumsSelectionStore`) and
- *  opens its editor in place via `SectionDrumsPopover` — the design
- *  reference's modal-on-timeline-click, replacing the old dock panel.
- *  A boundary's
- *  transition can *also* be set right where it happens — clicking the
- *  handoff line itself opens `TransitionPopover` in place, matching the
- *  design reference's click-the-timeline interaction — rather than only
- *  through the dock's Transition block once a section is selected. Both
- *  write the same `drumTransitionModel`/`drumTransitionBars` fields, so
- *  neither is a fork of the other. */
-export default function DrumsView() {
-  const song = useSongStore((s) => s.currentSong());
-  const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const selectedSectionId = useDrumsSelectionStore((s) => s.selectedSectionId);
-  const setSelectedSectionId = useDrumsSelectionStore((s) => s.setSelectedSectionId);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [transitionPopover, setTransitionPopover] = useState<{ sectionId: string; left: number; top: number } | null>(
-    null,
+/** The variation indicator — a dotted baseline with a row of small
+ *  diamonds spanning the detour's duration, drawn in the lane's own
+ *  color at the base of the track (the lane's main line stays clean). */
+function VariationGlyph({ x1, x2, baseY, color }: { x1: number; x2: number; baseY: number; color: string }) {
+  const steps = 8;
+  return (
+    <g pointerEvents="none">
+      <line
+        x1={x1} y1={baseY} x2={x2} y2={baseY}
+        stroke={color} strokeWidth={2.2} strokeDasharray="1 5" strokeLinecap="round" strokeOpacity={0.95}
+      />
+      {Array.from({ length: steps + 1 }).map((_, i) => {
+        const dx = x1 + (i * (x2 - x1)) / steps;
+        return (
+          <path
+            key={i}
+            d={`M ${dx} ${baseY - 4} L ${dx + 4} ${baseY} L ${dx} ${baseY + 4} L ${dx - 4} ${baseY} Z`}
+            fill={color}
+            fillOpacity={0.9}
+          />
+        );
+      })}
+    </g>
   );
-  const [sectionPopover, setSectionPopover] = useState<{ left: number; top: number } | null>(null);
+}
 
-  // Closes the popover on any click outside it or outside a handoff hit
-  // target — the hit targets themselves stopPropagation so re-clicking a
-  // (possibly different) boundary while one's already open just retargets
-  // it instead of closing then needing a second click to reopen.
-  useEffect(() => {
-    if (!transitionPopover && !sectionPopover) return;
-    function handleOutsideClick(e: MouseEvent) {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest("[data-transition-popover]")) return;
-      if (target?.closest("[data-section-drums-popover]")) return;
-      setTransitionPopover(null);
-      setSectionPopover(null);
-    }
-    document.addEventListener("click", handleOutsideClick);
-    return () => document.removeEventListener("click", handleOutsideClick);
-  }, [transitionPopover, sectionPopover]);
+/** The fill/transition "gesture" marker — a bold shape sitting on the
+ *  voice line, spanning the bars it occupies, drawn in the lane's own
+ *  color. Each model reads differently: `buildUp` = a filled dome rising,
+ *  `breakDown` = a filled dome dipping below the line, `cut` = one sharp
+ *  spike then silence, `dropOut` = a low fading outline, and the automatic
+ *  handoff fill = a bold dashed dome. Height is clamped so it reads
+ *  clearly without invading the neighbouring lane. */
+function FillDome({
+  x1, x2, y, color, model, depth = 1,
+}: {
+  x1: number; x2: number; y: number; color: string; model: DrumTransitionModel | null; depth?: number;
+}) {
+  const cx = (x1 + x2) / 2;
+  const half = (x2 - x1) / 2;
+  const h = Math.min(half, 13) * depth;
+  const up = `M ${x1.toFixed(1)} ${y} Q ${cx.toFixed(1)} ${(y - 2 * h).toFixed(1)} ${x2.toFixed(1)} ${y}`;
+  const dn = `M ${x1.toFixed(1)} ${y} Q ${cx.toFixed(1)} ${(y + 2 * h).toFixed(1)} ${x2.toFixed(1)} ${y}`;
 
-  if (!song) return null;
-
-  function setBoundaryTransitionModel(sectionId: string, model: DrumTransitionModel | null) {
-    updateCurrentSong((s) =>
-      updateSection(s, sectionId, (sec) => ({
-        ...sec,
-        drumTransitionModel: model ?? undefined,
-        drumTransitionBars: model ? (sec.drumTransitionBars ?? 1) : undefined,
-      })),
+  if (model === "cut") {
+    // one sharp hit, then silence — a narrow spike
+    const d = `M ${(cx - half * 0.16).toFixed(1)} ${y} L ${cx} ${(y - 2.4 * h).toFixed(1)} L ${(cx + half * 0.16).toFixed(1)} ${y} Z`;
+    return <path d={d} fill={color} stroke={color} strokeWidth={1.2} strokeOpacity={0.95} pointerEvents="none" />;
+  }
+  if (model === "breakDown") {
+    // energy drains — dome dips below the line
+    return (
+      <g pointerEvents="none">
+        <path d={`${dn} Z`} fill={color} fillOpacity={0.4} />
+        <path d={dn} fill="none" stroke={color} strokeWidth={3} strokeLinecap="round" strokeOpacity={0.95} />
+      </g>
     );
   }
-
-  function setBoundaryTransitionBars(sectionId: string, bars: number) {
-    updateCurrentSong((s) => updateSection(s, sectionId, (sec) => ({ ...sec, drumTransitionBars: Math.max(1, bars) })));
+  if (model === "dropOut") {
+    // groove continues but voices silenced — a low, fading outline
+    return (
+      <path d={up} fill="none" stroke={color} strokeWidth={2} strokeDasharray="2 5" strokeLinecap="round" strokeOpacity={0.6} />
+    );
   }
+  if (model === "buildUp") {
+    // density ramp landing on a strong hit — filled dome rising
+    return (
+      <g pointerEvents="none">
+        <path d={`${up} Z`} fill={color} fillOpacity={0.4} />
+        <path d={up} fill="none" stroke={color} strokeWidth={3} strokeLinecap="round" strokeOpacity={0.95} />
+      </g>
+    );
+  }
+  // automatic handoff fill — bold dashed dome
+  return (
+    <path d={up} fill="none" stroke={color} strokeWidth={3} strokeDasharray="3 4" strokeLinecap="round" strokeOpacity={0.95} />
+  );
+}
 
+function hexagonPoints(cx: number, cy: number, r: number): string {
+  let p = "";
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI / 6 + (i * Math.PI) / 3;
+    p += `${(cx + r * Math.cos(a)).toFixed(1)},${(cy + r * Math.sin(a)).toFixed(1)} `;
+  }
+  return p.trim();
+}
+
+/** Whole-song drum arrangement as an event canvas: a pure-black stage,
+ *  a fixed six-lane track (KICK/SNR/RIM/HAT/CYM/TOM, silent lanes
+ *  dimmed), no section bands — the top annotation row carries each
+ *  section's label with a start/stop bracket, plus the handoff transition
+ *  labels. Each lane is a thick track with its beat/bar grid drawn
+ *  inside; the pattern's Euclidean necklace is drawn once at the node
+ *  where the new k/n starts (repeats just continue the line), variations
+ *  read as a lane-colored dotted detour under the line, and fills /
+ *  transitions read as bold lane-colored domes sitting on the line.
+ *
+ *  Editing is dock-based, mirroring Harmony: this view registers
+ *  `DrumsDockTools` into the shared dock once (it reads
+ *  `useDrumsSelectionStore` itself), and clicking the timeline — a
+ *  section, a necklace, a variation detour, or a handoff — just selects
+ *  the owning section, which loads its Pattern / Variation / Transition
+ *  editors into the dock. */
+export default function DrumsView() {
+  const song = useSongStore((s) => s.currentSong());
+  const selectedSectionId = useDrumsSelectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useDrumsSelectionStore((s) => s.setSelectedSectionId);
+  const setTools = useDockStore((s) => s.setTools);
+
+  // Horizontal zoom — stretches/shrinks the bar width so the whole song
+  // fits on screen or a few bars get detail. Local to the view, not
+  // persisted (a song's drum view is a working surface, not song data).
+  const [zoom, setZoom] = useState(1);
+  const clampZoom = (z: number) => Math.min(2.5, Math.max(0.4, z));
+  const barW = BAR_PX * zoom;
+  const barX = (bar: number): number => X0 + bar * barW;
+
+  // A working draft from the Pattern editor — when one exists for a
+  // section, the timeline renders it instead of the committed section so
+  // slider edits preview live on the lines/necklaces before Apply/Revert.
+  const draftSectionId = useDrumsDraftStore((s) => s.sectionId);
+  const draftSection = useDrumsDraftStore((s) => s.section);
+
+  // Register the dock editor once (Harmony's pattern) — it reads the
+  // shared selection store directly, so clicking the timeline updates it
+  // without this view re-pushing fresh JSX into the dock on every click.
+  useEffect(() => {
+    setTools(<DrumPatternTools />);
+    return () => setTools(null);
+  }, [setTools]);
+
+  if (!song) return null;
   const spans = sectionSpans(song);
 
   if (spans.length === 0) {
     return (
-      <div className="p-6 max-w-3xl">
+      <div className="px-3 pt-3 pb-4">
         <p className="text-inkMuted text-sm">No sections yet — add some in Structure first.</p>
       </div>
     );
   }
 
-  const resolved: ResolvedSpan[] = spans.map((span) => ({
-    span,
-    key: sectionDrumKey(span.section, song.concept),
-    necklaces: resolveSectionVoiceNecklaces(span.section, song.concept),
-  }));
+  const resolved: ResolvedSpan[] = spans.map((span) => {
+    const sec = draftSectionId === span.section.id && draftSection ? draftSection : span.section;
+    return {
+      span,
+      section: sec,
+      key: sectionDrumKey(sec, song.concept),
+      necklaces: resolveSectionVoiceNecklaces(sec, song.concept),
+    };
+  });
 
-  // Real handoff-fill planning — the same function trackdraft-bridge's
-  // export calls, so "would this boundary get an automatic fill" here
-  // means the same thing it means at export time, not a guess.
-  const handoffInputs: HandoffSectionInput[] = spans.map((span) => ({
-    sectionId: span.sectionId,
-    occurrenceIndex: span.occurrenceIndex,
-    variant: resolveSectionVariant(span.section, song.concept),
-    durationBeats: span.durationBeats,
-    velocityTarget: velocityNumber(span.section.velocity),
+  // Real handoff-fill planning — the same function the export path uses,
+  // so "would this boundary get an automatic fill" here means the same
+  // thing it means at export time.
+  const handoffInputs: HandoffSectionInput[] = resolved.map((r) => ({
+    sectionId: r.span.sectionId,
+    occurrenceIndex: r.span.occurrenceIndex,
+    variant: resolveSectionVariant(r.section, song.concept),
+    durationBeats: r.span.durationBeats,
+    velocityTarget: velocityNumber(r.span.section.velocity),
   }));
   const handoffPlans = planSectionHandoffFills(handoffInputs, FILL_DATA);
 
-  const usedVoices: KitVoice[] = VOICE_ORDER.filter((v) =>
-    resolved.some((r) => r.necklaces?.some((n) => n.voice === v && n.count > 0)),
-  );
-
   const bars = totalBars(spans);
-  const width = barToX(bars) + 40;
-  const laneStackHeight = Math.max(1, usedVoices.length) * LANE_H;
-  const height = TOP_PAD + laneStackHeight + BOTTOM_PAD;
+  const width = barX(bars) + 40;
+  const height = STACK_BOTTOM + BOTTOM_PAD;
+
+  const anyLaneHits = resolved.some((r) => DRUM_LANES.some((l) => laneNecklace(l, r.necklaces)));
+
+  // Beat/bar gridlines for the thick tracks — bar boundaries strong,
+  // in-bar beats faint, computed per section's own meter so odd meters
+  // read correctly inside their own tracks.
+  const gridLines: { x: number; bar: boolean }[] = [];
+  resolved.forEach((r) => {
+    const bpb = beatsPerBar(r.span.section);
+    const beatCount = Math.max(1, Math.round(bpb));
+    for (let b = 0; b < r.span.bars; b++) {
+      gridLines.push({ x: barX(r.span.startBar + b), bar: true });
+      for (let beat = 1; beat < beatCount; beat++) {
+        gridLines.push({ x: barX(r.span.startBar + b) + beat * (barW / beatCount), bar: false });
+      }
+    }
+  });
+  gridLines.push({ x: barX(bars), bar: true });
+
+  function selectSection(sectionId: string) {
+    setSelectedSectionId(sectionId);
+  }
 
   return (
-    <div className="p-6 space-y-3">
-      <div>
-        <h2 className="font-medium text-sm">Drums</h2>
-        <p className="text-xs text-inkMuted">
-          The whole song's resolved groove, one lane per voice — a repeat of the exact same pattern+variant just
-          continues the line instead of redrawing its necklace. Click a section to edit its drums in place, or click a
-          boundary line to set what happens at that handoff, right there.
-        </p>
-      </div>
-
-      {usedVoices.length === 0 ? (
-        <p className="text-inkMuted text-sm">No drum voices resolve for this song yet.</p>
-      ) : (
-        <div ref={wrapRef} className="relative overflow-x-auto border border-edge rounded bg-black">
-          <svg width={width} height={height} className="block">
-            {/* section bands — click any occurrence to select its section
-                (all occurrences of the same section highlight together,
-                since they share one underlying section to edit) */}
-            {resolved.map((r, i) => {
-              const x = barToX(r.span.startBar);
-              const w = barToX(r.span.startBar + r.span.bars) - x;
-              const isSelected = r.span.section.id === selectedSectionId;
-              const roleColor = SECTION_ROLE_COLOR[r.span.section.role] ?? SECTION_ROLE_COLOR.custom;
-              return (
-                <g
-                  key={`band-${i}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedSectionId(r.span.section.id);
-                    const wrapEl = wrapRef.current;
-                    if (!wrapEl) return;
-                    const rect = wrapEl.getBoundingClientRect();
-                    setSectionPopover({
-                      left: Math.max(4, Math.min(e.clientX - rect.left + 12, rect.width - 330)),
-                      top: Math.max(4, e.clientY - rect.top - 10),
-                    });
-                  }}
-                  style={{ cursor: "pointer" }}
-                >
-                  <rect
-                    x={x}
-                    y={TOP_PAD - 8}
-                    width={w}
-                    height={laneStackHeight + 8}
-                    fill={roleColor.fill}
-                    stroke={isSelected ? "#E8B54A" : roleColor.rim}
-                    strokeWidth={isSelected ? 2 : 1}
-                    strokeOpacity={isSelected ? 1 : 0.5}
-                  />
-                  <text
-                    x={x + w / 2}
-                    y={TOP_PAD - 14}
-                    textAnchor="middle"
-                    fontSize={10}
-                    fontFamily="'IBM Plex Mono', monospace"
-                    fill={isSelected ? "#E8B54A" : roleColor.rim}
-                  >
-                    {r.span.section.name}
-                    {r.span.occurrenceIndex > 0 ? ` ·${r.span.occurrenceIndex + 1}` : ""}
-                  </text>
-                </g>
-              );
-            })}
-
-            {/* subtle bar markers — faint vertical gridlines so odd
-                meters and section lengths read against the plain black
-                field, matching the design reference's understated grid */}
-            {Array.from({ length: bars + 1 }).map((_, b) => (
-              <line
-                key={`bar-marker-${b}`}
-                x1={barToX(b)}
-                y1={TOP_PAD - 8}
-                x2={barToX(b)}
-                y2={TOP_PAD - 8 + laneStackHeight + 8}
-                stroke="#FFFFFF"
-                strokeOpacity={b % 4 === 0 ? 0.09 : 0.05}
-                strokeWidth={1}
-              />
-            ))}
-
-            {/* lane labels + baselines — each voice's own color, the way
-                the design reference draws it: a faint guide the full
-                width of the song (this voice *could* play here), with a
-                bold segment laid over just the bars it actually does.
-                Matches the reference's "quiet baseline" vs. active
-                "lane-baseline" distinction, not a single flat gray line. */}
-            {usedVoices.map((voice, li) => {
-              const y = TOP_PAD + li * LANE_H + LANE_H / 2;
-              const color = VOICE_COLOR[voice] ?? "#8B94A1";
-              return (
-                <g key={`lane-${voice}`}>
-                  <text x={X0 - 16} y={y + 3} textAnchor="end" fontSize={9} fontFamily="'IBM Plex Mono', monospace" fill={color}>
-                    {VOICE_LABEL[voice]}
-                  </text>
-                  <line x1={barToX(0)} y1={y} x2={barToX(bars)} y2={y} stroke={color} strokeWidth={1} strokeOpacity={0.25} />
-                  {resolved.map((r, i) => {
-                    const active = r.necklaces?.some((n) => n.voice === voice && n.count > 0);
-                    if (!active) return null;
-                    return (
-                      <line
-                        key={`active-${voice}-${i}`}
-                        x1={barToX(r.span.startBar)}
-                        y1={y}
-                        x2={barToX(r.span.startBar + r.span.bars)}
-                        y2={y}
-                        stroke={color}
-                        strokeWidth={2.5}
-                        strokeLinecap="round"
-                      />
-                    );
-                  })}
-                </g>
-              );
-            })}
-
-            {/* one necklace per section per voice, skipping exact repeats */}
-            {usedVoices.map((voice, li) => {
-              const y = TOP_PAD + li * LANE_H + LANE_H / 2;
-              let lastKey: string | null = null;
-              return resolved.map((r, i) => {
-                const n = r.necklaces?.find((v) => v.voice === voice && v.count > 0);
-                if (!n) {
-                  lastKey = null;
-                  return null;
-                }
-                const sameAsPrev = lastKey === r.key;
-                lastKey = r.key;
-                if (sameAsPrev) return null; // provably identical resolved data — the line just continues
-                const cx = barToX(r.span.startBar) + (barToX(r.span.startBar + r.span.bars) - barToX(r.span.startBar)) / 2;
-                return (
-                  <NecklaceGlyph
-                    key={`glyph-${voice}-${i}`}
-                    cx={cx}
-                    cy={y}
-                    radius={NECK_R}
-                    hits={n.hits}
-                    color={VOICE_COLOR[voice] ?? "#8B94A1"}
-                    backdrop="#12161D"
-                  />
-                );
-              });
-            })}
-
-            {/* section-boundary handoffs — an explicit named transition if
-                the section has one chosen, else the automatic handoff fill
-                every long-enough section gets by default. The last span
-                never gets either: there's nothing after it to hand off to,
-                same as the real export. Every boundary (not just ones with
-                a marker already) carries a wide invisible click target, so
-                a silent/auto-fill boundary is exactly as clickable as one
-                that already has an explicit transition — clicking opens
-                `TransitionPopover` right there to set or change it. */}
-            {resolved.slice(0, -1).map((r, i) => {
-              const model = r.span.section.drumTransitionModel;
-              const hasAutoFill = handoffPlans[i]?.fillStart !== null;
-              const sectionId = r.span.section.id;
-
-              const x = barToX(r.span.startBar + r.span.bars);
-              const yTop = TOP_PAD - 8;
-              const yBottom = TOP_PAD - 8 + laneStackHeight + 8;
-              const color = model ? TRANSITION_COLOR[model] : "#565F70";
-
-              return (
-                <g key={`handoff-${i}`}>
-                  {(model || hasAutoFill) && (
-                    <>
-                      <line
-                        x1={x} y1={yTop} x2={x} y2={yBottom}
-                        stroke={color}
-                        strokeWidth={model ? 2 : 1.4}
-                        strokeDasharray={model ? undefined : "2 3"}
-                        opacity={model ? 0.9 : 0.6}
-                      />
-                      {/* handoff node — a small circular control point at
-                          the boundary's vertical midpoint, the design
-                          reference's "node" affordance for fills and
-                          transitions */}
-                      <circle cx={x} cy={(yTop + yBottom) / 2} r={3} fill={color} opacity={model ? 1 : 0.6} />
-                      <text x={x} y={yBottom + 12} textAnchor="middle" fontSize={8} fontFamily="'IBM Plex Mono', monospace" fill={color}>
-                        {model ? TRANSITION_LABEL[model].toUpperCase() : "FILL"}
-                      </text>
-                    </>
-                  )}
-                  <rect
-                    data-transition-popover
-                    x={x - 14}
-                    y={yTop}
-                    width={28}
-                    height={yBottom - yTop}
-                    fill="transparent"
-                    style={{ cursor: "pointer" }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const wrapEl = wrapRef.current;
-                      if (!wrapEl) return;
-                      const rect = wrapEl.getBoundingClientRect();
-                      setTransitionPopover({
-                        sectionId,
-                        left: Math.min(e.clientX - rect.left + 12, rect.width - 232),
-                        top: Math.max(4, e.clientY - rect.top - 10),
-                      });
-                    }}
-                  />
-                </g>
-              );
-            })}
-          </svg>
-
-          {transitionPopover && (() => {
-            const activeSection = resolved.find((r) => r.span.section.id === transitionPopover.sectionId)?.span
-              .section;
-            if (!activeSection) return null;
-            return (
-              <div data-transition-popover>
-                <TransitionPopover
-                  sectionName={activeSection.name}
-                  currentModel={activeSection.drumTransitionModel}
-                  currentBars={activeSection.drumTransitionBars}
-                  left={transitionPopover.left}
-                  top={transitionPopover.top}
-                  onSetModel={(model) => setBoundaryTransitionModel(transitionPopover.sectionId, model)}
-                  onSetBars={(bars) => setBoundaryTransitionBars(transitionPopover.sectionId, bars)}
-                  onClose={() => setTransitionPopover(null)}
-                />
-              </div>
-            );
-          })()}
-
-          {sectionPopover && (
-            <div data-section-drums-popover>
-              <SectionDrumsPopover
-                left={sectionPopover.left}
-                top={sectionPopover.top}
-                onClose={() => setSectionPopover(null)}
-              />
-            </div>
-          )}
+    <div className="px-2 pt-1.5 pb-3">
+      {!anyLaneHits && <p className="text-inkMuted text-xs mb-2">No drum voices resolve for this song yet.</p>}
+      <div className="flex items-center justify-end mb-1.5 select-none">
+        <div className="flex items-center gap-0.5 border border-edge rounded bg-black px-1 py-0.5">
+          <button
+            className="w-5 h-5 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
+            onClick={() => setZoom((z) => clampZoom(z / 1.2))}
+            title="Zoom out"
+          >
+            −
+          </button>
+          <span className="font-mono text-2xs text-inkMuted tabular-nums w-9 text-center" title="Timeline zoom">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            className="w-5 h-5 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
+            onClick={() => setZoom((z) => clampZoom(z * 1.2))}
+            title="Zoom in"
+          >
+            +
+          </button>
         </div>
-      )}
+      </div>
+      <div className="relative overflow-x-auto border border-edge rounded bg-black">
+        <svg width={width} height={height} className="block">
+          <defs>
+            <filter id="drums-glow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="3" result="b" />
+              <feMerge>
+                <feMergeNode in="b" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          {/* ---- top annotation row: section labels + start/stop brackets ---- */}
+          {resolved.map((r, i) => {
+            const x = barX(r.span.startBar);
+            const w = barX(r.span.startBar + r.span.bars) - x;
+            const isSelected = r.span.section.id === selectedSectionId;
+            const roleColor = SECTION_ROLE_COLOR[r.span.section.role] ?? SECTION_ROLE_COLOR.custom;
+            const col = isSelected ? "#E8B54A" : roleColor.rim;
+            return (
+              <g key={`sec-${i}`} pointerEvents="none">
+                <text x={x + w / 2} y={12} textAnchor="middle" fontSize={12} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill={col}>
+                  {r.span.section.name}
+                  {r.span.occurrenceIndex > 0 ? ` ·${r.span.occurrenceIndex + 1}` : ""}
+                </text>
+                <path
+                  d={`M ${x} ${20} L ${x} ${26} L ${x + w} ${26} L ${x + w} ${20}`}
+                  fill="none"
+                  stroke={col}
+                  strokeWidth={1.6}
+                  strokeOpacity={isSelected ? 1 : 0.6}
+                />
+              </g>
+            );
+          })}
+
+          {/* ---- transition labels in the top row + boundary ticks ---- */}
+          {resolved.slice(0, -1).map((r, i) => {
+            const model = r.section.drumTransitionModel;
+            const hasAutoFill = handoffPlans[i]?.fillStart !== null;
+            const x = barX(r.span.startBar + r.span.bars);
+            const color = model ? TRANSITION_COLOR[model] : "#565F70";
+            return (
+              <g key={`tr-${i}`}>
+                {(model || hasAutoFill) && (
+                  <g pointerEvents="none">
+                    <polygon
+                      points={hexagonPoints(x, STACK_BOTTOM + 12, 6)}
+                      fill={color}
+                      fillOpacity={model ? 0.9 : 0.25}
+                      stroke={color}
+                      strokeWidth={1.2}
+                    />
+                    <text x={x + 9} y={STACK_BOTTOM + 16} fontSize={10} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill={color}>
+                      {model ? TRANSITION_LABEL[model].toUpperCase() : "FILL"}
+                    </text>
+                  </g>
+                )}
+                <line
+                  x1={x} y1={STACK_TOP} x2={x} y2={STACK_BOTTOM}
+                  stroke={color}
+                  strokeWidth={1}
+                  strokeDasharray="2 4"
+                  strokeOpacity={0.28}
+                  pointerEvents="none"
+                />
+              </g>
+            );
+          })}
+
+          {/* faint bar numbers at the top of the stack */}
+          {Array.from({ length: bars + 1 }).map((_, b) => (
+            <text
+              key={`bn-${b}`}
+              x={barX(b)}
+              y={TOP_PAD - 8}
+              textAnchor="middle"
+              fontSize={10}
+              fontFamily="'IBM Plex Mono', monospace"
+              fill="#7a7a80"
+              pointerEvents="none"
+            >
+              {b}
+            </text>
+          ))}
+
+          {/* ---- thick lane tracks: internal beat/bar grid + label + quiet baseline ---- */}
+          {DRUM_LANES.map((lane, li) => (
+            <g key={`track-${lane.key}`} pointerEvents="none">
+              {gridLines.map((g, gi) => (
+                <line
+                  key={`g-${lane.key}-${gi}`}
+                  x1={g.x} y1={TOP_PAD + li * TRACK_H} x2={g.x} y2={trackBottom(li)}
+                  stroke="#fff"
+                  strokeOpacity={g.bar ? 0.14 : 0.06}
+                  strokeWidth={1}
+                />
+              ))}
+              <text x={X0 - 14} y={laneY(li) + 4} textAnchor="end" fontSize={12} fontFamily="'IBM Plex Mono', monospace" fill={lane.color} fontWeight={600}>
+                {lane.label}
+              </text>
+              <line
+                x1={barX(0)} y1={laneY(li)} x2={barX(bars)} y2={laneY(li)}
+                stroke={lane.color}
+                strokeWidth={1}
+                strokeOpacity={0.12}
+              />
+            </g>
+          ))}
+
+          {/* ---- lane content: active lines, necklaces, continuation nodes, variations ---- */}
+          {DRUM_LANES.map((lane, li) => {
+            const y = laneY(li);
+            let lastKey: string | null = null;
+            return resolved.map((r, i) => {
+              const n = laneNecklace(lane, r.necklaces);
+              if (!n) {
+                lastKey = null;
+                return null;
+              }
+              const x1 = barX(r.span.startBar) + 2;
+              const x2 = barX(r.span.startBar + r.span.bars) - 2;
+              const isSelected = r.span.section.id === selectedSectionId;
+              const sameAsPrev = lastKey === r.key;
+              lastKey = r.key;
+              const cx = barX(r.span.startBar);
+              const variation = r.section.drumVariationOutline;
+              const vBars = r.section.drumVariationBars ?? 1;
+
+              return (
+                <g key={`lane-${lane.key}-${i}`}>
+                  {/* the lane's active line */}
+                  <line
+                    x1={x1} y1={y} x2={x2} y2={y}
+                    stroke={lane.color}
+                    strokeWidth={6}
+                    strokeLinecap="round"
+                    strokeOpacity={isSelected ? 1 : 0.9}
+                    pointerEvents="none"
+                  />
+
+                  {/* pattern change → necklace at the node where it starts;
+                      exact repeat → the line just continues, tiny node */}
+                  {!sameAsPrev ? (
+                    <g style={{ cursor: "pointer" }} onClick={() => selectSection(r.span.section.id)}>
+                      <NecklaceGlyph
+                        cx={cx} cy={y} radius={NECK_R}
+                        hits={n.hits} steps={n.steps}
+                        color={lane.color}
+                        backdrop="#0D0F14"
+                      />
+                      {isSelected && (
+                        <circle cx={cx} cy={y} r={NECK_R + 3} fill="none" stroke="#E8B54A" strokeWidth={1.2} strokeDasharray="3 3" />
+                      )}
+                      <circle cx={cx} cy={y} r={NECK_R + 8} fill="transparent" />
+                    </g>
+                  ) : (
+                    <g pointerEvents="none">
+                      <circle cx={barX(r.span.startBar)} cy={y} r={3.6} fill="#0D0F14" stroke={lane.color} strokeWidth={1.6} strokeOpacity={0.85} />
+                      <circle cx={barX(r.span.startBar)} cy={y} r={1.5} fill={lane.color} />
+                    </g>
+                  )}
+
+                  {/* variation detour — dotted base segment + diamonds, lane color */}
+                  {variation && (
+                    <VariationGlyph
+                      x1={barX(r.span.startBar + r.span.bars - vBars)}
+                      x2={barX(r.span.startBar + r.span.bars)}
+                      baseY={laneBaseY(li)}
+                      color={lane.color}
+                    />
+                  )}
+                </g>
+              );
+            });
+          })}
+
+          {/* ---- transitions/fills: bold lane-colored domes on the voice line ---- */}
+          {resolved.slice(0, -1).map((r, i) => {
+            const model = r.section.drumTransitionModel;
+            const hasAutoFill = handoffPlans[i]?.fillStart !== null;
+            if (!model && !hasAutoFill) return null;
+            const tBars = r.section.drumTransitionBars ?? 1;
+            const g1 = barX(r.span.startBar + r.span.bars - tBars);
+            const g2 = barX(r.span.startBar + r.span.bars);
+            return DRUM_LANES.map((lane, li) => {
+              const n = laneNecklace(lane, r.necklaces);
+              if (!n) return null; // the dome lives on lanes active in this section
+              const depth = model === "breakDown" && lane.key === "tom" ? 1.6 : 1;
+              return (
+                <FillDome
+                  key={`ts-${i}-${lane.key}`}
+                  x1={g1} x2={g2} y={laneY(li)}
+                  color={lane.color} model={model ?? null} depth={depth}
+                />
+              );
+            });
+          })}
+
+          {/* ---- section hit rects: click anywhere in a section to select it ---- */}
+          {resolved.map((r, i) => (
+            <rect
+              key={`hit-${i}`}
+              x={barX(r.span.startBar)}
+              y={STACK_TOP}
+              width={barX(r.span.startBar + r.span.bars) - barX(r.span.startBar)}
+              height={STACK_BOTTOM - STACK_TOP}
+              fill="transparent"
+              style={{ cursor: "pointer" }}
+              onClick={() => selectSection(r.span.section.id)}
+            />
+          ))}
+
+          {/* ---- boundary hit rects: click a handoff → the section whose ending it is ---- */}
+          {resolved.slice(0, -1).map((r, i) => (
+            <rect
+              key={`hitb-${i}`}
+              x={barX(r.span.startBar + r.span.bars) - 12}
+              y={STACK_TOP}
+              width={24}
+              height={STACK_BOTTOM - STACK_TOP}
+              fill="transparent"
+              style={{ cursor: "pointer" }}
+              onClick={() => selectSection(r.span.section.id)}
+            />
+          ))}
+
+          {/* ---- necklace hit circles (drawn last so they sit above the hit rects) ---- */}
+          {DRUM_LANES.map((lane, li) => {
+            const y = laneY(li);
+            let lastKey: string | null = null;
+            return resolved.map((r, i) => {
+              const n = laneNecklace(lane, r.necklaces);
+              if (!n) {
+                lastKey = null;
+                return null;
+              }
+              const sameAsPrev = lastKey === r.key;
+              lastKey = r.key;
+              if (sameAsPrev) return null;
+              const cx = barX(r.span.startBar);
+              return (
+                <circle
+                  key={`hitn-${lane.key}-${i}`}
+                  cx={cx} cy={y} r={NECK_R + 8}
+                  fill="transparent"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => selectSection(r.span.section.id)}
+                />
+              );
+            });
+          })}
+        </svg>
+      </div>
     </div>
   );
 }

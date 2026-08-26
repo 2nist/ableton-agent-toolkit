@@ -6,6 +6,7 @@ import {
   outlineBeatsPerBar,
   outlineToClickPattern,
   outlineToGroovePattern,
+  numerator as outlineNumerator,
   type DrumPattern,
   type PackedVariant,
   type PackedNote,
@@ -15,6 +16,7 @@ import {
   sectionDurationBeats,
   type BlueprintSection,
   type MeterOutline,
+  type EuclidPattern,
   type DrumPattern as SchemaDrumPattern,
 } from "../../types/blueprint";
 
@@ -109,6 +111,14 @@ export interface VoiceNecklace {
    *  different constellations. That's real, not a rendering bug. */
   hits: number[];
   count: number;
+  /** The grid the necklace is drawn on — `n` in the Euclidean E(k,n)
+   *  reading of the loop: the outline's numerator for odd-meter
+   *  outlines, the loop's 16th-note step count for named presets. A
+   *  necklace view draws `steps` reference points around the ring, with
+   *  the `count` onsets sitting at their true (unquantized) positions
+   *  among them. Absent for legacy data — callers fall back to a plain
+   *  dashed ring. */
+  steps?: number;
 }
 
 /**
@@ -137,7 +147,7 @@ export function resolveVariant(
  *  (preset patterns) and `resolveOutlineVoiceNecklaces` (odd-meter
  *  outlines) reduce to, so onset-fraction math exists in exactly one
  *  place regardless of which kind of groove produced the notes. */
-function groupNotesByVoice(notes: PackedNote[], loopBeats: number): VoiceNecklace[] | null {
+function groupNotesByVoice(notes: PackedNote[], loopBeats: number, steps?: number): VoiceNecklace[] | null {
   if (notes.length === 0 || loopBeats <= 0) return null;
   const byVoice = new Map<KitVoice, number[]>();
   for (const [beat, pitch] of notes) {
@@ -153,6 +163,7 @@ function groupNotesByVoice(notes: PackedNote[], loopBeats: number): VoiceNecklac
     voice,
     hits: hits.slice().sort((a, b) => a - b),
     count: hits.length,
+    steps,
   }));
 }
 
@@ -173,7 +184,7 @@ export function resolveVoiceNecklaces(
 ): VoiceNecklace[] | null {
   const variant = resolveVariant(pattern, variantIndex);
   if (!variant) return null;
-  return groupNotesByVoice(variant.notes, variant.lengthBeats);
+  return groupNotesByVoice(variant.notes, variant.lengthBeats, Math.max(1, Math.round(variant.lengthBeats * 4)));
 }
 
 /**
@@ -186,7 +197,39 @@ export function resolveVoiceNecklaces(
  */
 export function resolveOutlineVoiceNecklaces(outline: MeterOutline): VoiceNecklace[] | null {
   const notes = outline.cellVoices ? outlineToGroovePattern(outline, outline.cellVoices) : outlineToClickPattern(outline);
-  return groupNotesByVoice(notes, outlineBeatsPerBar(outline));
+  return groupNotesByVoice(notes, outlineBeatsPerBar(outline), outlineNumerator(outline));
+}
+
+/** Builds a single-voice `VoiceNecklace` from a free-form Euclidean
+ *  pattern — `k` onsets spread as evenly as possible across `n` steps,
+ *  cyclically shifted by `rotation`. Any k in 1..n is valid (unlike a
+ *  `MeterOutline`, which is constrained to 2s/3s cells). The per-voice
+ *  authoring path ("edit the drums voice by voice"). */
+function euclidToVoiceNecklace(pat: EuclidPattern, voice: KitVoice): VoiceNecklace | null {
+  const n = Math.max(1, Math.floor(pat.n));
+  const k = Math.max(1, Math.min(n, Math.floor(pat.k)));
+  const r = ((Math.floor(pat.rotation) % n) + n) % n;
+  const steps: number[] = [];
+  for (let i = 0; i < k; i++) {
+    const base = Math.round((i * n) / k);
+    steps.push((base + r) % n);
+  }
+  steps.sort((a, b) => a - b);
+  return { voice, hits: steps.map((s) => s / n), count: steps.length, steps: n };
+}
+
+/** The onset step indices of a Euclidean pattern, shared by the editor's
+ *  step view and the per-voice resolution — one place for the math. */
+export function euclidOnsetSteps(pat: Pick<EuclidPattern, "k" | "n" | "rotation">): number[] {
+  const n = Math.max(1, Math.floor(pat.n));
+  const k = Math.max(1, Math.min(n, Math.floor(pat.k)));
+  const r = ((Math.floor(pat.rotation) % n) + n) % n;
+  const steps: number[] = [];
+  for (let i = 0; i < k; i++) {
+    const base = Math.round((i * n) / k);
+    steps.push((base + r) % n);
+  }
+  return steps.sort((a, b) => a - b);
 }
 
 /**
@@ -194,12 +237,28 @@ export function resolveOutlineVoiceNecklaces(outline: MeterOutline): VoiceNeckla
  * whichever of a section's two mutually-exclusive drum-authoring modes is
  * active (`drumMeterOutline` takes priority over `drumPattern`, same
  * order `drumClips.ts` uses), or the heuristic pattern when neither is
- * set — so callers never need to know which mode a section is in.
- */
+ * set — then applies any per-voice Euclidean overrides
+ * (`drumVoicePatterns`) on top, replacing those voices' necklaces with
+ * their own free-form k/n rhythm. Callers never need to know which mode a
+ * section is in. */
 export function resolveSectionVoiceNecklaces(section: BlueprintSection, concept?: string): VoiceNecklace[] | null {
-  if (section.drumMeterOutline) return resolveOutlineVoiceNecklaces(section.drumMeterOutline);
-  const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
-  return resolveVoiceNecklaces(pattern, section.drumVariantIndex);
+  let base: VoiceNecklace[] | null;
+  if (section.drumMeterOutline) {
+    base = resolveOutlineVoiceNecklaces(section.drumMeterOutline);
+  } else {
+    const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
+    base = resolveVoiceNecklaces(pattern, section.drumVariantIndex);
+  }
+  const overrides = section.drumVoicePatterns;
+  if (!overrides) return base;
+  const overrideVoices = (Object.keys(overrides) as KitVoice[]).filter((v) => overrides[v]);
+  if (overrideVoices.length === 0) return base;
+  const kept = base ? base.filter((n) => !overrideVoices.includes(n.voice)) : [];
+  const added = overrideVoices
+    .map((v) => euclidToVoiceNecklace(overrides[v]!, v))
+    .filter((n): n is VoiceNecklace => n !== null);
+  const out = [...kept, ...added];
+  return out.length > 0 ? out : null;
 }
 
 /**

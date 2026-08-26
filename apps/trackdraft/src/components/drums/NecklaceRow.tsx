@@ -21,7 +21,7 @@ export default function NecklaceRow({ necklaces }: { necklaces: VoiceNecklace[] 
       {necklaces.map((n) => (
         <div key={n.voice} className="flex flex-col items-center gap-0.5" title={`${n.count} hit${n.count === 1 ? "" : "s"} per loop`}>
           <svg width={SIZE} height={SIZE} viewBox={`${-SIZE / 2} ${-SIZE / 2} ${SIZE} ${SIZE}`}>
-            <NecklaceGlyph cx={0} cy={0} radius={R} hits={n.hits} color={VOICE_COLOR[n.voice] ?? "#8B94A1"} />
+            <NecklaceGlyph cx={0} cy={0} radius={R} hits={n.hits} steps={n.steps} color={VOICE_COLOR[n.voice] ?? "#8B94A1"} />
           </svg>
           <span className="font-mono text-3xs text-inkMuted uppercase tracking-wide">{VOICE_LABEL[n.voice]}</span>
         </div>
