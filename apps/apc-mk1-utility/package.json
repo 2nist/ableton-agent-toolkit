@@ -1,0 +1,28 @@
+{
+  "name": "apc-mk1-utility",
+  "private": true,
+  "version": "0.1.0",
+  "description": "APC mini mk1 clip editor. Reads the mk1 over Web MIDI and edits the currently-selected clip in Ableton Live directly via AbletonOSC (packages/osc-bridge) — real transpose/quantize/transform/generate on clip notes, driven by fader banks (Pitch/Time/Transform/Generate/Clip Tools), no MIDI mapping step.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hardware/controller-bridge": "^0.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.7"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^5.0.8",
+    "vitest": "^3.0.0"
+  }
+}

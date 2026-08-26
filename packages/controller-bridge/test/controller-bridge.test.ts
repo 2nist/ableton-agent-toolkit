@@ -6,6 +6,8 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  APC_MINI_MK1,
+  APC_MINI_MK1_MODES,
   APC_MINI_MK2,
   APC_MINI_MK2_MAPPINGS,
   APC_MINI_MK2_MODES,
@@ -113,5 +115,34 @@ describe("mode definitions", () => {
       const modes = ATOMSQ_MODES.groups[group] ?? [];
       expect(modes.some((m) => m.name === defaultName)).toBe(true);
     }
+  });
+
+  it("APC_MINI_MK1_MODES defaults reference a mode that actually exists in its group", () => {
+    for (const [group, defaultName] of Object.entries(APC_MINI_MK1_MODES.defaults)) {
+      const modes = APC_MINI_MK1_MODES.groups[group] ?? [];
+      expect(modes.some((m) => m.name === defaultName)).toBe(true);
+    }
+  });
+});
+
+describe("APC_MINI_MK1 (bank-router hardware model)", () => {
+  // Numbers are sourced from Ableton's own shipped MIDI Remote Script for
+  // this device (see elements/apc-mini-mk1.ts header) — not guessed.
+  it("exposes the real hardware element numbers", () => {
+    expect(APC_MINI_MK1.controls.shift_button?.midi).toBe(98);
+    expect(APC_MINI_MK1.controls.master_fader?.midi).toBe(56);
+    expect(APC_MINI_MK1.matrices.faders?.identifiers[0]?.[0]).toBe(48);
+    expect(APC_MINI_MK1.matrices.track_buttons?.identifiers[0]?.[0]).toBe(64);
+    expect(APC_MINI_MK1.matrices.scene_launch_buttons?.identifiers[0]?.[0]).toBe(82);
+  });
+
+  it("has no dedicated transport controls (the real hardware has none)", () => {
+    expect(APC_MINI_MK1.controls.transport_play_button).toBeUndefined();
+  });
+
+  it("APC_MINI_MK1_MODES defines a Fader_Banks group defaulting to pitch", () => {
+    expect(APC_MINI_MK1_MODES.defaults.Fader_Banks).toBe("pitch");
+    const bankNames = APC_MINI_MK1_MODES.groups.Fader_Banks?.map((m) => m.name);
+    expect(bankNames).toEqual(["pitch", "time", "transform", "generate", "clip_tools"]);
   });
 });

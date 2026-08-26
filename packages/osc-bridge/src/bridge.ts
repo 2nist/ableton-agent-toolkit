@@ -66,6 +66,8 @@ export function startPositionBridge(options: PositionBridgeOptions = {}): Positi
   const lastState: {
     beat?: number;
     isPlaying?: boolean;
+    selectedTrack?: number;
+    selectedDevice?: number;
     telemetry?: TelemetryState;
   } = {};
   const clients = new Set<WebSocket>();
@@ -100,6 +102,8 @@ export function startPositionBridge(options: PositionBridgeOptions = {}): Positi
     if (!event) return;
     if (event.type === "beat") lastState.beat = event.beat;
     if (event.type === "playState") lastState.isPlaying = event.isPlaying;
+    if (event.type === "selectedTrack") lastState.selectedTrack = event.track;
+    if (event.type === "selectedDevice") lastState.selectedDevice = event.device;
     onEvent(event);
     broadcast(event);
   });
@@ -107,6 +111,15 @@ export function startPositionBridge(options: PositionBridgeOptions = {}): Positi
   function subscribe() {
     udpPort.send({ address: "/live/song/start_listen/beat" });
     udpPort.send({ address: "/live/song/start_listen/is_playing" });
+    // Blue hand — the selected track in Live's UI. AbletonOSC's view.py only
+    // registers start_listen/stop_listen for selected_scene and
+    // selected_track, NOT selected_device (get/set only) — subscribing to
+    // it used to silently fail (dropped as an unrecognized reply type)
+    // before parseOscReply gained a raw fallback; sending it just produced
+    // a repeating "Unknown OSC address" error from AbletonOSC for no
+    // benefit, so it's dropped here rather than "fixed" — there's nothing
+    // to subscribe to on the AbletonOSC side for this field.
+    udpPort.send({ address: "/live/view/start_listen/selected_track" });
   }
 
   udpPort.on("ready", subscribe);
@@ -124,6 +137,14 @@ export function startPositionBridge(options: PositionBridgeOptions = {}): Positi
     if (lastState.beat !== undefined) client.send(JSON.stringify({ type: "beat", beat: lastState.beat }));
     if (lastState.isPlaying !== undefined) {
       client.send(JSON.stringify({ type: "playState", isPlaying: lastState.isPlaying }));
+    }
+    if (lastState.selectedTrack !== undefined) {
+      client.send(JSON.stringify({ type: "selectedTrack", track: lastState.selectedTrack }));
+    }
+    if (lastState.selectedDevice !== undefined) {
+      client.send(
+        JSON.stringify({ type: "selectedDevice", track: lastState.selectedTrack ?? 0, device: lastState.selectedDevice }),
+      );
     }
     if (lastState.telemetry) {
       client.send(JSON.stringify({ type: "telemetry", ...lastState.telemetry }));

@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>APC mini mk2 — Step Sequencer Control Reference</title>
+<style>
+  :root {
+    --bg: #121214; --panel: #1a1a1e; --panel2: #222226; --border: #333338;
+    --text: #dddddd; --muted: #888899; --dim: #555566;
+    --off: #1e1e1e; --hit: #ffd400; --ocean: #00e5d0; --green: #22ff66;
+    --amber: #ffb000; --blue: #2e6bff; --grey: #555566;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px -apple-system, "Segoe UI", system-ui, sans-serif;
+  }
+  .wrap { max-width: 1260px; margin: 0 auto; padding: 24px; }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p  { margin: 0 0 18px; color: var(--muted); }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  .chip {
+    padding: 5px 12px; border-radius: 999px; background: var(--panel2);
+    border: 1px solid var(--border); font-size: 12px; color: var(--muted);
+  }
+  .chip b { color: var(--text); }
+  .chip.play { border-color: var(--green); color: var(--green); }
+  .chip.shift { border-color: var(--amber); color: var(--amber); }
+
+  .layout { display: grid; grid-template-columns: minmax(0, auto) 300px; gap: 24px; }
+
+  /* Pad grid */
+  .padgrid-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .grid-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+  .grid-head .title { font-size: 13px; color: var(--muted); }
+  .grid-head .title b { color: var(--text); }
+  .grid {
+    display: grid; grid-template-columns: 28px repeat(8, 1fr); gap: 4px;
+    width: min(100%, 620px);
+  }
+  .grid .axis { display: grid; align-items: center; justify-content: center; color: var(--dim); font-size: 11px; }
+  .grid .axis.col { grid-row: 1; }
+  .pad {
+    aspect-ratio: 1 / 1; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--off); cursor: pointer; position: relative;
+    transition: background .12s, border-color .12s, box-shadow .12s;
+  }
+  .pad:hover { box-shadow: 0 0 0 2px rgba(255,255,255,.14); }
+  .pad .n {
+    position: absolute; left: 4px; top: 3px; font: 9px ui-monospace, Menlo, monospace;
+    color: var(--dim); pointer-events: none;
+  }
+  /* region separators */
+  .pad.boundary-v { border-left: 2px solid #4a4a55; }
+  .pad.boundary-h { border-top: 2px solid #4a4a55; }
+  /* step grid */
+  .pad.hit  { background: var(--hit); border-color: #b39200; }
+  .pad.hit .n { color: #111; }
+  .pad.grn  { background: var(--green); border-color: #149b3e; }
+  .pad.grn .n { color: #002b12; }
+  .pad.pls  { background: #0d2e1a; border: 1px dashed var(--green); }
+  .pad.pls .n { color: #1f9e4e; }
+  .pad.offb { background: #3a3000; border-color: #5c4c00; }   /* hit beyond length */
+  .pad.offb .n { color: #8a7420; }
+  .pad.endmark { box-shadow: inset 0 0 0 2px var(--amber); }  /* loop-end marker */
+  /* drum pads */
+  .pad.ocean { background: var(--ocean); border-color: #00a89a; }
+  .pad.ocean .n { color: #00332e; }
+  .pad.amber { background: var(--amber); border-color: #b37d00; }
+  .pad.amber .n { color: #111; }
+  /* fx pads */
+  .pad.blue  { background: var(--blue); border-color: #1d4fd8; }
+  .pad.blue .n { color: #eef; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+  .controls .sep { width: 1px; height: 26px; background: var(--border); margin: 0 4px; }
+  .fx-label { font: 11px ui-monospace, Menlo, monospace; color: var(--dim); margin-right: 2px; }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 12px; font: inherit; cursor: pointer;
+  }
+  button:hover { border-color: var(--muted); }
+  button.on { background: #333; border-color: var(--text); }
+  button.play { border-color: var(--green); color: var(--green); }
+  button.play.on { background: rgba(34,255,102,.12); }
+  button.shift { border-color: var(--amber); color: var(--amber); }
+  button.shift.on { background: rgba(255,176,0,.14); }
+  button.tfx { padding: 5px 8px; font: 11px ui-monospace, Menlo, monospace; }
+  button.tfx.on { border-color: var(--blue); color: #9db8ff; }
+
+  .readout {
+    margin-top: 12px; font: 12px ui-monospace, Menlo, monospace; color: var(--muted);
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    min-height: 40px; white-space: pre-wrap;
+  }
+
+  /* Right reference column */
+  .ref { display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .card h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .card p.note { margin: 8px 0 0; font-size: 11px; color: var(--dim); line-height: 1.5; }
+  .rows { display: flex; flex-direction: column; gap: 4px; }
+  .row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text); }
+  .row .lbl { color: var(--muted); }
+  .row .midi { font: 11px ui-monospace, Menlo, monospace; color: var(--dim); }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1px solid #00000066; }
+
+  .legend .row { justify-content: flex-start; }
+  .legend .row span { margin-right: 12px; }
+
+  footer { margin-top: 24px; color: var(--dim); font: 11px ui-monospace, Menlo, monospace; line-height: 1.7; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>APC mini mk2 — Step Sequencer Control Reference</h1>
+    <p>Drum-Rack-style layout · bottom-left 4×4 = the 16 drum pads (like the rack) · top 4×8 = the selected pad's
+       32-step sequencer · bottom-right 4×4 = FX pads · shift+step sets per-pad sequence length.</p>
+  </header>
+
+  <div class="chips">
+    <span class="chip">Selected pad <b id="padChip">1 · note 36</b></span>
+    <span class="chip">Sequence length <b id="lenChip">32</b></span>
+    <span class="chip shift" id="shiftChip">SHIFT off</span>
+    <span class="chip" id="playChip">● stopped</span>
+    <span class="chip">Demo tempo <b>120 BPM (16th = 125 ms)</b></span>
+  </div>
+
+  <div class="layout">
+    <div class="padgrid-wrap">
+      <div class="grid-head">
+        <span class="title" id="gridTitle">STEP SEQUENCER — pad <b id="padLabel">1</b> (note <b id="rackLabel">36</b>) · length <b id="lenLabel">32</b> · shift+step = set length</span>
+        <span class="title" id="playheadInfo"></span>
+      </div>
+      <div class="grid-head">
+        <span class="title">TOP 4×8 = steps (selected pad) · BOTTOM-LEFT 4×4 = <b>DRUM RACK pads 36–51</b> · BOTTOM-RIGHT 4×4 = <b>FX pads</b></span>
+      </div>
+      <div class="grid" id="grid"></div>
+
+      <div class="controls">
+        <button id="shiftBtn" class="shift">SHIFT</button>
+        <div class="sep"></div>
+        <button id="playBtn" class="play">▶ Play</button>
+        <button id="clearBtn">Clear pad</button>
+        <button id="rndBtn">Randomize pad</button>
+        <button id="resetBtn">Reset all</button>
+      </div>
+      <div class="controls" id="trackFxRow">
+        <span class="fx-label">TRACK FX (notes 100–107):</span>
+      </div>
+
+      <div class="readout" id="readout">Tap a drum pad to select &amp; preview · tap the top grid to place steps · SHIFT + a step sets that pad's length.</div>
+    </div>
+
+    <div class="ref">
+      <div class="card">
+        <h3>Scene buttons — transport &amp; utility</h3>
+        <div class="rows" id="sceneRows"></div>
+      </div>
+      <div class="card">
+        <h3>Track buttons — FX (mixed M/T)</h3>
+        <div class="rows" id="trackRows"></div>
+      </div>
+      <div class="card">
+        <h3>Faders — device control</h3>
+        <div class="rows" id="faderRows"></div>
+        <p class="note">Faders map to Ableton device parameters via OSC — /live/device/set/parameter/value (or native /live/midimap/map_cc). Master fader = global FX amount.</p>
+      </div>
+      <div class="card legend">
+        <h3>LED colors</h3>
+        <div class="rows">
+          <div class="row"><span><i class="dot" style="background:#ffd400"></i>step hit</span><span><i class="dot" style="background:#00e5d0"></i>selected drum pad</span></div>
+          <div class="row"><span><i class="dot" style="background:#22ff66"></i>playhead / firing</span><span><i class="dot" style="border:1px dashed #22ff66;background:#0d2e1a"></i>playhead pulse</span></div>
+          <div class="row"><span><i class="dot" style="background:#ffb000"></i>pad has seq / loop end</span><span><i class="dot" style="background:#2e6bff"></i>FX pad ON</span></div>
+          <div class="row"><span><i class="dot" style="background:#3a3000"></i>step beyond length</span><span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    drum pads (bottom-left 4×4) = rack notes 36–51, kick bottom-left, like APC drum mode · tap = preview (send note) + select<br/>
+    step grid (top 4×8) = selected pad's 32 steps, row-major · SHIFT + step N sets that pad's length to N (1-based)<br/>
+    hardware pad note = row×8 + col (ch 0, LED ch 6) · pad-mode sysex: F0 47 7F 4F 62 00 01 &lt;mode&gt; F7<br/>
+    faders CC 48–55 · master CC 56 · shift note 122 · scene notes 112–119 · track notes 100–107
+  </footer>
+</div>
+
+<script>
+"use strict";
+const N_PADS = 16, MAX_STEPS = 32;
+
+// Per-pad patterns (16 × 32) and per-pad sequence lengths (1-32).
+const patterns = Array.from({ length: N_PADS }, () => Array(MAX_STEPS).fill(false));
+const lengths = Array(N_PADS).fill(MAX_STEPS);
+const fxOn = Array(16).fill(false);               // bottom-right FX pads
+const trackFx = Array.from({ length: 8 }, (_, i) => ({ on: false, mode: i < 4 ? "T" : "M" })); // toggle / momentary
+
+let selectedPad = 0, shiftHeld = false, playing = false, step = 0, timer = null;
+
+const $ = (id) => document.getElementById(id);
+const gridEl = $("grid"), readout = $("readout");
+
+// ---- Geometry helpers ----
+function regionOf(r, c) {
+  if (r < 4) return "step";       // top 4×8
+  if (c < 4) return "drum";       // bottom-left 4×4
+  return "fx";                    // bottom-right 4×4
+}
+function cellStep(r, c) { return r * 8 + c; }                       // 0-31 (top rows only)
+function hardwareNote(r, c) { return r * 8 + c; }                   // 0-63 physical pad
+function drumPadIndex(r, c) { return (r - 4) * 4 + (c - 0); }       // 0-15
+function rackNoteFor(r, c) { return 36 + (7 - r) * 4 + c; }         // 36-51 bottom-left quadrant
+function rackNoteOfPad(idx) { return 48 - 4 * Math.floor(idx / 4) + (idx % 4); }
+function fxSlotIndex(r, c) { return (r - 4) * 4 + (c - 4); }        // 0-15
+
+// ---- Build static grid (28px axis col + 8 pads per row) ----
+gridEl.innerHTML = "";
+const colHeader = document.createElement("div");
+colHeader.className = "axis col"; colHeader.textContent = " ";
+gridEl.appendChild(colHeader);
+for (let c = 0; c < 8; c++) {
+  const a = document.createElement("div");
+  a.className = "axis col"; a.textContent = String(c + 1);
+  gridEl.appendChild(a);
+}
+const pads = [];
+for (let r = 0; r < 8; r++) {
+  const rowLabel = document.createElement("div");
+  rowLabel.className = "axis"; rowLabel.textContent = String(r + 1);
+  gridEl.appendChild(rowLabel);
+  const rowEls = [];
+  for (let c = 0; c < 8; c++) {
+    const pad = document.createElement("div");
+    pad.className = "pad";
+    const n = document.createElement("span");
+    n.className = "n";
+    pad.appendChild(n);
+    pad.addEventListener("click", () => onPadClick(r, c));
+    pad.addEventListener("mousemove", () => updateReadout(r, c));
+    gridEl.appendChild(pad);
+    rowEls.push(pad);
+  }
+  pads.push(rowEls);
+}
+
+// ---- Interaction ----
+function onPadClick(r, c) {
+  const region = regionOf(r, c);
+  if (region === "drum") {
+    const idx = drumPadIndex(r, c);
+    // Plain tap = audition only (keeps the step editor where it is);
+    // SHIFT + tap = select this pad for editing.
+    if (shiftHeld) selectedPad = idx;
+    previewClick();                 // live drum preview blip
+    render();
+    updateReadout(r, c);
+  } else if (region === "step") {
+    const s = cellStep(r, c);
+    if (shiftHeld) {
+      lengths[selectedPad] = s + 1; // 1-based: shift + step 16 = 16-step loop
+    } else {
+      patterns[selectedPad][s] = !patterns[selectedPad][s];
+    }
+    render();
+    updateReadout(r, c);
+  } else {
+    const slot = fxSlotIndex(r, c);
+    fxOn[slot] = !fxOn[slot];
+    render();
+    updateReadout(r, c);
+  }
+}
+
+function clearSelected() { patterns[selectedPad].fill(false); render(); }
+function randomizeSelected() {
+  const len = lengths[selectedPad];
+  for (let s = 0; s < len; s++) patterns[selectedPad][s] = Math.random() < 0.3;
+  for (let s = len; s < MAX_STEPS; s++) patterns[selectedPad][s] = false;
+  render();
+}
+function resetAll() {
+  patterns.forEach((p) => p.fill(false));
+  lengths.fill(MAX_STEPS);
+  fxOn.fill(false);
+  trackFx.forEach((f) => (f.on = false));
+  selectedPad = 0; shiftHeld = false;
+  render();
+}
+
+// ---- Render ----
+function render() {
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const el = pads[r][c];
+      el.className = "pad" + (c >= 4 ? " boundary-v" : "") + (r >= 4 ? " boundary-h" : "");
+      const region = regionOf(r, c);
+      if (region === "step") renderStep(el, r, c);
+      else if (region === "drum") renderDrum(el, r, c);
+      else renderFx(el, r, c);
+      el.title = tooltip(r, c);
+    }
+  }
+  const sel = selectedPad;
+  $("padLabel").textContent = sel + 1;
+  $("rackLabel").textContent = rackNoteOfPad(sel);
+  $("lenLabel").textContent = lengths[sel];
+  $("padChip").textContent = `${sel + 1} · note ${rackNoteOfPad(sel)}`;
+  $("lenChip").textContent = lengths[sel];
+  $("shiftChip").textContent = shiftHeld ? "SHIFT on" : "SHIFT off";
+  $("shiftBtn").classList.toggle("on", shiftHeld);
+  $("playheadInfo").textContent = playing ? `▶ step ${step + 1}` : "";
+  renderTrackFx();
+}
+
+function renderStep(el, r, c) {
+  const s = cellStep(r, c);
+  const len = lengths[selectedPad];
+  const hit = patterns[selectedPad][s];
+  const within = s < len;
+  const isPlayhead = playing && s === step;
+  el.querySelector(".n").textContent = String(s + 1);
+  if (isPlayhead && within) el.classList.add(hit ? "grn" : "pls");
+  else if (hit && within) el.classList.add("hit");
+  else if (hit) el.classList.add("offb");
+  if (s + 1 === len) el.classList.add("endmark");
+}
+
+function renderDrum(el, r, c) {
+  const idx = drumPadIndex(r, c);
+  el.querySelector(".n").textContent = String(rackNoteFor(r, c));
+  const firing = playing && step < lengths[idx] && patterns[idx][step];
+  if (firing) el.classList.add("grn");
+  else if (idx === selectedPad) el.classList.add("ocean");
+  else if (patterns[idx].some(Boolean)) el.classList.add("amber");
+}
+
+function renderFx(el, r, c) {
+  const slot = fxSlotIndex(r, c);
+  el.querySelector(".n").textContent = String(slot + 1);
+  if (fxOn[slot]) el.classList.add("blue");
+}
+
+function tooltip(r, c) {
+  const region = regionOf(r, c);
+  const hw = hardwareNote(r, c);
+  if (region === "step") {
+    const s = cellStep(r, c);
+    return `step ${s + 1} of pad ${selectedPad + 1} · len ${lengths[selectedPad]} · note ${hw}`;
+  }
+  if (region === "drum") {
+    const idx = drumPadIndex(r, c);
+    return `drum pad → rack note ${rackNoteFor(r, c)} · tap = preview + select · note ${hw}${patterns[idx].some(Boolean) ? " · has sequence" : ""}`;
+  }
+  const slot = fxSlotIndex(r, c);
+  return `FX slot ${slot + 1} · ${fxOn[slot] ? "ON" : "OFF"} · note ${hw}`;
+}
+
+function updateReadout(r, c) {
+  const region = regionOf(r, c);
+  const hw = hardwareNote(r, c);
+  if (region === "step") {
+    const s = cellStep(r, c);
+    readout.textContent =
+      `STEP GRID — pad ${selectedPad + 1} (rack note ${rackNoteOfPad(selectedPad)})\n` +
+      `  step ${s + 1} of ${lengths[selectedPad]}${s >= lengths[selectedPad] ? "  (beyond length)" : ""}\n` +
+      `  → ${patterns[selectedPad][s] ? "HIT" : "empty"}\n` +
+      `  → note ${hw} (ch 0, LED ch 6)\n` +
+      (shiftHeld ? "  SHIFT held: click = SET length\n" : "  shift + click = set length");
+  } else if (region === "drum") {
+    const idx = drumPadIndex(r, c);
+    readout.textContent =
+      `DRUM PADS — pad ${idx + 1} · rack note ${rackNoteFor(r, c)}\n` +
+      `  tap = audition · SHIFT+tap = select for editing\n` +
+      (idx === selectedPad ? "  → SELECTED\n" : "") +
+      (patterns[idx].some(Boolean) ? "  → has a sequence\n" : "  → empty\n") +
+      `  → note ${hw}`;
+  } else {
+    const slot = fxSlotIndex(r, c);
+    readout.textContent =
+      `FX PADS — slot ${slot + 1}\n` +
+      `  → ${fxOn[slot] ? "ON (toggle)" : "OFF"}\n` +
+      `  → note ${hw}`;
+  }
+}
+
+function renderTrackFx() {
+  const row = $("trackFxRow");
+  row.querySelectorAll("button").forEach((b) => b.remove());
+  trackFx.forEach((fx, i) => {
+    const b = document.createElement("button");
+    b.className = "tfx" + (fx.on ? " on" : "");
+    b.textContent = `FX${i + 1}·${fx.mode}`;
+    b.title = `track button ${i} (note ${100 + i}) · ${fx.mode === "M" ? "momentary — hold to engage" : "toggle — press on/off"}`;
+    b.addEventListener("click", () => { fx.on = !fx.on; render(); });
+    row.appendChild(b);
+  });
+}
+
+// ---- Transport ----
+function play() {
+  if (playing) { stop(); return; }
+  playing = true; step = 0;
+  $("playBtn").textContent = "■ Stop";
+  $("playBtn").classList.add("on");
+  $("playChip").textContent = "▶ playing";
+  $("playChip").classList.add("play");
+  timer = setInterval(() => { step = (step + 1) % MAX_STEPS; render(); }, 125);
+  render();
+}
+function stop() {
+  playing = false;
+  clearInterval(timer); timer = null;
+  $("playBtn").textContent = "▶ Play";
+  $("playBtn").classList.remove("on");
+  $("playChip").textContent = "● stopped";
+  $("playChip").classList.remove("play");
+  render();
+}
+
+// ---- WebAudio drum preview blip ----
+let actx = null;
+function previewClick() {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+    const t = actx.currentTime;
+    const osc = actx.createOscillator();
+    const g = actx.createGain();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(1400, t);
+    osc.frequency.exponentialRampToValueAtTime(350, t + 0.03);
+    g.gain.setValueAtTime(0.05, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    osc.connect(g).connect(actx.destination);
+    osc.start(t); osc.stop(t + 0.06);
+  } catch (e) { /* audio unavailable */ }
+}
+
+// ---- Shift (keyboard + button) ----
+function setShift(v) { shiftHeld = v; render(); }
+$("shiftBtn").addEventListener("click", () => setShift(!shiftHeld));
+window.addEventListener("keydown", (e) => { if (e.key === "Shift") setShift(true); });
+window.addEventListener("keyup", (e) => { if (e.key === "Shift") setShift(false); });
+
+// ---- Buttons ----
+$("playBtn").addEventListener("click", play);
+$("clearBtn").addEventListener("click", () => { clearSelected(); readout.textContent = "Cleared pad " + (selectedPad + 1) + "."; });
+$("rndBtn").addEventListener("click", () => { randomizeSelected(); readout.textContent = "Randomized pad " + (selectedPad + 1) + "."; });
+$("resetBtn").addEventListener("click", resetAll);
+
+// ---- Reference rows ----
+const sceneRoles = [
+  ["0", "play / stop", "note 112"], ["1", "solo pad", "note 113"],
+  ["2", "mute pad", "note 114"], ["3", "resolution 1/16↔1/8", "note 115"],
+  ["4", "pattern A / B", "note 116"], ["5", "clear pad", "note 117"],
+  ["6", "follow Live transport", "note 118"], ["7", "commit pattern → clip", "note 119"],
+];
+$("sceneRows").innerHTML = sceneRoles.map(([i, lbl, midi]) =>
+  `<div class="row"><span class="lbl">${i} · ${lbl}</span><span class="midi">${midi}</span></div>`).join("");
+
+const trackRoles = Array.from({ length: 8 }, (_, i) =>
+  [`FX${i + 1}`, `${i < 4 ? "toggle" : "momentary"}`, `note ${100 + i}`]);
+$("trackRows").innerHTML = trackRoles.map(([i, lbl, midi]) =>
+  `<div class="row"><span class="lbl">${i} · ${lbl}</span><span class="midi">${midi}</span></div>`).join("");
+
+const faderRoles = Array.from({ length: 8 }, (_, i) =>
+  [`FX${i + 1}`, `device param ${i + 1}`, `cc ${48 + i}`]);
+faderRoles.push(["MASTER", "global FX amount", "cc 56"]);
+$("faderRows").innerHTML = faderRoles.map(([i, lbl, midi]) =>
+  `<div class="row"><span class="lbl">${i} · ${lbl}</span><span class="midi">${midi}</span></div>`).join("");
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "trackdraft": {
+      "command": "node",
+      "args": ["packages/song-mcp/dist/index.js"],
+      "env": {
+        "TRACKDRAFT_LIBRARY_DIR": "~/TrackDraft/library"
+      }
+    }
+  }
+}

@@ -152,6 +152,9 @@ async function runStudio(context: ReturnType<typeof initialize>, target: RenderT
 
   const studio = JSON.parse(raw) as StudioResult | null;
   if (studio === null) return; // explicit Cancel
+  log(
+    `parsed: ${describeStudioResult(studio)}, transitionModel=${studio.transitionModel}, transitionBars=${studio.transitionBars}, nextGridDenominator=${studio.nextGridDenominator ?? "unset"}`,
+  );
 
   const rendered = renderStudioResult(studio);
   if (!rendered) {

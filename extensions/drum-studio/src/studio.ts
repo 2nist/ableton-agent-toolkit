@@ -55,7 +55,13 @@ export function buildStudioHtml(
     .join("");
   const numeratorOptions = outlineNumerators.map((n) => `<option value="${n}">${n}</option>`).join("");
   const denominatorOptions = outlineDenominators.map((d) => `<option value="${d}" ${d === 16 ? "selected" : ""}>${d}</option>`).join("");
-  const transitionOptions = transitionOrder.map((m) => `<option value="${m}">${transitionLabels[m] ?? m}</option>`).join("");
+  // Buttons, not a <select> — same interaction the tabs/variant chips/cell
+  // toggles in this modal already use reliably; a native <select> here was
+  // found not to reliably deliver its change event in Live's embedded
+  // webview host, so this control avoids that surface entirely.
+  const transitionChips = transitionOrder
+    .map((m) => `<button class="tab-btn transition-chip" data-model="${m}">${transitionLabels[m] ?? m}</button>`)
+    .join("");
   const transitionBarsOptions = [1, 2].map((b) => `<option value="${b}">${b} bar${b === 1 ? "" : "s"}</option>`).join("");
   const prepDenomOptions = outlineDenominators.map((d) => `<option value="${d}">/${d}</option>`).join("");
 
@@ -145,7 +151,8 @@ export function buildStudioHtml(
     <section>
       <h2>Transition</h2>
       <div id="transitionControls">
-        <label>Model <select id="transitionModel">${transitionOptions}</select></label>
+        <span style="color:var(--muted)">Model</span>
+        <div id="transitionModelChips" class="tabs">${transitionChips}</div>
         <label>Length <select id="transitionBars">${transitionBarsOptions}</select></label>
         <label title="Prime the ear for a different subdivision just before the boundary"><input type="checkbox" id="prepMeter" /> Prep meter change</label>
         <label id="prepMeterDenomLabel" style="display:none">to /<select id="prepMeterDenom">${prepDenomOptions}</select></label>

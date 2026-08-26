@@ -70,6 +70,89 @@ export const PRESET_PROGRESSIONS: Record<string, PresetProgression> = {
     degrees: ["i", "♭II", "i", "♭II"],
     mode: "phrygian",
   },
+
+  // ─── Mined from lead-sheet-dataset (Theorytab / hooktheory) ───────────────
+  // Most common pop progressions across 17,527 lead-sheet sections.
+  // Degrees are ionian keys; counts = n-chord windows (see
+  // /Users/Matthew/ableton-midi/progressions/lead-sheet-progressions.md).
+  /** Axis rotation starting on vi (vi–IV–I–V) */
+  axis_on_vi: {
+    name: "Axis on vi (vi-IV-I-V)",
+    degrees: ["vi", "IV", "I", "V"],
+    mode: "ionian",
+  },
+  /** Axis rotation starting on IV (IV–I–V–vi) */
+  axis_from_IV: {
+    name: "Axis from IV (IV-I-V-vi)",
+    degrees: ["IV", "I", "V", "vi"],
+    mode: "ionian",
+  },
+  /** Axis rotation starting on V (V–vi–IV–I) */
+  axis_from_V: {
+    name: "Axis from V (V-vi-IV-I)",
+    degrees: ["V", "vi", "IV", "I"],
+    mode: "ionian",
+  },
+  /** Classic I–IV–V–I turnaround */
+  classic_turnaround: {
+    name: "Classic Turnaround (I-IV-V-I)",
+    degrees: ["I", "IV", "V", "I"],
+    mode: "ionian",
+  },
+  /** Pop four-chord I–V–IV–I */
+  pop_four: {
+    name: "Pop Four (I-V-IV-I)",
+    degrees: ["I", "V", "IV", "I"],
+    mode: "ionian",
+  },
+  /** Pop V–I–IV–V */
+  pop_five: {
+    name: "Pop Five (V-I-IV-V)",
+    degrees: ["V", "I", "IV", "V"],
+    mode: "ionian",
+  },
+  /** Modal rock ♭VI–♭III–♭VII–♭VI */
+  modal_rock: {
+    name: "Modal Rock (bVI-bIII-bVII-bVI)",
+    degrees: ["♭VI", "♭III", "♭VII", "♭VI"],
+    mode: "ionian",
+  },
+  /** Modal rock variant ♭VII–♭VI–♭III–♭VII */
+  modal_rock_b: {
+    name: "Modal Rock B (bVII-bVI-bIII-bVII)",
+    degrees: ["♭VII", "♭VI", "♭III", "♭VII"],
+    mode: "ionian",
+  },
+  /** Jazz-flavored pop I–vi–ii–V */
+  jazzy_pop: {
+    name: "Jazzy Pop (I-vi-ii-V)",
+    degrees: ["I", "vi", "ii", "V"],
+    mode: "ionian",
+  },
+  /** Rock ♭VI–♭VII–I anthem ending */
+  rock_bvi_bvii: {
+    name: "Rock bVI-bVII-I",
+    degrees: ["♭VI", "♭VII", "I"],
+    mode: "ionian",
+  },
+  /** One–four–five I–IV–V */
+  one_four_five: {
+    name: "One-Four-Five (I-IV-V)",
+    degrees: ["I", "IV", "V"],
+    mode: "ionian",
+  },
+  /** Axis with return: I–V–vi–IV–I */
+  axis_five: {
+    name: "Axis Five (I-V-vi-IV-I)",
+    degrees: ["I", "V", "vi", "IV", "I"],
+    mode: "ionian",
+  },
+  /** Axis loop: I–V–vi–IV–I–V */
+  axis_six: {
+    name: "Axis Six (I-V-vi-IV-I-V)",
+    degrees: ["I", "V", "vi", "IV", "I", "V"],
+    mode: "ionian",
+  },
 };
 
 /**

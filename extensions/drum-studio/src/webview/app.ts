@@ -62,6 +62,16 @@ const TRANSITION_NOTES: Record<string, string> = {
 type Tab = "pattern" | "outline";
 const VOICE_CYCLE: CellVoice[] = ["hat", "kick", "snare"];
 
+/**
+ * A sensible starting groove for a fresh set of cells: kick on the first
+ * cell, alternating kick/snare after — so kick and snare are audible and
+ * visible immediately, not just theoretically available behind a tiny
+ * per-cell button nobody notices on a plain hat-click pattern.
+ */
+function defaultVoicesFor(cells: readonly MeterCell[]): CellVoice[] {
+  return cells.map((_, i) => (i % 2 === 0 ? "kick" : "snare"));
+}
+
 const state = {
   tab: "pattern" as Tab,
   // pattern tab
@@ -69,7 +79,7 @@ const state = {
   variantIndex: 0,
   // outline tab
   outlineCells: [2, 3] as MeterCell[],
-  outlineCellVoices: ["hat", "hat"] as CellVoice[],
+  outlineCellVoices: defaultVoicesFor([2, 3]),
   outlineDenominator: 16,
   outlineNumeratorChoice: 5,
   outlineGroupingChoice: 0,
@@ -148,7 +158,9 @@ function renderPreviewGrid(variant: PreviewVariant | null): void {
 }
 
 function renderTransitionControls(): void {
-  ($("#transitionModel") as HTMLSelectElement).value = state.transitionModel;
+  for (const chip of Array.from(document.querySelectorAll<HTMLElement>(".transition-chip"))) {
+    chip.classList.toggle("active", chip.dataset.model === state.transitionModel);
+  }
   ($("#transitionBars") as HTMLSelectElement).value = String(state.transitionBars);
   ($("#prepMeter") as HTMLInputElement).checked = state.prepMeter;
   ($("#prepMeterDenom") as HTMLSelectElement).value = String(state.prepMeterDenom);
@@ -244,7 +256,7 @@ function bind(): void {
     state.outlineNumeratorChoice = Number((e.target as HTMLSelectElement).value);
     state.outlineGroupingChoice = 0;
     state.outlineCells = canonicalGroupings(state.outlineNumeratorChoice)[0]!.slice();
-    state.outlineCellVoices = state.outlineCells.map(() => "hat");
+    state.outlineCellVoices = defaultVoicesFor(state.outlineCells);
     render();
   });
   $("#denominator").addEventListener("change", (e) => {
@@ -254,7 +266,7 @@ function bind(): void {
   $("#grouping").addEventListener("change", (e) => {
     state.outlineGroupingChoice = Number((e.target as HTMLSelectElement).value);
     state.outlineCells = canonicalGroupings(state.outlineNumeratorChoice)[state.outlineGroupingChoice]!.slice();
-    state.outlineCellVoices = state.outlineCells.map(() => "hat");
+    state.outlineCellVoices = defaultVoicesFor(state.outlineCells);
     render();
   });
   $("#cells").addEventListener("click", (e) => {
@@ -285,8 +297,10 @@ function bind(): void {
     }
   });
 
-  $("#transitionModel").addEventListener("change", (e) => {
-    state.transitionModel = (e.target as HTMLSelectElement).value;
+  $("#transitionModelChips").addEventListener("click", (e) => {
+    const chip = (e.target as HTMLElement).closest(".transition-chip") as HTMLElement | null;
+    if (!chip?.dataset.model) return;
+    state.transitionModel = chip.dataset.model;
     render();
   });
   $("#transitionBars").addEventListener("change", (e) => {

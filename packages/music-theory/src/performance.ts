@@ -1,0 +1,245 @@
+/**
+ * Performance Effects — deterministic per-chord articulation transforms
+ * (strum/pulse/arp), shared by the TrackDraft web app's MIDI export and
+ * the trackdraft-bridge Ableton extension. Previously these three
+ * transforms were duplicated inline in both consumers; this module is
+ * the canonical single implementation.
+ *
+ * Each transform is a pure generic function operating on any note type
+ * that has { pitch, startTime, duration, velocity }. The `ChordPerformanceEffect`
+ * type is compatible with @music-theory/song-blueprint's definition.
+ */
+
+export interface ChordPerformanceNote {
+  pitch: number;
+  startTime: number; // beats
+  duration: number; // beats
+  velocity?: number; // 0-127 (optional to accept NoteDescription's number|undefined)
+}
+
+export interface ChordPerformanceEffect {
+  style: "strum" | "pulse" | "arp";
+  params?: Record<string, number>;
+}
+
+// ---------------------------------------------------------------------------
+// Seeded RNG (mulberry32) for deterministic random (arp direction)
+// ---------------------------------------------------------------------------
+
+function mulberry32(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state |= 0;
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashStr(s: string): number {
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash << 5) - hash + s.charCodeAt(i)) | 0;
+  }
+  return hash >>> 0;
+}
+
+// ---------------------------------------------------------------------------
+// Strum
+// ---------------------------------------------------------------------------
+
+/**
+ * Strum-spread: notes are staggered outward from lowest to highest pitch
+ * by `strumMs` milliseconds (default 150). The stagger is converted from
+ * ms to beats using an approximation at 120 bpm (×2 correction so
+ * 150ms → 0.3 beats, matching the documented bridge default).
+ *
+ * Additional params:
+ *   velocityDecay (0-1, default 0) — each subsequent note loses this
+ *     fraction of its velocity, so the strum fades as it spreads.
+ */
+export function applyStrum<T extends ChordPerformanceNote>(
+  notes: T[],
+  params?: Record<string, number>,
+): T[] {
+  if (notes.length < 2) return notes;
+  const strumMs = params?.strumMs ?? 150;
+  const velocityDecay = params?.velocityDecay ?? 0;
+
+  const sorted = [...notes].sort((a, b) => a.pitch - b.pitch);
+  const staggerBeats = (strumMs / 1000) * 2;
+  const interval = staggerBeats / Math.max(1, sorted.length - 1);
+  return sorted.map((n, i) => {
+    const velDecay = 1 - i * velocityDecay / Math.max(1, sorted.length - 1);
+    return {
+      ...n,
+      startTime: n.startTime + i * interval,
+      duration: Math.max(0.05, n.duration - i * interval),
+      velocity: Math.round(Math.max(1, (n.velocity ?? 96) * velDecay)),
+    } as T;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Pulse (re-trigger / tremolo)
+// ---------------------------------------------------------------------------
+
+/**
+ * Tremolo re-trigger: each note in the chord is split into `subdivision`
+ * equal-duration hits across the original note's span (default 4).
+ * Velocities follow a triangle wave across the re-trigger cycle.
+ *
+ * Additional params:
+ *   velocityDepth (0-1, default 0.4) — how deep the triangle wave
+ *     modulates velocity (0 = flat velocity, 1 = 0→100% swing).
+ *   dutyCycle (0-1, default 0.5) — where the peak falls in the
+ *     subdivision cycle (0.5 = centered triangle; <0.5 = early peak;
+ *     >0.5 = late peak).
+ */
+export function applyPulse<T extends ChordPerformanceNote>(
+  notes: T[],
+  params?: Record<string, number>,
+): T[] {
+  if (notes.length === 0) return notes;
+  const subdivision = params?.subdivision ?? 4;
+  const velocityDepth = params?.velocityDepth ?? 0.4;
+  const dutyCycle = params?.dutyCycle ?? 0.5;
+
+  return notes
+    .flatMap((n) => {
+      const hitDuration = n.duration / subdivision;
+      const hits: ChordPerformanceNote[] = [];
+      for (let i = 0; i < subdivision; i++) {
+        const position = i / Math.max(1, subdivision - 1);
+        // Asymmetric triangle wave: peaks at dutyCycle
+        const distFromPeak = Math.abs(position - dutyCycle);
+        const range = Math.max(dutyCycle, 1 - dutyCycle);
+        const factor = range > 0 ? 1 - distFromPeak / range : 1;
+        const baseVel = n.velocity ?? 96;
+        const modRange = baseVel * velocityDepth;
+        const velocity = Math.round(baseVel - modRange + modRange * 2 * factor);
+        hits.push({
+          pitch: n.pitch,
+          startTime: n.startTime + i * hitDuration,
+          duration: hitDuration,
+          velocity: Math.max(1, Math.min(127, velocity)),
+        });
+      }
+      return hits;
+    })
+    .sort((a, b) => a.startTime - b.startTime) as T[];
+}
+
+// ---------------------------------------------------------------------------
+// Arpeggiator
+// ---------------------------------------------------------------------------
+
+/**
+ * Arpeggiator: cycles through chord notes at a `subdivision` rate
+ * across the chord's full duration (default 4).
+ *
+ * Additional params:
+ *   octaves (1-4, default 1) — how many octaves to span.
+ *   direction ("up"|"down"|"upDown"|"random", default "up") — pattern
+ *     direction. Stored as a numeric key: 0=up, 1=down, 2=upDown, 3=random.
+ *   rateOffset (-0.5-0.5, default 0) — push/pull timing of each step.
+ */
+export function applyArp<T extends ChordPerformanceNote>(
+  notes: T[],
+  params?: Record<string, number>,
+): T[] {
+  if (notes.length === 0) return notes;
+  const subdivision = params?.subdivision ?? 4;
+  const octaves = Math.max(1, params?.octaves ?? 1);
+  const directionNum = params?.direction ?? 0;
+  const rateOffset = Math.max(-0.5, Math.min(0.5, params?.rateOffset ?? 0));
+
+  const sorted = [...notes].sort((a, b) => a.pitch - b.pitch);
+  const stepDuration = notes[0].duration / subdivision;
+  const hits: ChordPerformanceNote[] = [];
+
+  // Build the note sequence across octaves
+  const baseNotes: { pitch: number; velocity?: number }[] = [];
+  for (let oct = 0; oct < octaves; oct++) {
+    for (const n of sorted) {
+      baseNotes.push({ pitch: n.pitch + oct * 12, velocity: n.velocity ?? 96 });
+    }
+  }
+
+  // Build the sequence for the number of steps
+  const seq: { pitch: number; velocity?: number }[] = [];
+  const totalNotes = baseNotes.length;
+
+  // Resolve direction string/number
+  // 0=up, 1=down, 2=upDown, 3=random
+  const totalSteps = subdivision * octaves;
+  const uniquePitches = new Set(baseNotes.map((n) => n.pitch));
+  const seed = hashStr(uniquePitches.size.toString());
+
+  if (directionNum === 3) {
+    // random — deterministic via seeded RNG
+    const rng = mulberry32(seed);
+    for (let i = 0; i < totalSteps; i++) {
+      seq.push(baseNotes[Math.floor(rng() * baseNotes.length)]!);
+    }
+  } else if (directionNum === 2) {
+    // upDown: up then down
+    const up = directionNum === 2 ? baseNotes : baseNotes;
+    const down = [...up].reverse().slice(1, -1);
+    const cycle = [...up, ...down];
+    for (let i = 0; i < totalSteps; i++) {
+      seq.push(cycle[i % cycle.length]!);
+    }
+  } else if (directionNum === 1) {
+    // down
+    const reversed = [...baseNotes].reverse();
+    for (let i = 0; i < totalSteps; i++) {
+      seq.push(reversed[i % reversed.length]!);
+    }
+  } else {
+    // up (default)
+    for (let i = 0; i < totalSteps; i++) {
+      seq.push(baseNotes[i % baseNotes.length]!);
+    }
+  }
+
+  for (let i = 0; i < Math.max(subdivision, totalSteps); i++) {
+    const note = seq[i % seq.length]!;
+    const offset = i * rateOffset * stepDuration;
+    hits.push({
+      pitch: note.pitch,
+      startTime: notes[0].startTime + i * stepDuration + offset,
+      duration: stepDuration,
+      velocity: note.velocity ?? 96,
+    });
+  }
+  return hits as T[];
+}
+
+// ---------------------------------------------------------------------------
+// Dispatcher
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply a chord's performance effect (if any) to a note list.
+ * If `effect` is null/undefined, returns notes unchanged.
+ * All params default to values that reproduce the original behavior
+ * so existing chords with no params continue to sound identical.
+ */
+export function applyPerformanceEffect<T extends ChordPerformanceNote>(
+  notes: T[],
+  effect: ChordPerformanceEffect | undefined,
+): T[] {
+  if (!effect) return notes;
+  switch (effect.style) {
+    case "strum":
+      return applyStrum(notes, effect.params);
+    case "pulse":
+      return applyPulse(notes, effect.params);
+    case "arp":
+      return applyArp(notes, effect.params);
+    default:
+      return notes;
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "apc-sequencer",
+  "private": true,
+  "version": "0.1.0",
+  "description": "APC mini mk2 hardware step sequencer for an Ableton Drum Rack. Web MIDI in/out + AbletonOSC bridge. Drum-Rack-style 8x8 grid: 16 drum pads, 32 steps per pad, per-pad length (shift+step), FX pads, faders→device control.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hardware/controller-bridge": "^0.1.0",
+    "@hardware/step-sequencer": "^0.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.7"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^5.0.8",
+    "vitest": "^3.0.0"
+  }
+}

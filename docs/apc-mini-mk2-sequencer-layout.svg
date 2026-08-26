@@ -1,0 +1,258 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 880" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <style>
+    .bg      { fill: #1a1a1a; }
+    .title   { font: 24px sans-serif; font-weight: 700; fill: #eeeeee; }
+    .subtitle{ font: 14px sans-serif; fill: #888888; }
+    .section { font: 12px sans-serif; font-weight: 700; fill: #999999; letter-spacing: 1px; }
+    .axis    { font: 11px sans-serif; fill: #666666; }
+    .pad     { fill: #1e1e1e; stroke: #333333; }
+    .hit     { fill: #ffd400; stroke: #b39200; }
+    .ocean   { fill: #00e5d0; stroke: #00a89a; }
+    .green   { fill: #22ff66; stroke: #149b3e; }
+    .pulse   { fill: #0d2e1a; stroke: #22ff66; stroke-dasharray: 3 3; }
+    .amber   { fill: #ffb000; stroke: #b37d00; }
+    .blue    { fill: #2e6bff; stroke: #1d4fd8; }
+    .offb    { fill: #3a3000; stroke: #5c4c00; }
+    .note    { font: 9px monospace; fill: #666666; }
+    .noteOn  { font: 9px monospace; fill: #111111; }
+    .noteOn2 { font: 9px monospace; fill: #eef; }
+    .sepLine { stroke: #4a4a55; stroke-width: 2; }
+    .btn     { fill: #2a2a2e; stroke: #444444; }
+    .btnTxt  { font: 12px sans-serif; font-weight: 700; fill: #eeeeee; text-anchor: middle; }
+    .lbl     { font: 12px sans-serif; fill: #bbbbbb; }
+    .lblTiny { font: 9px monospace; fill: #666666; }
+    .fxSlot  { fill: #222222; stroke: #444444; }
+    .knob    { fill: #555555; stroke: #888888; }
+    .swatch  { stroke: #555555; }
+    .mapTxt  { font: 13px monospace; fill: #cccccc; }
+    .ledTxt  { font: 12px monospace; fill: #7ec699; }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="1120" height="880" rx="10"/>
+
+  <!-- ── Title ─────────────────────────────────────────────── -->
+  <text class="title" x="60" y="48">APC mini mk2 — Step Sequencer Layout (Drum-Rack style)</text>
+  <text class="subtitle" x="60" y="72">bottom-left 4×4 = the 16 drum pads · top 4×8 = selected pad's 32-step sequencer · bottom-right 4×4 = FX pads</text>
+
+  <!-- ── Section: pad grid ────────────────────────────────── -->
+  <text class="section" x="60" y="118">8×8 GRID — step sequencer (top) · drum pads 36–51 (bottom-left) · FX pads (bottom-right)</text>
+
+  <!-- column headers -->
+  <g class="axis" text-anchor="middle">
+    <text x="83"  y="140">1</text><text x="135" y="140">2</text><text x="187" y="140">3</text>
+    <text x="239" y="140">4</text><text x="291" y="140">5</text><text x="343" y="140">6</text>
+    <text x="395" y="140">7</text><text x="447" y="140">8</text>
+  </g>
+  <!-- row headers -->
+  <g class="axis" text-anchor="end">
+    <text x="44" y="176">1</text><text x="44" y="228">2</text><text x="44" y="280">3</text>
+    <text x="44" y="332">4</text><text x="44" y="384">5</text><text x="44" y="436">6</text>
+    <text x="44" y="488">7</text><text x="44" y="540">8</text>
+  </g>
+
+  <!-- region separators -->
+  <line class="sepLine" x1="60" y1="355" x2="470" y2="355"/>
+  <line class="sepLine" x1="264" y1="358" x2="264" y2="560"/>
+
+  <!--
+    TOP 4×8 = selected pad's 32 steps (row-major). Example: pad "kick" (note 36),
+    sequence length 16 (loop-end marked at step 16), playhead on step 3.
+    Steps 17-32 are beyond the length → dimmed.
+  -->
+  <g>
+    <!-- row 0 = steps 1-8 -->
+    <rect class="hit"   x="60"  y="150" width="46" height="46" rx="4"/><text class="noteOn" x="63" y="162">1</text>
+    <rect class="pad"   x="112" y="150" width="46" height="46" rx="4"/><text class="note" x="115" y="162">2</text>
+    <rect class="green" x="164" y="150" width="46" height="46" rx="4"/><text class="noteOn" x="167" y="162">3</text>
+    <rect class="pad"   x="216" y="150" width="46" height="46" rx="4"/><text class="note" x="219" y="162">4</text>
+    <rect class="hit"   x="268" y="150" width="46" height="46" rx="4"/><text class="noteOn" x="271" y="162">5</text>
+    <rect class="pad"   x="320" y="150" width="46" height="46" rx="4"/><text class="note" x="323" y="162">6</text>
+    <rect class="hit"   x="372" y="150" width="46" height="46" rx="4"/><text class="noteOn" x="375" y="162">7</text>
+    <rect class="pad"   x="424" y="150" width="46" height="46" rx="4"/><text class="note" x="427" y="162">8</text>
+    <!-- row 1 = steps 9-16 -->
+    <rect class="hit"   x="60"  y="202" width="46" height="46" rx="4"/><text class="noteOn" x="63" y="214">9</text>
+    <rect class="pad"   x="112" y="202" width="46" height="46" rx="4"/><text class="note" x="115" y="214">10</text>
+    <rect class="pad"   x="164" y="202" width="46" height="46" rx="4"/><text class="note" x="167" y="214">11</text>
+    <rect class="pad"   x="216" y="202" width="46" height="46" rx="4"/><text class="note" x="219" y="214">12</text>
+    <rect class="hit"   x="268" y="202" width="46" height="46" rx="4"/><text class="noteOn" x="271" y="214">13</text>
+    <rect class="pad"   x="320" y="202" width="46" height="46" rx="4"/><text class="note" x="323" y="214">14</text>
+    <rect class="pad"   x="372" y="202" width="46" height="46" rx="4"/><text class="note" x="375" y="214">15</text>
+    <rect class="hit"   x="424" y="202" width="46" height="46" rx="4"/><text class="noteOn" x="427" y="214">16</text>
+    <rect x="424" y="202" width="46" height="46" rx="4" fill="none" stroke="#ffb000" stroke-width="3"/><!-- loop end marker -->
+    <!-- rows 2-3 = steps 17-32, beyond length → dimmed -->
+    <rect class="offb" x="60"  y="254" width="46" height="46" rx="4"/><text class="note" x="63" y="266">17</text>
+    <rect class="offb" x="112" y="254" width="46" height="46" rx="4"/><text class="note" x="115" y="266">18</text>
+    <rect class="offb" x="164" y="254" width="46" height="46" rx="4"/><text class="note" x="167" y="266">19</text>
+    <rect class="offb" x="216" y="254" width="46" height="46" rx="4"/><text class="note" x="219" y="266">20</text>
+    <rect class="offb" x="268" y="254" width="46" height="46" rx="4"/><text class="note" x="271" y="266">21</text>
+    <rect class="offb" x="320" y="254" width="46" height="46" rx="4"/><text class="note" x="323" y="266">22</text>
+    <rect class="offb" x="372" y="254" width="46" height="46" rx="4"/><text class="note" x="375" y="266">23</text>
+    <rect class="offb" x="424" y="254" width="46" height="46" rx="4"/><text class="note" x="427" y="266">24</text>
+    <rect class="offb" x="60"  y="306" width="46" height="46" rx="4"/><text class="note" x="63" y="318">25</text>
+    <rect class="offb" x="112" y="306" width="46" height="46" rx="4"/><text class="note" x="115" y="318">26</text>
+    <rect class="offb" x="164" y="306" width="46" height="46" rx="4"/><text class="note" x="167" y="318">27</text>
+    <rect class="offb" x="216" y="306" width="46" height="46" rx="4"/><text class="note" x="219" y="318">28</text>
+    <rect class="offb" x="268" y="306" width="46" height="46" rx="4"/><text class="note" x="271" y="318">29</text>
+    <rect class="offb" x="320" y="306" width="46" height="46" rx="4"/><text class="note" x="323" y="318">30</text>
+    <rect class="offb" x="372" y="306" width="46" height="46" rx="4"/><text class="note" x="375" y="318">31</text>
+    <rect class="offb" x="424" y="306" width="46" height="46" rx="4"/><text class="note" x="427" y="318">32</text>
+  </g>
+
+  <!--
+    BOTTOM-LEFT 4×4 = DRUM RACK pads, rack notes 36-51 (kick bottom-left).
+    Tap = preview + select. Selected pad (36) = ocean; pads with a sequence = amber.
+  -->
+  <g>
+    <rect class="ocean" x="60"  y="514" width="46" height="46" rx="4"/><text class="noteOn" x="63" y="526">36</text>
+    <rect class="amber" x="112" y="514" width="46" height="46" rx="4"/><text class="noteOn" x="115" y="526">37</text>
+    <rect class="pad"   x="164" y="514" width="46" height="46" rx="4"/><text class="note" x="167" y="526">38</text>
+    <rect class="amber" x="216" y="514" width="46" height="46" rx="4"/><text class="noteOn" x="219" y="526">39</text>
+
+    <rect class="amber" x="60"  y="462" width="46" height="46" rx="4"/><text class="noteOn" x="63" y="474">40</text>
+    <rect class="pad"   x="112" y="462" width="46" height="46" rx="4"/><text class="note" x="115" y="474">41</text>
+    <rect class="amber" x="164" y="462" width="46" height="46" rx="4"/><text class="noteOn" x="167" y="474">42</text>
+    <rect class="pad"   x="216" y="462" width="46" height="46" rx="4"/><text class="note" x="219" y="474">43</text>
+
+    <rect class="amber" x="60"  y="410" width="46" height="46" rx="4"/><text class="noteOn" x="63" y="422">44</text>
+    <rect class="pad"   x="112" y="410" width="46" height="46" rx="4"/><text class="note" x="115" y="422">45</text>
+    <rect class="amber" x="164" y="410" width="46" height="46" rx="4"/><text class="noteOn" x="167" y="422">46</text>
+    <rect class="pad"   x="216" y="410" width="46" height="46" rx="4"/><text class="note" x="219" y="422">47</text>
+
+    <rect class="amber" x="60"  y="358" width="46" height="46" rx="4"/><text class="noteOn" x="63" y="370">48</text>
+    <rect class="pad"   x="112" y="358" width="46" height="46" rx="4"/><text class="note" x="115" y="370">49</text>
+    <rect class="amber" x="164" y="358" width="46" height="46" rx="4"/><text class="noteOn" x="167" y="370">50</text>
+    <rect class="pad"   x="216" y="358" width="46" height="46" rx="4"/><text class="note" x="219" y="370">51</text>
+  </g>
+
+  <!--
+    BOTTOM-RIGHT 4×4 = FX PADS (toggle/momentary). ON = blue, OFF = dark.
+  -->
+  <g>
+    <rect class="blue" x="268" y="358" width="46" height="46" rx="4"/><text class="noteOn2" x="271" y="370">1</text>
+    <rect class="pad"  x="320" y="358" width="46" height="46" rx="4"/><text class="note" x="323" y="370">2</text>
+    <rect class="blue" x="372" y="358" width="46" height="46" rx="4"/><text class="noteOn2" x="375" y="370">3</text>
+    <rect class="pad"  x="424" y="358" width="46" height="46" rx="4"/><text class="note" x="427" y="370">4</text>
+
+    <rect class="blue" x="268" y="410" width="46" height="46" rx="4"/><text class="noteOn2" x="271" y="422">5</text>
+    <rect class="pad"  x="320" y="410" width="46" height="46" rx="4"/><text class="note" x="323" y="422">6</text>
+    <rect class="pad"  x="372" y="410" width="46" height="46" rx="4"/><text class="note" x="375" y="422">7</text>
+    <rect class="blue" x="424" y="410" width="46" height="46" rx="4"/><text class="noteOn2" x="427" y="422">8</text>
+
+    <rect class="pad"  x="268" y="462" width="46" height="46" rx="4"/><text class="note" x="271" y="474">9</text>
+    <rect class="pad"  x="320" y="462" width="46" height="46" rx="4"/><text class="note" x="323" y="474">10</text>
+    <rect class="pad"  x="372" y="462" width="46" height="46" rx="4"/><text class="note" x="375" y="474">11</text>
+    <rect class="blue" x="424" y="462" width="46" height="46" rx="4"/><text class="noteOn2" x="427" y="474">12</text>
+
+    <rect class="pad"  x="268" y="514" width="46" height="46" rx="4"/><text class="note" x="271" y="526">13</text>
+    <rect class="pad"  x="320" y="514" width="46" height="46" rx="4"/><text class="note" x="323" y="526">14</text>
+    <rect class="pad"  x="372" y="514" width="46" height="46" rx="4"/><text class="note" x="375" y="526">15</text>
+    <rect class="pad"  x="424" y="514" width="46" height="46" rx="4"/><text class="note" x="427" y="526">16</text>
+  </g>
+
+  <!-- ── Section: scene buttons (right column) ─────────────── -->
+  <text class="section" x="520" y="118">SCENE BUTTONS — transport &amp; utility</text>
+  <g>
+    <rect class="btn" x="520" y="150" width="44" height="44" rx="6"/><text class="btnTxt" x="542" y="177">0</text>
+    <rect class="btn" x="520" y="202" width="44" height="44" rx="6"/><text class="btnTxt" x="542" y="229">1</text>
+    <rect class="btn" x="520" y="254" width="44" height="44" rx="6"/><text class="btnTxt" x="542" y="281">2</text>
+    <rect class="btn" x="520" y="306" width="44" height="44" rx="6"/><text class="btnTxt" x="542" y="333">3</text>
+    <rect class="btn" x="520" y="358" width="44" height="44" rx="6"/><text class="btnTxt" x="542" y="385">4</text>
+    <rect class="btn" x="520" y="410" width="44" height="44" rx="6"/><text class="btnTxt" x="542" y="437">5</text>
+    <rect class="btn" x="520" y="462" width="44" height="44" rx="6"/><text class="btnTxt" x="542" y="489">6</text>
+    <rect class="btn" x="520" y="514" width="44" height="44" rx="6"/><text class="btnTxt" x="542" y="541">7</text>
+  </g>
+  <g class="lbl">
+    <text x="578" y="168">play / stop</text><text class="lblTiny" x="578" y="182">note 112</text>
+    <text x="578" y="220">solo pad</text><text class="lblTiny" x="578" y="234">note 113</text>
+    <text x="578" y="272">mute pad</text><text class="lblTiny" x="578" y="286">note 114</text>
+    <text x="578" y="324">resolution 1/16↔1/8</text><text class="lblTiny" x="578" y="338">note 115</text>
+    <text x="578" y="376">pattern A / B</text><text class="lblTiny" x="578" y="390">note 116</text>
+    <text x="578" y="428">clear pad</text><text class="lblTiny" x="578" y="442">note 117</text>
+    <text x="578" y="480">follow Live transport</text><text class="lblTiny" x="578" y="494">note 118</text>
+    <text x="578" y="532">commit pattern → clip</text><text class="lblTiny" x="578" y="546">note 119</text>
+  </g>
+
+  <!-- ── Section: track buttons (FX) ───────────────────────── -->
+  <text class="section" x="60" y="584">TRACK BUTTONS — FX controls (mixed momentary / toggle)</text>
+  <g>
+    <rect class="btn" x="60"  y="600" width="46" height="46" rx="6"/><text class="btnTxt" x="83"  y="627">FX1</text>
+    <rect class="btn" x="112" y="600" width="46" height="46" rx="6"/><text class="btnTxt" x="135" y="627">FX2</text>
+    <rect class="btn" x="164" y="600" width="46" height="46" rx="6"/><text class="btnTxt" x="187" y="627">FX3</text>
+    <rect class="btn" x="216" y="600" width="46" height="46" rx="6"/><text class="btnTxt" x="239" y="627">FX4</text>
+    <rect class="btn" x="268" y="600" width="46" height="46" rx="6"/><text class="btnTxt" x="291" y="627">FX5</text>
+    <rect class="btn" x="320" y="600" width="46" height="46" rx="6"/><text class="btnTxt" x="343" y="627">FX6</text>
+    <rect class="btn" x="372" y="600" width="46" height="46" rx="6"/><text class="btnTxt" x="395" y="627">FX7</text>
+    <rect class="btn" x="424" y="600" width="46" height="46" rx="6"/><text class="btnTxt" x="447" y="627">FX8</text>
+  </g>
+  <g class="lblTiny" text-anchor="middle">
+    <text x="83"  y="660">toggle</text><text x="83"  y="674">note 100</text>
+    <text x="135" y="660">toggle</text><text x="135" y="674">note 101</text>
+    <text x="187" y="660">toggle</text><text x="187" y="674">note 102</text>
+    <text x="239" y="660">toggle</text><text x="239" y="674">note 103</text>
+    <text x="291" y="660">momentary</text><text x="291" y="674">note 104</text>
+    <text x="343" y="660">momentary</text><text x="343" y="674">note 105</text>
+    <text x="395" y="660">momentary</text><text x="395" y="674">note 106</text>
+    <text x="447" y="660">momentary</text><text x="447" y="674">note 107</text>
+  </g>
+
+  <!-- ── Section: faders (device control) ──────────────────── -->
+  <text class="section" x="60" y="712">FADERS — Ableton device control (CC 48-55) · MASTER (CC 56) · SHIFT (note 122)</text>
+  <g>
+    <rect class="fxSlot" x="60"  y="726" width="40" height="110" rx="4"/><rect class="knob" x="68"  y="736" width="24" height="26" rx="4"/>
+    <rect class="fxSlot" x="112" y="726" width="40" height="110" rx="4"/><rect class="knob" x="120" y="736" width="24" height="26" rx="4"/>
+    <rect class="fxSlot" x="164" y="726" width="40" height="110" rx="4"/><rect class="knob" x="172" y="736" width="24" height="26" rx="4"/>
+    <rect class="fxSlot" x="216" y="726" width="40" height="110" rx="4"/><rect class="knob" x="224" y="736" width="24" height="26" rx="4"/>
+    <rect class="fxSlot" x="268" y="726" width="40" height="110" rx="4"/><rect class="knob" x="276" y="736" width="24" height="26" rx="4"/>
+    <rect class="fxSlot" x="320" y="726" width="40" height="110" rx="4"/><rect class="knob" x="328" y="736" width="24" height="26" rx="4"/>
+    <rect class="fxSlot" x="372" y="726" width="40" height="110" rx="4"/><rect class="knob" x="380" y="736" width="24" height="26" rx="4"/>
+    <rect class="fxSlot" x="424" y="726" width="40" height="110" rx="4"/><rect class="knob" x="432" y="736" width="24" height="26" rx="4"/>
+    <rect class="fxSlot" x="520" y="726" width="40" height="110" rx="4"/><rect class="knob" x="528" y="736" width="24" height="26" rx="4"/>
+  </g>
+  <g class="lbl" text-anchor="middle">
+    <text x="80"  y="852">FX1</text><text x="80"  y="866" class="lblTiny">cc 48</text>
+    <text x="132" y="852">FX2</text><text x="132" y="866" class="lblTiny">cc 49</text>
+    <text x="184" y="852">FX3</text><text x="184" y="866" class="lblTiny">cc 50</text>
+    <text x="236" y="852">FX4</text><text x="236" y="866" class="lblTiny">cc 51</text>
+    <text x="288" y="852">FX5</text><text x="288" y="866" class="lblTiny">cc 52</text>
+    <text x="340" y="852">FX6</text><text x="340" y="866" class="lblTiny">cc 53</text>
+    <text x="392" y="852">FX7</text><text x="392" y="866" class="lblTiny">cc 54</text>
+    <text x="444" y="852">FX8</text><text x="444" y="866" class="lblTiny">cc 55</text>
+    <text x="540" y="852">MASTER</text><text x="540" y="866" class="lblTiny">cc 56</text>
+  </g>
+  <g>
+    <rect class="btn" x="590" y="726" width="60" height="110" rx="6"/>
+    <text class="btnTxt" x="620" y="776">SHIFT</text>
+    <text class="lblTiny" x="620" y="792" text-anchor="middle">note 122</text>
+    <text class="lblTiny" x="620" y="806" text-anchor="middle">momentary</text>
+  </g>
+
+  <!-- ── Legend ────────────────────────────────────────────── -->
+  <text class="section" x="700" y="118">LED COLOR LEGEND</text>
+  <g class="lbl">
+    <rect class="swatch hit"   x="700" y="136" width="16" height="16"/><text x="724" y="149">step hit (yellow)</text>
+    <rect class="swatch ocean" x="700" y="158" width="16" height="16"/><text x="724" y="171">selected drum pad (ocean)</text>
+    <rect class="swatch green" x="700" y="180" width="16" height="16"/><text x="724" y="193">playhead / pad firing (green)</text>
+    <rect class="swatch pulse" x="700" y="202" width="16" height="16"/><text x="724" y="215">playhead, empty (green pulse)</text>
+    <rect class="swatch amber" x="700" y="224" width="16" height="16"/><text x="724" y="237">pad has seq / loop-end (amber)</text>
+    <rect class="swatch blue"  x="700" y="246" width="16" height="16"/><text x="724" y="259">FX pad ON (blue)</text>
+    <rect class="swatch offb"  x="700" y="268" width="16" height="16"/><text x="724" y="281">step beyond length (dim)</text>
+    <rect class="swatch pad"   x="700" y="290" width="16" height="16"/><text x="724" y="303">idle / off</text>
+  </g>
+
+  <!-- ── Navigation map ────────────────────────────────────── -->
+  <text class="section" x="700" y="340">NAVIGATION MAP</text>
+  <g class="mapTxt">
+    <text x="700" y="366">drum pads (bottom-left 4×4) = rack notes 36–51</text>
+    <text x="700" y="388">  kick = bottom-left (note 36) · tap = preview + select</text>
+    <text x="700" y="410">step grid (top 4×8) = selected pad's 32 steps</text>
+    <text x="700" y="432">  step = row×8 + col + 1 (row-major)</text>
+    <text x="700" y="454">SHIFT + step N = set that pad's length to N (1-based)</text>
+    <text x="700" y="476">FX pads (bottom-right 4×4) · track buttons = FX (M/T)</text>
+    <text x="700" y="498">faders → /live/device/set/parameter/value (OSC)</text>
+  </g>
+
+  <!-- ── MIDI notes footer ─────────────────────────────────── -->
+  <text class="ledTxt" x="700" y="540">pad note = row×8 + col (ch 0, LED ch 6) · pad-mode sysex: F0 47 7F 4F 62 00 01 &lt;mode&gt; F7</text>
+  <text class="ledTxt" x="700" y="560">scene notes 112–119 · track notes 100–107 · faders CC 48–55 · master CC 56 · shift note 122</text>
+  <text class="ledTxt" x="700" y="580">fader→device via /live/midimap/map_cc (native) or /live/device/set/parameter/value (OSC)</text>
+</svg>

@@ -1,0 +1,24 @@
+{
+  "name": "@music-theory/song-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for the TrackDraft song library — analyze, edit, and create genre templates via plain language",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@music-theory/core": "0.1.0",
+    "@music-theory/song-blueprint": "0.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.3",
+    "vitest": "^3.0.0"
+  }
+}

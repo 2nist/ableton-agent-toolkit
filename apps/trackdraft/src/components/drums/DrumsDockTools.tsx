@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
 import { updateSection } from "../../lib/sections";
-import { DRUM_PATTERN_OPTIONS, variantCount } from "../../lib/playback/drumPreview";
+import { DRUM_PATTERN_OPTIONS, variantCount, resolveOutlineVoiceNecklaces } from "../../lib/playback/drumPreview";
 import { TRANSITION_COLOR, TRANSITION_LABEL, TRANSITION_MODELS } from "./transitionStyle";
 import type { DrumPattern, DrumTransitionModel, DrumCellVoice, MeterOutline } from "../../types/blueprint";
 import { numerator as outlineNumerator, countLabel, buildEuclideanOutline, twoThreeCellCounts, euclideanCells } from "@drum/library";
 import DrumNecklacePreview from "../structure/DrumNecklacePreview";
 import OutlineTimeline from "./OutlineTimeline";
+import NecklaceRow from "./NecklaceRow";
 
 type DrumMode = "auto" | "preset" | "outline";
 const OUTLINE_DENOMINATORS = [8, 16];
@@ -250,6 +251,71 @@ export default function DrumsDockTools({ compact = false }: { compact?: boolean 
     );
   }
 
+  function setVariationModel(outline: MeterOutline | null) {
+    updateCurrentSong((s) =>
+      updateSection(s, section!.id, (sec) => ({
+        ...sec,
+        drumVariationOutline: outline ?? undefined,
+        drumVariationBars: outline ? (sec.drumVariationBars ?? 1) : undefined,
+      })),
+    );
+  }
+
+  function applyVariationEuclidean(numeratorValue: number, denominator: number, cellCount: number, rotation: number) {
+    updateCurrentSong((s) =>
+      updateSection(s, section!.id, (sec) => ({
+        ...sec,
+        drumVariationOutline: buildEuclideanOutline(numeratorValue, denominator, cellCount, rotation),
+        drumVariationBars: sec.drumVariationBars ?? 1,
+      })),
+    );
+  }
+
+  function setVariationBars(bars: number) {
+    updateCurrentSong((s) =>
+      updateSection(s, section!.id, (sec) => ({ ...sec, drumVariationBars: Math.max(1, bars) })),
+    );
+  }
+
+  function stepVariationNumerator(delta: number) {
+    const o = section!.drumVariationOutline;
+    if (!o) return;
+    const denominator = Math.round(4 / o.cellBeats);
+    const next = Math.max(2, outlineNumerator(o) + delta);
+    applyVariationEuclidean(next, denominator, twoThreeCellCounts(next)[0]!, 0);
+  }
+
+  function setVariationCellCount(count: number) {
+    const o = section!.drumVariationOutline;
+    if (!o) return;
+    const denominator = Math.round(4 / o.cellBeats);
+    applyVariationEuclidean(outlineNumerator(o), denominator, count, 0);
+  }
+
+  function stepVariationRotation(delta: number) {
+    const o = section!.drumVariationOutline;
+    if (!o) return;
+    const denominator = Math.round(4 / o.cellBeats);
+    const num = outlineNumerator(o);
+    const count = o.cells.length;
+    const base = inferRotation(o, num, count);
+    const start = base === -1 ? 0 : base;
+    const next = ((start + delta) % count + count) % count;
+    applyVariationEuclidean(num, denominator, count, next);
+  }
+
+  function setVariationDenominator(denominator: number) {
+    const o = section!.drumVariationOutline;
+    if (!o) return;
+    updateCurrentSong((s) =>
+      updateSection(s, section!.id, (sec) =>
+        sec.drumVariationOutline
+          ? { ...sec, drumVariationOutline: { ...sec.drumVariationOutline, cellBeats: 4 / denominator } }
+          : sec,
+      ),
+    );
+  }
+
   const total = variantCount(section.drumPattern);
   const outline = section.drumMeterOutline;
   const currentDenominator = outline ? Math.round(4 / outline.cellBeats) : 8;
@@ -259,6 +325,12 @@ export default function DrumsDockTools({ compact = false }: { compact?: boolean 
   const currentRotation = outline ? inferRotation(outline, currentNumerator, currentCellCount) : -1;
   const presetMatch = outline ? presetForMeter(currentNumerator, currentDenominator) : null;
   const selectedCell = outline ? Math.max(0, Math.min(selectedCellIndex, outline.cells.length - 1)) : null;
+  const variation = section.drumVariationOutline;
+  const vNumerator = variation ? outlineNumerator(variation) : 7;
+  const vDenominator = variation ? Math.round(4 / variation.cellBeats) : 8;
+  const vCellCount = variation ? variation.cells.length : 3;
+  const vCellCountOptions = twoThreeCellCounts(vNumerator);
+  const vRotation = variation ? inferRotation(variation, vNumerator, vCellCount) : -1;
 
   return (
     <div className={compact ? "space-y-2" : "p-3 space-y-3"}>
@@ -551,6 +623,86 @@ export default function DrumsDockTools({ compact = false }: { compact?: boolean 
           </div>
         </>
       )}
+
+      <div className="border-t border-edge pt-3">
+        <span
+          className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1.5"
+          title="A different k/n for the section's final bars that returns to the base pattern — an out-and-back detour, distinct from a transition (which changes energy, not shape)."
+        >
+          Variation (this section's ending detour)
+        </span>
+        <div className="flex gap-1 mb-2">
+          <button
+            className={`font-mono text-2xs rounded px-2 py-1 border ${
+              !variation ? "border-inkMuted text-ink" : "border-edge text-inkMuted hover:text-ink"
+            }`}
+            onClick={() => setVariationModel(null)}
+          >
+            none
+          </button>
+          <button
+            className={`font-mono text-2xs rounded px-2 py-1 border ${
+              variation ? "border-accent text-accent bg-accent/10" : "border-edge text-inkMuted hover:text-ink"
+            }`}
+            onClick={() => setVariationModel(buildEuclideanOutline(7, 8, twoThreeCellCounts(7)[0]!, 0))}
+          >
+            euclid
+          </button>
+        </div>
+
+        {variation && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Numerator (n)</span>
+                <div className="flex items-center gap-1">
+                  <button className="w-6 h-6 rounded border border-edge text-inkMuted hover:text-ink disabled:opacity-30" onClick={() => stepVariationNumerator(-1)} disabled={vNumerator <= 2}>◂</button>
+                  <span className="font-mono tabular-nums flex-1 text-center text-sm">{vNumerator}</span>
+                  <button className="w-6 h-6 rounded border border-edge text-inkMuted hover:text-ink" onClick={() => stepVariationNumerator(1)}>▸</button>
+                </div>
+              </div>
+              <div>
+                <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Cells (k)</span>
+                <div className="flex flex-wrap gap-1">
+                  {vCellCountOptions.map((c) => (
+                    <button key={c} className={`font-mono text-xs rounded px-1.5 py-1 border ${vCellCount === c ? "border-inkMuted text-ink" : "border-edge text-inkMuted hover:text-ink"}`} onClick={() => setVariationCellCount(c)}>{c}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Rotation</span>
+                <div className="flex items-center gap-1">
+                  <button className="w-6 h-6 rounded border border-edge text-inkMuted hover:text-ink" onClick={() => stepVariationRotation(-1)}>◂</button>
+                  <span className="font-mono tabular-nums flex-1 text-center text-sm">{vRotation === -1 ? "custom" : vRotation}</span>
+                  <button className="w-6 h-6 rounded border border-edge text-inkMuted hover:text-ink" onClick={() => stepVariationRotation(1)}>▸</button>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Denominator</span>
+              <div className="flex gap-1">
+                {OUTLINE_DENOMINATORS.map((d) => (
+                  <button key={d} className={`flex-1 font-mono text-xs rounded px-1 py-1 border ${vDenominator === d ? "border-inkMuted text-ink" : "border-edge text-inkMuted hover:text-ink"}`} onClick={() => setVariationDenominator(d)}>/{d}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-sm">
+              <span className="font-mono text-3xs text-inkMuted">Bars</span>
+              <button className="w-6 h-6 rounded border border-edge text-inkMuted hover:text-ink" onClick={() => setVariationBars((section.drumVariationBars ?? 1) - 1)}>−</button>
+              <span className="font-mono tabular-nums min-w-[2ch] text-center">{section.drumVariationBars ?? 1}</span>
+              <button className="w-6 h-6 rounded border border-edge text-inkMuted hover:text-ink" onClick={() => setVariationBars((section.drumVariationBars ?? 1) + 1)}>+</button>
+              <button className="ml-auto font-mono text-3xs text-inkMuted hover:text-red-400" onClick={() => setVariationModel(null)}>clear</button>
+            </div>
+
+            <div>
+              <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Detour preview</span>
+              <NecklaceRow necklaces={resolveOutlineVoiceNecklaces(variation)} />
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="border-t border-edge pt-3">
         <span

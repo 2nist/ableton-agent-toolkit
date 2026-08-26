@@ -4,3 +4,4 @@ export * from "./scales";
 export * from "./chords";
 export * from "./substitutions";
 export * from "./progressions";
+export * from "./performance";

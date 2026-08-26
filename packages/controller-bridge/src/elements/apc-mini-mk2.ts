@@ -40,7 +40,8 @@ export const APC_MINI_MK2: ControllerElements = {
   },
 
   matrices: {
-    // 8×8 clip launch pad grid (rows flipped: 0=top physical)
+    // 8×8 clip launch pad grid (rows flipped: 0=top physical).
+    // LED feedback: note-on on ledChannel (6 = FULL_BRIGHTNESS) with velocity = palette index.
     clip_launch_buttons: {
       identifiers: Array.from({ length: 8 }, (_, row) =>
         Array.from({ length: 8 }, (_, col) => row * 8 + col)
@@ -49,6 +50,7 @@ export const APC_MINI_MK2: ControllerElements = {
       height: 8,
       element: {
         channel: 0,
+        ledChannel: 6,
         msgType: "note",
         name: "Clip Launch Button",
         isRgb: true,
@@ -65,6 +67,7 @@ export const APC_MINI_MK2: ControllerElements = {
       height: 8,
       element: {
         channel: 9,
+        ledChannel: 6,
         msgType: "note",
         name: "Drum Pad",
         isRgb: true,

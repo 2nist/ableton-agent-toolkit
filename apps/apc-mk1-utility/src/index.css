@@ -1,0 +1,253 @@
+:root {
+  color-scheme: dark;
+  --bg: #16181d;
+  --panel: #1f232b;
+  --border: #333844;
+  --text: #e8eaf0;
+  --muted: #8a90a0;
+  --accent: #5ec26a;
+  --accent-dim: #2c3a2e;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+h1 {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.warning {
+  color: #e0a13a;
+  font-size: 13px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.card h2 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-top: 0;
+}
+
+.port-picker {
+  display: grid;
+  grid-template-columns: 140px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.port-picker select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+.port-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.shift-indicator {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  margin-left: 8px;
+}
+.shift-indicator[data-active="true"] {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.bank-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.bank-button {
+  flex: 1;
+  min-width: 90px;
+  padding: 10px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.bank-button[data-active="true"] {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.bank-button.spare {
+  color: var(--muted);
+  cursor: default;
+}
+
+.fader-row {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.fader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.fader-slider {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 24px;
+  height: 140px;
+}
+
+.fader-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.scene-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.scene-button {
+  flex: 1;
+  min-width: 90px;
+  padding: 8px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.scene-note {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.scene-label {
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.shift-toggle {
+  display: block;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.learn-active {
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.learn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.learn-button {
+  padding: 6px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.learn-button[data-active="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.reset-button {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.grid-pads {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.grid-pad {
+  aspect-ratio: 1;
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+}
+.grid-pad:active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.log {
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.log-empty {
+  color: var(--muted);
+}
+
+.log-line {
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+}
