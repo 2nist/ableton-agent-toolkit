@@ -103,10 +103,10 @@ describe("hexToPixel", () => {
     expect(y).toBeCloseTo(0, 0);
   });
 
-  it("maps q=1, r=0 below origin (degree axis r runs horizontally)", () => {
+  it("maps q=1, r=0 to the right (degree axis q runs horizontally)", () => {
     const { x, y } = hexToPixel(1, 0);
-    expect(x).toBeCloseTo(0, 0);
-    expect(y).toBeGreaterThan(0);
+    expect(x).toBeGreaterThan(0);
+    expect(y).toBeCloseTo(0, 0);
   });
 });
 

@@ -134,7 +134,7 @@ export default function HoneycombWheel({
 
   const loop = useMemo(() => detectLoop(steps, displayWalk), [steps, displayWalk]);
   // The loop's translation vector in pixel space, under the same projection
-  // as the cells themselves (hexToPixel handles the flat-top mapping).
+  // as the cells themselves (hexToPixel handles the pointy-top mapping).
   const loopVec = loop?.translated ? hexToPixel(loop.dq, loop.dr, S) : null;
 
   const pathD = useMemo(
