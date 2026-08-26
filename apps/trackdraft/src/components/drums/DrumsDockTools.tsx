@@ -274,10 +274,10 @@ export default function DrumsDockTools() {
               title={
                 m === "auto" ? "Infer a pattern from role, velocity and meter"
                 : m === "preset" ? "Pick a named corpus/synth pattern"
-                : "Author an odd-meter 2s/3s outline (Ferguson's apple/galloping cells)"
+                : "Euclidean odd-meter authoring — k/n/rotation, Ferguson's apple/galloping cells"
               }
             >
-              {m}
+              {m === "outline" ? "euclid" : m}
             </button>
           ))}
         </div>
@@ -330,6 +330,9 @@ export default function DrumsDockTools() {
 
       {mode === "outline" && outline && (
         <>
+          <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block -mb-1">
+            Euclidean rhythm — E(k, n)
+          </span>
           <div className="grid grid-cols-3 gap-2">
             <div>
               <span
