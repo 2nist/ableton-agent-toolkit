@@ -1,4 +1,5 @@
 import { syncArrangementToSections, type BlueprintSong, type BlueprintSection } from "../types/blueprint";
+import { buildEuclideanOutline, twoThreeCellCounts } from "@drum/library";
 import type { SongMap, MapSlot } from "../data/songMaps";
 import { honeycombTextToChords } from "./harmony/chordBuilder";
 import { inferGrooveOverride } from "./playback/drumPreview";
@@ -104,7 +105,7 @@ export interface ApplySongMapOptions {
  *  never ship them). Song-level defaults apply only where the map sets
  *  them — a map with no `concept` leaves the song's own concept alone.
  *
- *  Two slot fields get real generation, not just storage:
+ *  Three slot fields get real generation, not just storage:
  *  - `progression` (roman-numeral chord cycle) is resolved into actual
  *    `Chord`s via the same parser the Harmony tab's honeycomb-text import
  *    uses (`honeycombTextToChords`), against the *map's* key/scale (a
@@ -119,7 +120,13 @@ export interface ApplySongMapOptions {
  *    isn't representable as an explicit per-section choice at all — the
  *    engine treats those as heuristic-only outcomes — so those slots are
  *    deliberately left on "auto" and rely on the song's `concept` reaching
- *    the live heuristic correctly instead (see `inferPatternForSection`). */
+ *    the live heuristic correctly instead (see `inferPatternForSection`).
+ *  - `harmonyRhythm` also gets real generation when `"euclid"`: the 2s/3s
+ *    outline is built from the slot's own meter (`harmonyCellCount` /
+ *    `harmonyRotation` shape it), and `"follow drums"` sets
+ *    `harmonyFollowsDrums` while `syncopationOffset` passes straight
+ *    through — a template programs the harmony arrangement exactly like
+ *    it already programs the drums. */
 export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplySongMapOptions): BlueprintSong {
   const variant = options?.variantName ? map.variants?.find((v) => v.name === options.variantName) : undefined;
   const slots: MapSlot[] = options?.excludeOptional
@@ -133,18 +140,35 @@ export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplyS
   const sections = slots.map((slot) => {
     const section = newSection(slot.label, slot.role);
     const beatsPerChord = slot.beatsPerChord ?? section.beatsPerChord;
+    const numerator = slot.timeSignatureNumerator ?? section.timeSignatureNumerator;
+    const denominator = 2 ** (slot.timeSignatureDenPower ?? section.timeSignatureDenPower);
+    // "euclid" builds the 2s/3s outline from the slot's own meter (the
+    // same shape the Harmony tab's euclid default produces); a 1-beat
+    // meter has no valid 2/3 decomposition, so it falls back to no
+    // outline rather than throwing.
+    const harmonyRhythm = slot.harmonyRhythm ?? "beats";
+    let harmonyMeterOutline: BlueprintSection["harmonyMeterOutline"];
+    if (harmonyRhythm === "euclid") {
+      const cellCount = slot.harmonyCellCount ?? twoThreeCellCounts(numerator)[0];
+      if (cellCount !== undefined) {
+        harmonyMeterOutline = buildEuclideanOutline(numerator, denominator, cellCount, slot.harmonyRotation ?? 0);
+      }
+    }
     return {
       ...section,
       bars: slot.bars ?? section.bars,
       velocity: slot.velocity ?? section.velocity,
       beatsPerChord,
-      timeSignatureNumerator: slot.timeSignatureNumerator ?? section.timeSignatureNumerator,
+      timeSignatureNumerator: numerator,
       timeSignatureDenPower: slot.timeSignatureDenPower ?? section.timeSignatureDenPower,
       transitionNote: slot.purpose,
       chords: slot.progression?.length
         ? honeycombTextToChords(slot.progression.join(" "), resolvedKey, beatsPerChord, resolvedScale)
         : section.chords,
       drumPattern: inferGrooveOverride(slot.groove) ?? section.drumPattern,
+      harmonyMeterOutline,
+      harmonyFollowsDrums: harmonyRhythm === "follow drums" ? true : undefined,
+      syncopationOffset: slot.syncopationOffset,
     };
   });
   // Every slot mints a fresh section id (see the comment above), so

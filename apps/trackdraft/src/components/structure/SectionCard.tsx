@@ -187,6 +187,22 @@ export default function SectionCard({ section, repeats, onChange, onChangeRepeat
             </button>
           </span>
         )}
+        {(section.harmonyMeterOutline || section.harmonyFollowsDrums || section.syncopationOffset) && (
+          <span
+            className="flex items-center gap-1 text-xs text-inkMuted"
+            title="This section's chord rhythm is customized — edit it in the Harmony tab, not here."
+          >
+            Harmony
+            {section.harmonyMeterOutline ? (
+              <span className="text-accent">outline · {section.harmonyMeterOutline.label}</span>
+            ) : section.harmonyFollowsDrums ? (
+              <span className="text-accent">follows drums</span>
+            ) : null}
+            {section.syncopationOffset ? (
+              <span className="text-accent">push {Math.round(section.syncopationOffset * 4)}/16</span>
+            ) : null}
+          </span>
+        )}
         <label className="flex items-center gap-1" title="Also drives the generated drums: quiet sections get sparse patterns, loud ones get intense patterns.">
           Velocity
           <select

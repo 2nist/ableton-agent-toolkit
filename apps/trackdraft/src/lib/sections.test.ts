@@ -199,6 +199,40 @@ describe("applySongMap", () => {
     expect(song.sections.map((s) => s.name)).toEqual(["Loop A", "Loop B"]);
   });
 
+  it("mints the harmony rhythm fields from a slot's harmonyRhythm/harmonyRotation/syncopationOffset", () => {
+    const map: SongMap = {
+      id: "test-map-harmony-rhythm",
+      name: "Test",
+      description: "",
+      slots: [
+        // euclid on the slot's own 7/8 meter (3-cell groupings), no rotation
+        { role: "verse", label: "Verse", purpose: "", timeSignatureNumerator: 7, timeSignatureDenPower: 3, harmonyRhythm: "euclid" },
+        // same meter, rotated one cell — a real accent-pattern shift
+        { role: "pre_chorus", label: "Pre-Chorus", purpose: "", timeSignatureNumerator: 7, timeSignatureDenPower: 3, harmonyRhythm: "euclid", harmonyRotation: 1 },
+        // follow drums + a 16th push
+        { role: "chorus", label: "Chorus", purpose: "", harmonyRhythm: "follow drums", syncopationOffset: 0.25 },
+        // default beats — no harmony rhythm fields at all
+        { role: "bridge", label: "Bridge", purpose: "" },
+      ],
+    };
+    const song = applySongMap(makeSong([]), map);
+    const verse = song.sections[0].harmonyMeterOutline!;
+    const pre = song.sections[1].harmonyMeterOutline!;
+    expect(verse.cellBeats).toBe(0.5); // /8 meter
+    for (const o of [verse, pre]) {
+      expect(o.cells.reduce((a, b) => a + b, 0)).toBe(7);
+      expect(o.cells.every((c) => c === 2 || c === 3)).toBe(true);
+    }
+    expect(verse.cells).not.toEqual(pre.cells); // rotation shifts which 2s/3s reads first
+    expect(song.sections[0].harmonyFollowsDrums).toBeUndefined();
+    expect(song.sections[2].harmonyMeterOutline).toBeUndefined();
+    expect(song.sections[2].harmonyFollowsDrums).toBe(true);
+    expect(song.sections[2].syncopationOffset).toBe(0.25);
+    expect(song.sections[3].harmonyMeterOutline).toBeUndefined();
+    expect(song.sections[3].harmonyFollowsDrums).toBeUndefined();
+    expect(song.sections[3].syncopationOffset).toBeUndefined();
+  });
+
   it("drops slots marked optional when excludeOptional is set", () => {
     const map: SongMap = {
       id: "test-map-optional",

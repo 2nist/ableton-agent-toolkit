@@ -65,6 +65,26 @@ export interface MapSlot {
    *  render short-edit mode can ignore this and treat the section as
    *  always included, matching today's behavior. */
   optional?: boolean;
+  /** How this section's chord changes are timed. `"beats"` (default) is
+   *  the classic per-chord beat grid; `"euclid"` advances chords on a
+   *  2s/3s Euclidean outline built from this slot's own time signature
+   *  (see `harmonyCellCount`/`harmonyRotation`); `"follow drums"` rides
+   *  the section's drum outline. Mirrors the Harmony tab's Rhythm control
+   *  so a template can program the harmony arrangement the same way
+   *  `groove`/`velocity` already program the drums. */
+  harmonyRhythm?: "beats" | "euclid" | "follow drums";
+  /** Euclidean density (number of 2s/3s cells) for
+   *  `harmonyRhythm: "euclid"` — the tresillo 3 in 7/8, etc. Defaults to
+   *  the meter's canonical first grouping, the same default the Harmony
+   *  tab uses. */
+  harmonyCellCount?: number;
+  /** Cyclic rotation (0..cellCount-1) for `harmonyRhythm: "euclid"` —
+   *  which 2s/3s cell reads first. */
+  harmonyRotation?: number;
+  /** Anticipation offset in beats — pushes every chord change EARLY by
+   *  this much (0.25 = a sixteenth). Mirrors the Harmony tab's Push
+   *  control. */
+  syncopationOffset?: number;
 }
 
 /** Song-level defaults a map may establish. `concept` doubles as the
