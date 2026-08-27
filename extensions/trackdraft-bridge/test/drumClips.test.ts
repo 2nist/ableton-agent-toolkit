@@ -584,3 +584,77 @@ describe("planDrumClips — drumMeterOutline (odd-meter outline authoring)", () 
     });
   });
 });
+
+describe("planDrumClips — per-voice overrides and detours reach the export", () => {
+  const SEVEN_EIGHT: MeterOutline = { cellBeats: 0.5, cells: [2, 2, 3], label: "1 2 1 2 1 2 3" };
+
+  it("drumVoicePatterns replaces the overridden voice's notes in the exported clip", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        makeSection({
+          id: "1",
+          name: "Verse",
+          bars: 1,
+          timeSignatureNumerator: 4,
+          drumVoicePatterns: { kick: { k: 1, n: 4, rotation: 0 } },
+        }),
+      ],
+    });
+    const [clip] = planDrumClips(song, fixturePresets(), emptyFills);
+    // The fixture 'standard' groove has kicks on 0 and 2; the override
+    // collapses the kick voice to a single hit on the downbeat.
+    const kicks = clip.notes.filter((n) => n.pitch === KICK).map((n) => n.startTime);
+    expect(kicks).toEqual([0]);
+    // Snare was not overridden — the base groove's snare survives untouched.
+    const snares = clip.notes.filter((n) => n.pitch === SNARE).map((n) => n.startTime);
+    expect(snares).toEqual([1, 3]);
+  });
+
+  it("a voice override can add a voice the base groove never plays", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        makeSection({
+          id: "1",
+          name: "Verse",
+          bars: 1,
+          timeSignatureNumerator: 4,
+          drumVoicePatterns: { rideBell: { k: 1, n: 4, rotation: 0 } },
+        }),
+      ],
+    });
+    const [clip] = planDrumClips(song, fixturePresets(), emptyFills);
+    // The 'standard' fixture has no rideBell — the override adds note 53.
+    expect(clip.notes.some((n) => n.pitch === 53)).toBe(true);
+  });
+
+  it("drumVariationOutline replaces the final bar with the detour, beating the automatic fill", () => {
+    const song = makeSong({
+      id: "x",
+      title: "x",
+      bpm: 120,
+      sections: [
+        makeSection({
+          id: "a",
+          name: "Verse",
+          bars: 2,
+          timeSignatureNumerator: 4,
+          drumVariationOutline: SEVEN_EIGHT,
+          drumVariationBars: 1,
+        }),
+        makeSection({ id: "b", name: "Next", bars: 2, timeSignatureNumerator: 4 }),
+      ],
+    });
+    const [first] = planDrumClips(song, fixturePresets(), fixtureFills());
+    const tail = first.notes.filter((n) => n.startTime >= 4);
+    // The 7/8 click detour filled the last bar with closed hats...
+    expect(tail.some((n) => n.pitch === CLOSED_HAT)).toBe(true);
+    // ...and the automatic handoff fill's toms are gone from that span.
+    expect(tail.some((n) => n.pitch === TOM_HIGH)).toBe(false);
+  });
+});

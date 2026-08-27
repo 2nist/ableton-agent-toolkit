@@ -18,7 +18,8 @@
 import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
-import { resolveDrumHits, inferPatternForSection } from "./playback/drumPreview";
+import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
+import { planSectionDrumNotes, FILL_DATA, humanizeOutlineNotes, type SectionDrumInput } from "@drum/library";
 import { planColorStem } from "./colorStem";
 import type { BlueprintSong, Chord } from "../types/blueprint";
 
@@ -55,9 +56,12 @@ const CHORD_OCTAVE = 5;
 /** Octave 3 = MIDI 36 (C2 in Ableton's display). Matches bassLine.ts. */
 const BASS_OCTAVE = 3;
 
-/** GM drum map — same pitches the bridge's drumClips.ts and the app's
- *  drumPreview.ts use (ABLETON_SAFE_NOTES). */
-const GM_DRUM_PITCHES = new Set([36, 37, 38, 39, 42, 45, 46, 47, 49, 51]);
+/** GM drum map — the full 13-voice canonical set the export can produce:
+ *  `ABLETON_SAFE_NOTES` (what the presets and bridge use) plus the extra
+ *  voices a per-voice override or a detour can author (pedalHat 44,
+ *  tomLow 41, rideBell 53). Filtering by this keeps stray/unmapped pitches
+ *  out of the .mid while letting every authored voice through. */
+const GM_DRUM_PITCHES = new Set([36, 37, 38, 39, 41, 42, 44, 45, 46, 47, 49, 51, 53]);
 
 // ---------------------------------------------------------------------------
 // Chord cycle (duplicated from bridge's chordCycle.ts — no cross-package dep)
@@ -140,25 +144,49 @@ export function planBassStem(spans: SectionSpan[]): MidiNote[] {
   return notes;
 }
 
-/** Drum notes — the same explicit-override-else-heuristic pattern
- *  resolution `drumClips.ts` uses for the bridge's export path, via
- *  `playback/drumPreview.ts`'s `resolveDrumHits`/`inferPatternForSection`
- *  (real @drum/library pattern/groove data, tiled to fill each section).
- *  `resolveDrumHits` normally converts beat positions to seconds via
- *  `secPerBeat`; passing `1` here gets beat positions straight back
- *  unchanged, which is what a beat-based MIDI file needs. */
+/** Drum notes — the SAME per-section pipeline the bridge's `planDrumClips`
+ *  uses for the Ableton export, via `@drum/library`'s `planSectionDrumNotes`,
+ *  so the exported .mid (and live MIDI out, which reuses this) matches
+ *  "Send to Ableton" note for note: outline-vs-pattern base resolution
+ *  (`resolveSectionVariant`), per-voice Euclidean overrides
+ *  (`drumVoicePatterns`), velocity scaling, seeded per-occurrence tiling,
+ *  automatic handoff fills, the ending detour (`drumVariationOutline`) and
+ *  the named transition (`drumTransitionModel`). Outline-driven sections
+ *  are humanized exactly like the bridge so even microtiming agrees. */
 export function planDrumStem(spans: SectionSpan[], concept?: string): MidiNote[] {
+  const inputs: SectionDrumInput[] = spans.map((span) => {
+    const section = span.section;
+    let variant = resolveSectionVariant(section, concept);
+    if (variant && section.drumMeterOutline) {
+      variant = { ...variant, notes: humanizeOutlineNotes(variant.notes, section.drumMeterOutline.cellBeats) };
+    }
+    return {
+      sectionId: section.id,
+      occurrenceIndex: span.occurrenceIndex,
+      variant,
+      outline: section.drumMeterOutline ?? null,
+      voiceOverrides: section.drumVoicePatterns,
+      variation: section.drumVariationOutline ?? null,
+      variationBars: section.drumVariationBars,
+      transitionModel: section.drumTransitionModel ?? null,
+      transitionBars: section.drumTransitionBars,
+      gridBeats: section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25,
+      durationBeats: span.durationBeats,
+      velocityTarget: velocityNumber(section.velocity),
+    };
+  });
+
+  const plans = planSectionDrumNotes(inputs, FILL_DATA);
+
   const notes: MidiNote[] = [];
-  for (const span of spans) {
-    const pattern = span.section.drumPattern ?? inferPatternForSection(span.section, concept);
-    const hits = resolveDrumHits(pattern, span.section.drumVariantIndex, span.section, 1, span.durationBeats);
-    if (!hits) continue;
-    for (const hit of hits) {
+  for (let i = 0; i < spans.length; i++) {
+    const span = spans[i];
+    for (const n of plans[i].notes) {
       notes.push({
-        pitch: hit.midi,
-        startTime: span.startBeat + hit.offsetSec,
+        pitch: n.pitch,
+        startTime: span.startBeat + n.beat,
         duration: DRUM_HIT_DURATION,
-        velocity: hit.velocity,
+        velocity: n.velocity,
       });
     }
   }

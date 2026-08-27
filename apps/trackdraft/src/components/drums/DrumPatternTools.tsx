@@ -8,15 +8,22 @@ import {
   variantCount,
   resolveSectionVoiceNecklaces,
   resolveOutlineVoiceNecklaces,
-  euclidOnsetSteps,
 } from "../../lib/playback/drumPreview";
 import { TRANSITION_COLOR, TRANSITION_LABEL, TRANSITION_MODELS } from "./transitionStyle";
 import NecklaceRow from "./NecklaceRow";
+import TransitionPreview from "./TransitionPreview";
 import { VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
-import { buildEuclideanOutline, twoThreeCellCounts, numerator as outlineNumerator, type KitVoice } from "@drum/library";
-import type { BlueprintSection, DrumPattern, DrumTransitionModel, MeterOutline } from "../../types/blueprint";
+import {
+  buildEuclideanOutline,
+  twoThreeCellCounts,
+  numerator as outlineNumerator,
+  countLabel,
+  euclidOnsetSteps,
+  type KitVoice,
+} from "@drum/library";
+import type { BlueprintSection, DrumPattern, DrumTransitionModel, DrumCellVoice, MeterOutline } from "../../types/blueprint";
 
-type DrumMode = "auto" | "preset";
+type DrumMode = "auto" | "preset" | "outline";
 type ToolTab = "pattern" | "variation" | "transition";
 
 const DEFAULT_DENOM = 8;
@@ -25,7 +32,16 @@ const CHIP_ON = "font-mono text-2xs rounded px-2 py-1 border border-accent text-
 const TAB = "flex-1 rounded border border-edge px-2 py-1 font-mono text-2xs uppercase tracking-wider text-inkMuted hover:text-ink";
 const TAB_ON = "flex-1 rounded border border-accent px-2 py-1 font-mono text-2xs uppercase tracking-wider text-accent bg-accent/10";
 
+/** Per-cell downbeat voice — the kick/snare/hat a cell's "DA" plays.
+ *  Colors match `voiceStyle`'s kick/snare/hat hues. */
+const CELL_VOICE_LABEL: Record<DrumCellVoice, string> = { kick: "Kick", snare: "Snare", hat: "Hat" };
+const CELL_VOICE_COLOR: Record<DrumCellVoice, string> = { kick: "#E8B54A", snare: "#D96459", hat: "#8B94A1" };
+
+/** Which of the three mutually-exclusive drum-authoring modes a section is
+ *  in — same priority the export uses: a Euclidean outline beats a named
+ *  preset beats the heuristic. */
 function modeOf(sec: BlueprintSection): DrumMode {
+  if (sec.drumMeterOutline) return "outline";
   return sec.drumPattern ? "preset" : "auto";
 }
 
@@ -179,14 +195,24 @@ function EuclidStepView({ k, n, rotation, color, large }: { k: number; n: number
  *  here; every edit is written to a working draft the timeline previews
  *  live, committed to the song with Apply (undoable) or thrown away with
  *  Optimized for the horizontal bottom dock: the tab row also carries the
- *  section-groove controls (Auto + Preset + Variant). The Pattern tab is
+ *  section-groove controls (Auto + Euclid + Preset + Variant) — Euclid is
+ *  how any section is switched into outline/odd-meter authoring, since a
+ *  `drumMeterOutline` is otherwise only editable once it already exists.
+ *  The Pattern tab is
  *  Voice-by-Voice first — voice chips | a large Euclidean pattern display |
  *  the Length/Density/Offset sliders — with the whole-section Euclidean
  *  editor tucked at the bottom for genuine outline/odd-meter sections.
  *  Tabs: Pattern · Detour (ending rhythm detour) · Transition.
- *  TODO: Transition models all render the same today — the model only
- *  stores an energy label (build/break/cut/drop); the audible difference
- *  is applied at export in the bridge, not previewed here yet. */
+ *
+ *  The Pattern tab's whole-section Euclidean block (genuine outline/odd-meter
+ *  sections) is a full editor, not just sliders: Length/Density/Offset plus
+ *  the /8 /16 grid, and a cell editor for the 2s/3s grouping — toggle each
+ *  cell 2⇄3, insert/remove cells, and assign each cell's downbeat a
+ *  kick/snare/hat voice (`cellVoices`), which the export honors.
+ *
+ *  The Transition tab previews the actual generated material per voice
+ *  (`TransitionPreview`), so build/break/cut/drop read differently here and
+ *  at export — no more shared placeholder. */
 export default function DrumPatternTools() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
@@ -197,6 +223,9 @@ export default function DrumPatternTools() {
   const clearDraft = useDrumsDraftStore((s) => s.clearDraft);
   const [tab, setTab] = useState<ToolTab>("pattern");
   const [voice, setVoice] = useState<KitVoice | null>(null);
+  // Which whole-section outline cell is selected for editing — local to this
+  // panel (not song data), reset when the selected section changes.
+  const [cellIndex, setCellIndex] = useState(0);
   // The preset to restore when Auto is toggled back off — kept locally so
   // switching to Auto doesn't forget the groove you were just on.
   const lastPresetRef = useRef<DrumPattern | null>(null);
@@ -206,6 +235,7 @@ export default function DrumPatternTools() {
   useEffect(() => {
     clearDraft();
     setVoice(null);
+    setCellIndex(0);
     lastPresetRef.current = null;
   }, [selectedSectionId, clearDraft]);
 
@@ -246,6 +276,8 @@ export default function DrumPatternTools() {
 
   const necklace = resolveSectionVoiceNecklaces(eff, song.concept);
   const outlineNecklaces = outline ? resolveOutlineVoiceNecklaces(outline) : null;
+  // The selected outline cell, self-clamped as cells are added/removed.
+  const selectedCell = outline ? Math.min(cellIndex, outline.cells.length - 1) : null;
   const variantTotal = variantCount(eff.drumPattern);
 
   // Per-voice override editing — pick ANY voice (not just ones already in
@@ -275,7 +307,8 @@ export default function DrumPatternTools() {
   }
 
   /** Auto toggles: on → let the engine pick the groove; clicking it again
-   *  turns it off and restores the last explicit preset (or "standard"). */
+   *  turns it off and restores the last explicit preset (or "standard").
+   *  Either way, leaving auto also drops any Euclidean outline. */
   function toggleAuto() {
     if (mode === "auto") {
       const restore = lastPresetRef.current ?? "standard";
@@ -283,11 +316,28 @@ export default function DrumPatternTools() {
         ...sec,
         drumPattern: restore,
         drumVariantIndex: sec.drumVariantIndex ?? 0,
+        drumMeterOutline: undefined,
       }));
     } else {
       if (eff.drumPattern) lastPresetRef.current = eff.drumPattern;
-      draftWith((sec) => ({ ...sec, drumPattern: undefined, drumVariantIndex: undefined }));
+      draftWith((sec) => ({ ...sec, drumPattern: undefined, drumVariantIndex: undefined, drumMeterOutline: undefined }));
     }
+  }
+
+  /** Switch the section to Euclidean (outline) authoring — a drum meter
+   *  independent of the section's time signature. Creates a 7/8 (2+2+3)
+   *  outline to start from; the Euclid sliders + cell editor reshape it
+   *  into any 2s/3s grouping. The current preset is remembered so
+   *  Auto/Preset can restore it. */
+  function enterOutline() {
+    if (mode === "outline") return;
+    if (eff.drumPattern) lastPresetRef.current = eff.drumPattern;
+    draftWith((sec) => ({
+      ...sec,
+      drumPattern: undefined,
+      drumVariantIndex: undefined,
+      drumMeterOutline: sec.drumMeterOutline ?? buildEuclideanOutline(7, 8, twoThreeCellCounts(7)[0]!, 0),
+    }));
   }
 
   function setPreset(val: string) {
@@ -316,6 +366,66 @@ export default function DrumPatternTools() {
       ...sec,
       drumMeterOutline: buildEuclideanOutline(nv, baseDenom, kv, rv),
     }));
+  }
+
+  // ---- Whole-section outline cell editing — the 2s/3s grouping and each
+  // cell's kick/snare/hat downbeat (`cellVoices`), both honored at export.
+  // ---- These mutate the outline's cells/voices directly (never silently
+  // regenerating them from a slider), keeping manual edits intact.
+
+  function setOutlineDenominator(denom: number) {
+    draftWith((sec) =>
+      sec.drumMeterOutline
+        ? { ...sec, drumMeterOutline: { ...sec.drumMeterOutline, cellBeats: 4 / denom } }
+        : sec,
+    );
+  }
+
+  function toggleOutlineCell(i: number) {
+    draftWith((sec) => {
+      const o = sec.drumMeterOutline;
+      if (!o) return sec;
+      const cells = o.cells.slice();
+      cells[i] = cells[i] === 2 ? 3 : 2;
+      return { ...sec, drumMeterOutline: { ...o, cells, label: countLabel(cells) } };
+    });
+  }
+
+  function setOutlineCellVoice(i: number, voice: DrumCellVoice) {
+    draftWith((sec) => {
+      const o = sec.drumMeterOutline;
+      if (!o) return sec;
+      const cellVoices = (o.cellVoices ?? o.cells.map(() => "hat" as DrumCellVoice)).slice();
+      cellVoices[i] = voice;
+      return { ...sec, drumMeterOutline: { ...o, cellVoices } };
+    });
+  }
+
+  /** Inserts a fresh 2-cell right after `afterIndex` (`cells.length - 1`
+   *  from the UI appends at the end) rather than only ever appending — a
+   *  repeating odd-meter figure is usually easiest to build by growing it
+   *  from wherever you're looking. */
+  function insertOutlineCell(afterIndex: number) {
+    draftWith((sec) => {
+      const o = sec.drumMeterOutline;
+      if (!o) return sec;
+      const at = afterIndex + 1;
+      const cells = [...o.cells.slice(0, at), 2 as const, ...o.cells.slice(at)];
+      const cellVoices = o.cellVoices
+        ? [...o.cellVoices.slice(0, at), "hat" as DrumCellVoice, ...o.cellVoices.slice(at)]
+        : undefined;
+      return { ...sec, drumMeterOutline: { ...o, cells, cellVoices, label: countLabel(cells) } };
+    });
+  }
+
+  function removeOutlineCell(i: number) {
+    draftWith((sec) => {
+      const o = sec.drumMeterOutline;
+      if (!o || o.cells.length <= 1) return sec; // never empty out entirely
+      const cells = o.cells.filter((_, idx) => idx !== i);
+      const cellVoices = o.cellVoices ? o.cellVoices.filter((_, idx) => idx !== i) : undefined;
+      return { ...sec, drumMeterOutline: { ...o, cells, cellVoices, label: countLabel(cells) } };
+    });
   }
 
 
@@ -389,6 +499,17 @@ export default function DrumPatternTools() {
           }
         >
           Auto
+        </button>
+        <button
+          className={mode === "outline" ? CHIP_ON : CHIP}
+          onClick={enterOutline}
+          title={
+            mode === "outline"
+              ? "Euclidean mode is on — this section's drums run an outline meter independent of the section's time signature"
+              : "Switch to Euclidean odd-meter authoring — a drum meter independent of the section's time signature"
+          }
+        >
+          Euclid
         </button>
         <select
           className="w-40 shrink-0 bg-panelAlt border border-edge rounded px-2 py-1 text-xs text-ink"
@@ -519,7 +640,7 @@ export default function DrumPatternTools() {
               one k/n). For preset/auto sections just show a compact
               overview of the resolved groove. */}
           {outline ? (
-            <div className="border-t border-edge/60 pt-2.5 space-y-1.5">
+            <div className="border-t border-edge/60 pt-2.5 space-y-2">
               <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block">
                 Euclidean · whole section
               </span>
@@ -531,9 +652,108 @@ export default function DrumPatternTools() {
                     {k} / {n} · rot {rotation} · {outline.label}
                   </p>
                 </div>
-                <div className="w-44 shrink-0">
+                <div className="w-44 shrink-0 space-y-2.5">
                   <EuclidSliders n={n} denom={baseDenom} k={k} rotation={rotation} onChange={setOutline} />
+                  {/* Grid — /8 (eighths) vs /16 (sixteenths), the one
+                      meter knob the Euclid sliders don't cover. */}
+                  <div>
+                    <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted mb-0.5 block">Grid</span>
+                    <div className="flex gap-1">
+                      {[8, 16].map((d) => (
+                        <button
+                          key={d}
+                          className={baseDenom === d ? CHIP_ON : CHIP}
+                          onClick={() => setOutlineDenominator(d)}
+                          title={d === 8 ? "x/8 meter — cells are half-beats" : "x/16 meter — cells are quarter-beats"}
+                        >
+                          /{d}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
+              </div>
+
+              {/* Cell editor — the 2s/3s grouping (Ferguson apple/gallop) and
+                  each cell's kick/snare/hat downbeat voice (`cellVoices`),
+                  both of which the export honors. */}
+              <div className="border-t border-edge/40 pt-2">
+                <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+                  Cells · {outline.label}
+                </span>
+                <div className="flex flex-wrap gap-1 items-center">
+                  {outline.cells.map((cell, i) => {
+                    const voice = outline.cellVoices?.[i] ?? "hat";
+                    const sel = i === selectedCell;
+                    return (
+                      <button
+                        key={i}
+                        className="flex flex-col items-center gap-0.5 rounded border px-1.5 py-1"
+                        style={{ borderColor: sel ? "#F5E7C8" : "#2E2E34", backgroundColor: sel ? "#232838" : "transparent" }}
+                        onClick={() => setCellIndex(i)}
+                        title={`Cell ${i + 1}: ${cell} beats, plays ${CELL_VOICE_LABEL[voice]}`}
+                      >
+                        <span className="font-mono text-sm text-ink leading-none">{cell}</span>
+                        <span className="w-3 h-1.5 rounded-full" style={{ backgroundColor: CELL_VOICE_COLOR[voice] }} />
+                      </button>
+                    );
+                  })}
+                  <button
+                    className="rounded border border-dashed border-edge text-inkMuted hover:text-ink px-2 py-1 text-xs"
+                    onClick={() => insertOutlineCell(outline.cells.length - 1)}
+                    title="Add a cell at the end"
+                  >
+                    +
+                  </button>
+                </div>
+
+                {selectedCell !== null && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 border border-edge/60 rounded p-1.5 bg-panelAlt">
+                    <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted">
+                      Cell {selectedCell + 1} of {outline.cells.length}
+                    </span>
+                    <button
+                      className={CHIP}
+                      onClick={() => toggleOutlineCell(selectedCell)}
+                      title="Toggle 2 ⇄ 3 beats (apple / galloping)"
+                    >
+                      {outline.cells[selectedCell]} ⇄ 2/3
+                    </button>
+                    <div className="flex gap-1" title="Which voice this cell's downbeat plays">
+                      {(["kick", "snare", "hat"] as DrumCellVoice[]).map((v) => {
+                        const active = (outline.cellVoices?.[selectedCell] ?? "hat") === v;
+                        const color = CELL_VOICE_COLOR[v];
+                        return (
+                          <button
+                            key={v}
+                            className="font-mono text-2xs rounded px-1.5 py-0.5 border"
+                            style={{
+                              borderColor: active ? color : "#2E2E34",
+                              color: active ? "#12161D" : color,
+                              backgroundColor: active ? color : "transparent",
+                            }}
+                            onClick={() => setOutlineCellVoice(selectedCell, v)}
+                          >
+                            {CELL_VOICE_LABEL[v]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      className="font-mono text-3xs text-inkMuted hover:text-ink"
+                      onClick={() => insertOutlineCell(selectedCell)}
+                    >
+                      + insert after
+                    </button>
+                    <button
+                      className="font-mono text-3xs text-inkMuted hover:text-red-400 disabled:opacity-30 disabled:hover:text-inkMuted"
+                      onClick={() => removeOutlineCell(selectedCell)}
+                      disabled={outline.cells.length <= 1}
+                    >
+                      remove
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ) : necklace ? (
@@ -591,10 +811,6 @@ export default function DrumPatternTools() {
             <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
               Transition · this section's ending
             </span>
-            <p className="text-2xs text-inkMuted/70 italic mb-2">
-              ⚠ TODO — the models share one preview today; the build/break/cut/drop
-              difference is only applied at export, not shown here yet.
-            </p>
             <div className="flex flex-wrap gap-1 mb-2">
               <button className={!eff.drumTransitionModel ? CHIP_ON : CHIP} onClick={() => setTransitionModel(null)}>
                 none
@@ -626,6 +842,16 @@ export default function DrumPatternTools() {
                   <span className="font-mono text-2xs tabular-nums text-ink">{eff.drumTransitionBars ?? 1}</span>
                   <button className={CHIP} onClick={() => setTransitionBars((eff.drumTransitionBars ?? 1) + 1)}>+</button>
                 </div>
+              </div>
+            )}
+            {eff.drumTransitionModel && (
+              <div className="border-t border-edge/40 pt-2">
+                <TransitionPreview
+                  section={eff}
+                  concept={song.concept}
+                  model={eff.drumTransitionModel}
+                  transitionBars={eff.drumTransitionBars ?? 1}
+                />
               </div>
             )}
           </div>

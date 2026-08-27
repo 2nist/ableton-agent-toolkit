@@ -4,9 +4,9 @@ import type { VoiceNecklace } from "../../lib/playback/drumPreview";
 
 /** One necklace per voice present in an already-resolved groove — pure
  *  presentation, no opinion about where the necklaces came from. Used by
- *  `structure/DrumNecklacePreview.tsx` (a preset+variant),
- *  `DrumsDockTools.tsx` (either a preset+variant or a `drumMeterOutline`
- *  outline) and the Drum Pattern tab so both authoring modes preview
+ *  `structure/DrumNecklacePreview.tsx` (a preset+variant) and the Drum
+ *  Pattern tab (`DrumPatternTools.tsx` — either a preset+variant or a
+ *  `drumMeterOutline` outline) so both authoring modes preview
  *  identically. `large` renders a bigger glyph for the primary per-voice
  *  editor, where the pattern is the main focus rather than a compact
  *  lane overview. */

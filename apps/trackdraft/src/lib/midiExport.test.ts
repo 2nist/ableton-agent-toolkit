@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { songToMidi } from "./midiExport";
+import { songToMidi, planDrumStem } from "./midiExport";
+import { sectionSpans } from "./arrangement";
 import { parseMidiBytes } from "./parsers/parseMidi";
 import { createEmptySong, type BlueprintSong, type Chord } from "../types/blueprint";
 
@@ -226,5 +227,45 @@ describe("songToMidi", () => {
     const chordNoteOns = chordTrack.events.filter((e) => e.type === "noteOn");
     // First chord = 8 arp notes, remaining 3 chords = 3 notes each (block) = 8 + 9 = 17
     expect(chordNoteOns.length).toBe(8 + 3 * 3);
+  });
+});
+
+describe("planDrumStem — authoring fields reach the exported drums", () => {
+  it("a per-voice override adds a voice the base groove never plays", () => {
+    const song = testSong();
+    song.sections[0].drumVoicePatterns = { rideBell: { k: 2, n: 8, rotation: 0 } };
+    song.arrangement = [{ sectionId: "s1", repeats: 1 }];
+    const notes = planDrumStem(sectionSpans(song), song.concept);
+    // The heuristic 'standard' groove never plays rideBell (pitch 53) — the
+    // override must put it in the exported stem, and it must survive the
+    // GM pitch filter.
+    expect(notes.some((n) => n.pitch === 53)).toBe(true);
+  });
+
+  it("a variation detour replaces the final bar with its own rhythm", () => {
+    const song = testSong();
+    song.sections[0].bars = 2;
+    song.sections[0].drumVariationOutline = { cellBeats: 0.5, cells: [2, 2, 3], label: "1 2 1 2 1 2 3" };
+    song.sections[0].drumVariationBars = 1;
+    song.arrangement = [{ sectionId: "s1", repeats: 1 }];
+    const notes = planDrumStem(sectionSpans(song), song.concept);
+    const tail = notes.filter((n) => n.startTime >= 4);
+    // The 7/8 click detour replaced the whole final bar — every tail note is
+    // the detour's closed hat, regardless of what the real base groove was.
+    expect(tail.length).toBeGreaterThan(0);
+    expect(tail.every((n) => n.pitch === 42)).toBe(true);
+  });
+
+  it("a cut transition truncates the final bar to a single hit", () => {
+    const song = testSong();
+    song.sections[0].bars = 2;
+    song.sections[0].drumTransitionModel = "cut";
+    song.sections[0].drumTransitionBars = 1;
+    song.arrangement = [{ sectionId: "s1", repeats: 1 }];
+    const notes = planDrumStem(sectionSpans(song), song.concept);
+    const tail = notes.filter((n) => n.startTime >= 4);
+    // cut = one kick+snare hit at beat 4, then dead silence for the span.
+    expect(tail.length).toBeGreaterThan(0);
+    expect(tail.filter((n) => n.startTime > 4)).toHaveLength(0);
   });
 });

@@ -18,3 +18,4 @@ export * from "./groove.js";
 export * from "./handoffs.js";
 export * from "./meter.js";
 export * from "./transitions.js";
+export * from "./section.js";

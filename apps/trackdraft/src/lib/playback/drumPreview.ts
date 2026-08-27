@@ -7,6 +7,7 @@ import {
   outlineToClickPattern,
   outlineToGroovePattern,
   numerator as outlineNumerator,
+  euclidOnsetSteps,
   type DrumPattern,
   type PackedVariant,
   type PackedNote,
@@ -207,33 +208,12 @@ export function resolveOutlineVoiceNecklaces(outline: MeterOutline): VoiceNeckla
  *  authoring path ("edit the drums voice by voice"). */
 function euclidToVoiceNecklace(pat: EuclidPattern, voice: KitVoice): VoiceNecklace | null {
   const n = Math.max(1, Math.floor(pat.n));
-  const k = Math.max(1, Math.min(n, Math.floor(pat.k)));
-  const r = ((Math.floor(pat.rotation) % n) + n) % n;
-  const steps: number[] = [];
-  for (let i = 0; i < k; i++) {
-    const base = Math.round((i * n) / k);
-    steps.push((base + r) % n);
-  }
-  steps.sort((a, b) => a - b);
+  const steps = euclidOnsetSteps(pat);
   return { voice, hits: steps.map((s) => s / n), count: steps.length, steps: n };
 }
 
-/** The onset step indices of a Euclidean pattern, shared by the editor's
- *  step view and the per-voice resolution — one place for the math. */
-export function euclidOnsetSteps(pat: Pick<EuclidPattern, "k" | "n" | "rotation">): number[] {
-  const n = Math.max(1, Math.floor(pat.n));
-  const k = Math.max(1, Math.min(n, Math.floor(pat.k)));
-  const r = ((Math.floor(pat.rotation) % n) + n) % n;
-  const steps: number[] = [];
-  for (let i = 0; i < k; i++) {
-    const base = Math.round((i * n) / k);
-    steps.push((base + r) % n);
-  }
-  return steps.sort((a, b) => a - b);
-}
-
 /**
- * The one entry point `DrumsView`/`DrumsDockTools` should call: resolves
+ * The one entry point `DrumsView`/`DrumPatternTools` should call: resolves
  * whichever of a section's two mutually-exclusive drum-authoring modes is
  * active (`drumMeterOutline` takes priority over `drumPattern`, same
  * order `drumClips.ts` uses), or the heuristic pattern when neither is
@@ -282,7 +262,7 @@ export function resolveSectionVariant(section: BlueprintSection, concept?: strin
 /** Every selectable named pattern — "auto" (`undefined`, deferring to
  *  `inferPatternForSection`) is a separate, third option a picker adds on
  *  top of this list, distinct from `"none"` here (an explicit "no drums"
- *  choice). Canonical list `SectionCard`'s picker and `DrumsDockTools`'
+ *  choice). Canonical list `SectionCard`'s picker and `DrumPatternTools`'
  *  picker both read from, so adding a preset means updating one place. */
 export const DRUM_PATTERN_OPTIONS: DrumPattern[] = [
   "none", "kick_only", "standard", "half_time", "driving", "bridge_sparse", "intense", "dnb", "78", "68", "54",

@@ -4,7 +4,7 @@ import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
 import { useDockStore } from "../../store/dockStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
-import { beatsPerBar, type BlueprintSection, type DrumTransitionModel, type DrumVoiceName } from "../../types/blueprint";
+import { beatsPerBar, type BlueprintSection, type DrumTransitionModel, type DrumVoiceName, type MeterOutline } from "../../types/blueprint";
 import {
   resolveSectionVoiceNecklaces,
   resolveSectionVariant,
@@ -17,7 +17,7 @@ import { TRANSITION_COLOR, TRANSITION_LABEL } from "./transitionStyle";
 import { SECTION_ROLE_COLOR } from "./sectionRoleStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
 import DrumPatternTools from "./DrumPatternTools";
-import { planSectionHandoffFills, FILL_DATA, type HandoffSectionInput } from "@drum/library";
+import { planSectionHandoffFills, FILL_DATA, outlineBeatsPerBar, numerator as outlineNumerator, type HandoffSectionInput } from "@drum/library";
 
 /** A stable identity for a section's *resolved* drum content — same
  *  preset+variant (or same outline cells/voicing) means literally the
@@ -181,6 +181,16 @@ function hexagonPoints(cx: number, cy: number, r: number): string {
   return p.trim();
 }
 
+/** Compact "n/d" label for a `drumMeterOutline` — 7/8, 7/16, ... — from its
+ *  cells (sum = numerator) and cellBeats (denominator). Shown next to a
+ *  section name when its drums run an outline, so an independent drum meter
+ *  is explicit rather than only visible as drifted gridlines. */
+function outlineMeterLabel(outline: MeterOutline): string {
+  const num = outlineNumerator(outline);
+  const den = Math.round(4 / outline.cellBeats);
+  return `${num}/${den}`;
+}
+
 /** Whole-song drum arrangement as an event canvas: a pure-black stage,
  *  a fixed six-lane track (KICK/SNR/RIM/HAT/CYM/TOM, silent lanes
  *  dimmed), no section bands — the top annotation row carries each
@@ -192,7 +202,7 @@ function hexagonPoints(cx: number, cy: number, r: number): string {
  *  transitions read as bold lane-colored domes sitting on the line.
  *
  *  Editing is dock-based, mirroring Harmony: this view registers
- *  `DrumsDockTools` into the shared dock once (it reads
+ *  `DrumPatternTools` into the shared dock once (it reads
  *  `useDrumsSelectionStore` itself), and clicking the timeline — a
  *  section, a necklace, a variation detour, or a handoff — just selects
  *  the owning section, which loads its Pattern / Variation / Transition
@@ -280,6 +290,58 @@ export default function DrumsView() {
   });
   gridLines.push({ x: barX(bars), bar: true });
 
+  // ---- Nested drum-meter ruler: the drums' OWN grid, drawn inside the
+  // lane tracks and allowed to drift against the section ruler above. For a
+  // section with a `drumMeterOutline` this is the 2s/3s cell grouping (each
+  // apple/gallop's start) repeated every outline bar — the amber lines show
+  // the drums in a different meter than the section (7/8 inside 4/4, say).
+  // For a preset/heuristic section whose groove loop length differs from the
+  // section's beats-per-bar, just the loop boundaries are drawn, so a
+  // mismatched loop reads as its own period instead of an invisible misalign.
+  const drumGridLines: { x: number; bar: boolean; cell: boolean }[] = [];
+  resolved.forEach((r, i) => {
+    const outline = r.section.drumMeterOutline;
+    const sectionBpb = beatsPerBar(r.span.section);
+    const startBeat = r.span.startBeat;
+    const duration = r.span.durationBeats;
+
+    if (outline) {
+      const outlineBpb = outlineBeatsPerBar(outline);
+      // Beat offset of each cell's start within one outline bar.
+      const cellStarts: number[] = [];
+      let acc = 0;
+      for (const cell of outline.cells) {
+        cellStarts.push(acc);
+        acc += cell * outline.cellBeats;
+      }
+      // When the outline meter == the section meter, the outline bar line is
+      // the section bar line — drawing it again just makes a brighter line.
+      // Only the in-bar cell grouping is the extra information then.
+      const drifting = Math.abs(outlineBpb - sectionBpb) > 1e-6;
+      for (let bar = 0; bar * outlineBpb < duration + 1e-9; bar++) {
+        const barStart = startBeat + bar * outlineBpb;
+        cellStarts.forEach((cs, idx) => {
+          if (bar === 0 && idx === 0) return; // the very first line == section edge
+          const absBeat = barStart + cs;
+          if (absBeat < startBeat - 1e-9 || absBeat > startBeat + duration + 1e-9) return;
+          if (idx === 0 && !drifting) return;
+          const x = X0 + (absBeat / sectionBpb) * barW;
+          drumGridLines.push({ x, bar: idx === 0, cell: idx > 0 });
+        });
+      }
+    } else {
+      const loopBeats = handoffInputs[i]?.variant?.lengthBeats;
+      if (loopBeats && Math.abs(loopBeats - sectionBpb) > 1e-6) {
+        for (let o = 0; o * loopBeats < duration + 1e-9; o++) {
+          const absBeat = startBeat + o * loopBeats;
+          if (absBeat < startBeat - 1e-9) continue;
+          const x = X0 + (absBeat / sectionBpb) * barW;
+          drumGridLines.push({ x, bar: true, cell: false });
+        }
+      }
+    }
+  });
+
   function selectSection(sectionId: string) {
     setSelectedSectionId(sectionId);
   }
@@ -329,11 +391,17 @@ export default function DrumsView() {
             const isSelected = r.span.section.id === selectedSectionId;
             const roleColor = SECTION_ROLE_COLOR[r.span.section.role] ?? SECTION_ROLE_COLOR.custom;
             const col = isSelected ? "#E8B54A" : roleColor.rim;
+            const outline = r.section.drumMeterOutline;
             return (
               <g key={`sec-${i}`} pointerEvents="none">
                 <text x={x + w / 2} y={12} textAnchor="middle" fontSize={12} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill={col}>
                   {r.span.section.name}
                   {r.span.occurrenceIndex > 0 ? ` ·${r.span.occurrenceIndex + 1}` : ""}
+                  {outline && (
+                    <tspan fill="#E8B54A" opacity={0.85} fontSize={10}>
+                      {` · ${outlineMeterLabel(outline)}`}
+                    </tspan>
+                  )}
                 </text>
                 <path
                   d={`M ${x} ${20} L ${x} ${26} L ${x + w} ${26} L ${x + w} ${20}`}
@@ -406,6 +474,17 @@ export default function DrumsView() {
                   stroke="#fff"
                   strokeOpacity={g.bar ? 0.14 : 0.06}
                   strokeWidth={1}
+                />
+              ))}
+              {/* The drum's own meter, amber so it reads as a separate ruler: */}
+              {drumGridLines.map((g, gi) => (
+                <line
+                  key={`dg-${lane.key}-${gi}`}
+                  x1={g.x} y1={TOP_PAD + li * TRACK_H} x2={g.x} y2={trackBottom(li)}
+                  stroke="#E8B54A"
+                  strokeOpacity={g.bar ? 0.2 : 0.09}
+                  strokeWidth={g.bar ? 1.4 : 1}
+                  strokeDasharray={g.cell ? "1 4" : undefined}
                 />
               ))}
               <text x={X0 - 14} y={laneY(li) + 4} textAnchor="end" fontSize={12} fontFamily="'IBM Plex Mono', monospace" fill={lane.color} fontWeight={600}>

@@ -2,30 +2,22 @@ import type { NoteDescription } from "@ableton-extensions/sdk";
 import {
   PRESET_DATA,
   FILL_DATA,
-  CRASH_PITCH,
   inferDrumPattern,
-  tileGrooveVaried,
-  occurrenceSeed,
-  hashSeed,
-  scaleToVelocityPreset,
-  planSectionHandoffFills,
+  humanizeOutlineNotes,
+  planSectionDrumNotes,
   outlineBeatsPerBar,
   outlineToClickPattern,
   outlineToGroovePattern,
-  synthesizeOutlineFill,
-  synthesizeTransition,
-  extractGroove,
-  applyGroove,
+  occurrenceSeed,
+  hashSeed,
   type DrumPattern,
-  type DrumNote,
   type FillLibrary,
-  type HandoffSectionInput,
   type PackedPreset,
   type PackedVariant,
-  type PackedNote,
+  type SectionDrumInput,
 } from "@drum/library";
 import { getVelocity } from "@music-theory/song-structure";
-import type { MeterOutline, DrumTransitionModel, BlueprintSection } from "@music-theory/song-blueprint";
+import type { MeterOutline } from "@music-theory/song-blueprint";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
 
 export interface DrumClipPlan {
@@ -39,98 +31,6 @@ export type { FillLibrary };
 
 /** A short, un-sustained hit — not a block chord — regardless of how dense the underlying groove is. */
 const HIT_DURATION = 0.25;
-
-function round4(n: number): number {
-  return Math.round(n * 10000) / 10000;
-}
-
-type TiledDrumNote = { beat: number; pitch: number; velocity: number };
-
-/**
- * Splices `section.drumTransitionModel` into a section's final bars,
- * replacing whatever's there — including an automatic handoff fill from
- * `planSectionHandoffFills`, spliced in just before this runs. An explicit
- * transition is a deliberate authorial choice and wins over the default
- * fill, not a second thing layered on top of it.
- *
- * Mirrors `extensions/drum-studio/src/render-drum-studio.ts`'s own
- * `applyTransition` (single-clip authoring) so the same section-boundary
- * vocabulary behaves identically whether it's driving one standalone clip
- * or a whole song's worth of them. Doesn't yet support that function's
- * `nextGridDenominator` meter-modulation pickup — `BlueprintSection` has
- * no field for it yet, so there's nothing for this to read.
- */
-function applyTransition(
-  tiled: TiledDrumNote[],
-  section: BlueprintSection,
-  durationBeats: number,
-  variant: PackedVariant,
-  velocityTarget: number,
-): TiledDrumNote[] {
-  const model: DrumTransitionModel | undefined = section.drumTransitionModel;
-  if (!model) return tiled;
-
-  const barBeats = variant.beatsPerBar;
-  const gridBeats = section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25;
-
-  const maxBars = Math.floor(durationBeats / barBeats);
-  if (maxBars < 1) return tiled;
-  const spanBars = Math.max(1, Math.min(Math.round(section.drumTransitionBars ?? 1), maxBars));
-  if (spanBars >= maxBars && maxBars < 2) return tiled; // never eat the section's only bar
-
-  const spanBeats = spanBars * barBeats;
-  const fillStart = durationBeats - spanBeats;
-  const baseNotes: PackedNote[] = tiled
-    .filter((n) => n.beat >= fillStart)
-    .map((n): PackedNote => [round4(n.beat - fillStart), n.pitch, n.velocity]);
-
-  const generated = synthesizeTransition(model, { spanBeats, gridBeats, velocityTarget, baseNotes });
-
-  const kept = tiled.filter((n) => n.beat < fillStart);
-  const added: TiledDrumNote[] = generated.map(([beat, pitch, velocity]) => ({ beat: round4(beat + fillStart), pitch, velocity }));
-  return [...kept, ...added];
-}
-
-function toDrumNotes(notes: PackedNote[]): DrumNote[] {
-  return notes.map(([beat, pitch, velocity]) => ({ beat, pitch, velocity }));
-}
-
-function toPackedNotes(notes: DrumNote[]): PackedNote[] {
-  return notes.map((n): PackedNote => [n.beat, n.pitch, n.velocity]);
-}
-
-/**
- * Borrows real human timing/velocity character from an actual corpus
- * performance and imposes it on an outline's mathematically-precise
- * onsets — real feel for a meter the corpus has no recording of at all,
- * via the same `extractGroove`/`applyGroove` template system used
- * elsewhere in this library to keep other parts in the drums' pocket.
- *
- * Extracted per-*beat*, not per-bar: the reference's own bar length has
- * nothing to do with the outline's (a 7/8 bar isn't 4 beats), but "how
- * a human's timing wobbles within one beat" generalizes across any bar
- * length, so `extractGroove` is called with `lengthBeats: 1` — every
- * beat of the outline inherits the same borrowed character, rather than
- * needing bar-position-specific data that wouldn't transfer between
- * differently-shaped meters anyway.
- *
- * Always draws from the `standard` preset's first variant — a real,
- * always-baked E-GMD performance, generic rather than stylistically
- * matched to the section. Falls back to the untouched notes if that
- * preset is missing (a test's fixture `presetData`, say) rather than
- * throwing — humanization is a real improvement, not a hard dependency.
- */
-function humanizeOutlineNotes(
-  notes: PackedNote[],
-  cellBeats: number,
-  presetData: Partial<Record<DrumPattern, PackedPreset>>,
-): PackedNote[] {
-  const reference = presetData.standard?.variants[0];
-  if (!reference || reference.notes.length === 0) return notes;
-  const groove = extractGroove(toDrumNotes(reference.notes), 1, cellBeats);
-  if (groove.points.length === 0) return notes;
-  return toPackedNotes(applyGroove(toDrumNotes(notes), groove));
-}
 
 /**
  * Turns a section's `drumMeterOutline` into a `PackedVariant` shaped like
@@ -179,23 +79,16 @@ function outlineVariant(outline: MeterOutline, presetData: Partial<Record<DrumPa
  *   variant is picked deterministically per section id — exactly as before
  *   manual control existed.
  *
- * Regardless of how the pattern is chosen, variants are scaled so their
- * peak lands on the section's velocity preset, and tiled with seeded
- * per-bar micro-variation (`tileGrooveVaried`) so long sections don't
- * loop identically. Section-handoff fills and the crash that resolves them
- * are computed by `@drum/library`'s `planSectionHandoffFills` — see there
- * for the actual logic; this file just resolves sections into its inputs
- * and splices the result into each section's notes. An outline-driven
- * section's fill comes from `synthesizeOutlineFill` (the corpus/synth
- * `FILL_DATA` has nothing keyed by an outline's often-fractional
- * beats-per-bar), injected into a local copy of `fillData` so
- * `planSectionHandoffFills`'s own fill-pool lookup finds it with no
- * special-casing there either.
- *
- * When `section.drumTransitionModel` is also set, `applyTransition`
- * (below) then overwrites that same tail span with one of the four named
- * transition models instead — an explicit choice always wins over the
- * automatic handoff fill for the bars it covers, it doesn't stack with it.
+ * From there, the whole per-section pipeline — per-voice Euclidean
+ * overrides (`drumVoicePatterns`), velocity scaling, seeded tiling,
+ * automatic handoff fills, the ending detour (`drumVariationOutline`),
+ * the named transition (`drumTransitionModel`) and the resolve-on-crash —
+ * runs in `@drum/library`'s `planSectionDrumNotes`, the SAME function the
+ * web app's MIDI export uses, so "Export MIDI", live MIDI out, and
+ * "Send to Ableton" all produce the same drums. This file only resolves
+ * each section's *base* groove (the part that needs song-blueprint /
+ * song-structure types) and maps the results into the library's
+ * DAW-agnostic `SectionDrumInput`, exactly like `planSectionHandoffFills`.
  *
  * `presetData`/`fillData` default to the real library and only need
  * overriding in tests, which use small fixture presets instead of asserting
@@ -210,9 +103,9 @@ export function planDrumClips(
   const spans = sectionSpans(song);
   const songSignals = { bpm: song.bpm, title: song.title, concept: song.concept, notes: song.notes };
 
-  // First pass: choose pattern + variant per section, so the handoff planner
-  // can look at the *next* section's resolved target too.
-  const resolved = spans.map(({ section, occurrenceIndex }) => {
+  // First pass: choose the base pattern + variant per section, so the
+  // handoff planner can look at the *next* section's resolved target too.
+  const resolved: (PackedVariant | null)[] = spans.map(({ section, occurrenceIndex }) => {
     if (section.drumMeterOutline) return outlineVariant(section.drumMeterOutline, presetData);
 
     const pattern = section.drumPattern ?? inferDrumPattern(
@@ -236,67 +129,28 @@ export function planDrumClips(
     return preset.variants[variantIndex];
   });
 
-  // Give planSectionHandoffFills somewhere to find a fill for each distinct
-  // outline meter in play — the real FILL_DATA has nothing keyed by an
-  // outline's (often fractional) beats-per-bar, and a section-transition
-  // fill still reads better than the groove just stopping cold. A local
-  // copy: never mutate the caller's fillData (the real FILL_DATA, by
-  // default), and only add keys that aren't already present so genuine
-  // corpus/synth fills for a beats-per-bar an outline happens to collide
-  // with (unlikely, but not impossible) still win.
-  const outlineFillData: FillLibrary = { acoustic: fillData.acoustic, synth: { ...fillData.synth } };
-  for (const { section } of spans) {
-    if (!section.drumMeterOutline) continue;
-    const key = String(outlineBeatsPerBar(section.drumMeterOutline));
-    if (!outlineFillData.synth[key]) {
-      outlineFillData.synth[key] = [synthesizeOutlineFill(section.drumMeterOutline, 100)];
-    }
-  }
-
-  const handoffInputs: HandoffSectionInput[] = spans.map(({ section, durationBeats, occurrenceIndex }, i) => ({
+  // Map each span into the library's shared per-section pipeline — voice
+  // overrides, detour, transition, and the outline fill are all carried
+  // here, so the app's MIDI export and this Ableton plan can't drift.
+  const inputs: SectionDrumInput[] = spans.map(({ section, durationBeats, occurrenceIndex }, i) => ({
     sectionId: section.id,
     occurrenceIndex,
     variant: resolved[i],
+    outline: section.drumMeterOutline ?? null,
+    voiceOverrides: section.drumVoicePatterns,
+    variation: section.drumVariationOutline ?? null,
+    variationBars: section.drumVariationBars,
+    transitionModel: section.drumTransitionModel ?? null,
+    transitionBars: section.drumTransitionBars,
+    gridBeats: section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25,
     durationBeats,
     velocityTarget: getVelocity(section.velocity),
   }));
-  const handoffPlans = planSectionHandoffFills(handoffInputs, outlineFillData);
 
-  return spans.map(({ section, startBeat, durationBeats, occurrenceIndex }, i) => {
-    const variant = resolved[i];
-    if (!variant) {
-      return { name: section.name, startBeat, durationBeats, notes: [] };
-    }
+  const plans = planSectionDrumNotes(inputs, fillData);
 
-    const velocityTarget = getVelocity(section.velocity);
-    const scaled = scaleToVelocityPreset(variant.notes, velocityTarget);
-
-    let tiled = tileGrooveVaried(
-      scaled.map(([beat, pitch, velocity]) => ({ beat, pitch, velocity })),
-      variant.lengthBeats,
-      durationBeats,
-      { seed: occurrenceSeed(section.id, occurrenceIndex) },
-    );
-
-    const plan = handoffPlans[i];
-    if (plan.fillStart !== null) {
-      const fillStart = plan.fillStart;
-      tiled = tiled.filter((note) => note.beat < fillStart);
-      for (const [beat, pitch, velocity] of plan.fillNotes) {
-        tiled.push({ beat, pitch, velocity });
-      }
-    }
-
-    tiled = applyTransition(tiled, section, durationBeats, variant, velocityTarget);
-
-    // A fill resolves onto a crash — put it on this section's downbeat when
-    // the previous section built into it, unless the groove already opens
-    // with one.
-    if (plan.precededByFill && !tiled.some((n) => n.pitch === CRASH_PITCH && n.beat < 0.25)) {
-      tiled.push({ beat: 0, pitch: CRASH_PITCH, velocity: Math.min(127, velocityTarget + 4) });
-    }
-
-    const notes: NoteDescription[] = tiled
+  return spans.map(({ section, startBeat, durationBeats }, i) => {
+    const notes: NoteDescription[] = plans[i].notes
       .sort((a, b) => a.beat - b.beat || a.pitch - b.pitch)
       .map(({ beat, pitch, velocity }) => ({
         pitch,
