@@ -17,7 +17,8 @@
       "velocity": "mf",
       "beatsPerChord": 4,
       "timeSignatureNumerator": 4,
-      "timeSignatureDenPower": 2
+      "timeSignatureDenPower": 2,
+      "syncopationOffset": 0.25
     },
     {
       "role": "solo",

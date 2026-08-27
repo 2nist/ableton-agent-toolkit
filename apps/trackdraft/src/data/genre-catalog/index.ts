@@ -12,7 +12,9 @@ import type { SongMap } from "../songMaps";
 //   "defaults": { "bpm", "key", "scale", "concept" } (all optional),
 //   "slots": [{ "role", "label", "purpose", "bars?", "velocity?", "beatsPerChord?",
 //               "timeSignatureNumerator?", "timeSignatureDenPower?",
-//               "progression?", "groove?", "swing?", "optional?" }],
+//               "progression?", "groove?", "swing?", "optional?",
+//               "harmonyRhythm? (\"beats\"|\"euclid\"|\"follow drums\")",
+//               "harmonyCellCount?", "harmonyRotation?", "syncopationOffset?" }],
 //   "variants": [{ "name", "description?", "slots": [...] }] (optional — alternate
 //               structures for genres with more than one canonical form, e.g. a
 //               loop-based vs. song-oriented shape; shares this file's "defaults")

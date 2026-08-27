@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { addSection, removeSection, reorderSections, updateRepeats, repeatsFor, applySongMap } from "./sections";
 import type { BlueprintSong, BlueprintSection } from "../types/blueprint";
 import type { SongMap } from "../data/songMaps";
+import { getGenreMap } from "../data/genre-catalog";
 
 function makeSong(sections: Partial<BlueprintSection>[], arrangement: BlueprintSong["arrangement"] = []): BlueprintSong {
   return {
@@ -231,6 +232,22 @@ describe("applySongMap", () => {
     expect(song.sections[3].harmonyMeterOutline).toBeUndefined();
     expect(song.sections[3].harmonyFollowsDrums).toBeUndefined();
     expect(song.sections[3].syncopationOffset).toBeUndefined();
+  });
+
+  it("mints euclid harmony outlines from the real math-rock genre map's 7/8 slots, keeps the 4/4 deception bridge straight", () => {
+    const map = getGenreMap("genre-math-rock-78");
+    expect(map).toBeDefined();
+    const song = applySongMap(makeSong([]), map!);
+    const byRole = (r: string) => song.sections.find((s) => s.role === r)!;
+    for (const role of ["intro", "verse", "chorus"]) {
+      const o = byRole(role).harmonyMeterOutline;
+      expect(o?.cellBeats).toBe(0.5); // /8 meter
+      expect(o?.cells.reduce((a, b) => a + b, 0)).toBe(7);
+      expect(o?.cells.every((c) => c === 2 || c === 3)).toBe(true);
+    }
+    // The Metric Deception pivots to straight 4/4 — its harmony stays on beats.
+    expect(byRole("bridge").harmonyMeterOutline).toBeUndefined();
+    expect(byRole("bridge").syncopationOffset).toBeUndefined();
   });
 
   it("drops slots marked optional when excludeOptional is set", () => {

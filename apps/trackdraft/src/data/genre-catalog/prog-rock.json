@@ -17,7 +17,8 @@
       "velocity": "mp",
       "beatsPerChord": 5,
       "timeSignatureNumerator": 5,
-      "timeSignatureDenPower": 2
+      "timeSignatureDenPower": 2,
+      "harmonyRhythm": "euclid"
     },
     {
       "role": "verse",
@@ -27,7 +28,8 @@
       "velocity": "mf",
       "beatsPerChord": 5,
       "timeSignatureNumerator": 5,
-      "timeSignatureDenPower": 2
+      "timeSignatureDenPower": 2,
+      "harmonyRhythm": "euclid"
     },
     {
       "role": "solo",

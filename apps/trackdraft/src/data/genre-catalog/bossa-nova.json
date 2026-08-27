@@ -33,6 +33,7 @@
       "timeSignatureDenPower": 2,
       "progression": ["Imaj7", "vi7", "ii7", "V7"],
       "groove": "Full clave locks in with a soft brushed snare or rim-click on the 'and' of 2; upright bass walks gently on 1 and 3.",
+      "syncopationOffset": 0.25,
       "swing": 0
     },
     {
@@ -59,6 +60,7 @@
       "timeSignatureDenPower": 2,
       "progression": ["Imaj7", "vi7", "ii7", "V7"],
       "groove": "Clave and bass hold steady while a lead instrument (flute, sax, or nylon guitar) improvises over the A-section changes.",
+      "syncopationOffset": 0.25,
       "swing": 0
     },
     {
