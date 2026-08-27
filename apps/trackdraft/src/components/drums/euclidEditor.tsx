@@ -1,0 +1,117 @@
+import { twoThreeCellCounts, euclidOnsetSteps, numerator as outlineNumerator } from "@drum/library";
+import type { MeterOutline } from "../../types/blueprint";
+
+/** Shared Euclidean rhythm primitives — the same Length/Density/Offset
+ *  sliders + step strips used by the Drums editor's outline authoring, so
+ *  Harmony's Euclidean rhythm control reuses exactly the same engine and
+ *  the two can never drift in how a k/n outline is presented.
+ */
+
+export function SliderRow({ label, min, max, value, display, onChange }: {
+  label: string; min: number; max: number; value: number; display?: number; onChange: (v: number) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="flex items-center justify-between font-mono text-2xs uppercase tracking-wider text-inkMuted mb-0.5">
+        <span>{label}</span>
+        <span className="text-ink tabular-nums">{display ?? value}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={Math.max(min, max)}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full h-1.5 accent-[#E8B54A] cursor-pointer"
+      />
+    </label>
+  );
+}
+
+/** Length (n) / Density (k) / Offset (rotation) — the intuitive way to
+ *  author "k pulses spread as evenly as possible across n steps". */
+export function EuclidSliders({ n, denom, k, rotation, onChange }: {
+  n: number; denom: number; k: number; rotation: number;
+  onChange: (n: number, k: number, r: number) => void;
+}) {
+  const validCounts = twoThreeCellCounts(n);
+  const kIndex = Math.max(0, validCounts.indexOf(k));
+  const kMax = Math.max(0, validCounts.length - 1);
+  return (
+    <div className="space-y-2.5">
+      <SliderRow
+        label="Length"
+        min={2}
+        max={16}
+        value={n}
+        onChange={(v) => {
+          // Change ONLY the length — keep the current density/offset, and
+          // only snap them if they can't exist at the new length.
+          const counts = twoThreeCellCounts(v);
+          const nextK = counts.includes(k) ? k : (counts[0] ?? k);
+          onChange(v, nextK, Math.min(rotation, Math.max(0, nextK - 1)));
+        }}
+      />
+      <SliderRow
+        label="Density"
+        min={0}
+        max={kMax}
+        value={Math.min(kIndex, kMax)}
+        display={validCounts[Math.min(kIndex, kMax)]}
+        onChange={(idx) => {
+          // Change ONLY the density — keep the offset (clamped to fit).
+          const nextK = validCounts[Math.round(idx)] ?? k;
+          onChange(n, nextK, Math.min(rotation, Math.max(0, nextK - 1)));
+        }}
+      />
+      <SliderRow
+        label="Offset"
+        min={0}
+        max={Math.max(0, k - 1)}
+        value={Math.min(rotation, Math.max(0, k - 1))}
+        onChange={(r) => onChange(n, k, Math.round(r))}
+      />
+    </div>
+  );
+}
+
+/** Narrow step-sequencer strip: n cells, the k onsets filled in. */
+export function StepView({ outline, color }: { outline: MeterOutline; color: string }) {
+  const n = outlineNumerator(outline);
+  const onsets: boolean[] = new Array(n).fill(false);
+  let step = 0;
+  for (const cell of outline.cells) {
+    if (step < n) onsets[step] = true;
+    step += cell;
+  }
+  return (
+    <div className="flex gap-px" title={outline.label}>
+      {onsets.map((on, i) => (
+        <div
+          key={i}
+          className="h-3 w-3 rounded-[2px]"
+          style={{ background: on ? color : "rgba(255,255,255,0.08)" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Narrow step-sequencer strip for a free-form Euclidean pattern. `large`
+ *  renders a bigger grid for the Voice-by-Voice editor's pattern display. */
+export function EuclidStepView({ k, n, rotation, color, large }: { k: number; n: number; rotation: number; color: string; large?: boolean }) {
+  const onsets = euclidOnsetSteps({ k, n, rotation });
+  const box = large ? "h-4 w-4 rounded-[3px]" : "h-3 w-3 rounded-[2px]";
+  return (
+    <div className="flex gap-px">
+      {Array.from({ length: n }).map((_, i) => (
+        <div
+          key={i}
+          className={box}
+          style={{ background: onsets.includes(i) ? color : "rgba(255,255,255,0.08)" }}
+        />
+      ))}
+    </div>
+  );
+}

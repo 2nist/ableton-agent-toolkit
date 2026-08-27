@@ -3,6 +3,7 @@ import {
   buildMeterOutline,
   buildEuclideanOutline,
   canonicalGroupings,
+  chordOnsetsForOutline,
   composeMeter,
   countLabel,
   euclideanCells,
@@ -15,6 +16,26 @@ import {
   twoThreeCellCounts,
   type MeterOutline,
 } from "../src/meter.js";
+
+describe("chordOnsetsForOutline", () => {
+  it("emits one onset per 2s/3s cell start, repeated across the duration", () => {
+    // 7/8 as 2+2+3 at cellBeats 0.5 → bar = 3.5 beats; cell starts at 0, 1, 2.
+    const sevenEight: MeterOutline = { cellBeats: 0.5, cells: [2, 2, 3], label: "1 2 1 2 1 2 3" };
+    expect(chordOnsetsForOutline(sevenEight, 7)).toEqual([0, 1, 2, 3.5, 4.5, 5.5]);
+  });
+
+  it("never emits an onset at or past the duration", () => {
+    const sevenEight: MeterOutline = { cellBeats: 0.5, cells: [2, 2, 3], label: "1 2 1 2 1 2 3" };
+    const onsets = chordOnsetsForOutline(sevenEight, 4);
+    expect(onsets.length).toBeGreaterThan(0);
+    expect(onsets.every((t) => t < 4)).toBe(true);
+  });
+
+  it("a 4/4 outline (2+2) yields a downbeat and one mid-bar onset per bar", () => {
+    const fourFour: MeterOutline = { cellBeats: 1, cells: [2, 2], label: "1 2 1 2" };
+    expect(chordOnsetsForOutline(fourFour, 4)).toEqual([0, 2]);
+  });
+});
 
 describe("canonicalGroupings / buildMeterOutline", () => {
   it("gives 5 as apple-galloping (2+3) by default, with galloping-apple as an alternative", () => {

@@ -365,3 +365,34 @@ export function synthesizeOutlineFill(outline: MeterOutline, velocityTarget: num
     source: { origin: "synth", generator: "outline-fill" },
   };
 }
+
+/**
+ * The chord-change grid a `MeterOutline` implies: one onset at each 2s/3s
+ * cell's start (the "DA" of each apple/gallop), repeated across
+ * `durationBeats` — the Euclidean-harmony counterpart to the drum outline.
+ * A chord progression advances on these onsets instead of per-chord beats,
+ * so harmony and drums can lock to the same syncopated grid (or run
+ * polymeter against each other). The final onset's chord runs to
+ * `durationBeats`; callers truncate it there, same as `loopChordsToFill`.
+ */
+export function chordOnsetsForOutline(outline: MeterOutline, durationBeats: number): number[] {
+  const bpb = outlineBeatsPerBar(outline);
+  // Beat offset of each cell's start within one outline bar — the final
+  // boundary equals `bpb` (the next bar's first onset) and is emitted by
+  // the outer loop as the next bar's first onset instead.
+  const onsetsInBar: number[] = [];
+  let acc = 0;
+  for (const cell of outline.cells) {
+    onsetsInBar.push(acc);
+    acc += cell * outline.cellBeats;
+  }
+  const onsets: number[] = [];
+  for (let bar = 0; bar * bpb < durationBeats - 1e-9; bar++) {
+    const barStart = bar * bpb;
+    for (const s of onsetsInBar) {
+      const t = Math.round((barStart + s) * 10000) / 10000;
+      if (t < durationBeats - 1e-9) onsets.push(t);
+    }
+  }
+  return onsets;
+}

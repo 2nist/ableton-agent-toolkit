@@ -305,6 +305,15 @@ export default function DrumsView() {
     const startBeat = r.span.startBeat;
     const duration = r.span.durationBeats;
 
+    // The detour (variation) owns its own meter across the section's final
+    // bars — the base ruler yields the span to it (inDetour), and the detour's
+    // 2s/3s grid is drawn there instead.
+    const variation = r.section.drumVariationOutline;
+    const vBars = Math.max(1, r.section.drumVariationBars ?? 1);
+    const vSpanBeats = Math.min(vBars * sectionBpb, duration);
+    const vStartBeat = startBeat + duration - vSpanBeats;
+    const inDetour = (absBeat: number) => variation !== undefined && absBeat >= vStartBeat - 1e-9;
+
     if (outline) {
       const outlineBpb = outlineBeatsPerBar(outline);
       // Beat offset of each cell's start within one outline bar.
@@ -325,6 +334,7 @@ export default function DrumsView() {
           const absBeat = barStart + cs;
           if (absBeat < startBeat - 1e-9 || absBeat > startBeat + duration + 1e-9) return;
           if (idx === 0 && !drifting) return;
+          if (inDetour(absBeat)) return; // the detour owns its span
           const x = X0 + (absBeat / sectionBpb) * barW;
           drumGridLines.push({ x, bar: idx === 0, cell: idx > 0 });
         });
@@ -335,9 +345,34 @@ export default function DrumsView() {
         for (let o = 0; o * loopBeats < duration + 1e-9; o++) {
           const absBeat = startBeat + o * loopBeats;
           if (absBeat < startBeat - 1e-9) continue;
+          if (inDetour(absBeat)) continue;
           const x = X0 + (absBeat / sectionBpb) * barW;
           drumGridLines.push({ x, bar: true, cell: false });
         }
+      }
+    }
+
+    // The detour's own meter — its 2s/3s grid across the detour span, so the
+    // second ruler follows the detour too, not just the base drum meter.
+    if (variation) {
+      const vBpb = outlineBeatsPerBar(variation);
+      const vCellStarts: number[] = [];
+      let vAcc = 0;
+      for (const cell of variation.cells) {
+        vCellStarts.push(vAcc);
+        vAcc += cell * variation.cellBeats;
+      }
+      const vDrifting = Math.abs(vBpb - sectionBpb) > 1e-6;
+      for (let bar = 0; bar * vBpb < vSpanBeats + 1e-9; bar++) {
+        const barStart = vStartBeat + bar * vBpb;
+        vCellStarts.forEach((cs, idx) => {
+          if (bar === 0 && idx === 0) return;
+          const absBeat = barStart + cs;
+          if (absBeat < vStartBeat - 1e-9 || absBeat > vStartBeat + vSpanBeats + 1e-9) return;
+          if (idx === 0 && !vDrifting) return;
+          const x = X0 + (absBeat / sectionBpb) * barW;
+          drumGridLines.push({ x, bar: idx === 0, cell: idx > 0 });
+        });
       }
     }
   });

@@ -230,6 +230,18 @@ export interface BlueprintSection {
    *  the base pattern (preset / outline / heuristic). This is the "edit
    *  the drums voice by voice" path. */
   drumVoicePatterns?: Partial<Record<DrumVoiceName, EuclidPattern>>;
+  /** Euclidean harmony — a `MeterOutline` whose onsets (each 2s/3s cell's
+   *  start) drive when the chord progression advances, instead of each
+   *  chord's `beats`. Reuses the exact drum-outline machinery, so harmony
+   *  and drums can lock to the same syncopated grid (or run polymeter
+   *  against each other). Absent → chords advance on per-chord `beats`
+   *  exactly as before. */
+  harmonyMeterOutline?: MeterOutline;
+  /** When true and the section has a `drumMeterOutline`, the harmony's
+   *  chord changes follow the drums' meter — the drums literally drive the
+   *  harmony rhythm. Only consulted when `harmonyMeterOutline` is absent;
+   *  set either this or `harmonyMeterOutline`, not both. */
+  harmonyFollowsDrums?: boolean;
   velocity: VelocityPreset;
   timeSignatureNumerator: number;
   timeSignatureDenPower: number;

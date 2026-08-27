@@ -13,12 +13,12 @@ import { TRANSITION_COLOR, TRANSITION_LABEL, TRANSITION_MODELS } from "./transit
 import NecklaceRow from "./NecklaceRow";
 import TransitionPreview from "./TransitionPreview";
 import { VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
+import { SliderRow, EuclidSliders, StepView, EuclidStepView } from "./euclidEditor";
 import {
   buildEuclideanOutline,
   twoThreeCellCounts,
   numerator as outlineNumerator,
   countLabel,
-  euclidOnsetSteps,
   type KitVoice,
 } from "@drum/library";
 import type { BlueprintSection, DrumPattern, DrumTransitionModel, DrumCellVoice, MeterOutline } from "../../types/blueprint";
@@ -58,75 +58,6 @@ function inferRotation(outline: MeterOutline, n: number, k: number): number {
   return 0;
 }
 
-function SliderRow({ label, min, max, value, display, onChange }: {
-  label: string; min: number; max: number; value: number; display?: number; onChange: (v: number) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="flex items-center justify-between font-mono text-2xs uppercase tracking-wider text-inkMuted mb-0.5">
-        <span>{label}</span>
-        <span className="text-ink tabular-nums">{display ?? value}</span>
-      </span>
-      <input
-        type="range"
-        min={min}
-        max={Math.max(min, max)}
-        step={1}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-1.5 accent-[#E8B54A] cursor-pointer"
-      />
-    </label>
-  );
-}
-
-/** Length (n) / Density (k) / Offset (rotation) — the intuitive way to
- *  author "k pulses spread as evenly as possible across n steps". */
-function EuclidSliders({ n, denom, k, rotation, onChange }: {
-  n: number; denom: number; k: number; rotation: number;
-  onChange: (n: number, k: number, r: number) => void;
-}) {
-  const validCounts = twoThreeCellCounts(n);
-  const kIndex = Math.max(0, validCounts.indexOf(k));
-  const kMax = Math.max(0, validCounts.length - 1);
-  return (
-    <div className="space-y-2.5">
-      <SliderRow
-        label="Length"
-        min={2}
-        max={16}
-        value={n}
-        onChange={(v) => {
-          // Change ONLY the length — keep the current density/offset, and
-          // only snap them if they can't exist at the new length.
-          const counts = twoThreeCellCounts(v);
-          const nextK = counts.includes(k) ? k : (counts[0] ?? k);
-          onChange(v, nextK, Math.min(rotation, Math.max(0, nextK - 1)));
-        }}
-      />
-      <SliderRow
-        label="Density"
-        min={0}
-        max={kMax}
-        value={Math.min(kIndex, kMax)}
-        display={validCounts[Math.min(kIndex, kMax)]}
-        onChange={(idx) => {
-          // Change ONLY the density — keep the offset (clamped to fit).
-          const nextK = validCounts[Math.round(idx)] ?? k;
-          onChange(n, nextK, Math.min(rotation, Math.max(0, nextK - 1)));
-        }}
-      />
-      <SliderRow
-        label="Offset"
-        min={0}
-        max={Math.max(0, k - 1)}
-        value={Math.min(rotation, Math.max(0, k - 1))}
-        onChange={(r) => onChange(n, k, Math.round(r))}
-      />
-    </div>
-  );
-}
-
 /** Free-form Length (n) / Density (k) / Offset (rotation) sliders for a
  *  per-voice Euclidean pattern — Density is freely adjustable 1..n (`k`
  *  onsets spread as evenly as possible across `n` steps). Changing one
@@ -147,46 +78,6 @@ function FreeSliders({ n, k, rotation, onChange }: {
       />
       <SliderRow label="Density" min={1} max={n} value={k} onChange={(v) => onChange(n, v, rotation)} />
       <SliderRow label="Offset" min={0} max={Math.max(0, n - 1)} value={rotation} onChange={(v) => onChange(n, k, v)} />
-    </div>
-  );
-}
-
-/** Narrow step-sequencer strip: n cells, the k onsets filled in. */
-function StepView({ outline, color }: { outline: MeterOutline; color: string }) {
-  const n = outlineNumerator(outline);
-  const onsets: boolean[] = new Array(n).fill(false);
-  let step = 0;
-  for (const cell of outline.cells) {
-    if (step < n) onsets[step] = true;
-    step += cell;
-  }
-  return (
-    <div className="flex gap-px" title={outline.label}>
-      {onsets.map((on, i) => (
-        <div
-          key={i}
-          className="h-3 w-3 rounded-[2px]"
-          style={{ background: on ? color : "rgba(255,255,255,0.08)" }}
-        />
-      ))}
-    </div>
-  );
-}
-
-/** Narrow step-sequencer strip for a free-form Euclidean pattern. `large`
- *  renders a bigger grid for the Voice-by-Voice editor's pattern display. */
-function EuclidStepView({ k, n, rotation, color, large }: { k: number; n: number; rotation: number; color: string; large?: boolean }) {
-  const onsets = euclidOnsetSteps({ k, n, rotation });
-  const box = large ? "h-4 w-4 rounded-[3px]" : "h-3 w-3 rounded-[2px]";
-  return (
-    <div className="flex gap-px">
-      {Array.from({ length: n }).map((_, i) => (
-        <div
-          key={i}
-          className={box}
-          style={{ background: onsets.includes(i) ? color : "rgba(255,255,255,0.08)" }}
-        />
-      ))}
     </div>
   );
 }
@@ -226,6 +117,8 @@ export default function DrumPatternTools() {
   // Which whole-section outline cell is selected for editing — local to this
   // panel (not song data), reset when the selected section changes.
   const [cellIndex, setCellIndex] = useState(0);
+  // Which detour cell is selected for editing — local, reset with the section.
+  const [vCellIndex, setVCellIndex] = useState(0);
   // The preset to restore when Auto is toggled back off — kept locally so
   // switching to Auto doesn't forget the groove you were just on.
   const lastPresetRef = useRef<DrumPattern | null>(null);
@@ -236,6 +129,7 @@ export default function DrumPatternTools() {
     clearDraft();
     setVoice(null);
     setCellIndex(0);
+    setVCellIndex(0);
     lastPresetRef.current = null;
   }, [selectedSectionId, clearDraft]);
 
@@ -278,6 +172,8 @@ export default function DrumPatternTools() {
   const outlineNecklaces = outline ? resolveOutlineVoiceNecklaces(outline) : null;
   // The selected outline cell, self-clamped as cells are added/removed.
   const selectedCell = outline ? Math.min(cellIndex, outline.cells.length - 1) : null;
+  // The selected detour cell, self-clamped the same way.
+  const vSelectedCell = variation ? Math.min(vCellIndex, variation.cells.length - 1) : null;
   const variantTotal = variantCount(eff.drumPattern);
 
   // Per-voice override editing — pick ANY voice (not just ones already in
@@ -443,6 +339,61 @@ export default function DrumPatternTools() {
 
   function setVariationBars(bars: number) {
     draftWith((sec) => ({ ...sec, drumVariationBars: Math.max(1, bars) }));
+  }
+
+  // ---- Detour (variation) cell editing — the same 2s/3s + cellVoices
+  // surface as the whole-section outline, so a detour's shape is authored
+  // identically (and the export honors `cellVoices` here too).
+
+  function setVariationDenominator(denom: number) {
+    draftWith((sec) =>
+      sec.drumVariationOutline
+        ? { ...sec, drumVariationOutline: { ...sec.drumVariationOutline, cellBeats: 4 / denom } }
+        : sec,
+    );
+  }
+
+  function toggleVariationCell(i: number) {
+    draftWith((sec) => {
+      const o = sec.drumVariationOutline;
+      if (!o) return sec;
+      const cells = o.cells.slice();
+      cells[i] = cells[i] === 2 ? 3 : 2;
+      return { ...sec, drumVariationOutline: { ...o, cells, label: countLabel(cells) } };
+    });
+  }
+
+  function setVariationCellVoice(i: number, voice: DrumCellVoice) {
+    draftWith((sec) => {
+      const o = sec.drumVariationOutline;
+      if (!o) return sec;
+      const cellVoices = (o.cellVoices ?? o.cells.map(() => "hat" as DrumCellVoice)).slice();
+      cellVoices[i] = voice;
+      return { ...sec, drumVariationOutline: { ...o, cellVoices } };
+    });
+  }
+
+  function insertVariationCell(afterIndex: number) {
+    draftWith((sec) => {
+      const o = sec.drumVariationOutline;
+      if (!o) return sec;
+      const at = afterIndex + 1;
+      const cells = [...o.cells.slice(0, at), 2 as const, ...o.cells.slice(at)];
+      const cellVoices = o.cellVoices
+        ? [...o.cellVoices.slice(0, at), "hat" as DrumCellVoice, ...o.cellVoices.slice(at)]
+        : undefined;
+      return { ...sec, drumVariationOutline: { ...o, cells, cellVoices, label: countLabel(cells) } };
+    });
+  }
+
+  function removeVariationCell(i: number) {
+    draftWith((sec) => {
+      const o = sec.drumVariationOutline;
+      if (!o || o.cells.length <= 1) return sec; // never empty out entirely
+      const cells = o.cells.filter((_, idx) => idx !== i);
+      const cellVoices = o.cellVoices ? o.cellVoices.filter((_, idx) => idx !== i) : undefined;
+      return { ...sec, drumVariationOutline: { ...o, cells, cellVoices, label: countLabel(cells) } };
+    });
   }
 
   function setTransitionModel(model: DrumTransitionModel | null) {
@@ -775,12 +726,115 @@ export default function DrumPatternTools() {
             </span>
             {variation ? (
               <div className="space-y-2">
-                <div className="space-y-1.5">
-                  <NecklaceRow necklaces={resolveOutlineVoiceNecklaces(variation)} />
-                  <StepView outline={variation} color="#D9954A" />
-                  <p className="font-mono text-2xs text-inkMuted">{vK} / {vN} · rot {vRot} · {variation.label}</p>
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <NecklaceRow necklaces={resolveOutlineVoiceNecklaces(variation)} />
+                    <StepView outline={variation} color="#D9954A" />
+                    <p className="font-mono text-2xs text-inkMuted">{vK} / {vN} · rot {vRot} · {variation.label}</p>
+                  </div>
+                  <div className="w-44 shrink-0 space-y-2.5">
+                    <EuclidSliders n={vN} denom={vDenom} k={vK} rotation={vRot} onChange={setVariation} />
+                    {/* Grid — /8 (eighths) vs /16 (sixteenths), same knob as the
+                        whole-section outline editor. */}
+                    <div>
+                      <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted mb-0.5 block">Grid</span>
+                      <div className="flex gap-1">
+                        {[8, 16].map((d) => (
+                          <button
+                            key={d}
+                            className={vDenom === d ? CHIP_ON : CHIP}
+                            onClick={() => setVariationDenominator(d)}
+                            title={d === 8 ? "x/8 meter — cells are half-beats" : "x/16 meter — cells are quarter-beats"}
+                          >
+                            /{d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <EuclidSliders n={vN} denom={vDenom} k={vK} rotation={vRot} onChange={setVariation} />
+
+                {/* Detour cells — the 2s/3s grouping + per-cell downbeat voice,
+                    same editor as the whole-section outline. */}
+                <div className="border-t border-edge/40 pt-2">
+                  <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+                    Detour cells · {variation.label}
+                  </span>
+                  <div className="flex flex-wrap gap-1 items-center">
+                    {variation.cells.map((cell, i) => {
+                      const voice = variation.cellVoices?.[i] ?? "hat";
+                      const sel = i === vSelectedCell;
+                      return (
+                        <button
+                          key={i}
+                          className="flex flex-col items-center gap-0.5 rounded border px-1.5 py-1"
+                          style={{ borderColor: sel ? "#F5E7C8" : "#2E2E34", backgroundColor: sel ? "#232838" : "transparent" }}
+                          onClick={() => setVCellIndex(i)}
+                          title={`Cell ${i + 1}: ${cell} beats, plays ${CELL_VOICE_LABEL[voice]}`}
+                        >
+                          <span className="font-mono text-sm text-ink leading-none">{cell}</span>
+                          <span className="w-3 h-1.5 rounded-full" style={{ backgroundColor: CELL_VOICE_COLOR[voice] }} />
+                        </button>
+                      );
+                    })}
+                    <button
+                      className="rounded border border-dashed border-edge text-inkMuted hover:text-ink px-2 py-1 text-xs"
+                      onClick={() => insertVariationCell(variation.cells.length - 1)}
+                      title="Add a cell at the end"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {vSelectedCell !== null && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 border border-edge/60 rounded p-1.5 bg-panelAlt">
+                      <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted">
+                        Cell {vSelectedCell + 1} of {variation.cells.length}
+                      </span>
+                      <button
+                        className={CHIP}
+                        onClick={() => toggleVariationCell(vSelectedCell)}
+                        title="Toggle 2 ⇄ 3 beats (apple / galloping)"
+                      >
+                        {variation.cells[vSelectedCell]} ⇄ 2/3
+                      </button>
+                      <div className="flex gap-1" title="Which voice this cell's downbeat plays">
+                        {(["kick", "snare", "hat"] as DrumCellVoice[]).map((v) => {
+                          const active = (variation.cellVoices?.[vSelectedCell] ?? "hat") === v;
+                          const color = CELL_VOICE_COLOR[v];
+                          return (
+                            <button
+                              key={v}
+                              className="font-mono text-2xs rounded px-1.5 py-0.5 border"
+                              style={{
+                                borderColor: active ? color : "#2E2E34",
+                                color: active ? "#12161D" : color,
+                                backgroundColor: active ? color : "transparent",
+                              }}
+                              onClick={() => setVariationCellVoice(vSelectedCell, v)}
+                            >
+                              {CELL_VOICE_LABEL[v]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        className="font-mono text-3xs text-inkMuted hover:text-ink"
+                        onClick={() => insertVariationCell(vSelectedCell)}
+                      >
+                        + insert after
+                      </button>
+                      <button
+                        className="font-mono text-3xs text-inkMuted hover:text-red-400 disabled:opacity-30 disabled:hover:text-inkMuted"
+                        onClick={() => removeVariationCell(vSelectedCell)}
+                        disabled={variation.cells.length <= 1}
+                      >
+                        remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Bars</span>
                   <div className="flex items-center gap-2">

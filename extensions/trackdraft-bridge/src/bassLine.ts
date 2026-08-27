@@ -1,7 +1,7 @@
 import { pitchClass } from "@music-theory/core";
 import type { NoteDescription } from "@ableton-extensions/sdk";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
-import { loopChordsToFill } from "./chordCycle.js";
+import { resolveChordOccurrences } from "./chordCycle.js";
 
 export interface BassLinePlan {
   name: string;
@@ -27,7 +27,7 @@ const DEFAULT_VELOCITY = 100;
  */
 export function planBassLine(song: BlueprintSong, octave: number = DEFAULT_OCTAVE): BassLinePlan[] {
   return sectionSpans(song).map(({ section, startBeat, durationBeats }) => {
-    const notes: NoteDescription[] = loopChordsToFill(section.chords ?? [], durationBeats).map((occurrence) => ({
+    const notes: NoteDescription[] = resolveChordOccurrences(section, durationBeats).map((occurrence) => ({
       pitch: octave * 12 + pitchClass(occurrence.chord.root),
       startTime: occurrence.startTime,
       duration: occurrence.duration,

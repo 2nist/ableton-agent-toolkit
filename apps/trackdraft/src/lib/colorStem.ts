@@ -21,7 +21,7 @@ import {
   type BiTonalOptions,
 } from "@platform/progression-engine";
 import type { SectionSpan } from "./arrangement";
-import type { MidiNote } from "./midiExport";
+import { resolveChordOccurrences, type MidiNote } from "./midiExport";
 /** Octave of the bi-tonal anchor foundation (Instrument A). Matches the
  *  engine's own default of 4 and Progression Studio's `anchorOctave`. */
 const COLOR_ANCHOR_OCTAVE = 4;
@@ -37,20 +37,15 @@ function chordToBiTonal(chord: { root: string; quality: string; beats: number })
 /** The section's chords looped to fill its full duration — the same fill
  *  math the Chords/Bass stems use, so the Color layer spans the whole
  *  section rather than just one pass through its chord cycle. */
+/** The section's chords resolved to fill its full duration — the same
+ *  occurrence math as the Chords/Bass stems (including Euclidean harmony
+ *  when the section carries a `harmonyMeterOutline`), so the Color layer
+ *  spans the whole section rather than just one pass through its cycle. */
 function sectionChordsFilled(span: SectionSpan): BiTonalChord[] {
-  const cycleBeats = (span.section.chords ?? []).reduce((sum, c) => sum + c.beats, 0);
-  if (cycleBeats <= 0) return [];
-  const out: BiTonalChord[] = [];
-  let cursor = 0;
-  while (cursor < span.durationBeats) {
-    for (const c of span.section.chords ?? []) {
-      if (cursor >= span.durationBeats) break;
-      const duration = Math.min(c.beats, span.durationBeats - cursor);
-      out.push({ ...chordToBiTonal(c), durationBeats: duration });
-      cursor += c.beats;
-    }
-  }
-  return out;
+  return resolveChordOccurrences(span.section, span.durationBeats).map((occ) => ({
+    ...chordToBiTonal(occ.chord),
+    durationBeats: occ.duration,
+  }));
 }
 
 /** The Color Chord layer for the whole song — one continuous stem, each

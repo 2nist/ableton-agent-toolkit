@@ -19,9 +19,9 @@ import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
 import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
-import { planSectionDrumNotes, FILL_DATA, humanizeOutlineNotes, type SectionDrumInput } from "@drum/library";
+import { planSectionDrumNotes, FILL_DATA, humanizeOutlineNotes, chordOnsetsForOutline, type SectionDrumInput, type MeterOutline } from "@drum/library";
 import { planColorStem } from "./colorStem";
-import type { BlueprintSong, Chord } from "../types/blueprint";
+import type { BlueprintSong, BlueprintSection, Chord } from "../types/blueprint";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,6 +90,34 @@ function loopChordsToFill(chords: Chord[], durationBeats: number): ChordOccurren
   return occurrences;
 }
 
+/** Euclidean harmony — chords advance on a `MeterOutline`'s onsets (each
+ *  2s/3s cell's start) instead of per-chord `beats`. Same contract as
+ *  `loopChordsToFill`; the harmony counterpart of the drum outline. */
+function loopChordsOnOutline(chords: Chord[], outline: MeterOutline, durationBeats: number): ChordOccurrence[] {
+  const onsets = chordOnsetsForOutline(outline, durationBeats);
+  if (onsets.length === 0 || chords.length === 0) return [];
+  const occurrences: ChordOccurrence[] = [];
+  for (let i = 0; i < onsets.length; i++) {
+    const startTime = onsets[i];
+    const end = onsets[i + 1] ?? durationBeats;
+    const duration = Math.max(0, Math.round((end - startTime) * 10000) / 10000);
+    occurrences.push({ chord: chords[i % chords.length], startTime, duration });
+  }
+  return occurrences;
+}
+
+/** Resolve a section's chord occurrences honoring Euclidean harmony — an
+ *  explicit `harmonyMeterOutline`, else the drums' outline when
+ *  `harmonyFollowsDrums` is set (the drums drive the harmony), else
+ *  per-chord `beats` exactly as before. Mirrors the bridge's resolver so
+ *  the web app and the extension can't drift. */
+export function resolveChordOccurrences(section: BlueprintSection, durationBeats: number): ChordOccurrence[] {
+  const outline =
+    section.harmonyMeterOutline ?? (section.harmonyFollowsDrums ? (section.drumMeterOutline ?? null) : null);
+  const chords = section.chords ?? [];
+  return outline ? loopChordsOnOutline(chords, outline, durationBeats) : loopChordsToFill(chords, durationBeats);
+}
+
 // ---------------------------------------------------------------------------
 // Stem generators
 // ---------------------------------------------------------------------------
@@ -98,7 +126,7 @@ function loopChordsToFill(chords: Chord[], durationBeats: number): ChordOccurren
 export function planChordStem(spans: SectionSpan[]): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
-    const occurrences = loopChordsToFill(span.section.chords ?? [], span.durationBeats);
+    const occurrences = resolveChordOccurrences(span.section, span.durationBeats);
     for (const occ of occurrences) {
       const rootPc = pitchClass(occ.chord.root);
       const chordPitches = chordToMidiNotes(rootPc, occ.chord.quality as ChordQuality, CHORD_OCTAVE);
@@ -131,7 +159,7 @@ export function planChordStem(spans: SectionSpan[]): MidiNote[] {
 export function planBassStem(spans: SectionSpan[]): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
-    const occurrences = loopChordsToFill(span.section.chords ?? [], span.durationBeats);
+    const occurrences = resolveChordOccurrences(span.section, span.durationBeats);
     for (const occ of occurrences) {
       notes.push({
         pitch: BASS_OCTAVE * 12 + pitchClass(occ.chord.root),

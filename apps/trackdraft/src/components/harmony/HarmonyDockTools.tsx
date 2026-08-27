@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { ScaleType, NoteName } from "@music-theory/core";
-import type { Chord } from "../../types/blueprint";
+import type { Chord, MeterOutline } from "../../types/blueprint";
+import { buildEuclideanOutline, twoThreeCellCounts, numerator as outlineNumerator } from "@drum/library";
+import { EuclidSliders, StepView } from "../drums/euclidEditor";
 import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { updateSection } from "../../lib/sections";
@@ -21,6 +23,19 @@ const COLOR_FLAVORS = Array.from(
       .map(([id, def]) => [id, def.label]),
   ),
 );
+
+/** Which rotation (if any) of `buildEuclideanOutline(n, d, k, r)` matches
+ *  the outline's cells — so the Offset slider shows a real number rather
+ *  than a guess after the outline was built from sliders. */
+function inferRotation(outline: MeterOutline, n: number, k: number): number {
+  if (!twoThreeCellCounts(n).includes(k)) return 0;
+  const d = Math.round(4 / outline.cellBeats);
+  for (let r = 0; r < k; r++) {
+    const cells = buildEuclideanOutline(n, d, k, r).cells;
+    if (cells.length === outline.cells.length && cells.every((c, i) => c === outline.cells[i])) return r;
+  }
+  return 0;
+}
 
 /** Shared "which section is the dock talking about, and in what key"
  *  resolution for the two Harmony dock panels. Each panel is registered
@@ -143,6 +158,40 @@ export function HarmonyTools() {
     );
   }
 
+  // Euclidean harmony — how the chord progression advances: per-chord beats
+  // (default), on a `harmonyMeterOutline`'s onsets, or following the section's
+  // drum meter (the drums literally drive the harmony).
+  const rhythmMode: "beats" | "euclid" | "drums" = activeSection.harmonyMeterOutline
+    ? "euclid"
+    : activeSection.harmonyFollowsDrums
+      ? "drums"
+      : "beats";
+  const hOutline = activeSection.harmonyMeterOutline;
+  const hDenom = hOutline ? Math.round(4 / hOutline.cellBeats) : 8;
+  const hN = hOutline ? outlineNumerator(hOutline) : 7;
+  const hK = hOutline ? hOutline.cells.length : (twoThreeCellCounts(hN)[0] ?? 3);
+  const hRot = hOutline ? inferRotation(hOutline, hN, hK) : 0;
+
+  function setRhythmMode(mode: "beats" | "euclid" | "drums") {
+    updateCurrentSong((s) =>
+      updateSection(s, activeSection!.id, (sec) => {
+        if (mode === "beats") return { ...sec, harmonyMeterOutline: undefined, harmonyFollowsDrums: undefined };
+        if (mode === "drums") return { ...sec, harmonyMeterOutline: undefined, harmonyFollowsDrums: true };
+        return {
+          ...sec,
+          harmonyFollowsDrums: undefined,
+          harmonyMeterOutline: sec.harmonyMeterOutline ?? buildEuclideanOutline(7, 8, twoThreeCellCounts(7)[0]!, 0),
+        };
+      }),
+    );
+  }
+
+  function setHarmonyOutline(next: MeterOutline) {
+    updateCurrentSong((s) =>
+      updateSection(s, activeSection!.id, (sec) => ({ ...sec, harmonyMeterOutline: next, harmonyFollowsDrums: undefined })),
+    );
+  }
+
   const editorChord = selectedChordId ? activeSection.chords.find((c) => c.id === selectedChordId) ?? null : null;
 
   return (
@@ -208,6 +257,81 @@ export function HarmonyTools() {
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Rhythm — how the chord progression advances across the section:
+          per-chord beats, on a Euclidean outline (same engine as the drums),
+          or following the section's drum meter. */}
+      <div className="p-2.5 border-b border-edge">
+        <span
+          className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1"
+          title="How the chord progression advances across the section — the export honors this everywhere (.mid, live out, Send to Ableton)"
+        >
+          Rhythm
+        </span>
+        <div className="flex gap-1 mb-2">
+          {(["beats", "euclid", "drums"] as const).map((m) => (
+            <button
+              key={m}
+              className={`flex-1 font-mono text-2xs rounded px-2 py-1 border ${
+                rhythmMode === m ? "border-inkMuted text-ink" : "border-edge text-inkMuted hover:text-ink"
+              }`}
+              onClick={() => setRhythmMode(m)}
+              title={
+                m === "beats"
+                  ? "Each chord holds its own beats, as authored"
+                  : m === "euclid"
+                    ? "Chords advance on a Euclidean outline's onsets — same engine as the drums"
+                    : "Chord changes follow this section's drum meter — the drums drive the harmony"
+              }
+            >
+              {m === "euclid" ? "euclid" : m === "drums" ? "follow drums" : "beats"}
+            </button>
+          ))}
+        </div>
+
+        {rhythmMode === "euclid" && hOutline && (
+          <div className="space-y-1.5">
+            <StepView outline={hOutline} color="#E8B54A" />
+            <p className="font-mono text-2xs text-inkMuted">
+              {hK} / {hN} · rot {hRot} · {hOutline.label}
+            </p>
+            <EuclidSliders
+              n={hN}
+              denom={hDenom}
+              k={hK}
+              rotation={hRot}
+              onChange={(nv, kv, rv) => setHarmonyOutline(buildEuclideanOutline(nv, hDenom, kv, rv))}
+            />
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Grid</span>
+              <div className="flex gap-1">
+                {[8, 16].map((d) => (
+                  <button
+                    key={d}
+                    className={`font-mono text-2xs rounded px-1.5 py-0.5 border ${
+                      hDenom === d ? "border-inkMuted text-ink" : "border-edge text-inkMuted hover:text-ink"
+                    }`}
+                    onClick={() => setHarmonyOutline({ ...hOutline, cellBeats: 4 / d })}
+                  >
+                    /{d}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="text-2xs text-inkMuted/70">
+              Chord changes land on each 2s/3s cell's start — set the same outline on the drums to lock them together.
+            </p>
+          </div>
+        )}
+
+        {rhythmMode === "drums" && (
+          <p className="text-2xs text-inkMuted/70">
+            {activeSection.drumMeterOutline
+              ? `Chord changes follow the drum meter (${activeSection.drumMeterOutline.label}).`
+              : "This section has no drum outline yet — set one in the Drums tab (Euclid mode), or pick euclid here to author one."}
+          </p>
+        )}
       </div>
 
       {/* Preset — the progression template, tucked under the Color flavor

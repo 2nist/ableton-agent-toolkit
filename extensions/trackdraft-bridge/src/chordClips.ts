@@ -1,7 +1,7 @@
 import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect } from "@music-theory/core";
 import type { NoteDescription } from "@ableton-extensions/sdk";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
-import { loopChordsToFill } from "./chordCycle.js";
+import { resolveChordOccurrences } from "./chordCycle.js";
 
 export interface ChordClipPlan {
   name: string;
@@ -26,7 +26,7 @@ const DEFAULT_VELOCITY = 96;
 export function planChordClips(song: BlueprintSong, octave: number = DEFAULT_OCTAVE): ChordClipPlan[] {
   return sectionSpans(song).map(({ section, startBeat, durationBeats }) => {
     const notes: NoteDescription[] = [];
-    for (const occurrence of loopChordsToFill(section.chords ?? [], durationBeats)) {
+    for (const occurrence of resolveChordOccurrences(section, durationBeats)) {
       const rootPc = pitchClass(occurrence.chord.root);
       let chordNotes: NoteDescription[] = [];
       for (const pitch of chordToMidiNotes(rootPc, occurrence.chord.quality as ChordQuality, octave)) {
