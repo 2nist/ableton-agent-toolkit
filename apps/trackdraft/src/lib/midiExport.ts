@@ -19,7 +19,7 @@ import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
 import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
-import { planSectionDrumNotes, FILL_DATA, humanizeOutlineNotes, chordOnsetsForOutline, type SectionDrumInput, type MeterOutline } from "@drum/library";
+import { planSectionDrumNotes, planSectionBass, FILL_DATA, humanizeOutlineNotes, chordOnsetsForOutline, type SectionDrumInput, type MeterOutline } from "@drum/library";
 import { planColorStem } from "./colorStem";
 import type { BlueprintSong, BlueprintSection, Chord } from "../types/blueprint";
 
@@ -47,14 +47,11 @@ const TICKS_PER_QUARTER = 480;
 
 /** Default MIDI velocities, matching the bridge's chordClips.ts / bassLine.ts. */
 const CHORD_VELOCITY = 96;
-const BASS_VELOCITY = 100;
 const DRUM_HIT_DURATION = 0.25;
 
 /** Octave 5 in @music-theory/core's numbering = MIDI 60 (middle C octave).
  *  Matches chordClips.ts DEFAULT_OCTAVE. */
 const CHORD_OCTAVE = 5;
-/** Octave 3 = MIDI 36 (C2 in Ableton's display). Matches bassLine.ts. */
-const BASS_OCTAVE = 3;
 
 /** GM drum map — the full 13-voice canonical set the export can produce:
  *  `ABLETON_SAFE_NOTES` (what the presets and bridge use) plus the extra
@@ -174,19 +171,20 @@ export function planChordStem(spans: SectionSpan[]): MidiNote[] {
   return notes;
 }
 
-/** Bass notes — one sustained root per chord, octave 3. */
+/** Bass notes — one sustained root per chord by default; a per-section
+ *  `bassProfile` (register/motion/rhythm/velocity) shapes the line. Uses
+ *  the SAME generator the Ableton extension's `planBassLine` calls
+ *  (`@drum/library`'s `planSectionBass`), so the exported .mid and live
+ *  MIDI out match "Send to Ableton" note for note. */
 export function planBassStem(spans: SectionSpan[]): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
-    const occurrences = resolveChordOccurrences(span.section, span.durationBeats);
-    for (const occ of occurrences) {
-      notes.push({
-        pitch: BASS_OCTAVE * 12 + pitchClass(occ.chord.root),
-        startTime: span.startBeat + occ.startTime,
-        duration: occ.duration,
-        velocity: BASS_VELOCITY,
-      });
-    }
+    const occurrences = resolveChordOccurrences(span.section, span.durationBeats).map((occ) => ({
+      rootPc: pitchClass(occ.chord.root),
+      startTime: span.startBeat + occ.startTime,
+      duration: occ.duration,
+    }));
+    notes.push(...planSectionBass(occurrences, span.section.bassProfile));
   }
   return notes;
 }

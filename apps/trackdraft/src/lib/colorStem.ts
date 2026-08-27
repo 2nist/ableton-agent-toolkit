@@ -25,9 +25,10 @@ import { resolveChordOccurrences, type MidiNote } from "./midiExport";
 /** Octave of the bi-tonal anchor foundation (Instrument A). Matches the
  *  engine's own default of 4 and Progression Studio's `anchorOctave`. */
 const COLOR_ANCHOR_OCTAVE = 4;
-/** Color notes ride two octaves above the anchor (Instrument B's default
- *  register) — clearly above the Chords track's block chords. */
-const COLOR_OCTAVE = 6;
+/** Color notes ride two octaves above the anchor by default (Instrument
+ *  B's default register) — clearly above the Chords track's block chords.
+ *  A section's `colorOctave` overrides this per section. */
+export const DEFAULT_COLOR_OCTAVE = 6;
 
 /** One blueprint `Chord` → the shape `generateBiTonal` wants. */
 function chordToBiTonal(chord: { root: string; quality: string; beats: number }): BiTonalChord {
@@ -59,7 +60,7 @@ export function planColorStem(spans: SectionSpan[]): MidiNote[] {
     if (chords.length === 0) continue;
     const opts: BiTonalOptions = {
       anchorOctave: COLOR_ANCHOR_OCTAVE,
-      colorOctave: COLOR_OCTAVE,
+      colorOctave: span.section.colorOctave ?? DEFAULT_COLOR_OCTAVE,
     };
     const generated = generateBiTonal(BI_TONAL_MATRIX, span.section.colorFlavor ?? DEFAULT_COLOR_FLAVOR, chords, opts);
     for (const n of generated.color) {

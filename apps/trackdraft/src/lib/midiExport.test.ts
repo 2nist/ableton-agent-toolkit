@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { songToMidi, planDrumStem } from "./midiExport";
+import { songToMidi, planDrumStem, planBassStem } from "./midiExport";
 import { sectionSpans } from "./arrangement";
 import { parseMidiBytes } from "./parsers/parseMidi";
 import { createEmptySong, type BlueprintSong, type Chord } from "../types/blueprint";
@@ -267,5 +267,26 @@ describe("planDrumStem — authoring fields reach the exported drums", () => {
     // cut = one kick+snare hit at beat 4, then dead silence for the span.
     expect(tail.length).toBeGreaterThan(0);
     expect(tail.filter((n) => n.startTime > 4)).toHaveLength(0);
+  });
+});
+
+describe("planBassStem", () => {
+  it("defaults to one sustained root per chord at octave 3", () => {
+    const notes = planBassStem(sectionSpans(testSong()));
+    expect(notes).toHaveLength(4);
+    // I–V–vi–IV in C: C G A F at octave 3 = 36 43 45 41.
+    expect(notes.map((n) => n.pitch)).toEqual([36, 43, 45, 41]);
+    expect(notes[0]).toMatchObject({ startTime: 0, duration: 4, velocity: 100 });
+    expect(notes[3]).toMatchObject({ startTime: 12, duration: 4 });
+  });
+
+  it("honors a per-section bassProfile (octave, motion, rhythm, velocity)", () => {
+    const song = testSong();
+    song.sections[0].bassProfile = { octave: 3, motion: "walking", rhythm: "half", velocity: 60 };
+    const notes = planBassStem(sectionSpans(song));
+    expect(notes).toHaveLength(8); // 4 chords × 2 subdivisions
+    expect(notes[0]).toMatchObject({ pitch: 36, velocity: 60 }); // C root
+    expect(notes[1].pitch).toBe(42); // walking approach: F# below G
+    expect(notes[2]).toMatchObject({ pitch: 43, velocity: 60 }); // G root
   });
 });

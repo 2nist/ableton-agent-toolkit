@@ -19,3 +19,4 @@ export * from "./handoffs.js";
 export * from "./meter.js";
 export * from "./transitions.js";
 export * from "./section.js";
+export * from "./bass.js";

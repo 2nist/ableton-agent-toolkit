@@ -158,6 +158,31 @@ export interface Chord {
   performance?: ChordPerformanceEffect;
 }
 
+/** The generated bass voice's shape for a section. Pure number knobs so
+ *  the shared generator (`@drum/library`'s `planSectionBass`) stays
+ *  dependency-free — it receives pre-computed pitch classes, never the
+ *  blueprint types themselves. Absent (per section) → the historical
+ *  behavior: one sustained root per chord, octave 3, velocity 100. */
+export interface BassProfile {
+  /** Register as a MIDI octave number (octave*12 + pitch class): 3 = the
+   *  standard bass octave (MIDI 36 = C2), 4 = an octave up. Default 3. */
+  octave?: 3 | 4;
+  /** How the bass moves between/within chord changes. `"root"` = the
+   *  chord root (the only option before this existed); `"root_fifth"` =
+   *  roots alternating with the fifth across the subdivision;
+   *  `"walking"` = roots that walk up into the next chord, ending each
+   *  chord on a leading tone one semitone below the next root. Default
+   *  `"root"`. */
+  motion?: "root" | "root_fifth" | "walking";
+  /** Subdivision of each chord's span. `"locked"` = one note per chord
+   *  change (legato); `"half"` = two notes; `"eighth"` = four. Default
+   *  `"locked"`. */
+  rhythm?: "locked" | "half" | "eighth";
+  /** Note velocity 1-127. Default 100 (matches the bridge's historical
+   *  bass velocity). */
+  velocity?: number;
+}
+
 /** A section as authored in the app. Mirrors song-structure's SongSection
  *  shape (name/role/bars/beatsPerChord/drumPattern/velocity/time
  *  signature) but uses `Chord` (this file, UI-shaped, has an id for
@@ -182,6 +207,15 @@ export interface BlueprintSection {
    *  time. Drives the Color track in MIDI export / Send to Ableton /
    *  real-time MIDI out. */
   colorFlavor?: string;
+  /** The Color layer's register — how many octaves above the chord anchor
+   *  the bi-tonal color voice sits (the progression engine's `colorOctave`;
+   *  the anchor is fixed at octave 4). Absent → 6 at export time. */
+  colorOctave?: number;
+  /** Bass line profile for this section — register, motion, rhythm and
+   *  velocity for the generated bass voice (the Bass track in MIDI
+   *  export / Send to Ableton / real-time MIDI out). Absent → a single
+   *  sustained root per chord at octave 3 (the historical behavior). */
+  bassProfile?: BassProfile;
   /** Per-section drum pattern override. When absent the Ableton extension
    *  still picks a pattern heuristically (role + velocity + meter + tempo);
    *  set this to choose a specific engine pattern instead. Paired with

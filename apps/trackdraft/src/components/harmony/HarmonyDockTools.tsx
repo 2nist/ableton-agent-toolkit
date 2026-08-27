@@ -9,20 +9,11 @@ import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { updateSection } from "../../lib/sections";
 import { downloadSongMidi } from "../../lib/midiExport";
 import { previewProgression } from "../../lib/playback/previewMidi";
-import { BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR } from "@platform/progression-engine";
 import PresetPicker from "./PresetPicker";
 import ProgressionTrack from "./ProgressionTrack";
 import ChordEditorPopover from "./ChordEditorPopover";
-
-/** Every bi-tonal flavor in the engine's matrix, deduped to `[id, label]`
- *  — the options for the per-section Color Chord flavor picker. */
-const COLOR_FLAVORS = Array.from(
-  new Map(
-    Object.values(BI_TONAL_MATRIX)
-      .flatMap((family) => Object.entries(family))
-      .map(([id, def]) => [id, def.label]),
-  ),
-);
+import BassSettings from "./BassSettings";
+import ColorSettings from "./ColorSettings";
 
 /** Which rotation (if any) of `buildEuclideanOutline(n, d, k, r)` matches
  *  the outline's cells — so the Offset slider shows a real number rather
@@ -126,14 +117,16 @@ export function HarmonyMainMenu() {
 }
 
 /** Harmony's Tools panel — the right sidebar's tools for the active
- *  section, top-to-bottom: a header with the progression preview's play
- *  button, the Preset picker, the selected chord's editor (selection/
- *  remove → Beats → Quality → Substitutions), the Color Chord flavor, the
- *  preview layer toggles + Linear/Loop, and Download MIDI. The song/section
- *  key selectors are gone — the song key lives in the header/Studio, and
- *  section key overrides felt redundant with editing chord roots directly.
- *  Reads the shared selection store directly, so clicking a chord on the
- *  wheel swaps the chord under edit without re-registering anything. */
+ *  section, grouped top-to-bottom: a header with the progression preview's
+ *  play button; **Chords** — the selected chord's editor (selection/remove
+ *  → Beats → Quality → Substitutions), the Rhythm control (how the
+ *  progression advances: beats/euclid/follow-drums + Push), and the
+ *  Preset picker; **Layers** — the derived voices generated from the
+ *  chords, each with its own settings (Bass: register/motion/rhythm/
+ *  velocity; Color: flavor/register); then the preview layer toggles +
+ *  Linear/Loop, and Download MIDI. Reads the shared selection store
+ *  directly, so clicking a chord on the wheel swaps the chord under edit
+ *  without re-registering anything. */
 export function HarmonyTools() {
   const { song, updateCurrentSong, activeSection, effectiveKey, effectiveScale } = useHarmonyDockSection();
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
@@ -150,12 +143,6 @@ export function HarmonyTools() {
 
   function updateChords(chords: Chord[]) {
     updateCurrentSong((s) => updateSection(s, activeSection!.id, (sec) => ({ ...sec, chords })));
-  }
-
-  function setColorFlavor(flavor: string | undefined) {
-    updateCurrentSong((s) =>
-      updateSection(s, activeSection!.id, (sec) => ({ ...sec, colorFlavor: flavor })),
-    );
   }
 
   // Euclidean harmony — how the chord progression advances: per-chord beats
@@ -228,6 +215,12 @@ export function HarmonyTools() {
         </button>
       </div>
 
+      {/* CHORDS — the authored progression (editing the selected chord),
+          how it advances (Rhythm), and the template (Preset). */}
+      <div className="px-2.5 pt-2 pb-1.5 border-b border-edge font-mono text-3xs uppercase tracking-wider text-inkMuted/70">
+        Chords
+      </div>
+
       {/* Selected chord's editor — selection/remove → Beats → Quality →
           Substitutions; performance lives in the effect row. */}
       {editorChord && (
@@ -246,26 +239,22 @@ export function HarmonyTools() {
         </div>
       )}
 
-      {/* Color flavor */}
+      {/* LAYERS — the derived voices generated from the chords: the bass
+          line and the bi-tonal color layer, each with its own settings. */}
+      <div className="px-2.5 pt-2 pb-1.5 border-b border-edge font-mono text-3xs uppercase tracking-wider text-inkMuted/70">
+        Layers
+      </div>
+      <div className="border-b border-edge">
+        <BassSettings
+          section={activeSection}
+          onChange={(updater) => updateCurrentSong((s) => updateSection(s, activeSection!.id, updater))}
+        />
+      </div>
       <div className="p-2.5 border-b border-edge">
-        <label
-          className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1"
-          title="Bi-tonal 'Color Chord' flavor for this section — the Color track in MIDI export, Send to Ableton, and real-time MIDI out"
-        >
-          Color flavor
-        </label>
-        <select
-          className="w-full bg-panelAlt border border-edge rounded px-2 py-1 text-xs text-ink"
-          value={activeSection.colorFlavor ?? ""}
-          onChange={(e) => setColorFlavor(e.target.value || undefined)}
-        >
-          <option value="">Default ({DEFAULT_COLOR_FLAVOR})</option>
-          {COLOR_FLAVORS.map(([id, label]) => (
-            <option key={id} value={id}>
-              {id.replace(/_/g, " ")} · {label}
-            </option>
-          ))}
-        </select>
+        <ColorSettings
+          section={activeSection}
+          onChange={(updater) => updateCurrentSong((s) => updateSection(s, activeSection!.id, updater))}
+        />
       </div>
 
       {/* Rhythm — how the chord progression advances across the section:
