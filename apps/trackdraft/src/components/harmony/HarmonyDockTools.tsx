@@ -117,16 +117,15 @@ export function HarmonyMainMenu() {
 }
 
 /** Harmony's Tools panel — the right sidebar's tools for the active
- *  section, grouped top-to-bottom: a header with the progression preview's
- *  play button; **Chords** — the selected chord's editor (selection/remove
- *  → Beats → Quality → Substitutions), the Rhythm control (how the
- *  progression advances: beats/euclid/follow-drums + Push), and the
- *  Preset picker; **Layers** — the derived voices generated from the
- *  chords, each with its own settings (Bass: register/motion/rhythm/
- *  velocity; Color: flavor/register); then the preview layer toggles +
- *  Linear/Loop, and Download MIDI. Reads the shared selection store
- *  directly, so clicking a chord on the wheel swaps the chord under edit
- *  without re-registering anything. */
+ *  section: a header with the progression preview's play button;
+ *  **Chords** — the selected chord's editor (selection/remove → Beats →
+ *  Quality → Substitutions), the Rhythm control (how the progression
+ *  advances: beats/euclid/follow-drums + Push), and the Preset picker;
+ *  then the preview layer toggles + Linear/Loop, and Download MIDI. The
+ *  derived voices (Bass/Color settings) live in the dock's **Layers**
+ *  bottom tab (`HarmonyLayers`) so this sidebar stays uncluttered. Reads
+ *  the shared selection store directly, so clicking a chord on the wheel
+ *  swaps the chord under edit without re-registering anything. */
 export function HarmonyTools() {
   const { song, updateCurrentSong, activeSection, effectiveKey, effectiveScale } = useHarmonyDockSection();
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
@@ -238,24 +237,6 @@ export function HarmonyTools() {
           />
         </div>
       )}
-
-      {/* LAYERS — the derived voices generated from the chords: the bass
-          line and the bi-tonal color layer, each with its own settings. */}
-      <div className="px-2.5 pt-2 pb-1.5 border-b border-edge font-mono text-3xs uppercase tracking-wider text-inkMuted/70">
-        Layers
-      </div>
-      <div className="border-b border-edge">
-        <BassSettings
-          section={activeSection}
-          onChange={(updater) => updateCurrentSong((s) => updateSection(s, activeSection!.id, updater))}
-        />
-      </div>
-      <div className="p-2.5 border-b border-edge">
-        <ColorSettings
-          section={activeSection}
-          onChange={(updater) => updateCurrentSong((s) => updateSection(s, activeSection!.id, updater))}
-        />
-      </div>
 
       {/* Rhythm — how the chord progression advances across the section:
           per-chord beats, on a Euclidean outline (same engine as the drums),
@@ -421,6 +402,32 @@ export function HarmonyTools() {
         >
           ⬇ Download MIDI
         </button>
+      </div>
+    </div>
+  );
+}
+
+/** The dock's Layers panel — the derived voices generated from the
+ *  progression (Bass + Color settings), given their own bottom-dock tab so
+ *  the right-side Tools sidebar stays uncluttered. Reads the shared
+ *  selection store directly like the other Harmony dock panels, so it
+ *  re-renders whenever the active section changes. */
+export function HarmonyLayers() {
+  const { activeSection, updateCurrentSong } = useHarmonyDockSection();
+  if (!activeSection) return null;
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2">
+      <div className="p-3 sm:border-r sm:border-edge sm:pr-6">
+        <BassSettings
+          section={activeSection}
+          onChange={(updater) => updateCurrentSong((s) => updateSection(s, activeSection.id, updater))}
+        />
+      </div>
+      <div className="p-3">
+        <ColorSettings
+          section={activeSection}
+          onChange={(updater) => updateCurrentSong((s) => updateSection(s, activeSection.id, updater))}
+        />
       </div>
     </div>
   );

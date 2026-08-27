@@ -13,7 +13,7 @@ const TABS = [
   { to: "lyrics", label: "Lyrics" },
 ];
 
-type DockTab = { id: "info" | "primary" | "tools"; label: string; node: ReactNode };
+type DockTab = { id: "info" | "primary" | "tools" | "layers"; label: string; node: ReactNode };
 
 /** Horizontal tab strip for the dock — shared by the right sidebar
  *  (Structure) and the bottom dock bar (everything else). */
@@ -57,6 +57,7 @@ export default function SongEditorLayout() {
   const dockInfo = useDockStore((s) => s.info);
   const dockPrimary = useDockStore((s) => s.primary);
   const dockTools = useDockStore((s) => s.tools);
+  const dockLayers = useDockStore((s) => s.layers);
   const activePanel = useDockStore((s) => s.activePanel);
   const setActivePanel = useDockStore((s) => s.setActivePanel);
 
@@ -67,16 +68,20 @@ export default function SongEditorLayout() {
   const isStructure = activeTab === "structure";
   const isHarmony = activeTab === "harmony";
 
-  // Dock tab order is Menu → Tools → Info: a tab's main menu first (Harmony
-  // only, today), its selection tools second, and song Info last — Info
-  // alone when a tab has nothing more specific (Studio, Structure).
+  // Dock tab order is Menu → Tools → Layers → Info: a tab's main menu first
+  // (Harmony only, today), its selection tools second, its secondary
+  // settings panel third (Harmony's Layers — Bass/Color), and song Info
+  // last — Info alone when a tab has nothing more specific (Studio,
+  // Structure).
   const dockTabs: DockTab[] = [
     ...(dockPrimary ? [{ id: "primary" as const, label: "Menu", node: dockPrimary }] : []),
     ...(dockTools ? [{ id: "tools" as const, label: "Tools", node: dockTools }] : []),
+    ...(dockLayers ? [{ id: "layers" as const, label: "Layers", node: dockLayers }] : []),
     { id: "info" as const, label: "Info", node: dockInfo },
   ];
   // Harmony's Tools live in a right sidebar; keep them out of the bottom
-  // bar so the dock there reads Menu → Info while still spanning full width.
+  // bar so the dock there reads Menu → Layers → Info while still spanning
+  // full width.
   const bottomTabs = isHarmony ? dockTabs.filter((t) => t.id !== "tools") : dockTabs;
   const activeNode = bottomTabs.find((t) => t.id === activePanel)?.node ?? dockInfo;
 

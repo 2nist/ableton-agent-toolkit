@@ -22,7 +22,8 @@ interface DockState {
   info: ReactNode | null;
   primary: ReactNode | null;
   tools: ReactNode | null;
-  activePanel: "info" | "primary" | "tools";
+  layers: ReactNode | null;
+  activePanel: "info" | "primary" | "tools" | "layers";
   setInfo: (node: ReactNode) => void;
   /** Registers the tab's main menu as the default view — it outranks
    *  `tools`, so Harmony lands on its menu rather than the chord editor. */
@@ -34,18 +35,46 @@ interface DockState {
    *  selected rather than staying on whatever the user was looking at
    *  before. */
   setTools: (node: ReactNode | null) => void;
-  setActivePanel: (panel: "info" | "primary" | "tools") => void;
+  /** Registers a tab's secondary settings panel that's too tall for the
+   *  right-side Tools sidebar — Harmony's Layers (Bass/Color harmonization
+   *  settings) get their own bottom-dock tab. Never yanks the user away
+   *  from `primary`/`tools`; the tab just becomes available to click, and
+   *  it becomes the default view only when nothing higher-ranked is
+   *  active. Cleared on tab unmount like `tools`. */
+  setLayers: (node: ReactNode | null) => void;
+  setActivePanel: (panel: "info" | "primary" | "tools" | "layers") => void;
+}
+
+/** The highest-ranked non-empty slot, used to pick a sane default view
+ *  when a higher-ranked one is cleared. */
+function defaultPanel(s: {
+  primary: ReactNode | null;
+  tools: ReactNode | null;
+  layers: ReactNode | null;
+}): "primary" | "tools" | "layers" | "info" {
+  return s.primary ? "primary" : s.tools ? "tools" : s.layers ? "layers" : "info";
 }
 
 export const useDockStore = create<DockState>((set) => ({
   info: null,
   primary: null,
   tools: null,
+  layers: null,
   activePanel: "info",
   setInfo: (node) => set({ info: node }),
-  setPrimary: (node) =>
-    set((s) => ({ primary: node, activePanel: node ? "primary" : s.tools ? "tools" : "info" })),
+  setPrimary: (node) => set((s) => ({ primary: node, activePanel: node ? "primary" : defaultPanel(s) })),
   setTools: (node) =>
-    set((s) => ({ tools: node, activePanel: s.primary ? "primary" : node ? "tools" : "info" })),
+    set((s) => ({ tools: node, activePanel: s.primary ? "primary" : node ? "tools" : defaultPanel(s) })),
+  setLayers: (node) =>
+    set((s) => ({
+      layers: node,
+      activePanel: node
+        ? s.primary || s.tools
+          ? s.activePanel
+          : "layers"
+        : s.activePanel === "layers"
+          ? defaultPanel(s)
+          : s.activePanel,
+    })),
   setActivePanel: (panel) => set({ activePanel: panel }),
 }));

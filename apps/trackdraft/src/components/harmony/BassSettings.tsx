@@ -38,7 +38,7 @@ export default function BassSettings({ section, onChange }: BassSettingsProps) {
     }`;
 
   return (
-    <div className="p-2.5">
+    <div>
       <span
         className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1"
         title="The generated bass voice for this section — the Bass track in MIDI export, Send to Ableton, and real-time MIDI out. One sustained root per chord by default."
@@ -93,7 +93,7 @@ export default function BassSettings({ section, onChange }: BassSettingsProps) {
             min={1}
             max={127}
             value={velocity}
-            className="w-24 accent-inkMuted"
+            className="w-28 accent-inkMuted"
             title="Bass note velocity"
             onChange={(e) => patch({ velocity: Number(e.target.value) })}
           />

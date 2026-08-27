@@ -9,7 +9,7 @@ import { useDockStore } from "../../store/dockStore";
 import { updateSection } from "../../lib/sections";
 import HoneycombWheel from "./HoneycombWheel";
 import FitStatus from "./FitStatus";
-import { HarmonyMainMenu, HarmonyTools } from "./HarmonyDockTools";
+import { HarmonyMainMenu, HarmonyTools, HarmonyLayers } from "./HarmonyDockTools";
 import { previewChord } from "../../lib/playback/previewMidi";
 
 /** The Harmony tab's canvas: the hex wheel and the linear progression
@@ -28,21 +28,25 @@ export default function HarmonyView() {
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
   const setPrimary = useDockStore((s) => s.setPrimary);
   const setTools = useDockStore((s) => s.setTools);
+  const setLayers = useDockStore((s) => s.setLayers);
 
   // The dock's panels are registered once and read the shared selection
   // store directly — they re-render themselves on selection/song changes,
   // so this effect never needs to re-run (and never risks the update-loop
   // a content-recomputing effect here would create). The main menu is the
   // dock's primary panel; Tools holds the settings toolbox (MIDI/color/key,
-  // the progression preview, the Linear/Loop toggle, and the chord editor).
+  // the progression preview, the Linear/Loop toggle, and the chord editor);
+  // Layers holds the derived-voice settings (Bass/Color) as a bottom tab.
   useEffect(() => {
     setPrimary(<HarmonyMainMenu />);
     setTools(<HarmonyTools />);
+    setLayers(<HarmonyLayers />);
     return () => {
       setPrimary(null);
       setTools(null);
+      setLayers(null);
     };
-  }, [setPrimary, setTools]);
+  }, [setPrimary, setTools, setLayers]);
 
   if (!currentSong) return null;
   const song = currentSong;
