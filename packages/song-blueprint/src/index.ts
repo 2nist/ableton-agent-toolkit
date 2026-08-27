@@ -242,6 +242,13 @@ export interface BlueprintSection {
    *  harmony rhythm. Only consulted when `harmonyMeterOutline` is absent;
    *  set either this or `harmonyMeterOutline`, not both. */
   harmonyFollowsDrums?: boolean;
+  /** Global anticipation offset in beats — every chord change is pushed
+   *  EARLY by this amount (e.g. 0.5 = an 8th-note jazz push, 0.25 = a
+   *  16th), so chords anticipate the downbeat across the bar. The UI stays
+   *  on a clean grid; only the exported onsets shift. Orthogonal to how
+   *  chords advance (`beats` vs an outline). The section's first chord is
+   *  clamped to the section start so no note lands before a clip. */
+  syncopationOffset?: number;
   velocity: VelocityPreset;
   timeSignatureNumerator: number;
   timeSignatureDenPower: number;

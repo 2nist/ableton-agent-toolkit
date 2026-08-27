@@ -2,7 +2,8 @@ import { useMemo, useCallback } from "react";
 import { pitchClass } from "@music-theory/core";
 import type { ScaleType, ChordQuality, NoteName } from "@music-theory/core";
 import { resolveFlavor, BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR } from "@platform/progression-engine";
-import type { Chord } from "../../types/blueprint";
+import { chordOnsetsForOutline, outlineBeatsPerBar } from "@drum/library";
+import type { Chord, MeterOutline } from "../../types/blueprint";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { chordFromDegree, chordsToHoneycombText, chordDisplayName } from "../../lib/harmony/chordBuilder";
 import {
@@ -41,6 +42,11 @@ interface HoneycombWheelProps {
   /** Active section's bi-tonal color flavor — renders a small badge on each
    *  chord hex showing the color-extension that chord maps to under it. */
   colorFlavor?: string;
+  /** The section's resolved harmony outline (harmonyMeterOutline, or the
+   *  drum outline when 'follow drums' is on) — when set, a small dial in the
+   *  wheel's corner draws one tick per chord-change onset, so the syncopated
+   *  grid reads on the wheel itself. */
+  harmonyOutline?: MeterOutline | null;
   /** Called when a chord is clicked or added, so the host can audition it
    *  through the selected MIDI port. */
   onPreviewChord?: (chord: Chord) => void;
@@ -55,6 +61,7 @@ export default function HoneycombWheel({
   onSelectChord,
   onChangeChords,
   colorFlavor,
+  harmonyOutline,
   onPreviewChord,
 }: HoneycombWheelProps) {
   const keyPc = pitchClass(keyName);
@@ -211,6 +218,15 @@ export default function HoneycombWheel({
 
   const vbStr = `${svgDims.vb[0]} ${svgDims.vb[1]} ${svgDims.vb[2]} ${svgDims.vb[3]}`;
 
+  // Euclidean-harmony onset dial — one tick per chord-change onset (each 2s/3s
+  // cell's start within a bar) drawn in the wheel's top-right corner.
+  const dial = useMemo(() => {
+    if (!harmonyOutline) return null;
+    const bpb = outlineBeatsPerBar(harmonyOutline);
+    return { bpb, onsets: chordOnsetsForOutline(harmonyOutline, bpb) };
+  }, [harmonyOutline]);
+  const dialCenter = dial ? { x: svgDims.vb[2] - 32, y: 30 } : null;
+
   return (
     <div style={{ position: "relative" }}>
       <svg
@@ -335,6 +351,32 @@ export default function HoneycombWheel({
             </g>
           );
         })}
+
+        {dial && dialCenter && (
+          <g style={{ pointerEvents: "none" }}>
+            <circle cx={dialCenter.x} cy={dialCenter.y} r={22} fill="#0E1116" stroke="#E8B54A" strokeOpacity={0.4} strokeWidth={1} />
+            {dial.onsets.map((t, i) => {
+              const a = (t / dial.bpb) * Math.PI * 2 - Math.PI / 2;
+              const r2 = i === 0 ? 22 : 19;
+              const x1 = dialCenter.x + Math.cos(a) * 15;
+              const y1 = dialCenter.y + Math.sin(a) * 15;
+              return (
+                <line
+                  key={i}
+                  x1={x1} y1={y1}
+                  x2={dialCenter.x + Math.cos(a) * r2} y2={dialCenter.y + Math.sin(a) * r2}
+                  stroke="#E8B54A"
+                  strokeWidth={i === 0 ? 2 : 1.3}
+                  strokeOpacity={0.9}
+                />
+              );
+            })}
+            <text x={dialCenter.x} y={dialCenter.y + 3} textAnchor="middle" dominantBaseline="middle"
+              fontFamily="'IBM Plex Mono', monospace" fontSize={7} fill="#E8B54A" opacity={0.8}>
+              {dial.onsets.length}×
+            </text>
+          </g>
+        )}
       </svg>
     </div>
   );

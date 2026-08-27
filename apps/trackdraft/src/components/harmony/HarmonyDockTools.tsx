@@ -192,6 +192,15 @@ export function HarmonyTools() {
     );
   }
 
+  function setSyncopation(value: number) {
+    updateCurrentSong((s) =>
+      updateSection(s, activeSection!.id, (sec) => ({
+        ...sec,
+        syncopationOffset: value > 0 ? Math.round(value * 100) / 100 : undefined,
+      })),
+    );
+  }
+
   const editorChord = selectedChordId ? activeSection.chords.find((c) => c.id === selectedChordId) ?? null : null;
 
   return (
@@ -288,6 +297,34 @@ export function HarmonyTools() {
               {m === "euclid" ? "euclid" : m === "drums" ? "follow drums" : "beats"}
             </button>
           ))}
+        </div>
+
+        {/* Push — the global anticipation offset, orthogonal to how the
+            chords advance: every chord change lands this many beats early. */}
+        <div className="flex items-center justify-between mb-2">
+          <span
+            className="font-mono text-2xs uppercase tracking-wider text-inkMuted"
+            title="Anticipation — push every chord change this many beats early (a jazz push). The wheel/UI stay on the clean grid; only the exported onsets shift."
+          >
+            Push
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              className="font-mono text-2xs rounded px-1.5 py-0.5 border border-edge text-inkMuted hover:text-ink"
+              onClick={() => setSyncopation((activeSection.syncopationOffset ?? 0) - 0.25)}
+            >
+              −
+            </button>
+            <span className="font-mono text-2xs tabular-nums text-ink w-10 text-center">
+              {Math.round(((activeSection.syncopationOffset ?? 0) / 0.25) * 4) / 4}/16
+            </span>
+            <button
+              className="font-mono text-2xs rounded px-1.5 py-0.5 border border-edge text-inkMuted hover:text-ink"
+              onClick={() => setSyncopation((activeSection.syncopationOffset ?? 0) + 0.25)}
+            >
+              +
+            </button>
+          </div>
         </div>
 
         {rhythmMode === "euclid" && hOutline && (

@@ -115,7 +115,26 @@ export function resolveChordOccurrences(section: BlueprintSection, durationBeats
   const outline =
     section.harmonyMeterOutline ?? (section.harmonyFollowsDrums ? (section.drumMeterOutline ?? null) : null);
   const chords = section.chords ?? [];
-  return outline ? loopChordsOnOutline(chords, outline, durationBeats) : loopChordsToFill(chords, durationBeats);
+  const occurrences = outline
+    ? loopChordsOnOutline(chords, outline, durationBeats)
+    : loopChordsToFill(chords, durationBeats);
+  return applySyncopation(occurrences, section.syncopationOffset);
+}
+
+/** Shift every chord change EARLY by `offset` — the global "jazz push"
+ *  (e.g. 0.5 = an 8th-note anticipation). Durations follow the shifted
+ *  starts; the section's first chord is clamped to its start so no note
+ *  precedes a clip, and the last chord still runs to the section end. */
+function applySyncopation(occurrences: ChordOccurrence[], offset: number | undefined): ChordOccurrence[] {
+  if (!offset || offset <= 0) return occurrences;
+  const starts = occurrences.map((o) => Math.max(0, Math.round((o.startTime - offset) * 10000) / 10000));
+  return occurrences.map((o, i) => {
+    const end =
+      i < occurrences.length - 1
+        ? starts[i + 1]
+        : Math.round((o.startTime + o.duration) * 10000) / 10000; // last still reaches the section end
+    return { ...o, startTime: starts[i], duration: Math.max(0, Math.round((end - starts[i]) * 10000) / 10000) };
+  });
 }
 
 // ---------------------------------------------------------------------------

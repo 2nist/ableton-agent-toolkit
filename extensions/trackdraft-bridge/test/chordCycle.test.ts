@@ -67,3 +67,32 @@ describe("resolveChordOccurrences — honors Euclidean harmony on a section", ()
     expect(occ.map((o) => o.startTime)).toEqual([0, 4, 8, 12]);
   });
 });
+
+describe("resolveChordOccurrences — syncopationOffset (jazz push)", () => {
+  it("pushes every chord change early by the offset, clamping the section's first chord", () => {
+    const section = makeSection({
+      id: "1", name: "V", bars: 1, timeSignatureNumerator: 4,
+      chords: twoChordCycle, syncopationOffset: 0.5,
+    });
+    const occ = resolveChordOccurrences(section, 16);
+    // chords were at 0,4,8,12 → pushed to 0 (clamped), 3.5, 7.5, 11.5
+    expect(occ.map((o) => o.startTime)).toEqual([0, 3.5, 7.5, 11.5]);
+    // the last chord still reaches the section end (16)
+    expect(occ[3].startTime + occ[3].duration).toBe(16);
+  });
+
+  it("applies to Euclidean harmony onsets too", () => {
+    const section = makeSection({
+      id: "1", name: "V", bars: 1, timeSignatureNumerator: 4,
+      harmonyMeterOutline: SEVEN_EIGHT, chords: twoChordCycle, syncopationOffset: 0.5,
+    });
+    const occ = resolveChordOccurrences(section, 7);
+    // onsets 0,1,2,3.5,4.5,5.5 → 0 (clamped), 0.5, 1.5, 3, 4, 5
+    expect(occ.map((o) => o.startTime)).toEqual([0, 0.5, 1.5, 3, 4, 5]);
+  });
+
+  it("leaves occurrences untouched when no offset is set", () => {
+    const section = makeSection({ id: "1", name: "V", bars: 1, timeSignatureNumerator: 4, chords: twoChordCycle });
+    expect(resolveChordOccurrences(section, 16).map((o) => o.startTime)).toEqual([0, 4, 8, 12]);
+  });
+});
