@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { MeterOutline } from "@drum/library";
 import { loopChordsToFill, loopChordsOnOutline, resolveChordOccurrences } from "../src/chordCycle.js";
 import { makeChord, makeSection } from "./helpers.js";
 
@@ -8,7 +9,7 @@ const twoChordCycle = [
 ];
 
 /** 7/8 as 2+2+3 at cellBeats 0.5 → bar = 3.5 beats; cell starts at 0, 1, 2. */
-const SEVEN_EIGHT = { cellBeats: 0.5, cells: [2, 2, 3], label: "1 2 1 2 1 2 3" } as const;
+const SEVEN_EIGHT: MeterOutline = { cellBeats: 0.5, cells: [2, 2, 3], label: "1 2 1 2 1 2 3" };
 
 describe("loopChordsToFill", () => {
   it("repeats the cycle until durationBeats is filled", () => {
@@ -61,7 +62,25 @@ describe("resolveChordOccurrences — honors Euclidean harmony on a section", ()
     expect(occ.map((o) => o.startTime)).toEqual([0, 1, 2, 3.5, 4.5, 5.5]);
   });
 
-  it("falls back to per-chord beats when neither harmony field is set", () => {
+  it("follows the drums' outline by DEFAULT when a drum outline exists (follow-drums default)", () => {
+    const section = makeSection({
+      id: "1", name: "V", bars: 1, timeSignatureNumerator: 4,
+      drumMeterOutline: SEVEN_EIGHT, chords: twoChordCycle,
+    });
+    const occ = resolveChordOccurrences(section, 7);
+    expect(occ.map((o) => o.startTime)).toEqual([0, 1, 2, 3.5, 4.5, 5.5]);
+  });
+
+  it("stays on per-chord beats when harmonyFollowsDrums is explicitly false", () => {
+    const section = makeSection({
+      id: "1", name: "V", bars: 1, timeSignatureNumerator: 4,
+      harmonyFollowsDrums: false, drumMeterOutline: SEVEN_EIGHT, chords: twoChordCycle,
+    });
+    const occ = resolveChordOccurrences(section, 16);
+    expect(occ.map((o) => o.startTime)).toEqual([0, 4, 8, 12]);
+  });
+
+  it("falls back to per-chord beats when neither harmony field nor a drum outline is set", () => {
     const section = makeSection({ id: "1", name: "V", bars: 1, timeSignatureNumerator: 4, chords: twoChordCycle });
     const occ = resolveChordOccurrences(section, 16);
     expect(occ.map((o) => o.startTime)).toEqual([0, 4, 8, 12]);

@@ -14,12 +14,19 @@ import {
   planSectionHandoffFills,
   scaleToVelocityPreset,
   occurrenceSeed,
+  hashSeed,
   type FillLibrary,
   type HandoffSectionInput,
 } from "./handoffs.js";
 import { tileGrooveVaried } from "./vary.js";
 import { extractGroove, applyGroove } from "./groove.js";
-import { synthesizeTransition, type TransitionModel } from "./transitions.js";
+import {
+  synthesizeTransition,
+  planSectionTransitions,
+  transitionFlavor,
+  type TransitionModel,
+  type TransitionFlavor,
+} from "./transitions.js";
 import type { DrumNote } from "./types.js";
 import { PRESET_DATA } from "./presetData.js";
 
@@ -238,6 +245,9 @@ export interface ApplyTransitionOptions {
   /** Subdivision grid the transition is generated on — an outline's
    *  `cellBeats`, or 0.25 (16ths) for standard presets. */
   gridBeats?: number;
+  /** A catalog flavor for the model — the seeded variation the
+   *  auto-assigner picks; absent → the model's default flavor. */
+  flavor?: TransitionFlavor;
 }
 
 /**
@@ -269,7 +279,13 @@ export function applySectionTransition(
     .filter((n) => n.beat >= fillStart)
     .map((n): PackedNote => [round4(n.beat - fillStart), n.pitch, n.velocity]);
 
-  const generated = synthesizeTransition(model, { spanBeats, gridBeats, velocityTarget: opts.velocityTarget, baseNotes });
+  const generated = synthesizeTransition(model, {
+    spanBeats,
+    gridBeats,
+    velocityTarget: opts.velocityTarget,
+    baseNotes,
+    flavor: opts.flavor,
+  });
 
   const kept = tiled.filter((n) => n.beat < fillStart);
   const added: TiledNote[] = generated.map(([beat, pitch, velocity]) => ({
@@ -318,6 +334,9 @@ function toPackedNotes(notes: DrumNote[]): PackedNote[] {
 export interface SectionDrumInput {
   sectionId: string;
   occurrenceIndex: number;
+  /** The section's role (chorus/verse/bridge/...) — drives the automatic
+   *  role-aware transition when the user hasn't authored one. */
+  role?: string | null;
   /** Resolved base groove — an outline-driven variant, a pattern variant,
    *  or `null` for silence. The caller resolves outline-vs-pattern because
    *  that path needs song-blueprint / song-structure types. */
@@ -362,14 +381,19 @@ export interface PlanSectionDrumOptions {
  *      against the *final* groove.
  *   2. A synthesized fill is injected for any outline-driven meter
  *      `FILL_DATA` has no analogue for.
- *   3. Each section is velocity-scaled, tiled with seeded per-occurrence
- *      micro-variation (`tileGrooveVaried`), and its automatic handoff fill
- *      (if the boundary qualifies) is spliced into its last bar.
- *   4. An authored detour (`drumVariationOutline`) and then a named
- *      transition (`drumTransitionModel`) overwrite the same tail region in
- *      turn — authorial choices always beat the automatic fill.
- *   5. A section preceded by a fill opens with a crash, unless its groove
- *      already does.
+ *   3. Each section is velocity-scaled and tiled with seeded per-occurrence
+ *      micro-variation (`tileGrooveVaried`).
+ *   4. A role-aware transition (`planSectionTransitions`) is auto-assigned
+ *      to every section the user hasn't authored — build up into choruses,
+ *      break down out of verses, drop out of bridges, cut into outros —
+ *      with a seeded catalog flavor and 1-2 bars for variation. The
+ *      automatic handoff fill only fires where no such gesture applies
+ *      (and then by seeded spice), so NOT every section carries a fill.
+ *   5. An authored detour (`drumVariationOutline`) and a named transition
+ *      (`drumTransitionModel`) overwrite the same tail region in turn —
+ *      authorial choices always beat the auto-assigned gesture.
+ *   6. A section preceded by a fill or build-up opens with a crash, unless
+ *      its groove already does.
  *
  * Pure and DAW-agnostic — the caller maps its own section model into
  * `SectionDrumInput` (exactly like `planSectionHandoffFills`), so both the
@@ -411,6 +435,38 @@ export function planSectionDrumNotes(
   }));
   const handoffPlans = planSectionHandoffFills(handoffInputs, outlineFillData);
 
+  // Role-aware auto transitions for sections the user hasn't authored —
+  // build up into choruses, break down out of verses, drop out of bridges,
+  // cut into outros, seeded catalog flavor + bars for variation. Sections
+  // with an authored transition/variation return null and keep their own.
+  const autoTransitions = planSectionTransitions(
+    inputs.map((input) => ({
+      sectionId: input.sectionId,
+      occurrenceIndex: input.occurrenceIndex,
+      role: input.role ?? null,
+      durationBeats: input.durationBeats,
+      beatsPerBar: input.variant ? input.variant.beatsPerBar : 4,
+      velocityTarget: input.velocityTarget,
+      manualModel: input.transitionModel != null,
+      hasVariation: input.variation != null,
+    })),
+  );
+
+  // Which boundaries actually carry the automatic handoff fill — only where
+  // there's no authored gesture AND no auto transition, and then by seeded
+  // spice, so NOT every section gets a fill (the old blanket behavior).
+  const fillApplied: boolean[] = inputs.map((input, i) => {
+    if (input.transitionModel || input.variation) return false;
+    if (autoTransitions[i].model !== null) return false;
+    if (handoffPlans[i].fillStart === null) return false;
+    return hashSeed(`${occurrenceSeed(input.sectionId, input.occurrenceIndex)}:fill`) % 100 < 45;
+  });
+  // A crash opens the next section when the previous one built into it —
+  // a fill or a build-up gesture both resolve onto this downbeat.
+  const precededByGesture: boolean[] = inputs.map((_, i) =>
+    i > 0 ? fillApplied[i - 1] || autoTransitions[i - 1].model === "buildUp" : false,
+  );
+
   return inputs.map((input, i) => {
     const variant = resolved[i];
     if (!variant) return { notes: [] };
@@ -426,8 +482,8 @@ export function planSectionDrumNotes(
     );
 
     const plan = handoffPlans[i];
-    const fillStart = plan.fillStart;
-    if (fillStart !== null) {
+    if (fillApplied[i] && plan.fillStart !== null) {
+      const fillStart = plan.fillStart;
       tiled = tiled.filter((note) => note.beat < fillStart);
       for (const [beat, pitch, velocity] of plan.fillNotes) {
         tiled.push({ beat, pitch, velocity });
@@ -442,19 +498,28 @@ export function planSectionDrumNotes(
         velocityTarget,
       });
     }
-    tiled = applySectionTransition(tiled, {
-      model: input.transitionModel,
-      transitionBars: input.transitionBars,
-      durationBeats: input.durationBeats,
-      variant,
-      velocityTarget,
-      gridBeats: input.gridBeats,
-    });
 
-    // A fill resolves onto a crash — put it on this section's downbeat when
-    // the previous section built into it, unless the groove already opens
-    // with one.
-    if (plan.precededByFill && !tiled.some((n) => n.pitch === crashPitch && n.beat < 0.25)) {
+    // The effective transition: the user's authored model, else the
+    // role-aware auto gesture (with its seeded catalog flavor).
+    const auto = autoTransitions[i];
+    const model = input.transitionModel ?? auto.model;
+    if (model) {
+      const flavor = input.transitionModel ? undefined : transitionFlavor(model, auto.flavor);
+      tiled = applySectionTransition(tiled, {
+        model,
+        transitionBars: input.transitionModel ? (input.transitionBars ?? 1) : auto.bars,
+        durationBeats: input.durationBeats,
+        variant,
+        velocityTarget,
+        gridBeats: input.gridBeats,
+        flavor,
+      });
+    }
+
+    // A build-up/fill resolves onto a crash — put it on this section's
+    // downbeat when the previous section built into it, unless the groove
+    // already opens with one.
+    if (precededByGesture[i] && !tiled.some((n) => n.pitch === crashPitch && n.beat < 0.25)) {
       tiled.push({ beat: 0, pitch: crashPitch, velocity: Math.min(127, velocityTarget + 4) });
     }
 

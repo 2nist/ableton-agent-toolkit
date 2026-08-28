@@ -10,6 +10,7 @@ import {
   outlineToGroovePattern,
   occurrenceSeed,
   hashSeed,
+  pickVariantIndex,
   type DrumPattern,
   type FillLibrary,
   type PackedPreset,
@@ -122,10 +123,12 @@ export function planDrumClips(
     if (!preset || preset.variants.length === 0) return null;
 
     // Explicit variant index when the user chose one (clamped to valid range);
-    // otherwise the deterministic hash pick that's been the default since day one.
+    // otherwise the deterministic pick that defaults to the clean downbeat
+    // groove (variant 0) most of the time, with the corpus variants as
+    // seeded variation — matches the app's preview/export via `pickVariantIndex`.
     const variantIndex = section.drumVariantIndex !== undefined
       ? Math.max(0, Math.min(section.drumVariantIndex, preset.variants.length - 1))
-      : hashSeed(occurrenceSeed(section.id, occurrenceIndex)) % preset.variants.length;
+      : pickVariantIndex(hashSeed(occurrenceSeed(section.id, occurrenceIndex)), preset.variants.length);
     return preset.variants[variantIndex];
   });
 
@@ -135,6 +138,7 @@ export function planDrumClips(
   const inputs: SectionDrumInput[] = spans.map(({ section, durationBeats, occurrenceIndex }, i) => ({
     sectionId: section.id,
     occurrenceIndex,
+    role: section.role ?? null,
     variant: resolved[i],
     outline: section.drumMeterOutline ?? null,
     voiceOverrides: section.drumVoicePatterns,

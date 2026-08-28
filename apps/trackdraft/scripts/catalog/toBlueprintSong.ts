@@ -249,11 +249,16 @@ export function catalogSongToBlueprintSong({ id, raw, lyricLines, hasSyncedLyric
       ? linesInSection.map((line) => ({ text: line.text, startBeat: line.startSec * beatsPerSec }))
       : undefined;
 
-    // Use snapped bars (derived from chord durations) instead of
-    // raw section timing (derived from audio onset detection).
-    // Bars follow chords — the progression is the musical truth,
-    // section boundary timestamps are just coarse estimates.
-    const finalBars = rawChords.length > 0 ? snappedBars : bars;
+    // Bars follow the RAW section timing — the audio onset detection is the
+    // ground truth for how long a section actually lasts — and the chord-
+    // snapped count only acts as a floor. Chord annotations routinely leave
+    // a gap/rest at the tail (the last chord's onset is early, the section
+    // runs on), so snapping bars to the chord total UNDERCOUNTS sections and
+    // makes the song run ~10-20% ahead of the audio (e.g. Drive My Car's
+    // verses are 8 bars in the recording but only 7 from chord durations).
+    // Taking the max keeps the longer count when chords genuinely outlast
+    // the raw span, so nothing gets cut off either way.
+    const finalBars = Math.max(rawChords.length > 0 ? snappedBars : 0, bars);
 
     // ---- return section object ---------------------------------------
 

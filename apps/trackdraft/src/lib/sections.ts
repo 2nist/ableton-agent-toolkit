@@ -145,8 +145,10 @@ export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplyS
     // "euclid" builds the 2s/3s outline from the slot's own meter (the
     // same shape the Harmony tab's euclid default produces); a 1-beat
     // meter has no valid 2/3 decomposition, so it falls back to no
-    // outline rather than throwing.
-    const harmonyRhythm = slot.harmonyRhythm ?? "beats";
+    // outline rather than throwing. No harmonyRhythm → undefined, which
+    // now means "follow the drums" whenever the section has a drum
+    // outline (the closest sync) — only an explicit "beats" opts out.
+    const harmonyRhythm = slot.harmonyRhythm;
     let harmonyMeterOutline: BlueprintSection["harmonyMeterOutline"];
     if (harmonyRhythm === "euclid") {
       const cellCount = slot.harmonyCellCount ?? twoThreeCellCounts(numerator)[0];
@@ -167,7 +169,7 @@ export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplyS
         : section.chords,
       drumPattern: inferGrooveOverride(slot.groove) ?? section.drumPattern,
       harmonyMeterOutline,
-      harmonyFollowsDrums: harmonyRhythm === "follow drums" ? true : undefined,
+      harmonyFollowsDrums: harmonyRhythm === "follow drums" ? true : harmonyRhythm === "beats" ? false : undefined,
       syncopationOffset: slot.syncopationOffset,
     };
   });

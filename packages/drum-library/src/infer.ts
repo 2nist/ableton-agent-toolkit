@@ -99,7 +99,10 @@ export function inferDrumPattern(section: InferSection, song: InferSong = {}): D
   const rank = velocityRank(section.velocity);
   const quiet = rank <= 2; // p and below
   const loud = rank >= 6; // ff and above
-  const role = section.role ?? "custom";
+  // A refrain IS a chorus (Beatles-style song sections are often labelled
+  // "refrain") — normalize so it gets the same pattern/dynamics a chorus
+  // does instead of falling through to `default`.
+  const role = (section.role === "refrain" ? "chorus" : section.role) ?? "custom";
   const bpm = song.bpm ?? 120;
 
   if (inferDrumStyle(song) === "electronic") {
@@ -142,7 +145,9 @@ export function inferDrumPattern(section: InferSection, song: InferSong = {}): D
 
   // Acoustic family.
   switch (role) {
-    case "intro": return quiet ? "bridge_sparse" : "standard";
+    // Intros settle into the song: keep them sparse up to mf so a short
+    // intro reads as a setup, not a full groove (the "train wreck" feel).
+    case "intro": return rank <= 4 ? "bridge_sparse" : "standard";
     case "verse": return quiet ? "bridge_sparse" : "standard";
     case "pre_chorus": return "driving";
     case "chorus": return loud ? "intense" : "driving";

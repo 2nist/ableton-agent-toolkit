@@ -55,14 +55,16 @@ export function loopChordsOnOutline(chords: BlueprintChord[], outline: MeterOutl
 
 /**
  * Resolve a section's chord occurrences honoring Euclidean harmony: an
- * explicit `harmonyMeterOutline`, else the drums' outline when
- * `harmonyFollowsDrums` is set (the drums literally drive the harmony
- * rhythm), else per-chord `beats` exactly as before. Shared by every
- * chord-driven generator so chords, bass and color can't drift.
+ * explicit `harmonyMeterOutline`, else the drums' outline — following the
+ * drums is the DEFAULT when a section has a `drumMeterOutline`; set
+ * `harmonyFollowsDrums: false` to stay on per-chord `beats` instead.
+ * Shared by every chord-driven generator so chords, bass and color can't
+ * drift.
  */
 export function resolveChordOccurrences(section: BlueprintSection, durationBeats: number): ChordOccurrence[] {
   const outline =
-    section.harmonyMeterOutline ?? (section.harmonyFollowsDrums ? (section.drumMeterOutline ?? null) : null);
+    section.harmonyMeterOutline ??
+    (section.harmonyFollowsDrums === false ? null : (section.drumMeterOutline ?? null));
   const chords = section.chords ?? [];
   const occurrences = outline
     ? loopChordsOnOutline(chords, outline, durationBeats)

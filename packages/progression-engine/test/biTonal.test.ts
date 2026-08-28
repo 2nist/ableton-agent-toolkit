@@ -105,4 +105,22 @@ describe("generateBiTonal", () => {
     expect(color.every((n) => n.duration === 1)).toBe(true);
     expect(color.every((n) => n.velocity === 80)).toBe(true);
   });
+
+  it("sustains color notes for the full chord duration by default (extended color pad)", () => {
+    const { color } = generateBiTonal(
+      BI_TONAL_MATRIX,
+      "ambient_ocean",
+      [
+        { rootPc: 0, quality: "maj", durationBeats: 4 },
+        { rootPc: 5, quality: "maj", durationBeats: 2 },
+      ],
+      { syncopation: [0, 0] },
+    );
+    const first = color.filter((n) => n.startTime === 0);
+    const second = color.filter((n) => n.startTime === 4);
+    expect(first.length).toBeGreaterThan(0);
+    expect(second.length).toBeGreaterThan(0);
+    expect(first.every((n) => n.duration === 4)).toBe(true);
+    expect(second.every((n) => n.duration === 2)).toBe(true);
+  });
 });

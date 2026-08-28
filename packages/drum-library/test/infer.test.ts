@@ -44,6 +44,20 @@ describe("inferDrumPattern — acoustic family", () => {
     expect(inferDrumPattern({ role: "custom", velocity: "ff" })).toBe("driving");
     expect(inferDrumPattern({ role: "custom", velocity: "mf" })).toBe("standard");
   });
+
+  it("keeps intros sparse up to mf so they settle into the song (not a train wreck)", () => {
+    expect(inferDrumPattern({ role: "intro", velocity: "pp" })).toBe("bridge_sparse");
+    expect(inferDrumPattern({ role: "intro", velocity: "mf" })).toBe("bridge_sparse");
+    // A genuinely loud intro can still get the full standard groove.
+    expect(inferDrumPattern({ role: "intro", velocity: "ff" })).toBe("standard");
+  });
+
+  it("treats a refrain as a chorus — Beatles-style labels get chorus patterns", () => {
+    expect(inferDrumPattern({ role: "refrain", velocity: "mf" })).toBe("driving");
+    expect(inferDrumPattern({ role: "refrain", velocity: "ff" })).toBe("intense");
+    // …and electronic refrains get the chorus four-on-the-floor too.
+    expect(inferDrumPattern({ role: "refrain", velocity: "mf" }, { concept: "club techno", bpm: 126 })).toBe("four_on_floor");
+  });
 });
 
 describe("inferDrumPattern — electronic family", () => {

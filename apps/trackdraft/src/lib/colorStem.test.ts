@@ -54,4 +54,12 @@ describe("planColorStem register", () => {
       expect(n.pitch).toBe(low[i].pitch + 24);
     });
   });
+
+  it("sustains color notes for the full chord duration (extended, not 1-beat stabs)", () => {
+    const notes = planColorStem(sectionSpans(testSong()));
+    expect(notes.length).toBeGreaterThan(0);
+    // The test song's chords are 4 beats each; the color voice should ring
+    // for the whole chord, not a 1-beat transient.
+    expect(notes.every((n) => n.duration === 4)).toBe(true);
+  });
 });

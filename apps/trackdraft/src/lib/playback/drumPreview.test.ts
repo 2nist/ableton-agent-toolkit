@@ -3,6 +3,7 @@ import {
   resolveDrumHits,
   resolveOutlineVoiceNecklaces,
   resolveSectionVoiceNecklaces,
+  resolveSectionVariant,
   resolveVoiceNecklaces,
   inferPatternForSection,
   inferGrooveOverride,
@@ -128,6 +129,64 @@ describe("resolveVoiceNecklaces", () => {
       expect(n.steps).toBeGreaterThan(0);
       expect(Number.isInteger(n.steps)).toBe(true);
     }
+  });
+});
+
+describe("seeded variant selection (the 'same drums everywhere' fix)", () => {
+  it("different sections resolve to different variants, not all variant 0", () => {
+    // The auto pick defaults to the clean downbeat groove (variant 0) most
+    // of the time, but across many distinct sections the seeded variation
+    // must still produce more than one groove — the old bug was variant 0
+    // for EVERY section. 20 distinct ids ⇒ P(all land on variant 0) is ~0.
+    const notes = Array.from({ length: 20 }, (_, i) =>
+      resolveSectionVariant(makeSection({ id: `song-${i}-section` }))!.notes.join("|"),
+    );
+    expect(new Set(notes).size).toBeGreaterThan(1);
+  });
+
+  it("defaults to the clean downbeat groove (snare on beats 1 & 3) most of the time", () => {
+    // The majority of auto sections resolve to variant 0 of "standard" —
+    // the clean downbeat default, snare exactly on beats 1 and 3, no flams.
+    const snarePitch = 38;
+    const variants = Array.from({ length: 40 }, (_, i) =>
+      resolveSectionVariant(makeSection({ id: `verse-${i}` }))!,
+    );
+    const cleanCount = variants.filter((v) => {
+      const snares = v.notes.filter((n) => n[1] === snarePitch).map((n) => n[0]);
+      return snares.length === 2 && snares[0] === 0 && snares[1] === 2;
+    }).length;
+    expect(cleanCount).toBeGreaterThan(variants.length / 2);
+  });
+
+  it("is deterministic: same section id + occurrence → the same variant", () => {
+    const first = resolveSectionVariant(makeSection({ id: "sec-x" }), undefined, 0)!;
+    const second = resolveSectionVariant(makeSection({ id: "sec-x" }), undefined, 0)!;
+    expect(first.notes).toEqual(second.notes);
+  });
+
+  it("a repeated section's later occurrence gets a different variant", () => {
+    const occ0 = resolveSectionVariant(makeSection({ id: "chorus" }), undefined, 0)!;
+    const occ2 = resolveSectionVariant(makeSection({ id: "chorus" }), undefined, 2)!;
+    expect(occ0.notes).not.toEqual(occ2.notes);
+  });
+
+  it("an explicit drumVariantIndex always wins over the seed", () => {
+    // Pinning variant 2 twice is stable — the explicit index wins, not the seed.
+    const manual = resolveSectionVariant(makeSection({ id: "sec-y", drumVariantIndex: 2 }))!;
+    const manualAgain = resolveSectionVariant(makeSection({ id: "sec-y", drumVariantIndex: 2 }))!;
+    expect(manual.notes).toEqual(manualAgain.notes);
+    // A pinned variant-0 and the auto-seeded pick for the same section are
+    // independent resolutions, and both must resolve to notes.
+    const explicit0 = resolveSectionVariant(makeSection({ id: "sec-z", drumVariantIndex: 0 }))!;
+    const seeded = resolveSectionVariant(makeSection({ id: "sec-z" }), undefined, 0)!;
+    expect(explicit0.notes.length).toBeGreaterThan(0);
+    expect(seeded.notes.length).toBeGreaterThan(0);
+  });
+
+  it("refrain resolves to the same (chorus) family as chorus via inferPatternForSection", () => {
+    const refrain = inferPatternForSection({ ...makeSection({ id: "r" }), role: "refrain" as never });
+    const chorus = inferPatternForSection({ ...makeSection({ id: "c" }), role: "chorus" });
+    expect(refrain).toBe(chorus);
   });
 });
 

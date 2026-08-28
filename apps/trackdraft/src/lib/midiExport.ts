@@ -21,6 +21,7 @@ import { sectionSpans, type SectionSpan } from "./arrangement";
 import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
 import { planSectionDrumNotes, planSectionBass, FILL_DATA, humanizeOutlineNotes, chordOnsetsForOutline, type SectionDrumInput, type MeterOutline } from "@drum/library";
 import { planColorStem } from "./colorStem";
+import { planMelodyStem } from "./melody/melodyStem";
 import type { BlueprintSong, BlueprintSection, Chord } from "../types/blueprint";
 
 // ---------------------------------------------------------------------------
@@ -104,13 +105,16 @@ function loopChordsOnOutline(chords: Chord[], outline: MeterOutline, durationBea
 }
 
 /** Resolve a section's chord occurrences honoring Euclidean harmony — an
- *  explicit `harmonyMeterOutline`, else the drums' outline when
- *  `harmonyFollowsDrums` is set (the drums drive the harmony), else
- *  per-chord `beats` exactly as before. Mirrors the bridge's resolver so
- *  the web app and the extension can't drift. */
+ *  explicit `harmonyMeterOutline`, else the drums' outline. Following the
+ *  drums is now the DEFAULT whenever a section has a `drumMeterOutline`
+ *  (the drums drive the harmony — the closest sync); set
+ *  `harmonyFollowsDrums: false` to opt back out onto per-chord `beats`.
+ *  Mirrors the bridge's resolver so the web app and the extension can't
+ *  drift. */
 export function resolveChordOccurrences(section: BlueprintSection, durationBeats: number): ChordOccurrence[] {
   const outline =
-    section.harmonyMeterOutline ?? (section.harmonyFollowsDrums ? (section.drumMeterOutline ?? null) : null);
+    section.harmonyMeterOutline ??
+    (section.harmonyFollowsDrums === false ? null : (section.drumMeterOutline ?? null));
   const chords = section.chords ?? [];
   const occurrences = outline
     ? loopChordsOnOutline(chords, outline, durationBeats)
@@ -201,13 +205,14 @@ export function planBassStem(spans: SectionSpan[]): MidiNote[] {
 export function planDrumStem(spans: SectionSpan[], concept?: string): MidiNote[] {
   const inputs: SectionDrumInput[] = spans.map((span) => {
     const section = span.section;
-    let variant = resolveSectionVariant(section, concept);
+    let variant = resolveSectionVariant(section, concept, span.occurrenceIndex);
     if (variant && section.drumMeterOutline) {
       variant = { ...variant, notes: humanizeOutlineNotes(variant.notes, section.drumMeterOutline.cellBeats) };
     }
     return {
       sectionId: section.id,
       occurrenceIndex: span.occurrenceIndex,
+      role: section.role ?? null,
       variant,
       outline: section.drumMeterOutline ?? null,
       voiceOverrides: section.drumVoicePatterns,
@@ -362,12 +367,13 @@ function keySignature(song: BlueprintSong): { sharps: number; major: boolean } {
 
 /** Converts a BlueprintSong to a Standard MIDI File as a Uint8Array.
  *
- *  Produces a Type-1 SMF with 5 tracks:
+ *  Produces a Type-1 SMF with 6 tracks:
  *  - Track 0: Conductor (tempo, time signature, key signature)
  *  - Track 1: Chords
  *  - Track 2: Bass
  *  - Track 3: Drums
  *  - Track 4: Color (bi-tonal Color Chord layer)
+ *  - Track 5: Melody (the captured hum-to-MIDI line, when any section has one)
  *
  *  The tempo is set from `song.bpm`, time signature from the song's
  *  numerator/denominator, and key signature from `song.key`/`song.scale`.
@@ -383,6 +389,7 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
   const bassNotes = planBassStem(spans);
   const drumNotes = planDrumStem(spans, song.concept);
   const colorNotes = planColorStem(spans);
+  const melodyNotes = planMelodyStem(spans);
 
   // --- Conductor track (tempo + time sig + key sig) ---
   const conductorEvents: RawMidiEvent[] = [];
@@ -428,9 +435,13 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
     notesToEvents(colorNotes, 2),
     "Color",
   );
+  const melodyTrack = buildTrackChunk(
+    notesToEvents(melodyNotes, 4), // channel 5 (0-based 4) — the template's melody track
+    "Melody",
+  );
 
   // --- Assemble SMF ---
-  const numTracks = 5;
+  const numTracks = 6;
   const header = [
     0x4d, 0x54, 0x68, 0x64, // "MThd"
     ...writeU32(6),          // header length
@@ -439,7 +450,15 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
     ...writeU16(TICKS_PER_QUARTER),
   ];
 
-  const allBytes = [...header, ...conductorTrack, ...chordTrack, ...bassTrack, ...drumTrack, ...colorTrack];
+  const allBytes = [
+    ...header,
+    ...conductorTrack,
+    ...chordTrack,
+    ...bassTrack,
+    ...drumTrack,
+    ...colorTrack,
+    ...melodyTrack,
+  ];
   return new Uint8Array(allBytes);
 }
 

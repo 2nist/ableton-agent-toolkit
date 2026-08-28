@@ -63,13 +63,17 @@ export function HarmonyMainMenu() {
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
   const setSelectedSectionId = useHarmonySelectionStore((s) => s.setSelectedSectionId);
   if (!song || !activeSection || !effectiveKey || !effectiveScale) return null;
+  // Capture the narrowed section for the closures below — TS control-flow
+  // narrowing doesn't persist into nested functions, so the guard above
+  // doesn't make `activeSection` non-null inside them.
+  const section = activeSection;
 
   function updateChords(chords: Chord[]) {
-    updateCurrentSong((s) => updateSection(s, activeSection!.id, (sec) => ({ ...sec, chords })));
+    updateCurrentSong((s) => updateSection(s, section.id, (sec) => ({ ...sec, chords })));
   }
 
   function updateSingleChord(chordId: string, update: Partial<Chord>) {
-    const next = activeSection.chords.map((c) => (c.id === chordId ? { ...c, ...update } : c));
+    const next = section.chords.map((c) => (c.id === chordId ? { ...c, ...update } : c));
     updateChords(next);
   }
 
@@ -149,9 +153,13 @@ export function HarmonyTools() {
   // drum meter (the drums literally drive the harmony).
   const rhythmMode: "beats" | "euclid" | "drums" = activeSection.harmonyMeterOutline
     ? "euclid"
-    : activeSection.harmonyFollowsDrums
-      ? "drums"
-      : "beats";
+    : activeSection.harmonyFollowsDrums === false
+      ? "beats"
+      : activeSection.harmonyFollowsDrums === true
+        ? "drums"
+        : activeSection.drumMeterOutline
+          ? "drums" // following the drums is the default when a drum outline exists
+          : "beats";
   const hOutline = activeSection.harmonyMeterOutline;
   const hDenom = hOutline ? Math.round(4 / hOutline.cellBeats) : 8;
   const hN = hOutline ? outlineNumerator(hOutline) : 7;
@@ -161,7 +169,7 @@ export function HarmonyTools() {
   function setRhythmMode(mode: "beats" | "euclid" | "drums") {
     updateCurrentSong((s) =>
       updateSection(s, activeSection!.id, (sec) => {
-        if (mode === "beats") return { ...sec, harmonyMeterOutline: undefined, harmonyFollowsDrums: undefined };
+        if (mode === "beats") return { ...sec, harmonyMeterOutline: undefined, harmonyFollowsDrums: false };
         if (mode === "drums") return { ...sec, harmonyMeterOutline: undefined, harmonyFollowsDrums: true };
         return {
           ...sec,

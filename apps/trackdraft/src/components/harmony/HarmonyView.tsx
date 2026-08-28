@@ -127,7 +127,7 @@ export default function HarmonyView() {
               colorFlavor={activeSection.colorFlavor}
               harmonyOutline={
                 activeSection.harmonyMeterOutline ??
-                (activeSection.harmonyFollowsDrums ? (activeSection.drumMeterOutline ?? null) : null)
+                (activeSection.harmonyFollowsDrums === false ? null : (activeSection.drumMeterOutline ?? null))
               }
               onPreviewChord={(chord) => void previewChord(chord)}
             />

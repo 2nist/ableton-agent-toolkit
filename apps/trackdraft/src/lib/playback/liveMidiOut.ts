@@ -1,6 +1,7 @@
 import { sectionSpans } from "../arrangement";
 import { planChordStem, planBassStem, planDrumStem, type MidiNote } from "../midiExport";
 import { planColorStem } from "../colorStem";
+import { planMelodyStem } from "../melody/melodyStem";
 import type { BlueprintSong } from "../../types/blueprint";
 
 /** 1-based MIDI channels (1-16, matching how Ableton's UI numbers them) —
@@ -17,9 +18,18 @@ export interface LiveMidiChannelMap {
   bass: number;
   drums: number;
   color: number;
+  /** Melody — the captured hum-to-MIDI line. Defaults to ch.5, matching
+   *  the template's `melody` track. */
+  melody: number;
 }
 
-export const DEFAULT_LIVE_MIDI_CHANNELS: LiveMidiChannelMap = { drums: 1, bass: 2, chords: 3, color: 4 };
+export const DEFAULT_LIVE_MIDI_CHANNELS: LiveMidiChannelMap = {
+  drums: 1,
+  bass: 2,
+  chords: 3,
+  color: 4,
+  melody: 5,
+};
 
 export interface MidiOutputInfo {
   id: string;
@@ -95,20 +105,53 @@ interface ScheduledNote {
  *  lookahead — there's still a real limit to this if the tab gets throttled
  *  harder than the lookahead window, which no timer-based scheduler can
  *  fully rule out from a plain script running on the main thread. */
+/** Start/loop options for `LiveMidiScheduler.start` — mirror
+ *  `SongTransport.play()`'s PlayOptions so the backing MIDI can start at
+ *  the same beat and loop the same region as the playhead (used when
+ *  recording a melody against a section). */
+export interface LiveSchedulerOptions {
+  /** Song beat to start at (notes before this are skipped). Default 0. */
+  startBeat?: number;
+  /** When both set, only notes inside [loopStart, loopEnd) are played, and
+   *  they repeat forever (folded into the loop) instead of stopping. */
+  loopStart?: number;
+  loopEnd?: number;
+}
+
 class LiveMidiScheduler {
   private output: MIDIOutput | null = null;
   private channelMap: LiveMidiChannelMap = DEFAULT_LIVE_MIDI_CHANNELS;
   private notes: ScheduledNote[] = [];
   private startedAtMs = 0;
   private secPerBeat = 0.5;
-  private nextIndex = 0;
+  private startBeat = 0;
+  private loopStart: number | null = null;
+  private loopEnd: number | null = null;
+  private lastScheduledElapsed = 0;
+  private lastNoteStart = 0;
   private timerId: ReturnType<typeof setInterval> | null = null;
 
   get isRunning(): boolean {
     return this.timerId !== null;
   }
 
-  start(song: BlueprintSong, output: MIDIOutput, channelMap: LiveMidiChannelMap = DEFAULT_LIVE_MIDI_CHANNELS): void {
+  /** Whether the current schedule is looping a region (a section loop). */
+  get isLooping(): boolean {
+    return this.loopStart !== null && this.loopEnd !== null;
+  }
+
+  /** The active loop region, or null when not looping — lets a live re-plan
+   *  preserve the loop instead of dropping back to a one-shot play. */
+  get loopRegion(): { start: number; end: number } | null {
+    return this.isLooping ? { start: this.loopStart!, end: this.loopEnd! } : null;
+  }
+
+  start(
+    song: BlueprintSong,
+    output: MIDIOutput,
+    channelMap: LiveMidiChannelMap = DEFAULT_LIVE_MIDI_CHANNELS,
+    opts: LiveSchedulerOptions = {},
+  ): void {
     this.stop();
     this.output = output;
     this.channelMap = channelMap;
@@ -119,39 +162,62 @@ class LiveMidiScheduler {
       ...planBassStem(spans).map((note) => ({ note, channel: channelMap.bass })),
       ...planDrumStem(spans, song.concept).map((note) => ({ note, channel: channelMap.drums })),
       ...planColorStem(spans).map((note) => ({ note, channel: channelMap.color })),
+      ...planMelodyStem(spans).map((note) => ({ note, channel: channelMap.melody })),
     ];
     scheduled.sort((a, b) => a.note.startTime - b.note.startTime);
     this.notes = scheduled;
+    this.lastNoteStart = scheduled.length ? scheduled[scheduled.length - 1].note.startTime : 0;
 
     this.secPerBeat = 60 / song.bpm;
+    this.startBeat = Math.max(0, opts.startBeat ?? 0);
+    this.loopStart = opts.loopStart ?? null;
+    this.loopEnd = opts.loopEnd ?? null;
     this.startedAtMs = performance.now();
-    this.nextIndex = 0;
+    // First window covers [startBeat - lookahead, startBeat + lookahead).
+    this.lastScheduledElapsed = this.startBeat - LOOKAHEAD_MS / 1000 / this.secPerBeat;
     this.timerId = setInterval(() => this.tick(), SCHEDULER_INTERVAL_MS);
   }
 
   private tick(): void {
     if (!this.output) return;
-    const elapsedMs = performance.now() - this.startedAtMs;
-    const windowEndBeats = (elapsedMs + LOOKAHEAD_MS) / 1000 / this.secPerBeat;
+    const elapsedBeats = this.startBeat + (performance.now() - this.startedAtMs) / 1000 / this.secPerBeat;
+    const windowEndBeats = elapsedBeats + LOOKAHEAD_MS / 1000 / this.secPerBeat;
+    const from = this.lastScheduledElapsed;
+    const looping = this.loopStart !== null && this.loopEnd !== null;
 
-    while (this.nextIndex < this.notes.length && this.notes[this.nextIndex].note.startTime <= windowEndBeats) {
-      const { note, channel } = this.notes[this.nextIndex];
-      this.nextIndex++;
-
-      const ch = Math.max(0, Math.min(15, channel - 1)); // MIDI wire format is 0-based
-      const pitch = Math.max(0, Math.min(127, Math.round(note.pitch)));
-      const velocity = Math.max(1, Math.min(127, Math.round(note.velocity)));
-      const onAtMs = this.startedAtMs + note.startTime * this.secPerBeat * 1000;
-      const offAtMs = onAtMs + Math.max(0.02, note.duration) * this.secPerBeat * 1000;
-
-      this.output.send([0x90 | ch, pitch, velocity], onAtMs);
-      this.output.send([0x80 | ch, pitch, 0], offAtMs);
+    for (const { note, channel } of this.notes) {
+      let t = note.startTime;
+      if (looping) {
+        // Only the loop region's notes play; each occurrence is scheduled
+        // as the elapsed clock crosses its beat on every pass.
+        if (t < this.loopStart! || t >= this.loopEnd!) continue;
+        const span = this.loopEnd! - this.loopStart!;
+        if (t < from) t += Math.ceil((from - t) / span) * span;
+      } else if (t <= from) {
+        continue;
+      }
+      if (t > from && t <= windowEndBeats) {
+        this.send(note, channel, t);
+      }
     }
+    this.lastScheduledElapsed = windowEndBeats;
 
     // Nothing left to schedule and the last note-off has already been
     // queued — stop polling, but leave already-sent future messages alone
     // (the browser dispatches them on their own timestamps regardless).
-    if (this.nextIndex >= this.notes.length) this.stopPolling();
+    if (!looping && windowEndBeats >= this.lastNoteStart) this.stopPolling();
+  }
+
+  private send(note: MidiNote, channel: number, atBeat: number): void {
+    if (!this.output) return; // tick() guards too, but this runs on its own
+    const ch = Math.max(0, Math.min(15, channel - 1)); // MIDI wire format is 0-based
+    const pitch = Math.max(0, Math.min(127, Math.round(note.pitch)));
+    const velocity = Math.max(1, Math.min(127, Math.round(note.velocity)));
+    const onAtMs = this.startedAtMs + (atBeat - this.startBeat) * this.secPerBeat * 1000;
+    const offAtMs = onAtMs + Math.max(0.02, note.duration) * this.secPerBeat * 1000;
+
+    this.output.send([0x90 | ch, pitch, velocity], onAtMs);
+    this.output.send([0x80 | ch, pitch, 0], offAtMs);
   }
 
   private stopPolling(): void {
@@ -161,22 +227,39 @@ class LiveMidiScheduler {
     }
   }
 
+  /** Silence every channel this session uses — necessary because pending
+   *  note-on messages already queued with the browser's MIDI subsystem
+   *  (from lookahead) would otherwise still fire after a pause/stop with no
+   *  matching note-off. */
+  private allNotesOff(): void {
+    if (!this.output) return;
+    const channels = new Set([this.channelMap.chords, this.channelMap.bass, this.channelMap.drums, this.channelMap.color, this.channelMap.melody]);
+    for (const channel of channels) {
+      const ch = Math.max(0, Math.min(15, channel - 1));
+      this.output.send([0xb0 | ch, ALL_NOTES_OFF_CC, 0]);
+    }
+  }
+
+  /** Pause — stop scheduling and silence anything sounding. The transport
+   *  holds the position; resuming is a fresh `start()` from its paused beat
+   *  (see transportControl.playSong). */
+  pause(): void {
+    this.stopPolling();
+    this.allNotesOff();
+  }
+
   /** Stops scheduling new notes and immediately silences every channel this
-   *  session used — necessary because pending note-on messages already
-   *  queued with the browser's MIDI subsystem (from lookahead) would
-   *  otherwise still fire after a manual stop with no matching note-off. */
+   *  session used, resetting for a fresh start. */
   stop(): void {
     this.stopPolling();
-    if (this.output) {
-      const channels = new Set([this.channelMap.chords, this.channelMap.bass, this.channelMap.drums, this.channelMap.color]);
-      for (const channel of channels) {
-        const ch = Math.max(0, Math.min(15, channel - 1));
-        this.output.send([0xb0 | ch, ALL_NOTES_OFF_CC, 0]);
-      }
-    }
+    this.allNotesOff();
     this.output = null;
     this.notes = [];
-    this.nextIndex = 0;
+    this.startBeat = 0;
+    this.loopStart = null;
+    this.loopEnd = null;
+    this.lastScheduledElapsed = 0;
+    this.lastNoteStart = 0;
   }
 }
 

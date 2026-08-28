@@ -152,6 +152,183 @@ describe("SongTransport.play", () => {
     expect(ticks).toHaveLength(1); // just the stop() tick itself
     unsub();
   });
+
+  it("seek: starts at startBeat instead of the top", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120); // 32 beats
+    const ticks: { beat: number }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
+
+    getSongTransport().play(song, { startBeat: 8 });
+    vi.advanceTimersByTime(500); // 1 beat at 120bpm
+    expect(ticks[ticks.length - 1]?.beat).toBeCloseTo(9, 0);
+
+    unsub();
+  });
+
+  it("loop: wraps within [loopStart, loopEnd) and never stops", () => {
+    // One 4-bar section = 16 beats; loop beats 8..12 (a 4-beat region).
+    const song = makeSong([makeSection({ id: "a", bars: 4, chords: [] })], 120);
+    const ticks: { beat: number }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
+
+    getSongTransport().play(song, { startBeat: 8, loopStart: 8, loopEnd: 12 });
+    // 3.5s = 7 beats past beat 8 → would be 15 without the loop, but it
+    // must fold back into [8, 12): 8 + ((15-8) mod 4) = 11.
+    vi.advanceTimersByTime(3500);
+
+    const last = ticks[ticks.length - 1]?.beat ?? -1;
+    expect(last).toBeGreaterThanOrEqual(8);
+    expect(last).toBeLessThan(12);
+    expect(getSongTransport().getIsPlaying()).toBe(true); // still looping
+
+    unsub();
+  });
+
+  it("loop to the song end still stops (no wrap when loopEnd reaches the end)", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 4, chords: [] })], 120); // 16 beats
+    getSongTransport().play(song, { startBeat: 8, loopStart: 8, loopEnd: 16 });
+    vi.advanceTimersByTime(5000); // 10 beats past beat 8 = beat 18 > 16 → stop
+    expect(getSongTransport().getIsPlaying()).toBe(false);
+  });
+
+  it("forceLoop wraps a whole-song section forever instead of stopping", () => {
+    // One 4-bar section = the entire 16-beat song; the section loop must
+    // wrap back to 0 forever, not stop when it reaches the song end.
+    const song = makeSong([makeSection({ id: "a", bars: 4, chords: [] })], 120);
+    const ticks: { beat: number }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
+
+    getSongTransport().play(song, { startBeat: 0, loopStart: 0, loopEnd: 16, forceLoop: true });
+    vi.advanceTimersByTime(20_000); // 40 beats → would be beat 40 unlooped
+
+    expect(getSongTransport().getIsPlaying()).toBe(true); // still looping
+    const last = ticks[ticks.length - 1]?.beat ?? -1;
+    expect(last).toBeGreaterThanOrEqual(0);
+    expect(last).toBeLessThan(16); // folded back into the song
+
+    unsub();
+  });
+
+  it("onNextBar fires once at the next bar boundary (getNextBarBeat is that boundary)", () => {
+    // 120bpm, 0.5s/beat → bar boundary = beat 4 (2s in).
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120);
+    const cb = vi.fn();
+
+    getSongTransport().play(song);
+    vi.advanceTimersByTime(500); // beat 1
+    expect(getSongTransport().getNextBarBeat()).toBe(4);
+    getSongTransport().onNextBar(cb);
+
+    vi.advanceTimersByTime(1000); // beat 3 — not the boundary yet
+    expect(cb).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1000); // beat 5 — crossed the boundary at 4
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    // One-shot: further ticks must not re-fire it.
+    vi.advanceTimersByTime(2000);
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it("onNextBar queues a new callback after a previous one fired", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 16, chords: [] })], 120);
+    getSongTransport().play(song);
+    vi.advanceTimersByTime(500); // beat 1
+
+    const first = vi.fn();
+    getSongTransport().onNextBar(first); // next boundary = beat 4
+    vi.advanceTimersByTime(2000); // beat 5 → first fires
+    expect(first).toHaveBeenCalledTimes(1);
+
+    const second = vi.fn();
+    expect(getSongTransport().getNextBarBeat()).toBe(8); // now at ~beat 5
+    getSongTransport().onNextBar(second); // next boundary = beat 8
+    vi.advanceTimersByTime(2000); // beat 9 → second fires
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).toHaveBeenCalledTimes(1);
+  });
+
+  it("pause clears a queued next-bar callback so it never fires", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120);
+    const cb = vi.fn();
+
+    getSongTransport().play(song);
+    vi.advanceTimersByTime(500); // beat 1
+    getSongTransport().onNextBar(cb); // next boundary = beat 4
+    vi.advanceTimersByTime(1000); // beat 3
+    getSongTransport().pause(); // clears the queued callback
+    vi.advanceTimersByTime(10_000);
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it("pause holds the beat and play() resumes from there (not the top)", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120); // 32 beats, 0.5s/beat
+    const ticks: { beat: number }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
+
+    getSongTransport().play(song);
+    vi.advanceTimersByTime(2000); // ~4 beats in
+    getSongTransport().pause();
+    const pausedBeat = ticks[ticks.length - 1]?.beat;
+    expect(pausedBeat).toBeGreaterThan(3);
+    expect(getSongTransport().getIsPlaying()).toBe(false);
+    expect(getSongTransport().isPaused()).toBe(true);
+
+    // Time passing while paused must not move the playhead.
+    vi.advanceTimersByTime(5000);
+    expect(getSongTransport().isPaused()).toBe(true);
+    expect(getSongTransport().getIsPlaying()).toBe(false);
+
+    // Resume without an explicit startBeat → continues from the held beat.
+    getSongTransport().play(song);
+    vi.advanceTimersByTime(500); // +1 beat
+    expect(ticks[ticks.length - 1]?.beat).toBeCloseTo((pausedBeat ?? 0) + 1, 0);
+    expect(getSongTransport().isPaused()).toBe(false);
+
+    unsub();
+  });
+
+  it("stop clears the paused position so play restarts from the top", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120);
+    const ticks: { beat: number }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
+
+    getSongTransport().play(song);
+    vi.advanceTimersByTime(2000);
+    getSongTransport().pause();
+    expect(getSongTransport().isPaused()).toBe(true);
+
+    getSongTransport().stop();
+    expect(getSongTransport().isPaused()).toBe(false);
+
+    getSongTransport().play(song); // must start over
+    vi.advanceTimersByTime(1000); // 2 beats
+    expect(ticks[ticks.length - 1]?.beat).toBeCloseTo(2, 0);
+
+    unsub();
+  });
+
+  it("pause is a no-op when not playing", () => {
+    getSongTransport().pause();
+    expect(getSongTransport().isPaused()).toBe(false);
+    expect(getSongTransport().getIsPlaying()).toBe(false);
+  });
+
+  it("getBeat() reports the live playhead while playing, the paused beat when paused, 0 when stopped", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120); // 0.5s/beat
+    getSongTransport().play(song);
+    vi.advanceTimersByTime(1000); // 2 beats
+    expect(getSongTransport().getBeat()).toBeCloseTo(2, 0);
+
+    getSongTransport().pause();
+    const paused = getSongTransport().getBeat();
+    expect(paused).toBeCloseTo(2, 0);
+    expect(getSongTransport().isPaused()).toBe(true);
+
+    getSongTransport().stop();
+    expect(getSongTransport().getBeat()).toBe(0);
+    expect(getSongTransport().getIsPlaying()).toBe(false);
+  });
 });
 
 describe("SongTransport.syncToAbleton", () => {

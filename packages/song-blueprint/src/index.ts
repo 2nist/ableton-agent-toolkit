@@ -183,6 +183,32 @@ export interface BassProfile {
   velocity?: number;
 }
 
+/** A single captured melody note — one sung/hummed pitch, segmented from
+ *  the microphone by the Melody tab's audio-to-MIDI pipeline. Timing is
+ *  in song beats relative to the section start (the same timebase as
+ *  every other beat count in this schema); the quantize + fit-to-scale
+ *  post-processing knobs rewrite these fields before the note lands in
+ *  `MelodyTrack`. */
+export interface MelodyNote {
+  /** MIDI note number (60 = middle C, same numbering as export). */
+  pitch: number;
+  /** Onset in beats from section start. */
+  startTime: number;
+  /** Length in beats. */
+  duration: number;
+  /** Note velocity 1-127. Default 96 at capture time (matches the chord
+   *  export velocity); a sung phrase can carry real dynamics. */
+  velocity?: number;
+}
+
+/** A section's captured monophonic melody line — the Melody track's
+ *  authoring-time representation, parallel to `chords`/`bassProfile`.
+ *  Absent (per section) → the section has no melody, and every exporter
+ *  (MIDI export, live MIDI out, Send to Ableton) simply skips it. */
+export interface MelodyTrack {
+  notes: MelodyNote[];
+}
+
 /** A section as authored in the app. Mirrors song-structure's SongSection
  *  shape (name/role/bars/beatsPerChord/drumPattern/velocity/time
  *  signature) but uses `Chord` (this file, UI-shaped, has an id for
@@ -216,6 +242,14 @@ export interface BlueprintSection {
    *  export / Send to Ableton / real-time MIDI out). Absent → a single
    *  sustained root per chord at octave 3 (the historical behavior). */
   bassProfile?: BassProfile;
+  /** Captured monophonic melody for this section — a sung/hummed line
+   *  recorded from the microphone and segmented into notes by the Melody
+   *  tab (audio-to-MIDI). Notes are beats-relative-to-section-start, so
+   *  the same `planMelodyStem` maps them onto the timeline like every
+   *  other stem. Absent → no melody for the section; exporters skip it.
+   *  The template's `melody` track (ch.5 in live MIDI out) is where this
+   *  line lands. */
+  melody?: MelodyTrack;
   /** Per-section drum pattern override. When absent the Ableton extension
    *  still picks a pattern heuristically (role + velocity + meter + tempo);
    *  set this to choose a specific engine pattern instead. Paired with

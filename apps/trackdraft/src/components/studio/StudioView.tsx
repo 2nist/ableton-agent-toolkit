@@ -4,7 +4,7 @@ import type { NoteName, ScaleType } from "@music-theory/core";
 import { useSongStore, type ClockSource } from "../../store/songStore";
 import { getSongTransport } from "../../lib/playback/songTransport";
 import { getAbletonClock } from "../../lib/playback/abletonClock";
-import { getLiveMidiScheduler, getMidiOutput } from "../../lib/playback/liveMidiOut";
+import { playSong, stopSong } from "../../lib/playback/transportControl";
 import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 import ArrangementTimeline from "./ArrangementTimeline";
 import AbletonStatus from "./AbletonStatus";
@@ -30,7 +30,6 @@ export default function StudioView() {
   }>({});
   const [showMidiSetup, setShowMidiSetup] = useState(false);
   const midiOutputId = useMidiSettingsStore((s) => s.midiOutputId);
-  const midiChannels = useMidiSettingsStore((s) => s.channels);
 
   function openPopout() {
     if (!currentSong) return;
@@ -42,18 +41,15 @@ export default function StudioView() {
   }
 
   // Subscribes once for the tab's lifetime rather than per-click, so the
-  // button also reflects playback stopping on its own (reaching the end
-  // of the song) not just an explicit Stop click. Stopping on unmount
-  // avoids a song that's mid-playback continuing to sound after the user
-  // navigates away from Studio.
+  // button also reflects playback stopping on its own (reaching the end of
+  // the song) not just an explicit Stop click. Deliberately does NOT stop
+  // playback on unmount — the header's global Play keeps the song going
+  // while you edit other tabs; navigation is only stopped by the layout's
+  // own cleanup when you leave the song editor.
   useEffect(() => {
     const transport = getSongTransport();
     const unsubscribe = transport.onTick((tick) => setIsPlaying(tick.isPlaying));
-    return () => {
-      unsubscribe();
-      transport.stop();
-      getLiveMidiScheduler().stop();
-    };
+    return () => unsubscribe();
   }, []);
 
   // Keep the transport's clockSource in sync with the persisted store
@@ -83,30 +79,17 @@ export default function StudioView() {
   const song = currentSong;
 
   async function togglePlayback() {
-    const transport = getSongTransport();
     if (isPlaying) {
-      transport.stop();
-      getLiveMidiScheduler().stop();
+      stopSong();
       return;
     }
-    if (clockSource === "ableton") {
-      transport.syncToAbleton(song);
-      return;
-    }
-    transport.play(song);
-    // Live MIDI-out is opt-in via the MIDI setup panel — no port selected
-    // means Play stays exactly what it's always been, a silent playhead.
-    if (midiOutputId) {
-      const output = await getMidiOutput(midiOutputId);
-      if (output) {
-        getLiveMidiScheduler().start(song, output, midiChannels);
-      } else {
-        // The saved port id is stale (Web MIDI ids change between browser
-        // restarts) — don't fail silently; re-picking in the panel fixes it.
-        getLiveMidiScheduler().stop();
-        transport.stop();
-        alert("The selected MIDI port is no longer available. Open the MIDI setup panel, re-select a port, then Play again.");
-      }
+    // Shared with the header's global Play — same clock-source handling and
+    // live MIDI out, so the two controls can't drift.
+    const started = await playSong(song, clockSource);
+    if (!started) {
+      // The saved port id is stale (Web MIDI ids change between browser
+      // restarts) — don't fail silently; re-picking in the panel fixes it.
+      alert("The selected MIDI port is no longer available. Open the MIDI setup panel, re-select a port, then Play again.");
     }
   }
 

@@ -16,3 +16,7 @@ puck.generated.tsx
 
 # Generated data
 apps/trackdraft/scripts/output/
+
+# Local bundles / scratch
+*.zip
+temp template Project/

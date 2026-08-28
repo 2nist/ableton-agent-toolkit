@@ -3,11 +3,13 @@ import { useSongStore } from "../../store/songStore";
 import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { updateSection } from "../../lib/sections";
+import { sectionSpans } from "../../lib/arrangement";
 import {
   DRUM_PATTERN_OPTIONS,
   variantCount,
   resolveSectionVoiceNecklaces,
   resolveOutlineVoiceNecklaces,
+  velocityNumber,
 } from "../../lib/playback/drumPreview";
 import { TRANSITION_COLOR, TRANSITION_LABEL, TRANSITION_MODELS } from "./transitionStyle";
 import NecklaceRow from "./NecklaceRow";
@@ -19,9 +21,11 @@ import {
   twoThreeCellCounts,
   numerator as outlineNumerator,
   countLabel,
+  planSectionTransitions,
   type KitVoice,
 } from "@drum/library";
 import type { BlueprintSection, DrumPattern, DrumTransitionModel, DrumCellVoice, MeterOutline } from "../../types/blueprint";
+import { beatsPerBar } from "../../types/blueprint";
 
 type DrumMode = "auto" | "preset" | "outline";
 type ToolTab = "pattern" | "variation" | "transition";
@@ -31,6 +35,14 @@ const CHIP = "font-mono text-2xs rounded px-2 py-1 border border-edge text-inkMu
 const CHIP_ON = "font-mono text-2xs rounded px-2 py-1 border border-accent text-accent bg-accent/10";
 const TAB = "flex-1 rounded border border-edge px-2 py-1 font-mono text-2xs uppercase tracking-wider text-inkMuted hover:text-ink";
 const TAB_ON = "flex-1 rounded border border-accent px-2 py-1 font-mono text-2xs uppercase tracking-wider text-accent bg-accent/10";
+
+/** The section's meter at an 8th-note grid — the natural outline/variation
+ *  numerator for the editor defaults, so a 4/4 song lands on 8 (8 eighths
+ *  = 4/4) instead of a hardcoded 7/8. 7/8 stays 7, 3/4 becomes 6, etc. */
+function eighthNoteNumerator(sec: Pick<BlueprintSection, "timeSignatureNumerator" | "timeSignatureDenPower">): number {
+  const den = 2 ** (sec.timeSignatureDenPower ?? 2);
+  return Math.max(1, Math.round(sec.timeSignatureNumerator * (8 / den)));
+}
 
 /** Per-cell downbeat voice — the kick/snare/hat a cell's "DA" plays.
  *  Colors match `voiceStyle`'s kick/snare/hat hues. */
@@ -144,6 +156,26 @@ export default function DrumPatternTools() {
     );
   }
 
+  // The role-aware auto transition for the selected section — the same
+  // plan the export path applies when the user hasn't authored one, shown
+  // here so "what's auto-assigned" is visible (and a chip above overrides).
+  const spans = sectionSpans(song);
+  const autoTransitions = planSectionTransitions(
+    spans.map((span) => ({
+      sectionId: span.sectionId,
+      occurrenceIndex: span.occurrenceIndex,
+      role: span.section.role ?? null,
+      durationBeats: span.durationBeats,
+      beatsPerBar: beatsPerBar(span.section),
+      velocityTarget: velocityNumber(span.section.velocity),
+      manualModel: span.section.drumTransitionModel != null,
+      hasVariation: span.section.drumVariationOutline != null,
+    })),
+  );
+  const autoIndex = spans.findIndex((span) => span.sectionId === section.id);
+  const autoPlan = autoIndex >= 0 ? autoTransitions[autoIndex] : null;
+  const autoNextName = autoIndex >= 0 && autoIndex + 1 < spans.length ? spans[autoIndex + 1].section.name : null;
+
   // Non-null alias for use inside the helper closures below (TS narrows
   // `section` in linear code but not inside hoisted function declarations).
   const activeSection = section;
@@ -163,7 +195,9 @@ export default function DrumPatternTools() {
 
   const variation = eff.drumVariationOutline;
   const vDenom = variation ? Math.round(4 / variation.cellBeats) : DEFAULT_DENOM;
-  const vN = variation ? outlineNumerator(variation) : 7;
+  // Detour default grid follows the section's meter (8 for 4/4), not a
+  // hardcoded 7/8 — most songs are 4/4.
+  const vN = variation ? outlineNumerator(variation) : (outline ? outlineNumerator(outline) : eighthNoteNumerator(eff));
   const vValid = twoThreeCellCounts(vN);
   const vK = variation ? variation.cells.length : (vValid[0] ?? 3);
   const vRot = variation ? inferRotation(variation, vN, vK) : 0;
@@ -187,7 +221,9 @@ export default function DrumPatternTools() {
          (necklace ? voiceChoices.find((v) => necklace.some((n) => n.voice === v)) : undefined) ??
          voiceChoices[0]);
   const voicePat = activeVoice && eff.drumVoicePatterns ? eff.drumVoicePatterns[activeVoice] : undefined;
-  const voiceN = voicePat?.n ?? 7;
+  // Voice-pattern default grid follows the section's meter (8 for 4/4), not
+  // a hardcoded 7 — so "3 / 7" doesn't show on a 4/4 song's every voice.
+  const voiceN = voicePat?.n ?? (outline ? outlineNumerator(outline) : eighthNoteNumerator(eff));
   const voiceK = voicePat?.k ?? Math.min(3, voiceN);
   const voiceRot = voicePat?.rotation ?? 0;
   const voiceHasBase = necklace ? necklace.some((n) => n.voice === activeVoice) : false;
@@ -221,18 +257,21 @@ export default function DrumPatternTools() {
   }
 
   /** Switch the section to Euclidean (outline) authoring — a drum meter
-   *  independent of the section's time signature. Creates a 7/8 (2+2+3)
-   *  outline to start from; the Euclid sliders + cell editor reshape it
-   *  into any 2s/3s grouping. The current preset is remembered so
-   *  Auto/Preset can restore it. */
+   *  independent of the section's time signature. Starts from the
+   *  section's own meter at an 8th-note grid (8 → 4/4, 7 → 7/8, ...); the
+   *  Euclid sliders + cell editor reshape it into any 2s/3s grouping. The
+   *  current preset is remembered so Auto/Preset can restore it. */
   function enterOutline() {
     if (mode === "outline") return;
     if (eff.drumPattern) lastPresetRef.current = eff.drumPattern;
+    // Default the outline to the section's own meter at an 8th-note grid
+    // (8 for 4/4) rather than a fixed 7/8 — most songs are 4/4.
+    const num = eighthNoteNumerator(eff);
     draftWith((sec) => ({
       ...sec,
       drumPattern: undefined,
       drumVariantIndex: undefined,
-      drumMeterOutline: sec.drumMeterOutline ?? buildEuclideanOutline(7, 8, twoThreeCellCounts(7)[0]!, 0),
+      drumMeterOutline: sec.drumMeterOutline ?? buildEuclideanOutline(num, 8, twoThreeCellCounts(num)[0] ?? 3, 0),
     }));
   }
 
@@ -888,6 +927,22 @@ export default function DrumPatternTools() {
                 );
               })}
             </div>
+            {!eff.drumTransitionModel && autoPlan && autoPlan.model && (
+              <div className="mb-2 rounded border border-edge px-2 py-1.5">
+                <span className="font-mono text-2xs text-ink">
+                  Auto:{" "}
+                  <span style={{ color: TRANSITION_COLOR[autoPlan.model] }}>
+                    {TRANSITION_LABEL[autoPlan.model]}
+                  </span>
+                  {" · "}
+                  {autoPlan.bars} bar{autoPlan.bars > 1 ? "s" : ""}
+                  {autoNextName ? <> into {autoNextName}</> : ""}
+                </span>
+                <p className="text-2xs text-inkMuted/70">
+                  Assigned by role — pick a chip above to override.
+                </p>
+              </div>
+            )}
             {eff.drumTransitionModel && (
               <div className="flex items-center justify-between mb-2">
                 <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Bars</span>

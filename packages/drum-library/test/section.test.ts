@@ -10,7 +10,8 @@ import {
   type SectionDrumInput,
   type TiledNote,
 } from "../src/section.js";
-import type { FillLibrary, PackedVariant } from "../src/presetData.js";
+import type { PackedVariant } from "../src/presetData.js";
+import type { FillLibrary } from "../src/handoffs.js";
 
 const KICK = 36;
 const SNARE = 38;

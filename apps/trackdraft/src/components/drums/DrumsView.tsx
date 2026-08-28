@@ -10,6 +10,7 @@ import {
   resolveSectionVariant,
   inferPatternForSection,
   velocityNumber,
+  seededVariantIndex,
   type VoiceNecklace,
 } from "../../lib/playback/drumPreview";
 import { DRUM_LANES, type DrumLane } from "./laneStyle";
@@ -17,7 +18,7 @@ import { TRANSITION_COLOR, TRANSITION_LABEL } from "./transitionStyle";
 import { SECTION_ROLE_COLOR } from "./sectionRoleStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
 import DrumPatternTools from "./DrumPatternTools";
-import { planSectionHandoffFills, FILL_DATA, outlineBeatsPerBar, numerator as outlineNumerator, type HandoffSectionInput } from "@drum/library";
+import { planSectionHandoffFills, planSectionTransitions, FILL_DATA, outlineBeatsPerBar, numerator as outlineNumerator, hashSeed, occurrenceSeed, type HandoffSectionInput } from "@drum/library";
 
 /** A stable identity for a section's *resolved* drum content — same
  *  preset+variant (or same outline cells/voicing) means literally the
@@ -30,14 +31,17 @@ import { planSectionHandoffFills, FILL_DATA, outlineBeatsPerBar, numerator as ou
  *  the line. Per-voice overrides (`drumVoiceOutlines`) *are* part of it:
  *  they change the resolved per-voice rhythm, so a section with different
  *  voice patterns reads as a different groove. */
-function sectionDrumKey(section: BlueprintSection, concept?: string): string {
+function sectionDrumKey(section: BlueprintSection, concept?: string, occurrenceIndex = 0): string {
   let key: string;
   if (section.drumMeterOutline) {
     const o = section.drumMeterOutline;
     key = `outline::${o.cellBeats}::${o.cells.join(",")}::${(o.cellVoices ?? []).join(",")}`;
   } else {
     const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
-    key = `${pattern}::${section.drumVariantIndex ?? 0}`;
+    // Use the same seeded variant the export uses, so a repeated section
+    // that resolves to a different variant renders as a pattern change
+    // (not "the line just continues").
+    key = `${pattern}::${seededVariantIndex(pattern, section, occurrenceIndex) ?? 0}`;
   }
   const ov = section.drumVoicePatterns;
   if (ov) {
@@ -251,8 +255,8 @@ export default function DrumsView() {
     return {
       span,
       section: sec,
-      key: sectionDrumKey(sec, song.concept),
-      necklaces: resolveSectionVoiceNecklaces(sec, song.concept),
+      key: sectionDrumKey(sec, song.concept, span.occurrenceIndex),
+      necklaces: resolveSectionVoiceNecklaces(sec, song.concept, span.occurrenceIndex),
     };
   });
 
@@ -262,11 +266,36 @@ export default function DrumsView() {
   const handoffInputs: HandoffSectionInput[] = resolved.map((r) => ({
     sectionId: r.span.sectionId,
     occurrenceIndex: r.span.occurrenceIndex,
-    variant: resolveSectionVariant(r.section, song.concept),
+    variant: resolveSectionVariant(r.section, song.concept, r.span.occurrenceIndex),
     durationBeats: r.span.durationBeats,
     velocityTarget: velocityNumber(r.span.section.velocity),
   }));
   const handoffPlans = planSectionHandoffFills(handoffInputs, FILL_DATA);
+
+  // The role-aware auto transitions — build up into choruses, break down
+  // out of verses, drop out of bridges, cut into outros, seeded catalog
+  // flavor + bars for variation. Shown on the timeline the same way the
+  // export path renders them, so what you see is what gets exported.
+  const autoTransitions = planSectionTransitions(
+    resolved.map((r) => ({
+      sectionId: r.span.sectionId,
+      occurrenceIndex: r.span.occurrenceIndex,
+      role: r.section.role ?? null,
+      durationBeats: r.span.durationBeats,
+      beatsPerBar: beatsPerBar(r.span.section),
+      velocityTarget: velocityNumber(r.span.section.velocity),
+      manualModel: r.section.drumTransitionModel != null,
+      hasVariation: r.section.drumVariationOutline != null,
+    })),
+  );
+  // A generic handoff fill only where no gesture applies (and by seeded
+  // spice), so not every section carries a fill.
+  const fillApplied: boolean[] = resolved.map((r, i) => {
+    if (r.section.drumTransitionModel || r.section.drumVariationOutline) return false;
+    if (autoTransitions[i].model !== null) return false;
+    if (handoffPlans[i].fillStart === null) return false;
+    return hashSeed(`${occurrenceSeed(r.span.sectionId, r.span.occurrenceIndex)}:fill`) % 100 < 45;
+  });
 
   const bars = totalBars(spans);
   const width = barX(bars) + 40;
@@ -451,8 +480,9 @@ export default function DrumsView() {
 
           {/* ---- transition labels in the top row + boundary ticks ---- */}
           {resolved.slice(0, -1).map((r, i) => {
-            const model = r.section.drumTransitionModel;
-            const hasAutoFill = handoffPlans[i]?.fillStart !== null;
+            const manual = r.section.drumTransitionModel;
+            const model = manual ?? autoTransitions[i].model;
+            const hasAutoFill = fillApplied[i];
             const x = barX(r.span.startBar + r.span.bars);
             const color = model ? TRANSITION_COLOR[model] : "#565F70";
             return (
@@ -468,6 +498,7 @@ export default function DrumsView() {
                     />
                     <text x={x + 9} y={STACK_BOTTOM + 16} fontSize={10} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill={color}>
                       {model ? TRANSITION_LABEL[model].toUpperCase() : "FILL"}
+                      {model && !manual ? " ·AUTO" : ""}
                     </text>
                   </g>
                 )}
@@ -603,10 +634,11 @@ export default function DrumsView() {
 
           {/* ---- transitions/fills: bold lane-colored domes on the voice line ---- */}
           {resolved.slice(0, -1).map((r, i) => {
-            const model = r.section.drumTransitionModel;
-            const hasAutoFill = handoffPlans[i]?.fillStart !== null;
+            const manual = r.section.drumTransitionModel;
+            const model = manual ?? autoTransitions[i].model;
+            const hasAutoFill = fillApplied[i];
             if (!model && !hasAutoFill) return null;
-            const tBars = r.section.drumTransitionBars ?? 1;
+            const tBars = (manual ? (r.section.drumTransitionBars ?? 1) : autoTransitions[i].bars) || 1;
             const g1 = barX(r.span.startBar + r.span.bars - tBars);
             const g2 = barX(r.span.startBar + r.span.bars);
             return DRUM_LANES.map((lane, li) => {

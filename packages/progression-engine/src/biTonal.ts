@@ -48,7 +48,9 @@ export interface BiTonalOptions {
   /** Syncopation pattern: beats offset for each step before its color notes.
    *  Default conversational: [0, 0.5, 0, 0.5, 0, 0, 1, 0] repeating. */
   syncopation?: number[];
-  /** Duration of color notes in beats. Default 1 (short transients). */
+  /** Duration of color notes in beats. Defaults to each chord's own
+   *  duration (a sustained color pad — the "extended color notes" feel);
+   *  pass a smaller value to turn the layer back into short transients. */
   colorDurationBeats?: number;
   /** Inject an RNG for reproducible voicing tie-breaks. */
   rng?: () => number;
@@ -142,7 +144,8 @@ const CONVERSATIONAL = [0, 0.5, 0, 0.5, 0, 0, 1, 0];
  *   full chord duration.
  * - Color: a chord on the shifted root at `colorOctave` (default +2 octaves),
  *   each note pulled toward the previous color note (voice leading), starting
- *   at the syncopation offset, short and quiet (transient layer).
+ *   at the syncopation offset and sustained for the chord's full duration by
+ *   default (a color pad); pass `colorDurationBeats` to get short transients.
  */
 export function generateBiTonal(
   matrix: BiTonalMatrix,
@@ -153,7 +156,6 @@ export function generateBiTonal(
   const anchorOctave = opts.anchorOctave ?? 4;
   const colorOctave = opts.colorOctave ?? anchorOctave + 2;
   const colorVelocity = opts.colorVelocity ?? 80;
-  const colorDur = Math.max(0.25, opts.colorDurationBeats ?? 1);
   const sync = opts.syncopation ?? CONVERSATIONAL;
 
   const anchor: NoteDescription[] = [];
@@ -163,6 +165,9 @@ export function generateBiTonal(
 
   for (let i = 0; i < chords.length; i++) {
     const c = chords[i]!;
+    // Color notes sustain for the whole chord by default (extended color
+    // pad); `colorDurationBeats` overrides per call (e.g. short transients).
+    const colorDur = Math.max(0.25, opts.colorDurationBeats ?? c.durationBeats);
     const recipe = resolveFlavor(matrix, c.quality, flavorId);
 
     // Instrument A — anchor block voicing at the foundation octave.

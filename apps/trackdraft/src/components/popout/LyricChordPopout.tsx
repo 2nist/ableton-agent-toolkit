@@ -6,20 +6,7 @@ import { useSongStore } from "../../store/songStore";
 import { sectionSpans } from "../../lib/arrangement";
 import { TRANSPORT_CHANNEL_NAME, type TransportTick } from "../../lib/playback/songTransport";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
-
-/** Which lyric line is current, given how far into the section we are.
- *  `startBeat` entries are strictly increasing (ingestion-produced), so
- *  the current line is the last one whose startBeat has passed. Returns
- *  -1 before the first line or when there's no timeline data at all. */
-function currentLineIndex(timeline: { startBeat: number }[] | undefined, beatInSection: number): number {
-  if (!timeline || timeline.length === 0) return -1;
-  let idx = -1;
-  for (let i = 0; i < timeline.length; i++) {
-    if (timeline[i].startBeat > beatInSection) break;
-    idx = i;
-  }
-  return idx;
-}
+import { currentLineIndex, rebaseLyricsTimeline } from "./lyricTimeline";
 
 interface ChordSlot {
   chord: { romanNumeral: string; root: string; quality: string };
@@ -79,6 +66,22 @@ export default function LyricChordPopout() {
     return () => channel.close();
   }, []);
 
+  // All hooks run unconditionally, BEFORE any early return — the popout has
+  // to render its "not found"/"waiting" states without skipping hooks.
+  // Calling useMemo only once playback started violated the Rules of Hooks
+  // ("rendered more hooks than during the previous render") and crashed the
+  // popout the moment the first transport tick arrived, so lyrics/chords
+  // never displayed. Derive the plain values first, memoize below.
+  const spans = song ? sectionSpans(song) : [];
+  const activeSpan = song && tick && tick.isPlaying && tick.sectionIndex >= 0 ? spans[tick.sectionIndex] : null;
+  // Expand chords to full section duration with beat positions (empty while
+  // not playing / song not found — deps are stable references + numbers, so
+  // it only recomputes when the section's chords or length actually change).
+  const chordSlots = useMemo<ChordSlot[]>(
+    () => (activeSpan ? expandChords(activeSpan.section, activeSpan.durationBeats) : []),
+    [activeSpan?.section.chords, activeSpan?.durationBeats],
+  );
+
   if (!song) {
     return (
       <div className="min-h-screen bg-black text-neutral-400 flex items-center justify-center">
@@ -86,9 +89,6 @@ export default function LyricChordPopout() {
       </div>
     );
   }
-
-  const spans = sectionSpans(song);
-  const activeSpan = tick && tick.isPlaying && tick.sectionIndex >= 0 ? spans[tick.sectionIndex] : null;
 
   if (!activeSpan || !tick) {
     return (
@@ -102,101 +102,100 @@ export default function LyricChordPopout() {
   const rawKey = section.key ?? song.key;
   const keyName: NoteName = rawKey in NOTE_TO_PC ? (rawKey as NoteName) : "C";
   const beatInSection = tick.beat - activeSpan.startBeat;
-  const timeline = section.lyricsTimeline;
+  const timeline = rebaseLyricsTimeline(section.lyricsTimeline, activeSpan.startBeat);
   const activeLine = currentLineIndex(timeline, beatInSection);
 
-  // Expand chords to full section duration with beat positions
-  const chordSlots = useMemo(
-    () => expandChords(section, activeSpan.durationBeats),
-    [section.chords, activeSpan.durationBeats],
-  );
-
-  // Find the current chord slot
-  const activeChordIndex = chordSlots.findIndex(
-    (s) => beatInSection >= s.startBeat && beatInSection < s.startBeat + s.durationBeats,
-  );
-
-  // Build a merged view: lyrics with chords interleaved at their
-  // respective beat positions
-  const rows: { type: "chord" | "lyric"; text: string; isActive: boolean; beat: number; idx: number }[] = [];
-
-  if (timeline && timeline.length > 0) {
-    let chordIdx = 0;
-    let lyricIdx = 0;
-    while (chordIdx < chordSlots.length || lyricIdx < timeline.length) {
-      const nextChord = chordSlots[chordIdx];
-      const nextLyric = timeline[lyricIdx];
-      const chordBeat = nextChord?.startBeat ?? Infinity;
-      const lyricBeat = nextLyric?.startBeat ?? Infinity;
-
-      if (chordBeat <= lyricBeat && nextChord) {
-        rows.push({
-          type: "chord",
-          text: nextChord.display,
-          isActive: chordIdx === activeChordIndex,
-          beat: chordBeat,
-          idx: chordIdx,
-        });
-        chordIdx++;
-      } else if (nextLyric) {
-        rows.push({
-          type: "lyric",
-          text: nextLyric.text,
-          isActive: lyricIdx === activeLine,
-          beat: lyricBeat,
-          idx: lyricIdx,
-        });
-        lyricIdx++;
-      } else {
-        break;
-      }
-    }
+  // ---- Karaoke layout: every lyric line is a block with its chord labels
+  // drawn INLINE OVER the line (floating above the words, positioned by
+  // their beat), and the line currently being sung is lit up (white +
+  // larger) while the rest stay dim.
+  interface LyricBlock {
+    text: string;
+    startBeat: number;
+    /** Beats until the next line (or section end for the last). */
+    spanBeats: number;
+    chords: { display: string; beat: number; isCurrent: boolean }[];
+    isCurrent: boolean;
   }
 
-  return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-10 gap-2 select-none">
-      <p className="text-sm uppercase tracking-widest text-neutral-500 font-mono mb-2">{section.name}</p>
+  const blocks: LyricBlock[] = (() => {
+    if (timeline && timeline.length > 0) {
+      return timeline.map((line, i) => {
+        const nextStart = i + 1 < timeline.length ? timeline[i + 1].startBeat : activeSpan.durationBeats;
+        const spanBeats = Math.max(0.001, nextStart - line.startBeat);
+        const chords = chordSlots
+          .filter((c) => c.startBeat >= line.startBeat && c.startBeat < nextStart)
+          .map((c) => ({
+            display: c.display,
+            beat: c.startBeat - line.startBeat,
+            isCurrent: beatInSection >= c.startBeat && beatInSection < c.startBeat + c.durationBeats,
+          }));
+        return { text: line.text, startBeat: line.startBeat, spanBeats, chords, isCurrent: i === activeLine };
+      });
+    }
+    // No timed timeline — split the plain lyrics into lines and estimate
+    // the current one by how far through the section we are, distributing
+    // the chords evenly by line.
+    const lines = (section.lyrics ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+    const estCurrent =
+      lines.length > 0 ? Math.min(lines.length - 1, Math.floor((beatInSection / Math.max(0.001, activeSpan.durationBeats)) * lines.length)) : -1;
+    const spanBeats = Math.max(0.001, activeSpan.durationBeats / Math.max(1, lines.length));
+    return lines.map((text, i) => ({
+      text,
+      startBeat: i * spanBeats,
+      spanBeats,
+      chords: chordSlots
+        .filter((c) => c.startBeat >= i * spanBeats && c.startBeat < (i + 1) * spanBeats)
+        .map((c) => ({ display: c.display, beat: c.startBeat - i * spanBeats, isCurrent: beatInSection >= c.startBeat && beatInSection < c.startBeat + c.durationBeats })),
+      isCurrent: i === estCurrent,
+    }));
+  })();
 
-      {timeline && timeline.length > 0 ? (
-        <div className="text-center space-y-2.5 max-w-4xl">
-          {rows.map((row, i) => (
-            <p
-              key={i}
-              className={
-                row.type === "chord"
-                  ? row.isActive
-                    ? "text-lg font-mono text-accent transition-colors"
-                    : "text-sm font-mono text-accent/30"
-                  : row.isActive
-                    ? "text-5xl font-semibold text-white transition-colors"
-                    : "text-2xl text-neutral-600"
-              }
-            >
-              {row.text}
-            </p>
+  const hasLyrics = blocks.length > 0;
+
+  return (
+    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-8 select-none">
+      <p className="text-sm uppercase tracking-widest text-neutral-500 font-mono mb-3">{section.name}</p>
+
+      {hasLyrics ? (
+        <div className="w-full max-w-4xl text-center">
+          {blocks.map((block, i) => (
+            <div key={i} className="py-1">
+              {/* chords floating inline over this lyric line */}
+              {block.chords.length > 0 && (
+                <div className="relative h-7 mx-auto max-w-3xl">
+                  {block.chords.map((c, ci) => {
+                    const frac = block.spanBeats > 0 ? c.beat / block.spanBeats : 0;
+                    const left = 8 + frac * 84;
+                    return (
+                      <span
+                        key={ci}
+                        className={`absolute -translate-x-1/2 font-mono text-base font-semibold transition-colors duration-200 ${
+                          c.isCurrent ? "text-accent" : "text-accent/30"
+                        }`}
+                        style={{ left: `${left}%` }}
+                      >
+                        {c.display}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              <p
+                className={`transition-all duration-200 ${
+                  block.isCurrent ? "text-5xl font-bold text-white" : "text-2xl text-neutral-600"
+                }`}
+              >
+                {block.text}
+              </p>
+            </div>
           ))}
-        </div>
-      ) : section.lyrics ? (
-        <div className="text-center max-w-3xl">
-          {section.chords.length > 0 && (
-            <p className="text-lg font-mono text-accent mb-3">
-              {section.chords
-                .map((c) => {
-                  const display = `${c.romanNumeral} (${chordDisplayName(pitchClass(c.root), c.quality, keyName)})`;
-                  return display;
-                })
-                .join("   ")}
-            </p>
-          )}
-          <p className="text-3xl whitespace-pre-wrap text-neutral-300">{section.lyrics}</p>
         </div>
       ) : (
         <div className="text-center max-w-3xl">
           {section.chords.length > 0 && (
             <p className="text-lg font-mono text-accent mb-3">
-              {section.chords
-                .map((c) => `${c.romanNumeral} (${chordDisplayName(pitchClass(c.root), c.quality, keyName)})`)
-                .join("   ")}
+              {section.chords.map((c) => `${c.romanNumeral} (${chordDisplayName(pitchClass(c.root), c.quality, keyName)})`).join("   ")}
             </p>
           )}
           <p className="text-xl text-neutral-600">No lyrics for this section.</p>

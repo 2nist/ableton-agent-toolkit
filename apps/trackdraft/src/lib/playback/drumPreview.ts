@@ -8,6 +8,9 @@ import {
   outlineToGroovePattern,
   numerator as outlineNumerator,
   euclidOnsetSteps,
+  hashSeed,
+  occurrenceSeed,
+  pickVariantIndex,
   type DrumPattern,
   type PackedVariant,
   type PackedNote,
@@ -201,6 +204,24 @@ export function resolveOutlineVoiceNecklaces(outline: MeterOutline): VoiceNeckla
   return groupNotesByVoice(notes, outlineBeatsPerBar(outline), outlineNumerator(outline));
 }
 
+/**
+ * The effective variant index for a section's pattern — an explicit
+ * `drumVariantIndex` wins (the user's manual pick); otherwise a
+ * deterministic pick seeded by the section id + occurrence, EXACTLY like
+ * `extensions/trackdraft-bridge/src/drumClips.ts`'s export path. The old
+ * fallback resolved every auto section to variant 0, which made every
+ * song's drums identical — the same hi-hat/snare/kick everywhere. Returns
+ * `undefined` only when the pattern has no resolvable preset. */
+export function seededVariantIndex(pattern: DrumPattern, section: BlueprintSection, occurrenceIndex: number): number | undefined {
+  const preset = PRESET_DATA[pattern];
+  if (!preset || preset.variants.length === 0) return undefined;
+  if (section.drumVariantIndex !== undefined) {
+    return Math.max(0, Math.min(section.drumVariantIndex, preset.variants.length - 1));
+  }
+  // Downbeats as default (variant 0), variation where the seed dictates.
+  return pickVariantIndex(hashSeed(occurrenceSeed(section.id, occurrenceIndex)), preset.variants.length);
+}
+
 /** Builds a single-voice `VoiceNecklace` from a free-form Euclidean
  *  pattern — `k` onsets spread as evenly as possible across `n` steps,
  *  cyclically shifted by `rotation`. Any k in 1..n is valid (unlike a
@@ -221,13 +242,13 @@ function euclidToVoiceNecklace(pat: EuclidPattern, voice: KitVoice): VoiceNeckla
  * (`drumVoicePatterns`) on top, replacing those voices' necklaces with
  * their own free-form k/n rhythm. Callers never need to know which mode a
  * section is in. */
-export function resolveSectionVoiceNecklaces(section: BlueprintSection, concept?: string): VoiceNecklace[] | null {
+export function resolveSectionVoiceNecklaces(section: BlueprintSection, concept?: string, occurrenceIndex = 0): VoiceNecklace[] | null {
   let base: VoiceNecklace[] | null;
   if (section.drumMeterOutline) {
     base = resolveOutlineVoiceNecklaces(section.drumMeterOutline);
   } else {
     const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
-    base = resolveVoiceNecklaces(pattern, section.drumVariantIndex);
+    base = resolveVoiceNecklaces(pattern, seededVariantIndex(pattern, section, occurrenceIndex));
   }
   const overrides = section.drumVoicePatterns;
   if (!overrides) return base;
@@ -248,7 +269,7 @@ export function resolveSectionVoiceNecklaces(section: BlueprintSection, concept?
  * handoff-fill planning) that needs the variant itself, not its onsets
  * already split by voice.
  */
-export function resolveSectionVariant(section: BlueprintSection, concept?: string): PackedVariant | null {
+export function resolveSectionVariant(section: BlueprintSection, concept?: string, occurrenceIndex = 0): PackedVariant | null {
   if (section.drumMeterOutline) {
     const outline = section.drumMeterOutline;
     const bpb = outlineBeatsPerBar(outline);
@@ -256,7 +277,7 @@ export function resolveSectionVariant(section: BlueprintSection, concept?: strin
     return { lengthBeats: bpb, beatsPerBar: bpb, notes, source: { origin: "synth", generator: outline.cellVoices ? "outline-groove" : "outline-click" } };
   }
   const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
-  return resolveVariant(pattern, section.drumVariantIndex);
+  return resolveVariant(pattern, seededVariantIndex(pattern, section, occurrenceIndex));
 }
 
 /** Every selectable named pattern — "auto" (`undefined`, deferring to

@@ -18,6 +18,7 @@ const STEM_ROWS: { stem: keyof LiveMidiChannelMap; label: string; track: string 
   { stem: "bass", label: "Bass", track: TEMPLATE_TRACK_NAMES[1] },
   { stem: "chords", label: "Chords", track: TEMPLATE_TRACK_NAMES[2] },
   { stem: "color", label: "Color", track: TEMPLATE_TRACK_NAMES[3] },
+  { stem: "melody", label: "Melody", track: TEMPLATE_TRACK_NAMES[4] },
 ];
 
 const CHANNEL_OPTIONS = Array.from({ length: 16 }, (_, i) => i + 1);

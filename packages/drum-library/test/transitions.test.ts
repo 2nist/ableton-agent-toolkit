@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { synthesizeTransition, type TransitionInput } from "../src/transitions.js";
+import { synthesizeTransition, planSectionTransitions, transitionFlavor, type TransitionInput, type TransitionPlanInput } from "../src/transitions.js";
 
 const KICK = 36;
 const SNARE = 38;
@@ -120,5 +120,138 @@ describe("synthesizeTransition — custom voices", () => {
   it("uses the provided voice pitches instead of the defaults", () => {
     const notes = synthesizeTransition("cut", input({ voices: { kick: 60, snare: 61, hat: 62 } }));
     expect(notes.map((n) => n[1]).sort()).toEqual([60, 61]);
+  });
+});
+
+describe("transition catalog", () => {
+  it("ships multiple distinct flavors per model (the large catalog)", () => {
+    expect(transitionFlavor("buildUp", 0)).toBeDefined();
+    // buildUp alone exposes several flavors, so role-identical sections vary.
+    const flavors = new Set(
+      Array.from({ length: 8 }, (_, i) => transitionFlavor("buildUp", i).label),
+    );
+    expect(flavors.size).toBeGreaterThan(2);
+    // Every model has at least one flavor; indexes wrap safely.
+    for (const model of ["buildUp", "breakDown", "cut", "dropOut"] as const) {
+      expect(transitionFlavor(model, 0).label.length).toBeGreaterThan(0);
+      expect(transitionFlavor(model, 99)).toBeDefined();
+    }
+  });
+
+  it("a buildUp flavor's grid changes the generated density", () => {
+    const fast = synthesizeTransition("buildUp", input({ flavor: { label: "32nd sprint", gridBeats: 0.125, roll: 1, curve: 1.5 } }));
+    const slow = synthesizeTransition("buildUp", input({ flavor: { label: "slow burn", gridBeats: 0.5, roll: 1, curve: 0.7 } }));
+    expect(fast.length).toBeGreaterThan(slow.length);
+  });
+
+  it("a dropOut flavor silences different voices than the default", () => {
+    const base: [number, number, number][] = [[0, KICK, 100], [0.5, SNARE, 90], [1, HAT, 70]];
+    const dropped = synthesizeTransition("dropOut", input({ baseNotes: base, flavor: { label: "drop rhythm", dropVoices: ["kick", "snare"] } }));
+    expect(dropped.some((n) => n[1] === KICK)).toBe(false);
+    expect(dropped.some((n) => n[1] === SNARE)).toBe(false);
+    expect(dropped.some((n) => n[1] === HAT)).toBe(true);
+  });
+});
+
+describe("planSectionTransitions — role-aware auto assignment", () => {
+  function sec(partial: Partial<TransitionPlanInput> & { sectionId: string }): TransitionPlanInput {
+    return { occurrenceIndex: 0, role: null, durationBeats: 8, beatsPerBar: 4, velocityTarget: 100, ...partial };
+  }
+
+  it("builds up INTO a chorus", () => {
+    const plans = planSectionTransitions([sec({ sectionId: "v", role: "verse" }), sec({ sectionId: "c", role: "chorus" })]);
+    expect(plans[0].model).toBe("buildUp");
+    // the last section never carries its own gesture
+    expect(plans[1].model).toBeNull();
+  });
+
+  it("builds up INTO a refrain too — a refrain is a chorus (Beatles labels)", () => {
+    const plans = planSectionTransitions([sec({ sectionId: "v", role: "verse" }), sec({ sectionId: "r", role: "refrain" })]);
+    expect(plans[0].model).toBe("buildUp");
+  });
+
+  it("a SHORT intro hands off cleanly — no build-up roll over a 1-3 bar intro (the train-wreck fix)", () => {
+    const short = sec({ sectionId: "intro", role: "intro", durationBeats: 12 }); // 3 bars
+    const plans = planSectionTransitions([short, sec({ sectionId: "v", role: "verse" })]);
+    expect(plans[0].model).toBeNull();
+  });
+
+  it("a LONG intro builds up into the first section with a single-bar gesture", () => {
+    const long = sec({ sectionId: "intro", role: "intro", durationBeats: 32 }); // 8 bars
+    const plans = planSectionTransitions([long, sec({ sectionId: "v", role: "verse" })]);
+    expect(plans[0].model).toBe("buildUp");
+    expect(plans[0].bars).toBe(1); // never a 2-bar roll on an intro
+  });
+
+  it("breaks down out of a verse", () => {
+    const plans = planSectionTransitions([sec({ sectionId: "v1", role: "verse" }), sec({ sectionId: "v2", role: "verse" })]);
+    expect(plans[0].model).toBe("breakDown");
+  });
+
+  it("drops out of a bridge — even into a chorus (the explicit ask)", () => {
+    const plans = planSectionTransitions([sec({ sectionId: "b", role: "bridge" }), sec({ sectionId: "c", role: "chorus" })]);
+    expect(plans[0].model).toBe("dropOut");
+  });
+
+  it("drops out of a bridge into an outro too", () => {
+    const plans = planSectionTransitions([sec({ sectionId: "b", role: "bridge" }), sec({ sectionId: "o", role: "outro" })]);
+    expect(plans[0].model).toBe("dropOut");
+  });
+
+  it("cuts into an outro (unless a louder signal already won)", () => {
+    const plans = planSectionTransitions([sec({ sectionId: "c", role: "chorus" }), sec({ sectionId: "o", role: "outro" })]);
+    expect(plans[0].model).toBe("cut");
+  });
+
+  it("a chorus boundary wins over the verse break-down when both apply", () => {
+    const plans = planSectionTransitions([sec({ sectionId: "v", role: "verse" }), sec({ sectionId: "c", role: "chorus" })]);
+    expect(plans[0].model).toBe("buildUp"); // not breakDown
+  });
+
+  it("leaves sections the user authored alone", () => {
+    const plans = planSectionTransitions([
+      sec({ sectionId: "a", role: "verse", manualModel: true }),
+      sec({ sectionId: "b", role: "chorus" }),
+    ]);
+    expect(plans[0].model).toBeNull();
+    expect(plans[1].model).toBeNull();
+  });
+
+  it("skips a section with an authored variation", () => {
+    const plans = planSectionTransitions([sec({ sectionId: "a", role: "verse", hasVariation: true }), sec({ sectionId: "b", role: "chorus" })]);
+    expect(plans[0].model).toBeNull();
+  });
+
+  it("assigns a seeded flavor and 1-2 bars for variation", () => {
+    // Same role + same section id → same plan (deterministic).
+    const a = planSectionTransitions([sec({ sectionId: "v", role: "verse" }), sec({ sectionId: "c", role: "chorus" })]);
+    const b = planSectionTransitions([sec({ sectionId: "v", role: "verse" }), sec({ sectionId: "c", role: "chorus" })]);
+    expect(a[0]).toEqual(b[0]);
+    // Different section ids → likely different flavor/bars (variation).
+    const c = planSectionTransitions([sec({ sectionId: "v2", role: "verse" }), sec({ sectionId: "c", role: "chorus" })]);
+    expect(c[0].model).toBe("buildUp");
+    expect(c[0].flavor).toBeGreaterThanOrEqual(0);
+    expect(c[0].bars).toBeGreaterThanOrEqual(1);
+    expect(c[0].bars).toBeLessThanOrEqual(2);
+  });
+
+  it("a repeated section's later occurrences vary (seeded, not byte-identical)", () => {
+    const plans = Array.from({ length: 20 }, (_, occ) =>
+      planSectionTransitions([sec({ sectionId: "c", role: "chorus", occurrenceIndex: occ }), sec({ sectionId: "v", role: "verse" })])[0],
+    );
+    // A chorus handing to a verse is a plain boundary; across 20 occurrences
+    // the seeded spice cannot land on a single identical outcome every time.
+    const distinct = new Set(plans.map((p) => `${p.model}:${p.flavor}:${p.bars}`));
+    expect(distinct.size).toBeGreaterThan(1);
+  });
+
+  it("not every plain boundary gets a gesture (fills/transitions are sparse)", () => {
+    // Build a row of plain (no-role) handoffs and confirm some resolve to a
+    // clean handoff — the old behavior filled every qualifying one.
+    const plain = Array.from({ length: 30 }, (_, i) => sec({ sectionId: `p${i}`, role: null, durationBeats: 8 }));
+    const plans = planSectionTransitions(plain);
+    const withGesture = plans.filter((p) => p.model !== null).length;
+    expect(withGesture).toBeGreaterThan(0);
+    expect(withGesture).toBeLessThan(plain.length);
   });
 });

@@ -317,6 +317,67 @@ function synthFill(beatsPerBar: number, variantIndex: number): PackedVariant {
 }
 
 // ---------------------------------------------------------------------------
+// Clean downbeat default
+// ---------------------------------------------------------------------------
+
+export interface CleanDownbeatOptions {
+  /** Closed-hat grid: 0.5 (8ths) or 0.25 (16ths). Default 8ths. */
+  hatGrid?: number;
+  /** Add the clean pickup kick into the next bar. Default true. */
+  pickup?: boolean;
+  /** Velocity lift for a louder pattern (e.g. `intense`). */
+  boost?: number;
+}
+
+/**
+ * A clean, grid-tight "downbeat" groove — the library's variant 0 / auto
+ * default for the acoustic family. THE SNARE SITS EXACTLY ON THE DOWNBEATS
+ * (beats 1 & 3 in 4/4): single hits, no flams, no ghost notes — so the
+ * default snare is a clean hit on the downbeats. The corpus variants (real
+ * takes with flams/ghosts/fills) and the seeded pick supply the variation
+ * "where the logic dictates".
+ */
+export function cleanDownbeat(lengthBeats: number, beatsPerBar: number, opts: CleanDownbeatOptions = {}): PackedVariant {
+  const b = new PatternBuilder();
+  const stride = Math.max(0.5, beatsPerBar / 2); // downbeats every half-bar (2 in 4/4)
+  const hatGrid = opts.hatGrid ?? 0.5;
+  const pickup = opts.pickup ?? true;
+  const boost = opts.boost ?? 0;
+
+  // Snare exactly on the downbeats — single clean hits.
+  for (let down = 0; down < lengthBeats; down += stride) {
+    b.hit(round4(down), snare, 100 + boost);
+  }
+  // Kick: each bar's downbeat accent + a clean pickup into the next bar.
+  for (let bar = 0; bar < lengthBeats; bar += beatsPerBar) {
+    b.hit(round4(bar), kick, 118 + boost);
+    if (pickup && bar + beatsPerBar < lengthBeats + 1e-9) {
+      b.hit(round4(Math.min(lengthBeats - 1e-9, bar + beatsPerBar - 0.5)), kick, 104 + Math.round(boost * 0.5));
+    }
+  }
+  // Closed hat across the loop, accented on the downbeats.
+  const hatSteps = Math.max(1, Math.round(lengthBeats / hatGrid));
+  b.run(0, hatGrid, hatSteps, closedHat, (i) => (i % 2 === 0 ? 78 + boost : 54 + Math.round(boost * 0.5)));
+
+  return b.build(lengthBeats, beatsPerBar, "clean_downbeat");
+}
+
+/**
+ * The clean downbeat default prepended as variant 0 of the acoustic
+ * family — standard (verse), driving (chorus/refrain), half_time, sparse
+ * and intense — so "auto" sections default to a snare on the downbeats.
+ * Indexed by `DrumPattern`; `presetData.ts` merges these in front of the
+ * corpus variants.
+ */
+export const CLEAN_DOWNBEAT: Partial<Record<DrumPattern, PackedVariant>> = {
+  standard: cleanDownbeat(4, 4, { hatGrid: 0.5, pickup: true }),
+  driving: cleanDownbeat(4, 4, { hatGrid: 0.25, pickup: true }),
+  half_time: cleanDownbeat(8, 4, { hatGrid: 0.5, pickup: true }),
+  bridge_sparse: cleanDownbeat(4, 4, { hatGrid: 0.5, pickup: false }),
+  intense: cleanDownbeat(4, 4, { hatGrid: 0.25, pickup: true, boost: 6 }),
+};
+
+// ---------------------------------------------------------------------------
 // Assembly
 // ---------------------------------------------------------------------------
 

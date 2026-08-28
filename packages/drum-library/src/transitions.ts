@@ -1,5 +1,6 @@
 import { ABLETON_SAFE_NOTES } from "./ableton.js";
 import type { PackedNote } from "./presetData.js";
+import { hashSeed, occurrenceSeed } from "./handoffs.js";
 
 /**
  * Named transition models for the final span of a section (or the pickup
@@ -56,6 +57,65 @@ export interface TransitionInput {
    * before it actually arrives. Composable with any of the four models.
    */
   nextGridBeats?: number;
+  /** A named variant of the model (see `TRANSITION_CATALOG`) — the "large
+   *  catalog" the auto-assigner draws from. Overrides the matching fields
+   *  above; absent → the model's default flavor 0. */
+  flavor?: TransitionFlavor;
+}
+
+/**
+ * A named, parameterized variant of a transition model. Each model exposes
+ * several flavors (denser/lighter, faster/slower, different dropped voices),
+ * and the auto-assigner picks one per section by seed so repeated sections
+ * of the same role don't all land the same gesture — the "large catalog"
+ * the library ships, procedural instead of dozens of baked clips.
+ */
+export interface TransitionFlavor {
+  /** Short human label (surfaced in the drums UI's auto readout). */
+  label: string;
+  /** Subdivision grid for generated material (`buildUp`/`cut`). */
+  gridBeats?: number;
+  /** `buildUp`: stride density at the roll's peak (1 = every grid step). */
+  roll?: number;
+  /** `buildUp`: velocity-ramp curvature (1 = linear, >1 = late spike). */
+  curve?: number;
+  /** `breakDown`: per-stage thinning (stage 0 keeps every 1st, stage 2 Nth). */
+  keepEvery?: [number, number, number];
+  /** `dropOut`: which voices to silence for the span. */
+  dropVoices?: (keyof TransitionVoices)[];
+  /** `cut`: include the snare stamp alongside the kick slam. */
+  stamp?: boolean;
+}
+
+/** The transition catalog — every flavor each model can render. A seeded
+ *  pick from here is what makes role-identical sections still vary. */
+export const TRANSITION_CATALOG: Record<TransitionModel, TransitionFlavor[]> = {
+  buildUp: [
+    { label: "16th hat ramp", gridBeats: 0.25, roll: 1, curve: 1 },
+    { label: "eighth+16th push", gridBeats: 0.25, roll: 2, curve: 1.2 },
+    { label: "32nd sprint", gridBeats: 0.125, roll: 1, curve: 1.5 },
+    { label: "slow burn", gridBeats: 0.5, roll: 1, curve: 0.7 },
+  ],
+  breakDown: [
+    { label: "3-stage thin", keepEvery: [1, 2, 4] },
+    { label: "fast drop", keepEvery: [1, 3, 3] },
+    { label: "long fade", keepEvery: [1, 1, 3] },
+  ],
+  cut: [
+    { label: "hard cut", stamp: true },
+    { label: "kick slam", stamp: false },
+  ],
+  dropOut: [
+    { label: "drop the kick", dropVoices: ["kick"] },
+    { label: "drop rhythm", dropVoices: ["kick", "snare"] },
+    { label: "kick+snare out", dropVoices: ["kick", "snare", "hat"] },
+  ],
+};
+
+/** Resolve a catalog flavor for a model+index, falling back to flavor 0. */
+export function transitionFlavor(model: TransitionModel, flavorIndex: number): TransitionFlavor {
+  const pool = TRANSITION_CATALOG[model];
+  return pool[Math.abs(flavorIndex) % pool.length] ?? pool[0];
 }
 
 function resolveVoices(voices: TransitionInput["voices"]): TransitionVoices {
@@ -63,16 +123,20 @@ function resolveVoices(voices: TransitionInput["voices"]): TransitionVoices {
 }
 
 function buildUp(input: TransitionInput, voices: TransitionVoices): PackedNote[] {
-  const grid = Math.max(input.gridBeats, 0.001);
+  const grid = Math.max(input.flavor?.gridBeats ?? input.gridBeats, 0.001);
   const totalSteps = Math.max(1, Math.round(input.spanBeats / grid));
+  const peakStride = Math.max(1, input.flavor?.roll ?? 1);
+  const curve = input.flavor?.curve ?? 1;
   const notes: PackedNote[] = [];
 
-  // Roll density ramps from "every 4th step" to "every step" over the span.
+  // Roll density ramps from "every 4th step" to the flavor's peak stride
+  // (1 = every step), with the velocity ramp shaped by the flavor's curve.
   for (let step = 0; step < totalSteps; step++) {
     const progress = totalSteps > 1 ? step / (totalSteps - 1) : 1;
-    const stride = Math.max(1, Math.round(4 * (1 - progress)));
+    const eased = Math.pow(progress, curve);
+    const stride = Math.max(1, Math.round(4 - (4 - peakStride) * eased));
     if (step % stride !== 0) continue;
-    const velocity = Math.round(input.velocityTarget * (0.4 + 0.6 * progress));
+    const velocity = Math.round(input.velocityTarget * (0.4 + 0.6 * eased));
     notes.push([step * grid, voices.hat, velocity]);
   }
 
@@ -90,7 +154,7 @@ function breakDown(input: TransitionInput): PackedNote[] {
   const grid = Math.max(input.gridBeats, 0.001);
   const stageCount = 3;
   const stageBeats = input.spanBeats / stageCount;
-  const keepEvery = [1, 2, 4]; // stage 0: everything, 1: every other, 2: every 4th
+  const keepEvery = input.flavor?.keepEvery ?? [1, 2, 4];
 
   return base
     .filter(([beat]) => {
@@ -112,14 +176,15 @@ function breakDown(input: TransitionInput): PackedNote[] {
 }
 
 function cut(input: TransitionInput, voices: TransitionVoices): PackedNote[] {
-  return [
-    [0, voices.kick, input.velocityTarget],
-    [0, voices.snare, input.velocityTarget],
-  ];
+  const notes: PackedNote[] = [[0, voices.kick, input.velocityTarget]];
+  if (input.flavor?.stamp !== false) notes.push([0, voices.snare, input.velocityTarget]);
+  return notes;
 }
 
 function dropOut(input: TransitionInput, voices: TransitionVoices): PackedNote[] {
-  const dropped = new Set((input.dropVoices ?? ["kick"]).map((voice) => voices[voice]));
+  const dropped = new Set(
+    (input.flavor?.dropVoices ?? input.dropVoices ?? ["kick"]).map((voice) => voices[voice]),
+  );
   return (input.baseNotes ?? []).filter(([, pitch]) => !dropped.has(pitch));
 }
 
@@ -167,4 +232,102 @@ export function synthesizeTransition(model: TransitionModel, input: TransitionIn
   }
 
   return notes.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+}
+
+/** Input to the role-aware auto-transition planner — one per section, in
+ *  arrangement order. `role` drives the gesture (build up into choruses,
+ *  break down out of verses, drop out of bridges...); `manualModel` /
+ *  `hasVariation` mark sections the user already authored so the planner
+ *  leaves them alone (their explicit choice wins downstream). */
+export interface TransitionPlanInput {
+  sectionId: string;
+  occurrenceIndex: number;
+  role?: string | null;
+  durationBeats: number;
+  beatsPerBar: number;
+  velocityTarget: number;
+  /** true when the user explicitly assigned a `drumTransitionModel`. */
+  manualModel?: boolean;
+  /** true when the user authored a variation/detour. */
+  hasVariation?: boolean;
+}
+
+/** A section's auto-assigned transition, or a clean handoff. */
+export interface SectionTransitionPlan {
+  model: TransitionModel | null;
+  /** Bars at the section's end devoted to the gesture (1 or 2 when set). */
+  bars: number;
+  /** Index into `TRANSITION_CATALOG[model]` — the seeded flavor. */
+  flavor: number;
+}
+
+/**
+ * Auto-assigns a transition gesture to each section's final bars from the
+ * musical role of the boundary, replacing the old "every long-enough
+ * section gets a generic fill" behavior:
+ *
+ *   - build up INTO choruses (and pre-choruses, and out of intros)
+ *   - break down out of verses
+ *   - drop out of bridges
+ *   - cut into outros
+ *   - clean handoff by default elsewhere, with a modest seeded chance of a
+ *     spice gesture so not every boundary carries a fill/transition.
+ *
+ * Seeded variation (a catalog flavor + 1-2 bars) means repeated sections of
+ * the same role render differently, not byte-identical. Sections the user
+ * authored (manualModel / hasVariation) return null — the caller keeps the
+ * authorial choice.
+ */
+export function planSectionTransitions(sections: TransitionPlanInput[]): SectionTransitionPlan[] {
+  // A refrain is a chorus (Beatles-style labels) — normalize so the
+  // planner builds up INTO refrains and treats them like choruses.
+  const normalizeRole = (role: string | null | undefined): string | null =>
+    role === "refrain" ? "chorus" : (role ?? null);
+
+  return sections.map((section, i) => {
+    const base: SectionTransitionPlan = { model: null, bars: 1, flavor: 0 };
+    if (section.manualModel || section.hasVariation) return base;
+    if (i === sections.length - 1) return base;
+
+    const next = sections[i + 1];
+    const nextRole = normalizeRole(next?.role);
+    const role = normalizeRole(section.role);
+    const maxBars = Math.max(1, Math.floor(section.durationBeats / Math.max(0.001, section.beatsPerBar)));
+
+    // A short intro hands off cleanly — a roll/build-up over a 1-3 bar
+    // intro is the "train wreck" (the intro is mostly roll, not setup).
+    // Long intros can build, but only with a single-bar gesture.
+    if (role === "intro" && maxBars < 4) return base;
+
+    // Priority — the loudest, most directional signal wins. A bridge drops
+    // out even into a chorus (the explicit "drop outs for bridges" ask);
+    // otherwise build up into choruses/pre-choruses/out of long intros,
+    // break down out of verses, cut into outros.
+    let model: TransitionModel | null = null;
+    if (role === "bridge") model = "dropOut";
+    else if (nextRole === "chorus") model = "buildUp";
+    else if (role === "intro") model = "buildUp";
+    else if (nextRole === "pre_chorus" || role === "pre_chorus") model = "buildUp";
+    else if (nextRole === "outro") model = "cut";
+    else if (role === "verse") model = "breakDown";
+    else if (nextRole === "bridge") model = "breakDown";
+
+    if (model === null) {
+      // Plain handoff — mostly clean, occasionally a spice gesture (seeded).
+      const roll = hashSeed(`${occurrenceSeed(section.sectionId, section.occurrenceIndex)}:transition`);
+      const r = roll % 100;
+      if (r < 15) model = "buildUp";
+      else if (r < 25) model = "cut";
+      else if (r < 35) model = "breakDown";
+      // else: clean handoff
+    }
+    if (model === null) return base;
+
+    const seed = hashSeed(`${occurrenceSeed(section.sectionId, section.occurrenceIndex)}:transition:${model}`);
+    const flavor = seed % TRANSITION_CATALOG[model].length;
+    // An intro's build is always a single bar (a 2-bar roll eats the intro);
+    // everywhere else 2 bars is a valid variation.
+    const bars = role === "intro" ? 1 : maxBars >= 2 && seed % 3 === 0 ? 2 : 1;
+    return { model, bars, flavor };
+  });
 }

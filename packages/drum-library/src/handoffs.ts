@@ -69,6 +69,20 @@ export function fillPool(variant: PackedVariant, fills: FillLibrary): PackedVari
   return pool.length > 0 ? pool : (fallback[key] ?? []);
 }
 
+/**
+ * The auto variant pick for a seeded section — defaults to the clean
+ * downbeat groove (variant 0, snare on the downbeats) most of the time,
+ * with the corpus/synth variants as seeded variation — "downbeats as
+ * default, variation where the logic dictates". Shared by the app's
+ * preview/export and the bridge's Ableton plan so they agree.
+ */
+export function pickVariantIndex(seed: number, variantCount: number): number {
+  if (variantCount <= 1) return 0;
+  // ~60% land on the clean default (variant 0); the rest spread across
+  // the remaining variants.
+  return seed % 100 < 60 ? 0 : 1 + (seed % (variantCount - 1));
+}
+
 export interface HandoffSectionInput {
   sectionId: string;
   occurrenceIndex: number;

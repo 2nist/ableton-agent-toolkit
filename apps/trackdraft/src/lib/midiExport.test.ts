@@ -1,8 +1,41 @@
 import { describe, it, expect } from "vitest";
-import { songToMidi, planDrumStem, planBassStem } from "./midiExport";
+import { songToMidi, planDrumStem, planBassStem, resolveChordOccurrences } from "./midiExport";
 import { sectionSpans } from "./arrangement";
 import { parseMidiBytes } from "./parsers/parseMidi";
-import { createEmptySong, type BlueprintSong, type Chord } from "../types/blueprint";
+import { createEmptySong, type BlueprintSong, type BlueprintSection, type Chord } from "../types/blueprint";
+
+describe("resolveChordOccurrences — follow-drums default", () => {
+  const SEVEN_EIGHT = { cellBeats: 0.5, cells: [2, 2, 3] as (2 | 3)[], label: "7/8" };
+
+  function sectionWith(drumMeterOutline?: BlueprintSection["drumMeterOutline"], harmonyFollowsDrums?: boolean): BlueprintSection {
+    return {
+      id: "s",
+      name: "Verse",
+      role: "verse",
+      bars: 1,
+      chords: [
+        { id: "c1", romanNumeral: "I", root: "C", quality: "maj", beats: 4 },
+        { id: "c2", romanNumeral: "V", root: "G", quality: "maj", beats: 4 },
+      ],
+      beatsPerChord: 4,
+      velocity: "mf",
+      timeSignatureNumerator: 7,
+      timeSignatureDenPower: 3,
+      drumMeterOutline,
+      harmonyFollowsDrums,
+    };
+  }
+
+  it("follows the drums' outline by default when the section has a drum outline (closest sync)", () => {
+    const occ = resolveChordOccurrences(sectionWith(SEVEN_EIGHT), 7);
+    expect(occ.map((o) => o.startTime)).toEqual([0, 1, 2, 3.5, 4.5, 5.5]);
+  });
+
+  it("stays on per-chord beats when harmonyFollowsDrums is explicitly false", () => {
+    const occ = resolveChordOccurrences(sectionWith(SEVEN_EIGHT, false), 16);
+    expect(occ.map((o) => o.startTime)).toEqual([0, 4, 8, 12]);
+  });
+});
 
 /** Builds a minimal test song with one section and a I–V–vi–IV progression
  *  in C major — the most common pop progression, good for verifying that
@@ -49,14 +82,14 @@ describe("songToMidi", () => {
     expect(bytes[3]).toBe(0x64); // d
   });
 
-  it("produces a Type-1 SMF with 5 tracks", () => {
+  it("produces a Type-1 SMF with 6 tracks", () => {
     const bytes = songToMidi(testSong());
     const parsed = parseMidiBytes(bytes);
     // Format = 1 (multi-track)
     const format = (bytes[8] << 8) | bytes[9];
     expect(format).toBe(1);
-    // 5 tracks: conductor, chords, bass, drums, color
-    expect(parsed.tracks.length).toBe(5);
+    // 6 tracks: conductor, chords, bass, drums, color, melody
+    expect(parsed.tracks.length).toBe(6);
   });
 
   it("encodes the correct tempo", () => {
@@ -149,6 +182,35 @@ describe("songToMidi", () => {
     expect(colorNoteOns.some((e) => (e.note ?? 0) >= 72)).toBe(true);
   });
 
+  it("emits a Melody track (Track 5) when a section has a captured melody", () => {
+    const song = testSong();
+    song.sections[0].melody = {
+      notes: [
+        { pitch: 60, startTime: 0, duration: 1, velocity: 96 },
+        { pitch: 62, startTime: 1, duration: 0.5, velocity: 90 },
+      ],
+    };
+    const bytes = songToMidi(song);
+    const parsed = parseMidiBytes(bytes);
+
+    // Track 5 = Melody (index 5). Both captured notes must be present,
+    // at their section-relative beats (section starts at beat 0 here).
+    const melodyTrack = parsed.tracks[5];
+    const melodyOns = melodyTrack.events
+      .filter((e) => e.type === "noteOn" && e.note !== undefined)
+      .map((e) => ({ pitch: e.note!, tick: e.tick }));
+    expect(melodyOns.some((n) => n.pitch === 60 && n.tick === 0)).toBe(true);
+    expect(melodyOns.some((n) => n.pitch === 62 && n.tick === 480)).toBe(true); // beat 1 = 480 ticks
+  });
+
+  it("omits the melody notes when no section has a melody (empty melody track)", () => {
+    const bytes = songToMidi(testSong());
+    const parsed = parseMidiBytes(bytes);
+    const melodyTrack = parsed.tracks[5];
+    const melodyOns = melodyTrack.events.filter((e) => e.type === "noteOn");
+    expect(melodyOns.length).toBe(0);
+  });
+
   it("round-trips: exported MIDI parses back without errors", () => {
     const bytes = songToMidi(testSong());
     // Should not throw
@@ -161,8 +223,8 @@ describe("songToMidi", () => {
     song.sections[0].chords = [];
     const bytes = songToMidi(song);
     const parsed = parseMidiBytes(bytes);
-    // Should still have 5 tracks, just with fewer notes
-    expect(parsed.tracks.length).toBe(5);
+    // Should still have 6 tracks, just with fewer notes
+    expect(parsed.tracks.length).toBe(6);
   });
 
   it("handles a song with multiple sections and repeats", () => {
@@ -200,7 +262,7 @@ describe("songToMidi", () => {
     ];
     const bytes = songToMidi(song);
     const parsed = parseMidiBytes(bytes);
-    expect(parsed.tracks.length).toBe(5);
+    expect(parsed.tracks.length).toBe(6);
     expect(parsed.notes.length).toBeGreaterThan(0);
   });
 

@@ -9,6 +9,7 @@ import StructureView from "./components/structure/StructureView";
 import HarmonyView from "./components/harmony/HarmonyView";
 import DrumsView from "./components/drums/DrumsView";
 import LyricsView from "./components/lyrics/LyricsView";
+import MelodyView from "./components/melody/MelodyView";
 import LivePreviewSandbox from "./pages/LivePreviewSandbox";
 import GenreWorkbench from "./pages/GenreWorkbench";
 import UiKitSandbox from "./pages/UiKitSandbox";
@@ -40,6 +41,7 @@ function App() {
             <Route path="harmony" element={<HarmonyView />} />
             <Route path="drums" element={<DrumsView />} />
             <Route path="lyrics" element={<LyricsView />} />
+            <Route path="melody" element={<MelodyView />} />
           </Route>
           {/* Top-level, not nested under SongEditorLayout — deliberately
               chrome-free (no header/nav/dock) for a window meant to be

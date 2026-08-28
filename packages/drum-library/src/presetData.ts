@@ -1,7 +1,7 @@
 import raw from "./presets-data.json" with { type: "json" };
 import type { DrumPattern } from "./presets.js";
 import type { Limb, SegmentRef } from "./types.js";
-import { SYNTH_VARIANTS, SYNTH_FILLS } from "./synthesize.js";
+import { SYNTH_VARIANTS, SYNTH_FILLS, CLEAN_DOWNBEAT } from "./synthesize.js";
 
 /**
  * Compact wire format for a resolved groove — fewer bytes than a named-key
@@ -114,6 +114,12 @@ function mergedPresets(): Partial<Record<DrumPattern, PackedPreset>> {
       const corpus = merged[pattern]?.variants ?? [];
       merged[pattern] = { variants: [...corpus, ...synthVariants] };
     }
+  }
+  // The acoustic family's clean downbeat default (snare on the downbeats)
+  // becomes variant 0 — the auto default — with the corpus takes behind it.
+  for (const [pattern, clean] of Object.entries(CLEAN_DOWNBEAT) as [DrumPattern, PackedVariant][]) {
+    const existing = merged[pattern]?.variants ?? [];
+    merged[pattern] = { variants: [clean, ...existing] };
   }
   return merged;
 }
