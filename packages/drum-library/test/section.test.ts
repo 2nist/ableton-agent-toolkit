@@ -96,6 +96,50 @@ describe("applyVariation", () => {
     expect(tail.every((n) => n.pitch === CLOSED_HAT)).toBe(true);
   });
 
+  it("splices the detour at a custom start beat, keeping the base groove on BOTH sides", () => {
+    const tiled: TiledNote[] = [
+      { beat: 0, pitch: KICK, velocity: 100 },
+      { beat: 1, pitch: SNARE, velocity: 90 },
+      { beat: 2, pitch: KICK, velocity: 100 },
+      { beat: 3, pitch: SNARE, velocity: 90 },
+      { beat: 4, pitch: KICK, velocity: 100 },
+      { beat: 5, pitch: SNARE, velocity: 90 },
+      { beat: 6, pitch: KICK, velocity: 100 },
+      { beat: 7, pitch: SNARE, velocity: 90 },
+    ];
+    const out = applyVariation(tiled, SEVEN_EIGHT, 1, {
+      durationBeats: 8,
+      barBeats: 4,
+      velocityTarget: 100,
+      variationStartBeat: 2,
+    });
+
+    // base groove kept before the detour (0..1) and after it (6..7)
+    expect(out.filter((n) => n.beat < 2)).toEqual(tiled.slice(0, 2));
+    expect(out.filter((n) => n.beat >= 6)).toEqual(tiled.slice(6, 8));
+    // the detour fills 2..5 with closed hats
+    const detour = out.filter((n) => n.beat >= 2 && n.beat < 6);
+    expect(detour.length).toBeGreaterThan(0);
+    expect(detour.every((n) => n.pitch === CLOSED_HAT)).toBe(true);
+  });
+
+  it("clamps an out-of-range start beat to the section edge", () => {
+    const tiled: TiledNote[] = [
+      { beat: 0, pitch: KICK, velocity: 100 },
+      { beat: 1, pitch: SNARE, velocity: 90 },
+      { beat: 4, pitch: KICK, velocity: 100 },
+      { beat: 5, pitch: SNARE, velocity: 90 },
+    ];
+    // startBeat 7 would overrun the 8-beat section → clamped back to the end
+    const out = applyVariation(tiled, SEVEN_EIGHT, 1, {
+      durationBeats: 8,
+      barBeats: 4,
+      velocityTarget: 100,
+      variationStartBeat: 7,
+    });
+    expect(out.filter((n) => n.beat < 4)).toEqual(tiled.slice(0, 2));
+  });
+
   it("is a no-op without a detour", () => {
     const tiled: TiledNote[] = [{ beat: 0, pitch: KICK, velocity: 100 }];
     expect(applyVariation(tiled, null, 1, { durationBeats: 8, barBeats: 4, velocityTarget: 100 })).toBe(tiled);
@@ -161,6 +205,28 @@ describe("planSectionDrumNotes", () => {
     expect(tail.every((n) => n.pitch === CLOSED_HAT)).toBe(true);
     // first bar still has the base groove
     expect(plan.notes.some((n) => n.beat < 4 && n.pitch === KICK)).toBe(true);
+  });
+
+  it("splices a variation detour at a custom start beat through the pipeline", () => {
+    const inputs: SectionDrumInput[] = [
+      {
+        sectionId: "s1",
+        occurrenceIndex: 0,
+        variant: BASE,
+        variation: SEVEN_EIGHT,
+        variationBars: 1,
+        variationStartBeat: 2,
+        durationBeats: 8,
+        velocityTarget: 100,
+      },
+    ];
+    const [plan] = planSectionDrumNotes(inputs, EMPTY_FILLS);
+    const detour = plan.notes.filter((n) => n.beat >= 2 && n.beat < 6);
+    expect(detour.length).toBeGreaterThan(0);
+    expect(detour.every((n) => n.pitch === CLOSED_HAT)).toBe(true);
+    // base groove present on BOTH sides of the mid-section detour
+    expect(plan.notes.some((n) => n.beat < 2 && n.pitch === KICK)).toBe(true);
+    expect(plan.notes.some((n) => n.beat >= 6 && n.pitch === KICK)).toBe(true);
   });
 
   it("an explicit transition wins over the automatic handoff fill for the same span", () => {

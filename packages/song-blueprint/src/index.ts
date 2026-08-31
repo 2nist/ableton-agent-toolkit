@@ -286,10 +286,16 @@ export interface BlueprintSection {
    *  pattern. Absent → no variation; the section plays its base pattern
    *  straight through. */
   drumVariationOutline?: MeterOutline;
-  /** Bars at the section's end devoted to `drumVariationOutline`.
-   *  Ignored when `drumVariationOutline` is absent. Defaults to 1 when
-   *  the field is set but this isn't. */
+  /** Bars devoted to `drumVariationOutline`. Ignored when
+   *  `drumVariationOutline` is absent. Defaults to 1 when the field is
+   *  set but this isn't. */
   drumVariationBars?: number;
+  /** Section-relative beat where the detour (`drumVariationOutline`)
+   *  begins — lets a detour live ANYWHERE on the timeline (the beat-dot
+   *  insert surface), not just at the section's end. Absent → the detour
+   *  sits in the section's final `drumVariationBars` bars (the classic
+   *  ending fill), clamped to the section length. */
+  drumVariationStartBeat?: number;
   /** Per-voice Euclidean pattern overrides — each voice's own free-form
    *  k/n rhythm, drawn as that voice's necklace on the timeline. A voice
    *  with an entry here plays its own Euclidean pattern (`k` onsets spread

@@ -218,6 +218,7 @@ export function planDrumStem(spans: SectionSpan[], concept?: string): MidiNote[]
       voiceOverrides: section.drumVoicePatterns,
       variation: section.drumVariationOutline ?? null,
       variationBars: section.drumVariationBars,
+      variationStartBeat: section.drumVariationStartBeat,
       transitionModel: section.drumTransitionModel ?? null,
       transitionBars: section.drumTransitionBars,
       gridBeats: section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25,

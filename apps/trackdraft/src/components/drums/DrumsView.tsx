@@ -4,6 +4,7 @@ import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
 import { useDockStore } from "../../store/dockStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
+import { updateSection } from "../../lib/sections";
 import { beatsPerBar, type BlueprintSection, type DrumTransitionModel, type DrumVoiceName, type MeterOutline } from "../../types/blueprint";
 import {
   resolveSectionVoiceNecklaces,
@@ -18,7 +19,7 @@ import { TRANSITION_COLOR, TRANSITION_LABEL } from "./transitionStyle";
 import { SECTION_ROLE_COLOR } from "./sectionRoleStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
 import DrumPatternTools from "./DrumPatternTools";
-import { planSectionHandoffFills, planSectionTransitions, FILL_DATA, outlineBeatsPerBar, numerator as outlineNumerator, hashSeed, occurrenceSeed, type HandoffSectionInput } from "@drum/library";
+import { planSectionHandoffFills, planSectionTransitions, FILL_DATA, outlineBeatsPerBar, numerator as outlineNumerator, hashSeed, occurrenceSeed, buildEuclideanOutline, twoThreeCellCounts, type HandoffSectionInput } from "@drum/library";
 
 /** A stable identity for a section's *resolved* drum content — same
  *  preset+variant (or same outline cells/voicing) means literally the
@@ -54,6 +55,21 @@ function sectionDrumKey(section: BlueprintSection, concept?: string, occurrenceI
   return key;
 }
 
+/** Eighth-note slots per bar for a section's meter — the default detour
+ *  grid (8 for 4/4, 7 for 7/8, ...). */
+function eighthNoteNumerator(sec: Pick<BlueprintSection, "timeSignatureNumerator" | "timeSignatureDenPower">): number {
+  return sec.timeSignatureNumerator * (8 / 2 ** sec.timeSignatureDenPower);
+}
+
+/** A sensible default detour outline for a section — its meter on a /8
+ *  grid, 2s/3s grouped (the same shape the Pattern tab's "Add detour"
+ *  button produces), so clicking an empty beat dot immediately has a
+ *  real fill to shape in the Detour editor. */
+function defaultDetourFor(sec: BlueprintSection): MeterOutline {
+  const num = eighthNoteNumerator(sec);
+  return buildEuclideanOutline(num, 8, twoThreeCellCounts(num)[0] ?? 3, 0);
+}
+
 // Canvas geometry — a pure-black stage with a top annotation row, then
 // six thick voice tracks. Tuned so six voices fit comfortably and each
 // track has room for its internal beat/bar grid.
@@ -64,12 +80,14 @@ const TOP_PAD = 40;
 const BOTTOM_PAD = 34;
 const NECK_R = 10.5;
 const STACK_TOP = TOP_PAD;
-const STACK_BOTTOM = TOP_PAD + DRUM_LANES.length * TRACK_H;
+// One extra row at the bottom of the stack is the beat-dot detour lane.
+const STACK_BOTTOM = TOP_PAD + (DRUM_LANES.length + 1) * TRACK_H;
 
 const laneY = (li: number): number => TOP_PAD + li * TRACK_H + TRACK_H / 2;
 const trackBottom = (li: number): number => TOP_PAD + (li + 1) * TRACK_H;
-// Variation markers sit just under the voice line (fills dome above it).
-const laneBaseY = (li: number): number => laneY(li) + 7;
+// The beat-dot detour lane — a full row at the bottom of the timeline, one
+// black dot per beat, clickable to drop/move/remove a detour at that spot.
+const DETOUR_Y = TOP_PAD + DRUM_LANES.length * TRACK_H + TRACK_H / 2;
 
 /** Union of a lane's member voices' onsets in one resolved span — the
  *  lane's own necklace. The HAT lane, for example, shows closed and open
@@ -97,23 +115,35 @@ interface ResolvedSpan {
   necklaces: VoiceNecklace[] | null;
 }
 
-/** The variation indicator — a dotted baseline with a row of small
- *  diamonds spanning the detour's duration, drawn in the lane's own
- *  color at the base of the track (the lane's main line stays clean). */
-function VariationGlyph({ x1, x2, baseY, color }: { x1: number; x2: number; baseY: number; color: string }) {
+/** The detour "node" — the groove lifts OFF the timeline at the detour's
+ *  start, arcs up (a small diamond at the peak, more diamonds riding the
+ *  arc), and lands back ON the line where the detour ends. Drawn in the
+ *  lane's own color. */
+function DetourArc({ x1, x2, y, color }: { x1: number; x2: number; y: number; color: string }) {
+  const w = x2 - x1;
+  if (w < 2) return null;
+  const peak = Math.min(26, Math.max(14, w * 0.2));
+  const mid = (x1 + x2) / 2;
   const steps = 8;
   return (
     <g pointerEvents="none">
-      <line
-        x1={x1} y1={baseY} x2={x2} y2={baseY}
-        stroke={color} strokeWidth={2.2} strokeDasharray="1 5" strokeLinecap="round" strokeOpacity={0.95}
+      <path
+        d={`M ${x1} ${y} Q ${mid} ${y - peak} ${x2} ${y}`}
+        fill="none"
+        stroke={color}
+        strokeWidth={2.6}
+        strokeLinecap="round"
+        strokeOpacity={0.95}
+        filter="url(#drums-glow)"
       />
       {Array.from({ length: steps + 1 }).map((_, i) => {
-        const dx = x1 + (i * (x2 - x1)) / steps;
+        const t = i / steps;
+        const dx = x1 + t * w;
+        const dy = y - peak * 4 * t * (1 - t); // same parabola as the Q curve
         return (
           <path
             key={i}
-            d={`M ${dx} ${baseY - 4} L ${dx + 4} ${baseY} L ${dx} ${baseY + 4} L ${dx - 4} ${baseY} Z`}
+            d={`M ${dx} ${dy - 3} L ${dx + 3} ${dy} L ${dx} ${dy + 3} L ${dx - 3} ${dy} Z`}
             fill={color}
             fillOpacity={0.9}
           />
@@ -410,6 +440,34 @@ export default function DrumsView() {
     setSelectedSectionId(sectionId);
   }
 
+  /** Drop/move/remove a detour at a section-relative beat — the beat-dot
+   *  lane's click handler. Clicking an empty dot creates (or moves) the
+   *  detour to start there; clicking the section's active detour dot clears
+   *  it. Selects the section so the Detour editor is ready to shape it. */
+  function setDetourAt(sectionId: string, startBeat: number) {
+    const song = useSongStore.getState().currentSong();
+    const sec = song?.sections.find((s) => s.id === sectionId);
+    if (!song || !sec) return;
+    const bpb = beatsPerBar(sec);
+    const duration = sec.bars * bpb;
+    const span = Math.min((sec.drumVariationBars ?? 1) * bpb, duration);
+    const currentStart = sec.drumVariationStartBeat ?? duration - span;
+    useSongStore.getState().updateCurrentSong((s) =>
+      updateSection(s, sectionId, (x) => {
+        if (x.drumVariationOutline && Math.abs(currentStart - startBeat) < 1e-6) {
+          // clicking the active detour dot removes it
+          return { ...x, drumVariationOutline: undefined, drumVariationBars: undefined, drumVariationStartBeat: undefined };
+        }
+        return {
+          ...x,
+          drumVariationOutline: x.drumVariationOutline ?? defaultDetourFor(x),
+          drumVariationStartBeat: startBeat,
+        };
+      }),
+    );
+    setSelectedSectionId(sectionId);
+  }
+
   return (
     <div className="px-2 pt-1.5 pb-3">
       {!anyLaneHits && <p className="text-inkMuted text-xs mb-2">No drum voices resolve for this song yet.</p>}
@@ -583,6 +641,13 @@ export default function DrumsView() {
               const cx = barX(r.span.startBar);
               const variation = r.section.drumVariationOutline;
               const vBars = r.section.drumVariationBars ?? 1;
+              // The detour's span on the lane line — from its start beat
+              // (or the section's final bars when unset) to where it ends.
+              const vBpb = beatsPerBar(r.span.section);
+              const vSpanBeats = Math.min(vBars * vBpb, r.span.durationBeats);
+              const vStartBeat = r.section.drumVariationStartBeat ?? r.span.durationBeats - vSpanBeats;
+              const vX1 = X0 + ((r.span.startBeat + vStartBeat) / vBpb) * barW;
+              const vX2 = X0 + ((r.span.startBeat + vStartBeat + vSpanBeats) / vBpb) * barW;
 
               return (
                 <g key={`lane-${lane.key}-${i}`}>
@@ -618,12 +683,13 @@ export default function DrumsView() {
                     </g>
                   )}
 
-                  {/* variation detour — dotted base segment + diamonds, lane color */}
+                  {/* variation detour — a node popping OFF the timeline at its
+                      start beat and landing back ON at its end, lane color */}
                   {variation && (
-                    <VariationGlyph
-                      x1={barX(r.span.startBar + r.span.bars - vBars)}
-                      x2={barX(r.span.startBar + r.span.bars)}
-                      baseY={laneBaseY(li)}
+                    <DetourArc
+                      x1={vX1}
+                      x2={vX2}
+                      y={laneY(li)}
                       color={lane.color}
                     />
                   )}
@@ -662,7 +728,7 @@ export default function DrumsView() {
               x={barX(r.span.startBar)}
               y={STACK_TOP}
               width={barX(r.span.startBar + r.span.bars) - barX(r.span.startBar)}
-              height={STACK_BOTTOM - STACK_TOP}
+              height={STACK_BOTTOM - STACK_TOP - TRACK_H}
               fill="transparent"
               style={{ cursor: "pointer" }}
               onClick={() => selectSection(r.span.section.id)}
@@ -676,12 +742,60 @@ export default function DrumsView() {
               x={barX(r.span.startBar + r.span.bars) - 12}
               y={STACK_TOP}
               width={24}
-              height={STACK_BOTTOM - STACK_TOP}
+              height={STACK_BOTTOM - STACK_TOP - TRACK_H}
               fill="transparent"
               style={{ cursor: "pointer" }}
               onClick={() => selectSection(r.span.section.id)}
             />
           ))}
+
+          {/* ---- beat-dot detour lane: a full row at the bottom of the
+              timeline — one black dot per beat; click to drop/move/remove a
+              detour at that spot (the active dot glows amber) ---- */}
+          <g>
+            <rect
+              x={barX(0)}
+              y={TOP_PAD + DRUM_LANES.length * TRACK_H}
+              width={barX(bars) - barX(0)}
+              height={TRACK_H}
+              fill="#0a0c10"
+            />
+            <text x={X0 - 14} y={DETOUR_Y + 4} textAnchor="end" fontSize={12} fontFamily="'IBM Plex Mono', monospace" fill="#7a7a80" fontWeight={600}>
+              DETOUR
+            </text>
+            <line x1={barX(0)} y1={DETOUR_Y} x2={barX(bars)} y2={DETOUR_Y} stroke="#565F70" strokeWidth={1.4} strokeOpacity={0.5} />
+            {resolved.map((r, i) => {
+              const bpb = Math.max(1, Math.round(beatsPerBar(r.span.section)));
+              const beatCount = Math.round(r.span.durationBeats);
+              const vSpan = Math.min((r.section.drumVariationBars ?? 1) * bpb, r.span.durationBeats);
+              const detourStart = r.section.drumVariationOutline
+                ? (r.section.drumVariationStartBeat ?? r.span.durationBeats - vSpan)
+                : null;
+              return (
+                <g key={`bd-sec-${i}`}>
+                  {Array.from({ length: beatCount }).map((_, beat) => {
+                    const x = X0 + ((r.span.startBeat + beat) / bpb) * barW;
+                    const active = detourStart !== null && Math.abs(beat - detourStart) < 1e-6;
+                    return (
+                      <circle
+                        key={`bd-${i}-${beat}`}
+                        cx={x}
+                        cy={DETOUR_Y}
+                        r={active ? 4.5 : 3}
+                        fill={active ? "#E8B54A" : "#0D0F14"}
+                        stroke={active ? "#E8B54A" : "#9a9aa2"}
+                        strokeWidth={active ? 0 : 1.2}
+                        style={{ cursor: "pointer" }}
+                        onClick={() => setDetourAt(r.span.section.id, beat)}
+                      >
+                        <title>{active ? "Detour starts here — click to remove" : `Insert a detour at beat ${beat}`}</title>
+                      </circle>
+                    );
+                  })}
+                </g>
+              );
+            })}
+          </g>
 
           {/* ---- necklace hit circles (drawn last so they sit above the hit rects) ---- */}
           {DRUM_LANES.map((lane, li) => {

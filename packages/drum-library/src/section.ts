@@ -184,12 +184,15 @@ export function applyVoiceOverrides(
 }
 
 export interface ApplyVariationOptions {
-  /** Total beats of the section — where the detour's tail begins. */
+  /** Total beats of the section. */
   durationBeats: number;
   /** The base groove's beats per bar, to convert `variationBars` into beats. */
   barBeats: number;
   /** Peak velocity the detour's notes are scaled to (the section's velocity preset). */
   velocityTarget: number;
+  /** Section-relative beat where the detour begins. Absent → the detour sits
+   *  in the section's final `variationBars` bars (the classic ending fill). */
+  variationStartBeat?: number;
 }
 
 /**
@@ -218,7 +221,13 @@ export function applyVariation(
   if (spanBars >= maxBars && maxBars < 2) return tiled; // never eat the section's only bar
 
   const spanBeats = spanBars * barBeats;
-  const fillStart = durationBeats - spanBeats;
+  // `variationStartBeat` positions the detour ANYWHERE in the section (the
+  // beat-dot insert surface); absent → it sits in the final bars, the classic
+  // ending fill. Clamped so it never overruns the section edge.
+  const fillStart = Math.max(
+    0,
+    Math.min(opts.variationStartBeat ?? durationBeats - spanBeats, durationBeats - spanBeats),
+  );
 
   const raw = variation.cellVoices
     ? outlineToGroovePattern(variation, variation.cellVoices)
@@ -232,7 +241,7 @@ export function applyVariation(
     velocity: Math.max(1, Math.min(127, Math.round(velocity * scale))),
   }));
 
-  const kept = tiled.filter((n) => n.beat < fillStart);
+  const kept = tiled.filter((n) => n.beat < fillStart || n.beat >= fillStart + spanBeats);
   return [...kept, ...generated];
 }
 
@@ -350,6 +359,9 @@ export interface SectionDrumInput {
   /** Ending detour (`drumVariationOutline`). */
   variation?: OutlineWithVoices | null;
   variationBars?: number;
+  /** Section-relative beat where the detour begins — absent → the section's
+   *  final bars. Lets a detour live anywhere on the timeline. */
+  variationStartBeat?: number;
   /** Named ending transition (`drumTransitionModel`). */
   transitionModel?: TransitionModel | null;
   transitionBars?: number;
@@ -496,6 +508,7 @@ export function planSectionDrumNotes(
         durationBeats: input.durationBeats,
         barBeats: variant.beatsPerBar,
         velocityTarget,
+        variationStartBeat: input.variationStartBeat,
       });
     }
 

@@ -373,11 +373,23 @@ export default function DrumPatternTools() {
   }
 
   function clearVariation() {
-    draftWith((sec) => ({ ...sec, drumVariationOutline: undefined, drumVariationBars: undefined }));
+    draftWith((sec) => ({ ...sec, drumVariationOutline: undefined, drumVariationBars: undefined, drumVariationStartBeat: undefined }));
   }
 
   function setVariationBars(bars: number) {
     draftWith((sec) => ({ ...sec, drumVariationBars: Math.max(1, bars) }));
+  }
+
+  /** Move the detour's start to a section-relative beat (clamped so it
+   *  never overruns the section edge) — set from the timeline's beat-dot
+   *  lane or the Start control here. */
+  function setVariationStart(beat: number) {
+    draftWith((sec) => {
+      const bpb = beatsPerBar(sec);
+      const duration = sec.bars * bpb;
+      const span = Math.min((sec.drumVariationBars ?? 1) * bpb, duration);
+      return { ...sec, drumVariationStartBeat: Math.max(0, Math.min(Math.round(beat), duration - span)) };
+    });
   }
 
   // ---- Detour (variation) cell editing — the same 2s/3s + cellVoices
@@ -874,6 +886,26 @@ export default function DrumPatternTools() {
                   )}
                 </div>
 
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Start beat</span>
+                  {(() => {
+                    const bpb = beatsPerBar(eff);
+                    const duration = eff.bars * bpb;
+                    const span = Math.min((eff.drumVariationBars ?? 1) * bpb, duration);
+                    const maxStart = Math.max(0, duration - span);
+                    const activeStart = eff.drumVariationStartBeat ?? maxStart;
+                    return (
+                      <div className="flex items-center gap-2">
+                        <button className={CHIP} onClick={() => setVariationStart(activeStart - 1)} title="Move the detour earlier">−</button>
+                        <span className="font-mono text-2xs tabular-nums text-ink">{activeStart}</span>
+                        <button className={CHIP} onClick={() => setVariationStart(activeStart + 1)} title="Move the detour later">+</button>
+                        <button className={CHIP} onClick={() => draftWith((sec) => ({ ...sec, drumVariationStartBeat: undefined }))} title="Anchor the detour at the section's end">
+                          end
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Bars</span>
                   <div className="flex items-center gap-2">
