@@ -46,7 +46,13 @@ export function planColorClips(song: BlueprintSong): ChordClipPlan[] {
     const chords = sectionChordsFilled(section, durationBeats);
     const notes: NoteDescription[] = [];
     if (chords.length > 0) {
-      const opts: BiTonalOptions = { anchorOctave: COLOR_ANCHOR_OCTAVE, colorOctave: COLOR_OCTAVE };
+      // `section.colorOctave` overrides the default, same as the app's
+      // colorStem — so a per-section register choice lands identically
+      // on the Live Color track and in the app's .mid / live out.
+      const opts: BiTonalOptions = {
+        anchorOctave: COLOR_ANCHOR_OCTAVE,
+        colorOctave: section.colorOctave ?? COLOR_OCTAVE,
+      };
       const generated = generateBiTonal(BI_TONAL_MATRIX, section.colorFlavor ?? DEFAULT_COLOR_FLAVOR, chords, opts);
       notes.push(...generated.color);
     }
