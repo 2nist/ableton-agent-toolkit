@@ -3,6 +3,7 @@ import {
   PRESET_DATA,
   FILL_DATA,
   inferDrumPattern,
+  songSignalsFor,
   humanizeOutlineNotes,
   planSectionDrumNotes,
   outlineBeatsPerBar,
@@ -102,7 +103,10 @@ export function planDrumClips(
   fillData: FillLibrary = FILL_DATA,
 ): DrumClipPlan[] {
   const spans = sectionSpans(song);
-  const songSignals = { bpm: song.bpm, title: song.title, concept: song.concept, notes: song.notes };
+  // The exact same signals the app's preview/export/live feed the heuristic
+  // (shared `songSignalsFor`), so a fast/trap-leaning song resolves the
+  // same in-browser and here — no drift.
+  const songSignals = songSignalsFor(song);
 
   // First pass: choose the base pattern + variant per section, so the
   // handoff planner can look at the *next* section's resolved target too.

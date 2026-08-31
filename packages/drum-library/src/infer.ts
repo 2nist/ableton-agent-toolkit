@@ -69,6 +69,29 @@ export function inferDrumStyle(song: InferSong): DrumStyle {
   return ELECTRONIC_MARKERS.test(haystack) ? "electronic" : "acoustic";
 }
 
+/**
+ * The subset of a song's self-description the style heuristic reads —
+ * extracted into ONE helper so every caller feeds `inferDrumPattern` the
+ * SAME signals and can't drift: the app's preview / .mid export / live
+ * MIDI out AND the Ableton bridge's `planDrumClips`. (The app previously
+ * passed only `concept`, so a fast or trap-leaning song previewed/exported
+ * one way while "Send to Ableton" resolved it as dnb/trap — this closes
+ * that gap.)
+ *
+ * Structurally accepts a `BlueprintSong` or any object carrying these
+ * fields; absent fields stay `undefined` and the heuristic uses its
+ * defaults. Field extraction is explicit (not a spread) so this helper
+ * never leaks schema-only keys into the engine.
+ */
+export function songSignalsFor(song: Partial<InferSong> | null | undefined): InferSong {
+  return {
+    bpm: song?.bpm,
+    title: song?.title,
+    concept: song?.concept,
+    notes: song?.notes,
+  };
+}
+
 function velocityRank(velocity: string | undefined): number {
   return VELOCITY_RANK[velocity ?? "mf"] ?? 4;
 }

@@ -13,6 +13,7 @@ import {
   beatsPerBar,
   sectionDurationBeats,
   type BlueprintSection,
+  type BlueprintSong,
   type DrumTransitionModel,
 } from "../../types/blueprint";
 import { VOICE_COLOR, VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
@@ -38,17 +39,17 @@ interface PreviewRow {
  */
 export default function TransitionPreview({
   section,
-  concept,
+  song,
   model,
   transitionBars,
 }: {
   section: BlueprintSection;
-  concept?: string;
+  song?: BlueprintSong;
   model: DrumTransitionModel;
   transitionBars: number;
 }) {
   const { rows, steps, tooShort } = useMemo(() => {
-    const variant = resolveSectionVariant(section, concept);
+    const variant = resolveSectionVariant(section, song);
     const barBeats = variant?.beatsPerBar ?? beatsPerBar(section);
     const gridBeats = section.drumMeterOutline?.cellBeats ?? 0.25;
     const durationBeats = sectionDurationBeats(section);
@@ -100,7 +101,7 @@ export default function TransitionPreview({
       .sort((a, b) => VOICE_ORDER.indexOf(a[0]) - VOICE_ORDER.indexOf(b[0]))
       .map(([voice, hits]) => ({ voice, hits: new Set(hits) }));
     return { rows, steps: totalSteps, tooShort };
-  }, [section, concept, model, transitionBars]);
+  }, [section, song, model, transitionBars]);
 
   if (tooShort) {
     return <p className="text-3xs text-inkMuted italic">Section too short — a transition needs a full bar to give up.</p>;

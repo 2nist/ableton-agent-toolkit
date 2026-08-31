@@ -11,6 +11,7 @@ import {
   hashSeed,
   occurrenceSeed,
   pickVariantIndex,
+  songSignalsFor,
   type DrumPattern,
   type PackedVariant,
   type PackedNote,
@@ -19,10 +20,20 @@ import {
 import {
   sectionDurationBeats,
   type BlueprintSection,
+  type BlueprintSong,
   type MeterOutline,
   type EuclidPattern,
   type DrumPattern as SchemaDrumPattern,
 } from "../../types/blueprint";
+
+/** The song fields the drum-style heuristic reads (`inferDrumPattern`'s
+ *  `InferSong`) — a structural subset of `BlueprintSong`. Threaded through
+ *  the preview/resolve chain instead of a bare `concept` so the app's
+ *  preview / .mid export / live out feed the heuristic the SAME full
+ *  signals the bridge does (via the shared `songSignalsFor`), killing the
+ *  drift where a fast (bpm≥160 → dnb) or 808/trap-leaning song previewed
+ *  one way but arrived in Ableton another. */
+type SongSignals = Partial<Pick<BlueprintSong, "bpm" | "title" | "concept" | "notes">>;
 
 /**
  * A single drum hit resolved from a pattern/variant — the common shape
@@ -241,13 +252,14 @@ function euclidToVoiceNecklace(pat: EuclidPattern, voice: KitVoice): VoiceNeckla
  * set — then applies any per-voice Euclidean overrides
  * (`drumVoicePatterns`) on top, replacing those voices' necklaces with
  * their own free-form k/n rhythm. Callers never need to know which mode a
- * section is in. */
-export function resolveSectionVoiceNecklaces(section: BlueprintSection, concept?: string, occurrenceIndex = 0): VoiceNecklace[] | null {
+ * section is in. `song` feeds the heuristic fallback — same signals the
+ * bridge uses (pass the whole `BlueprintSong`, not `song.concept`). */
+export function resolveSectionVoiceNecklaces(section: BlueprintSection, song?: SongSignals, occurrenceIndex = 0): VoiceNecklace[] | null {
   let base: VoiceNecklace[] | null;
   if (section.drumMeterOutline) {
     base = resolveOutlineVoiceNecklaces(section.drumMeterOutline);
   } else {
-    const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
+    const pattern = section.drumPattern ?? inferPatternForSection(section, song);
     base = resolveVoiceNecklaces(pattern, seededVariantIndex(pattern, section, occurrenceIndex));
   }
   const overrides = section.drumVoicePatterns;
@@ -269,14 +281,14 @@ export function resolveSectionVoiceNecklaces(section: BlueprintSection, concept?
  * handoff-fill planning) that needs the variant itself, not its onsets
  * already split by voice.
  */
-export function resolveSectionVariant(section: BlueprintSection, concept?: string, occurrenceIndex = 0): PackedVariant | null {
+export function resolveSectionVariant(section: BlueprintSection, song?: SongSignals, occurrenceIndex = 0): PackedVariant | null {
   if (section.drumMeterOutline) {
     const outline = section.drumMeterOutline;
     const bpb = outlineBeatsPerBar(outline);
     const notes = outline.cellVoices ? outlineToGroovePattern(outline, outline.cellVoices) : outlineToClickPattern(outline);
     return { lengthBeats: bpb, beatsPerBar: bpb, notes, source: { origin: "synth", generator: outline.cellVoices ? "outline-groove" : "outline-click" } };
   }
-  const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
+  const pattern = section.drumPattern ?? inferPatternForSection(section, song);
   return resolveVariant(pattern, seededVariantIndex(pattern, section, occurrenceIndex));
 }
 
@@ -300,15 +312,15 @@ export function variantCount(pattern: DrumPattern | undefined): number {
  * uses, exported so both `midiExport.ts` and (previously) live playback
  * can choose between explicit and inferred patterns consistently.
  *
- * `concept` is the *song's* concept text (electronic-vs-acoustic style
- * detection reads it, same as `extensions/trackdraft-bridge/src/
- * drumClips.ts`'s `songSignals` already does for the real Ableton export)
- * — optional and omittable so every existing caller keeps compiling, but
- * every caller that has a `song` in scope should pass `song.concept`.
- * Callers that don't pass it silently fall back to "acoustic" for every
- * song regardless of what it actually describes, which is exactly the gap
- * this parameter closes. */
-export function inferPatternForSection(section: BlueprintSection, concept?: string): DrumPattern {
+ * `song` is the *song's* self-description (title/concept/notes/bpm — the
+ * same `InferSong` subset the bridge feeds `inferDrumPattern`, extracted
+ * through the shared `songSignalsFor`) — optional and omittable so every
+ * existing caller keeps compiling, but every caller that has a `song` in
+ * scope should pass it. Callers that don't pass it silently fall back to
+ * "acoustic" for every song regardless of what it actually describes —
+ * and, worse, miss the bpm/notes signals the bridge sees, which is
+ * exactly the drift this parameter closes. */
+export function inferPatternForSection(section: BlueprintSection, song?: SongSignals): DrumPattern {
   return inferDrumPattern(
     {
       role: section.role,
@@ -317,7 +329,7 @@ export function inferPatternForSection(section: BlueprintSection, concept?: stri
       timeSignatureNumerator: section.timeSignatureNumerator,
       timeSignatureDenominator: 2 ** section.timeSignatureDenPower,
     },
-    { concept },
+    songSignalsFor(song),
   );
 }
 

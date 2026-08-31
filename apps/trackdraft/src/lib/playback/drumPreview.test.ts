@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { inferDrumPattern, songSignalsFor } from "@drum/library";
 import {
   resolveDrumHits,
   resolveOutlineVoiceNecklaces,
@@ -239,10 +240,57 @@ describe("inferPatternForSection", () => {
   it("an electronic concept routes to the electronic pattern family instead", () => {
     const section = makeSection({ role: "verse", velocity: "mf" });
     const acoustic = inferPatternForSection(section);
-    const electronic = inferPatternForSection(section, "Synthwave — analog synth arpeggios, gated-reverb snare.");
+    const electronic = inferPatternForSection(section, {
+      concept: "Synthwave — analog synth arpeggios, gated-reverb snare.",
+    });
     expect(acoustic).toBe("standard");
     expect(electronic).toBe("four_on_floor");
     expect(electronic).not.toBe(acoustic);
+  });
+
+  it("honors bpm — the same song resolves dnb at ≥160 instead of four_on_floor (the drift the full-song fix closes)", () => {
+    const section = makeSection({ role: "chorus", velocity: "mf" });
+    const song = { concept: "electronic club track", bpm: 120 };
+    // Old app behavior (concept only) returned four_on_floor at ANY tempo
+    // while the bridge's full-signal call returned dnb — the parity bug.
+    expect(inferPatternForSection(section, song)).toBe("four_on_floor");
+    expect(inferPatternForSection(section, { ...song, bpm: 170 })).toBe("dnb");
+  });
+
+  it("honors notes.instrumentation — an 808/trap-leaning song resolves trap", () => {
+    const section = makeSection({ role: "chorus", velocity: "mf" });
+    expect(
+      inferPatternForSection(section, {
+        bpm: 140,
+        notes: { instrumentation: ["808", "hi-hats"] },
+      }),
+    ).toBe("trap");
+  });
+
+  it("matches the bridge: full song signals produce the identical pattern via the shared songSignalsFor", () => {
+    const section = makeSection({ role: "verse", velocity: "mf" });
+    const song = {
+      bpm: 172,
+      title: "Neon Corridor",
+      concept: "synthwave chase scene",
+      notes: { instrumentation: ["synth", "909"], dynamics: "loud", lyricalContent: "running" },
+    };
+    // App path: inferPatternForSection(section, song) → inferDrumPattern(
+    //   sectionFields, songSignalsFor(song)). Bridge path: the same call
+    //   from planDrumClips. Both resolve identically — that's the parity
+    //   property this test locks in.
+    const viaApp = inferPatternForSection(section, song);
+    const viaBridge = inferDrumPattern(
+      {
+        role: section.role,
+        velocity: section.velocity,
+        name: section.name,
+        timeSignatureNumerator: section.timeSignatureNumerator,
+        timeSignatureDenominator: 2 ** section.timeSignatureDenPower,
+      },
+      songSignalsFor(song),
+    );
+    expect(viaApp).toBe(viaBridge);
   });
 });
 

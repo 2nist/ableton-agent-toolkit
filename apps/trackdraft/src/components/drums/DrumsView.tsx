@@ -5,7 +5,7 @@ import { useDockStore } from "../../store/dockStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
 import { updateSection } from "../../lib/sections";
-import { beatsPerBar, type BlueprintSection, type DrumTransitionModel, type DrumVoiceName, type MeterOutline } from "../../types/blueprint";
+import { beatsPerBar, type BlueprintSection, type BlueprintSong, type DrumTransitionModel, type DrumVoiceName, type MeterOutline } from "../../types/blueprint";
 import {
   resolveSectionVoiceNecklaces,
   resolveSectionVariant,
@@ -32,13 +32,13 @@ import { planSectionHandoffFills, planSectionTransitions, FILL_DATA, outlineBeat
  *  the line. Per-voice overrides (`drumVoiceOutlines`) *are* part of it:
  *  they change the resolved per-voice rhythm, so a section with different
  *  voice patterns reads as a different groove. */
-function sectionDrumKey(section: BlueprintSection, concept?: string, occurrenceIndex = 0): string {
+function sectionDrumKey(section: BlueprintSection, song?: BlueprintSong, occurrenceIndex = 0): string {
   let key: string;
   if (section.drumMeterOutline) {
     const o = section.drumMeterOutline;
     key = `outline::${o.cellBeats}::${o.cells.join(",")}::${(o.cellVoices ?? []).join(",")}`;
   } else {
-    const pattern = section.drumPattern ?? inferPatternForSection(section, concept);
+    const pattern = section.drumPattern ?? inferPatternForSection(section, song);
     // Use the same seeded variant the export uses, so a repeated section
     // that resolves to a different variant renders as a pattern change
     // (not "the line just continues").
@@ -285,8 +285,8 @@ export default function DrumsView() {
     return {
       span,
       section: sec,
-      key: sectionDrumKey(sec, song.concept, span.occurrenceIndex),
-      necklaces: resolveSectionVoiceNecklaces(sec, song.concept, span.occurrenceIndex),
+      key: sectionDrumKey(sec, song, span.occurrenceIndex),
+      necklaces: resolveSectionVoiceNecklaces(sec, song, span.occurrenceIndex),
     };
   });
 
@@ -296,7 +296,7 @@ export default function DrumsView() {
   const handoffInputs: HandoffSectionInput[] = resolved.map((r) => ({
     sectionId: r.span.sectionId,
     occurrenceIndex: r.span.occurrenceIndex,
-    variant: resolveSectionVariant(r.section, song.concept, r.span.occurrenceIndex),
+    variant: resolveSectionVariant(r.section, song, r.span.occurrenceIndex),
     durationBeats: r.span.durationBeats,
     velocityTarget: velocityNumber(r.span.section.velocity),
   }));

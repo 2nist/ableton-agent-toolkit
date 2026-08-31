@@ -297,7 +297,7 @@ describe("planDrumStem — authoring fields reach the exported drums", () => {
     const song = testSong();
     song.sections[0].drumVoicePatterns = { rideBell: { k: 2, n: 8, rotation: 0 } };
     song.arrangement = [{ sectionId: "s1", repeats: 1 }];
-    const notes = planDrumStem(sectionSpans(song), song.concept);
+    const notes = planDrumStem(sectionSpans(song), song);
     // The heuristic 'standard' groove never plays rideBell (pitch 53) — the
     // override must put it in the exported stem, and it must survive the
     // GM pitch filter.
@@ -310,7 +310,7 @@ describe("planDrumStem — authoring fields reach the exported drums", () => {
     song.sections[0].drumVariationOutline = { cellBeats: 0.5, cells: [2, 2, 3], label: "1 2 1 2 1 2 3" };
     song.sections[0].drumVariationBars = 1;
     song.arrangement = [{ sectionId: "s1", repeats: 1 }];
-    const notes = planDrumStem(sectionSpans(song), song.concept);
+    const notes = planDrumStem(sectionSpans(song), song);
     const tail = notes.filter((n) => n.startTime >= 4);
     // The 7/8 click detour replaced the whole final bar — every tail note is
     // the detour's closed hat, regardless of what the real base groove was.
@@ -324,7 +324,7 @@ describe("planDrumStem — authoring fields reach the exported drums", () => {
     song.sections[0].drumTransitionModel = "cut";
     song.sections[0].drumTransitionBars = 1;
     song.arrangement = [{ sectionId: "s1", repeats: 1 }];
-    const notes = planDrumStem(sectionSpans(song), song.concept);
+    const notes = planDrumStem(sectionSpans(song), song);
     const tail = notes.filter((n) => n.startTime >= 4);
     // cut = one kick+snare hit at beat 4, then dead silence for the span.
     expect(tail.length).toBeGreaterThan(0);

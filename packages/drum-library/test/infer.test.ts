@@ -1,5 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { inferDrumPattern, inferDrumStyle } from "../src/infer.js";
+import { inferDrumPattern, inferDrumStyle, songSignalsFor } from "../src/infer.js";
+
+describe("songSignalsFor", () => {
+  it("extracts exactly the fields the heuristic reads, dropping schema-only keys", () => {
+    const song = {
+      title: "Neon Corridor",
+      concept: "synthwave chase",
+      bpm: 172,
+      notes: { instrumentation: ["909"], dynamics: "loud" },
+      sections: [], // schema-only key — must not leak into InferSong
+      arrangement: [],
+    };
+    expect(songSignalsFor(song)).toEqual({
+      title: "Neon Corridor",
+      concept: "synthwave chase",
+      bpm: 172,
+      notes: { instrumentation: ["909"], dynamics: "loud" },
+    });
+  });
+
+  it("handles absent fields and null/undefined input", () => {
+    const empty = { bpm: undefined, title: undefined, concept: undefined, notes: undefined };
+    expect(songSignalsFor(undefined)).toEqual(empty);
+    expect(songSignalsFor(null)).toEqual(empty);
+    expect(songSignalsFor({})).toEqual(empty);
+  });
+
+  it("is the single funnel both app and bridge use — its output feeds inferDrumPattern's bpm/notes branches", () => {
+    // The parity property: planDrumClips (bridge) and the app's
+    // preview/export both call songSignalsFor(song) then inferDrumPattern.
+    const section = { role: "chorus", velocity: "mf" };
+    expect(inferDrumPattern(section, songSignalsFor({ bpm: 170, concept: "club" }))).toBe("dnb");
+    expect(inferDrumPattern(section, songSignalsFor({ bpm: 140, notes: { instrumentation: ["808"] } }))).toBe("trap");
+  });
+});
 
 describe("inferDrumStyle", () => {
   it("defaults to acoustic when the song says nothing about its sound", () => {

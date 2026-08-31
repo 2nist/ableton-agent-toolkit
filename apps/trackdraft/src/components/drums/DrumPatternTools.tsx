@@ -202,7 +202,7 @@ export default function DrumPatternTools() {
   const vK = variation ? variation.cells.length : (vValid[0] ?? 3);
   const vRot = variation ? inferRotation(variation, vN, vK) : 0;
 
-  const necklace = resolveSectionVoiceNecklaces(eff, song.concept);
+  const necklace = resolveSectionVoiceNecklaces(eff, song);
   const outlineNecklaces = outline ? resolveOutlineVoiceNecklaces(outline) : null;
   // The selected outline cell, self-clamped as cells are added/removed.
   const selectedCell = outline ? Math.min(cellIndex, outline.cells.length - 1) : null;
@@ -989,7 +989,7 @@ export default function DrumPatternTools() {
               <div className="border-t border-edge/40 pt-2">
                 <TransitionPreview
                   section={eff}
-                  concept={song.concept}
+                  song={song}
                   model={eff.drumTransitionModel}
                   transitionBars={eff.drumTransitionBars ?? 1}
                 />

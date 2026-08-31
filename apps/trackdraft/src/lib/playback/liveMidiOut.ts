@@ -160,7 +160,7 @@ class LiveMidiScheduler {
     const scheduled: ScheduledNote[] = [
       ...planChordStem(spans).map((note) => ({ note, channel: channelMap.chords })),
       ...planBassStem(spans).map((note) => ({ note, channel: channelMap.bass })),
-      ...planDrumStem(spans, song.concept).map((note) => ({ note, channel: channelMap.drums })),
+      ...planDrumStem(spans, song).map((note) => ({ note, channel: channelMap.drums })),
       ...planColorStem(spans).map((note) => ({ note, channel: channelMap.color })),
       ...planMelodyStem(spans).map((note) => ({ note, channel: channelMap.melody })),
     ];

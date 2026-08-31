@@ -201,11 +201,13 @@ export function planBassStem(spans: SectionSpan[]): MidiNote[] {
  *  (`drumVoicePatterns`), velocity scaling, seeded per-occurrence tiling,
  *  automatic handoff fills, the ending detour (`drumVariationOutline`) and
  *  the named transition (`drumTransitionModel`). Outline-driven sections
- *  are humanized exactly like the bridge so even microtiming agrees. */
-export function planDrumStem(spans: SectionSpan[], concept?: string): MidiNote[] {
+ *  are humanized exactly like the bridge so even microtiming agrees.
+ *  `song` feeds the heuristic pattern fallback with full signals (bpm /
+ *  title / concept / notes), same as the bridge — see `inferPatternForSection`. */
+export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const inputs: SectionDrumInput[] = spans.map((span) => {
     const section = span.section;
-    let variant = resolveSectionVariant(section, concept, span.occurrenceIndex);
+    let variant = resolveSectionVariant(section, song, span.occurrenceIndex);
     if (variant && section.drumMeterOutline) {
       variant = { ...variant, notes: humanizeOutlineNotes(variant.notes, section.drumMeterOutline.cellBeats) };
     }
@@ -388,7 +390,7 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
   // Generate stems
   const chordNotes = planChordStem(spans);
   const bassNotes = planBassStem(spans);
-  const drumNotes = planDrumStem(spans, song.concept);
+  const drumNotes = planDrumStem(spans, song);
   const colorNotes = planColorStem(spans);
   const melodyNotes = planMelodyStem(spans);
 
