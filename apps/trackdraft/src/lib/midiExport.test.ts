@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { songToMidi, planDrumStem, planBassStem, resolveChordOccurrences } from "./midiExport";
+import { songToMidi, planDrumStem, planBassStem } from "./midiExport";
+import { resolveChordOccurrences } from "@drum/library";
 import { sectionSpans } from "./arrangement";
 import { parseMidiBytes } from "./parsers/parseMidi";
 import { createEmptySong, type BlueprintSong, type BlueprintSection, type Chord } from "../types/blueprint";

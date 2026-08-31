@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { MeterOutline } from "@drum/library";
-import { loopChordsToFill, loopChordsOnOutline, resolveChordOccurrences } from "../src/chordCycle.js";
+import {
+  loopChordsToFill,
+  loopChordsOnOutline,
+  resolveChordOccurrences,
+  type MeterOutline,
+} from "@drum/library";
 import { makeChord, makeSection } from "./helpers.js";
 
 const twoChordCycle = [

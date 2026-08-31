@@ -1,8 +1,7 @@
 import { pitchClass } from "@music-theory/core";
-import { planSectionBass } from "@drum/library";
+import { planSectionBass, resolveChordOccurrences } from "@drum/library";
 import type { NoteDescription } from "@ableton-extensions/sdk";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
-import { resolveChordOccurrences } from "./chordCycle.js";
 
 export interface BassLinePlan {
   name: string;

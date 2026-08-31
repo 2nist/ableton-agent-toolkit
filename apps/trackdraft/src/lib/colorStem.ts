@@ -20,8 +20,9 @@ import {
   type BiTonalChord,
   type BiTonalOptions,
 } from "@platform/progression-engine";
+import { resolveChordOccurrences } from "@drum/library";
 import type { SectionSpan } from "./arrangement";
-import { resolveChordOccurrences, type MidiNote } from "./midiExport";
+import type { MidiNote } from "./midiExport";
 /** Octave of the bi-tonal anchor foundation (Instrument A). Matches the
  *  engine's own default of 4 and Progression Studio's `anchorOctave`. */
 const COLOR_ANCHOR_OCTAVE = 4;

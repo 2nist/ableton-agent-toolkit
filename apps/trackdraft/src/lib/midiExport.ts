@@ -9,20 +9,20 @@
  *   Track 4: Color (the bi-tonal "Color Chord" layer, per-section flavor)
  *
  * Reuses the same `sectionSpans` math the app already has (lib/arrangement.ts)
- * and the same `loopChordsToFill` cycle the bridge uses, so the exported MIDI
- * matches what the Ableton extension would generate — without depending on
- * the extension package (which lives in a separate workspace the web app
- * has no dependency on).
+ * and the shared `@drum/library` chord cycle the bridge uses, so the
+ * exported MIDI matches what the Ableton extension would generate — without
+ * depending on the extension package (which lives in a separate workspace
+ * the web app has no dependency on).
  */
 
 import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
 import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
-import { planSectionDrumNotes, planSectionBass, FILL_DATA, humanizeOutlineNotes, chordOnsetsForOutline, type SectionDrumInput, type MeterOutline } from "@drum/library";
+import { planSectionDrumNotes, planSectionBass, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, type SectionDrumInput } from "@drum/library";
 import { planColorStem } from "./colorStem";
 import { planMelodyStem } from "./melody/melodyStem";
-import type { BlueprintSong, BlueprintSection, Chord } from "../types/blueprint";
+import type { BlueprintSong, BlueprintSection } from "../types/blueprint";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,81 +62,10 @@ const CHORD_OCTAVE = 5;
 const GM_DRUM_PITCHES = new Set([36, 37, 38, 39, 41, 42, 44, 45, 46, 47, 49, 51, 53]);
 
 // ---------------------------------------------------------------------------
-// Chord cycle (duplicated from bridge's chordCycle.ts — no cross-package dep)
+// Chord cycle — @drum/library's chordCycle.ts is the single source of truth
+// shared with the Ableton bridge, so .mid / live out and "Send to Ableton"
+// can't drift. `resolveChordOccurrences` is imported above.
 // ---------------------------------------------------------------------------
-
-interface ChordOccurrence {
-  chord: Chord;
-  startTime: number; // beats from section start
-  duration: number; // beats
-}
-
-function loopChordsToFill(chords: Chord[], durationBeats: number): ChordOccurrence[] {
-  const cycleBeats = chords.reduce((sum, chord) => sum + chord.beats, 0);
-  if (cycleBeats <= 0) return [];
-
-  const occurrences: ChordOccurrence[] = [];
-  let cursor = 0;
-  while (cursor < durationBeats) {
-    for (const chord of chords) {
-      if (cursor >= durationBeats) break;
-      const duration = Math.min(chord.beats, durationBeats - cursor);
-      occurrences.push({ chord, startTime: cursor, duration });
-      cursor += chord.beats;
-    }
-  }
-  return occurrences;
-}
-
-/** Euclidean harmony — chords advance on a `MeterOutline`'s onsets (each
- *  2s/3s cell's start) instead of per-chord `beats`. Same contract as
- *  `loopChordsToFill`; the harmony counterpart of the drum outline. */
-function loopChordsOnOutline(chords: Chord[], outline: MeterOutline, durationBeats: number): ChordOccurrence[] {
-  const onsets = chordOnsetsForOutline(outline, durationBeats);
-  if (onsets.length === 0 || chords.length === 0) return [];
-  const occurrences: ChordOccurrence[] = [];
-  for (let i = 0; i < onsets.length; i++) {
-    const startTime = onsets[i];
-    const end = onsets[i + 1] ?? durationBeats;
-    const duration = Math.max(0, Math.round((end - startTime) * 10000) / 10000);
-    occurrences.push({ chord: chords[i % chords.length], startTime, duration });
-  }
-  return occurrences;
-}
-
-/** Resolve a section's chord occurrences honoring Euclidean harmony — an
- *  explicit `harmonyMeterOutline`, else the drums' outline. Following the
- *  drums is now the DEFAULT whenever a section has a `drumMeterOutline`
- *  (the drums drive the harmony — the closest sync); set
- *  `harmonyFollowsDrums: false` to opt back out onto per-chord `beats`.
- *  Mirrors the bridge's resolver so the web app and the extension can't
- *  drift. */
-export function resolveChordOccurrences(section: BlueprintSection, durationBeats: number): ChordOccurrence[] {
-  const outline =
-    section.harmonyMeterOutline ??
-    (section.harmonyFollowsDrums === false ? null : (section.drumMeterOutline ?? null));
-  const chords = section.chords ?? [];
-  const occurrences = outline
-    ? loopChordsOnOutline(chords, outline, durationBeats)
-    : loopChordsToFill(chords, durationBeats);
-  return applySyncopation(occurrences, section.syncopationOffset);
-}
-
-/** Shift every chord change EARLY by `offset` — the global "jazz push"
- *  (e.g. 0.5 = an 8th-note anticipation). Durations follow the shifted
- *  starts; the section's first chord is clamped to its start so no note
- *  precedes a clip, and the last chord still runs to the section end. */
-function applySyncopation(occurrences: ChordOccurrence[], offset: number | undefined): ChordOccurrence[] {
-  if (!offset || offset <= 0) return occurrences;
-  const starts = occurrences.map((o) => Math.max(0, Math.round((o.startTime - offset) * 10000) / 10000));
-  return occurrences.map((o, i) => {
-    const end =
-      i < occurrences.length - 1
-        ? starts[i + 1]
-        : Math.round((o.startTime + o.duration) * 10000) / 10000; // last still reaches the section end
-    return { ...o, startTime: starts[i], duration: Math.max(0, Math.round((end - starts[i]) * 10000) / 10000) };
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Stem generators
@@ -380,9 +309,9 @@ function keySignature(song: BlueprintSong): { sharps: number; major: boolean } {
  *
  *  The tempo is set from `song.bpm`, time signature from the song's
  *  numerator/denominator, and key signature from `song.key`/`song.scale`.
- *  Each stem's notes are generated using the same `sectionSpans` + 
- *  `loopChordsToFill` logic the Ableton bridge uses, so the exported MIDI
- *  matches what "Send to Ableton" would produce.
+ *  Each stem's notes are generated using the same `sectionSpans` + shared
+ *  `@drum/library` chord-cycle logic the Ableton bridge uses, so the
+ *  exported MIDI matches what "Send to Ableton" would produce.
  */
 export function songToMidi(song: BlueprintSong): Uint8Array {
   const spans = sectionSpans(song);

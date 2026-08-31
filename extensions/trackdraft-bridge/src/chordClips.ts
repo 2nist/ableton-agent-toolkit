@@ -1,7 +1,7 @@
 import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect } from "@music-theory/core";
 import type { NoteDescription } from "@ableton-extensions/sdk";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
-import { resolveChordOccurrences } from "./chordCycle.js";
+import { resolveChordOccurrences } from "@drum/library";
 
 export interface ChordClipPlan {
   name: string;

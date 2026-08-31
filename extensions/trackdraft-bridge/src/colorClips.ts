@@ -7,6 +7,7 @@ import {
   type BiTonalChord,
   type BiTonalOptions,
 } from "@platform/progression-engine";
+import { resolveChordOccurrences } from "@drum/library";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
 import type { ChordClipPlan } from "./chordClips.js";
 
@@ -22,23 +23,16 @@ function chordToBiTonal(chord: { root: string; quality: string; beats: number })
   return { rootPc: pitchClass(chord.root), quality: chord.quality, durationBeats: chord.beats };
 }
 
-/** The section's chords looped to fill its full duration — the same fill
- *  math `chordClips.ts` uses, so the Color layer spans the whole section
- *  rather than just one pass through its chord cycle. */
+/** The section's chords resolved to fill its full duration — the SAME
+ *  occurrence math as the Chords/Bass clips (`resolveChordOccurrences`, so
+ *  Euclidean harmony and the syncopation push apply here too) instead of a
+ *  plain fill loop, so the Color layer spans the whole section and matches
+ *  the app's `colorStem` note for note. */
 function sectionChordsFilled(section: BlueprintSong["sections"][number], durationBeats: number): BiTonalChord[] {
-  const cycleBeats = (section.chords ?? []).reduce((sum, c) => sum + c.beats, 0);
-  if (cycleBeats <= 0) return [];
-  const out: BiTonalChord[] = [];
-  let cursor = 0;
-  while (cursor < durationBeats) {
-    for (const c of section.chords ?? []) {
-      if (cursor >= durationBeats) break;
-      const duration = Math.min(c.beats, durationBeats - cursor);
-      out.push({ ...chordToBiTonal(c), durationBeats: duration });
-      cursor += c.beats;
-    }
-  }
-  return out;
+  return resolveChordOccurrences(section, durationBeats).map((occ) => ({
+    ...chordToBiTonal(occ.chord),
+    durationBeats: occ.duration,
+  }));
 }
 
 /** One clip per section holding the bi-tonal "Color Chord" layer — the

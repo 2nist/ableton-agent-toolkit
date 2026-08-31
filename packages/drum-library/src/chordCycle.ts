@@ -1,10 +1,40 @@
-import { chordOnsetsForOutline, type MeterOutline } from "@drum/library";
-import type { BlueprintChord, BlueprintSection } from "./blueprint.js";
+/**
+ * Chord cycle — how a section's (short) chord list is expanded to fill the
+ * section's full duration, honoring Euclidean harmony when the section
+ * carries a `harmonyMeterOutline` (or follows the drums' outline) and the
+ * global "jazz push" syncopation offset.
+ *
+ * This is the SINGLE shared home for the chord-cycle math, so the web
+ * app's .mid export / live out and the Ableton bridge's clips literally
+ * call the same functions and can't drift (previously each kept its own
+ * verbatim copy of `loopChordsToFill`/`loopChordsOnOutline`/
+ * `resolveChordOccurrences`/`applySyncopation`).
+ *
+ * Chords are typed structurally (`C extends { beats: number }`) so this
+ * package stays decoupled from the blueprint schema — callers pass their
+ * own `Chord`/`BlueprintChord` and get it back unchanged inside each
+ * `ChordOccurrence`.
+ */
 
-export interface ChordOccurrence {
-  chord: BlueprintChord;
+import { chordOnsetsForOutline, type MeterOutline } from "./meter.js";
+
+/** One resolved chord placement in a section — `startTime`/`duration` in
+ *  beats from the section start. `C` is the caller's chord type. */
+export interface ChordOccurrence<C = { beats: number }> {
+  chord: C;
   startTime: number;
   duration: number;
+}
+
+/** The section fields the resolver reads — a structural subset of the
+ *  blueprint schema's `BlueprintSection`, so both the app and the bridge
+ *  pass their own section object straight in. */
+export interface ChordResolutionSource<C extends { beats: number }> {
+  harmonyMeterOutline?: MeterOutline | null;
+  harmonyFollowsDrums?: boolean;
+  drumMeterOutline?: MeterOutline | null;
+  syncopationOffset?: number;
+  chords?: C[] | null;
 }
 
 /**
@@ -12,14 +42,14 @@ export interface ChordOccurrence {
  * whole section (a 16-bar verse built from a 4-bar/4-chord progression
  * lists only those 4 chords). This loops the list to fill `durationBeats`,
  * truncating the final repeat if it doesn't divide evenly. Shared by every
- * chord-driven generator (chord clips, bass line) so they can't drift out
- * of sync with each other on the same section.
+ * chord-driven generator (chords, bass, color) so they can't drift out of
+ * sync with each other on the same section.
  */
-export function loopChordsToFill(chords: BlueprintChord[], durationBeats: number): ChordOccurrence[] {
+export function loopChordsToFill<C extends { beats: number }>(chords: C[], durationBeats: number): ChordOccurrence<C>[] {
   const cycleBeats = chords.reduce((sum, chord) => sum + chord.beats, 0);
   if (cycleBeats <= 0) return [];
 
-  const occurrences: ChordOccurrence[] = [];
+  const occurrences: ChordOccurrence<C>[] = [];
   let cursor = 0;
   while (cursor < durationBeats) {
     for (const chord of chords) {
@@ -40,10 +70,10 @@ export function loopChordsToFill(chords: BlueprintChord[], durationBeats: number
  * harmony and drums sharing the same outline lock into the same syncopated
  * grid; a different one runs polymeter against it.
  */
-export function loopChordsOnOutline(chords: BlueprintChord[], outline: MeterOutline, durationBeats: number): ChordOccurrence[] {
+export function loopChordsOnOutline<C extends { beats: number }>(chords: C[], outline: MeterOutline, durationBeats: number): ChordOccurrence<C>[] {
   const onsets = chordOnsetsForOutline(outline, durationBeats);
   if (onsets.length === 0 || chords.length === 0) return [];
-  const occurrences: ChordOccurrence[] = [];
+  const occurrences: ChordOccurrence<C>[] = [];
   for (let i = 0; i < onsets.length; i++) {
     const startTime = onsets[i];
     const end = onsets[i + 1] ?? durationBeats;
@@ -61,7 +91,10 @@ export function loopChordsOnOutline(chords: BlueprintChord[], outline: MeterOutl
  * Shared by every chord-driven generator so chords, bass and color can't
  * drift.
  */
-export function resolveChordOccurrences(section: BlueprintSection, durationBeats: number): ChordOccurrence[] {
+export function resolveChordOccurrences<C extends { beats: number }>(
+  section: ChordResolutionSource<C>,
+  durationBeats: number,
+): ChordOccurrence<C>[] {
   const outline =
     section.harmonyMeterOutline ??
     (section.harmonyFollowsDrums === false ? null : (section.drumMeterOutline ?? null));
@@ -76,7 +109,7 @@ export function resolveChordOccurrences(section: BlueprintSection, durationBeats
  *  (e.g. 0.5 = an 8th-note anticipation). Durations follow the shifted
  *  starts; the section's first chord is clamped to its start so no note
  *  precedes a clip, and the last chord still runs to the section end. */
-function applySyncopation(occurrences: ChordOccurrence[], offset: number | undefined): ChordOccurrence[] {
+export function applySyncopation<C>(occurrences: ChordOccurrence<C>[], offset: number | undefined): ChordOccurrence<C>[] {
   if (!offset || offset <= 0) return occurrences;
   const starts = occurrences.map((o) => Math.max(0, Math.round((o.startTime - offset) * 10000) / 10000));
   return occurrences.map((o, i) => {
