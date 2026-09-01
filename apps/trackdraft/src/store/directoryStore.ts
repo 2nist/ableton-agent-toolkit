@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { readStorage, writeStorage } from "./storage";
 
 export interface DirectoryConfig {
   path: string;
@@ -33,21 +34,8 @@ interface DirectoryStoreState {
 
 const STORAGE_KEY = "trackdraft-directories";
 
-function loadFromStorage(): DirectoryConfig[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as DirectoryConfig[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function persist(dirs: DirectoryConfig[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(dirs));
-}
-
 export const useDirectoryStore = create<DirectoryStoreState>((set, get) => ({
-  dirs: loadFromStorage(),
+  dirs: readStorage<DirectoryConfig[]>(STORAGE_KEY, []),
   listings: {},
   loading: null,
   error: null,
@@ -61,7 +49,7 @@ export const useDirectoryStore = create<DirectoryStoreState>((set, get) => ({
     if (!next.some((d) => d.isDefault)) {
       next[0].isDefault = true;
     }
-    persist(next);
+    writeStorage(STORAGE_KEY, next);
     set({ dirs: next });
     // Auto-load the new directory
     get().loadListing(dir.path);
@@ -73,7 +61,7 @@ export const useDirectoryStore = create<DirectoryStoreState>((set, get) => ({
     if (next.length > 0 && !next.some((d) => d.isDefault)) {
       next[0].isDefault = true;
     }
-    persist(next);
+    writeStorage(STORAGE_KEY, next);
     set((s) => {
       const listings = { ...s.listings };
       delete listings[path];
@@ -86,7 +74,7 @@ export const useDirectoryStore = create<DirectoryStoreState>((set, get) => ({
       ...d,
       isDefault: d.path === path,
     }));
-    persist(next);
+    writeStorage(STORAGE_KEY, next);
     set({ dirs: next });
   },
 

@@ -4,9 +4,9 @@ import {
   loopChordsOnOutline,
   resolveChordOccurrences,
   applySyncopation,
-  type MeterOutline,
   type ChordOccurrence,
 } from "../src/chordCycle.js";
+import type { MeterOutline } from "../src/meter.js";
 
 /** A minimal structural chord (the schema's `Chord` has `beats` too). */
 const C = (beats: number, root = "C") => ({ root, beats });

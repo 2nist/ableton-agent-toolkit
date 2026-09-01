@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { type BlueprintSong, createEmptySong } from "../types/blueprint";
+import { createDebouncedWriter, readStorage, readRawStorage, writeRawStorage } from "./storage";
 
 const STORAGE_KEY = "trackdraft-songs";
 const CURRENT_ID_KEY = "trackdraft-current-song-id";
@@ -36,20 +37,14 @@ interface SongStoreState {
   loadFromStorage: () => void;
 }
 
-let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null;
-
-function readStoredSongs(): BlueprintSong[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as BlueprintSong[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function persistSongs(songs: BlueprintSong[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(songs));
-}
+/** Debounced writers — one per persisted key, so a single autosave pass
+ *  persists the songs list and the current-song id together (same debounce
+ *  the store always had). The id is written RAW (unquoted), preserving the
+ *  exact stored format `readRawStorage` expects. */
+const persistSongs = createDebouncedWriter<BlueprintSong[]>(STORAGE_KEY, AUTOSAVE_DEBOUNCE_MS);
+const persistCurrentId = createDebouncedWriter<string>(CURRENT_ID_KEY, AUTOSAVE_DEBOUNCE_MS, (id) =>
+  writeRawStorage(CURRENT_ID_KEY, id),
+);
 
 export const useSongStore = create<SongStoreState>((set, get) => ({
   songs: [],
@@ -60,7 +55,7 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
 
   setClockSource: (mode) => {
     set({ clockSource: mode });
-    localStorage.setItem(CLOCK_SOURCE_KEY, mode);
+    writeRawStorage(CLOCK_SOURCE_KEY, mode);
   },
 
   currentSong: () => {
@@ -150,23 +145,17 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
   canRedo: () => get().historyIndex < get().history.length - 1,
 
   autoSave: () => {
-    if (autoSaveTimeout !== null) clearTimeout(autoSaveTimeout);
-    autoSaveTimeout = setTimeout(() => {
-      persistSongs(get().songs);
-      if (get().currentSongId) {
-        localStorage.setItem(CURRENT_ID_KEY, get().currentSongId!);
-      }
-      autoSaveTimeout = null;
-    }, AUTOSAVE_DEBOUNCE_MS);
+    persistSongs.write(get().songs);
+    const id = get().currentSongId;
+    if (id) persistCurrentId.write(id);
   },
 
   loadFromStorage: () => {
-    const songs = readStoredSongs();
-    const storedCurrentId = localStorage.getItem(CURRENT_ID_KEY);
+    const songs = readStorage<BlueprintSong[]>(STORAGE_KEY, []);
+    const storedCurrentId = readRawStorage(CURRENT_ID_KEY);
     const currentSongId = songs.some((s) => s.id === storedCurrentId) ? storedCurrentId : null;
     const current = songs.find((s) => s.id === currentSongId);
-    const savedSource = localStorage.getItem(CLOCK_SOURCE_KEY);
-    const clockSource: ClockSource = savedSource === "ableton" ? "ableton" : "internal";
+    const clockSource: ClockSource = readRawStorage(CLOCK_SOURCE_KEY) === "ableton" ? "ableton" : "internal";
     set({
       songs,
       currentSongId,

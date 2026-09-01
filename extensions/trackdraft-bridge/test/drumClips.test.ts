@@ -319,13 +319,18 @@ describe("planDrumClips — fills and transitions", () => {
     });
   }
 
-  it("replaces the last bar of a section with a fill when handing off", () => {
+  it("hands off with an automatic build-up ramp (not the legacy always-fill tom pattern)", () => {
     const [first] = planDrumClips(twoSections(2), fixturePresets(), fixtureFills());
-    // Groove notes in the final bar (beats 4..8) are gone; fill notes are there.
+    // The final bar is a rising closed-hat ramp — the role-aware auto
+    // transition a plain custom→custom handoff gets now — not the old
+    // always-fill tom pattern.
     const lastBar = first.notes.filter((n) => n.startTime >= 4);
-    expect(lastBar.some((n) => n.pitch === TOM_HIGH)).toBe(true);
-    // The fill's tom hits land relative to the fill start (beat 4).
-    expect(lastBar.map((n) => n.startTime)).toEqual(expect.arrayContaining([6, 7, 7.5]));
+    expect(lastBar.some((n) => n.pitch === CLOSED_HAT)).toBe(true);
+    expect(lastBar.some((n) => n.pitch === TOM_HIGH)).toBe(false);
+    // The ramp accelerates into a closing hit (kick+snare together) at the end.
+    const closing = first.notes.filter((n) => n.startTime >= 7.5);
+    expect(closing.some((n) => n.pitch === KICK)).toBe(true);
+    expect(closing.some((n) => n.pitch === SNARE)).toBe(true);
   });
 
   it("opens the following section with a crash", () => {
@@ -334,17 +339,24 @@ describe("planDrumClips — fills and transitions", () => {
     expect(opener).toBeDefined();
   });
 
-  it("builds the fill toward a louder next section", () => {
-    const [first] = planDrumClips(twoSections(2, "f"), fixturePresets(), fixtureFills());
-    const fillPeak = Math.max(...first.notes.filter((n) => n.startTime >= 4).map((n) => n.velocity ?? 0));
-    expect(fillPeak).toBe(112); // the next section's f target, not this section's mf
+  it("the following section's opening crash scales toward its own velocity target", () => {
+    const [, loudNext] = planDrumClips(twoSections(2, "f"), fixturePresets(), fixtureFills());
+    const [, quietNext] = planDrumClips(twoSections(2), fixturePresets(), fixtureFills());
+    const crashLoud = loudNext.notes.find((n) => n.pitch === CRASH && n.startTime === 0)!;
+    const crashQuiet = quietNext.notes.find((n) => n.pitch === CRASH && n.startTime === 0)!;
+    expect(crashLoud).toBeDefined();
+    expect(crashQuiet).toBeDefined();
+    // The crash into an "f" section lands harder than the crash into an "mf".
+    expect(crashLoud.velocity!).toBeGreaterThan(crashQuiet.velocity!);
   });
 
-  it("skips the fill when the section is too short to give up a bar", () => {
+  it("a too-short section gets no ramp/fill of its own, but the next section still opens with a crash", () => {
     const clips = planDrumClips(twoSections(1), fixturePresets(), fixtureFills());
+    // The 1-bar verse keeps its plain groove — no tom fill, no build-up ramp.
     expect(clips[0].notes.some((n) => n.pitch === TOM_HIGH)).toBe(false);
-    // And with no fill, the next section gets no crash either.
-    expect(clips[1].notes.some((n) => n.pitch === CRASH && n.startTime === 0)).toBe(false);
+    expect(clips[0].notes.some((n) => n.pitch === CLOSED_HAT)).toBe(false);
+    // The boundary still lands the opening crash on the following section.
+    expect(clips[1].notes.some((n) => n.pitch === CRASH && n.startTime === 0)).toBe(true);
   });
 
   it("the last section never gets a fill — there is nothing to hand off to", () => {

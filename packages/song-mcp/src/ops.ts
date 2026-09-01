@@ -108,8 +108,11 @@ export function applyOps(
       errors.push({ opIndex: i, opType: op.type, message: `songId "${op.songId}" does not match this song's id "${song.id}".` });
       continue;
     }
-    const section = song.sections.find((s) => s.id === op.sectionId);
-    if (!section) {
+    // `reorderSections` targets the whole song (its ids are validated as a
+    // permutation below) and carries no `sectionId` — the other ops must
+    // reference an existing section.
+    const section = op.type === "reorderSections" ? undefined : song.sections.find((s) => s.id === op.sectionId);
+    if (op.type !== "reorderSections" && !section) {
       errors.push({ opIndex: i, opType: op.type, message: `Section "${op.sectionId}" not found in this song.` });
       continue;
     }
