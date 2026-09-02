@@ -21,3 +21,4 @@ export * from "./chordCycle.js";
 export * from "./transitions.js";
 export * from "./section.js";
 export * from "./bass.js";
+export * from "./style.js";
