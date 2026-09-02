@@ -7,7 +7,7 @@ import {
   type BiTonalChord,
   type BiTonalOptions,
 } from "@platform/progression-engine";
-import { resolveChordOccurrences } from "@drum/library";
+import { resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
 import type { ChordClipPlan } from "./chordClips.js";
 
@@ -28,8 +28,8 @@ function chordToBiTonal(chord: { root: string; quality: string; beats: number })
  *  Euclidean harmony and the syncopation push apply here too) instead of a
  *  plain fill loop, so the Color layer spans the whole section and matches
  *  the app's `colorStem` note for note. */
-function sectionChordsFilled(section: BlueprintSong["sections"][number], durationBeats: number): BiTonalChord[] {
-  return resolveChordOccurrences(section, durationBeats).map((occ) => ({
+function sectionChordsFilled(section: BlueprintSong["sections"][number], durationBeats: number, spacing: number): BiTonalChord[] {
+  return resolveChordOccurrences(section, durationBeats, spacing).map((occ) => ({
     ...chordToBiTonal(occ.chord),
     durationBeats: occ.duration,
   }));
@@ -43,7 +43,8 @@ function sectionChordsFilled(section: BlueprintSong["sections"][number], duratio
  *  controls exactly what lands on the Live Color track. */
 export function planColorClips(song: BlueprintSong): ChordClipPlan[] {
   return sectionSpans(song).map(({ section, startBeat, durationBeats }) => {
-    const chords = sectionChordsFilled(section, durationBeats);
+    const profile = resolveStyleProfile(section, song);
+    const chords = sectionChordsFilled(section, durationBeats, styleSpacing(profile.density));
     const notes: NoteDescription[] = [];
     if (chords.length > 0) {
       // `section.colorOctave` overrides the default, same as the app's

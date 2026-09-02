@@ -12,6 +12,11 @@ import {
   occurrenceSeed,
   hashSeed,
   pickVariantIndex,
+  applyStyleToVariant,
+  hasBend,
+  resolveStyleProfile,
+  styleSeed,
+  styleVelocityTarget,
   type DrumPattern,
   type FillLibrary,
   type PackedPreset,
@@ -132,29 +137,43 @@ export function planDrumClips(
     // seeded variation — matches the app's preview/export via `pickVariantIndex`.
     const variantIndex = section.drumVariantIndex !== undefined
       ? Math.max(0, Math.min(section.drumVariantIndex, preset.variants.length - 1))
-      : pickVariantIndex(hashSeed(occurrenceSeed(section.id, occurrenceIndex)), preset.variants.length);
+      : pickVariantIndex(
+          hashSeed(
+            hasBend(section, song)
+              ? styleSeed(resolveStyleProfile(section, song), section.id, occurrenceIndex)
+              : occurrenceSeed(section.id, occurrenceIndex),
+          ),
+          preset.variants.length,
+        );
     return preset.variants[variantIndex];
   });
 
   // Map each span into the library's shared per-section pipeline — voice
   // overrides, detour, transition, and the outline fill are all carried
   // here, so the app's MIDI export and this Ableton plan can't drift.
-  const inputs: SectionDrumInput[] = spans.map(({ section, durationBeats, occurrenceIndex }, i) => ({
-    sectionId: section.id,
-    occurrenceIndex,
-    role: section.role ?? null,
-    variant: resolved[i],
-    outline: section.drumMeterOutline ?? null,
-    voiceOverrides: section.drumVoicePatterns,
-    variation: section.drumVariationOutline ?? null,
-    variationBars: section.drumVariationBars,
-    variationStartBeat: section.drumVariationStartBeat,
-    transitionModel: section.drumTransitionModel ?? null,
-    transitionBars: section.drumTransitionBars,
-    gridBeats: section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25,
-    durationBeats,
-    velocityTarget: getVelocity(section.velocity),
-  }));
+  const inputs: SectionDrumInput[] = spans.map(({ section, durationBeats, occurrenceIndex }, i) => {
+    // The Bend note transforms (Feel + Backbeat) apply after the outline
+    // humanization baked into `resolved[i]` — the same relative point the
+    // app applies them, so app == bridge. Neutral profile = no-op.
+    const profile = resolveStyleProfile(section, song);
+    const variant = resolved[i] ? applyStyleToVariant(resolved[i], profile) : null;
+    return {
+      sectionId: section.id,
+      occurrenceIndex,
+      role: section.role ?? null,
+      variant,
+      outline: section.drumMeterOutline ?? null,
+      voiceOverrides: section.drumVoicePatterns,
+      variation: section.drumVariationOutline ?? null,
+      variationBars: section.drumVariationBars,
+      variationStartBeat: section.drumVariationStartBeat,
+      transitionModel: section.drumTransitionModel ?? null,
+      transitionBars: section.drumTransitionBars,
+      gridBeats: section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25,
+      durationBeats,
+      velocityTarget: styleVelocityTarget(getVelocity(section.velocity), profile),
+    };
+  });
 
   const plans = planSectionDrumNotes(inputs, fillData);
 

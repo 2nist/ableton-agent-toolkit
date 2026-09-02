@@ -158,10 +158,10 @@ class LiveMidiScheduler {
 
     const spans = sectionSpans(song);
     const scheduled: ScheduledNote[] = [
-      ...planChordStem(spans).map((note) => ({ note, channel: channelMap.chords })),
-      ...planBassStem(spans).map((note) => ({ note, channel: channelMap.bass })),
+      ...planChordStem(spans, song).map((note) => ({ note, channel: channelMap.chords })),
+      ...planBassStem(spans, song).map((note) => ({ note, channel: channelMap.bass })),
       ...planDrumStem(spans, song).map((note) => ({ note, channel: channelMap.drums })),
-      ...planColorStem(spans).map((note) => ({ note, channel: channelMap.color })),
+      ...planColorStem(spans, song).map((note) => ({ note, channel: channelMap.color })),
       ...planMelodyStem(spans).map((note) => ({ note, channel: channelMap.melody })),
     ];
     scheduled.sort((a, b) => a.note.startTime - b.note.startTime);

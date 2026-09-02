@@ -1,5 +1,5 @@
 import { pitchClass } from "@music-theory/core";
-import { planSectionBass, resolveChordOccurrences } from "@drum/library";
+import { planSectionBass, resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
 import type { NoteDescription } from "@ableton-extensions/sdk";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
 
@@ -30,7 +30,8 @@ export const DEFAULT_OCTAVE = 3;
  */
 export function planBassLine(song: BlueprintSong, octave: number = DEFAULT_OCTAVE): BassLinePlan[] {
   return sectionSpans(song).map(({ section, startBeat, durationBeats }) => {
-    const occurrences = resolveChordOccurrences(section, durationBeats).map((occ) => ({
+    const profile = resolveStyleProfile(section, song);
+    const occurrences = resolveChordOccurrences(section, durationBeats, styleSpacing(profile.density)).map((occ) => ({
       rootPc: pitchClass(occ.chord.root),
       startTime: occ.startTime,
       duration: occ.duration,

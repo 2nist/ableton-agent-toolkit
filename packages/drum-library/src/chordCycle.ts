@@ -45,7 +45,7 @@ export interface ChordResolutionSource<C extends { beats: number }> {
  * chord-driven generator (chords, bass, color) so they can't drift out of
  * sync with each other on the same section.
  */
-export function loopChordsToFill<C extends { beats: number }>(chords: C[], durationBeats: number): ChordOccurrence<C>[] {
+export function loopChordsToFill<C extends { beats: number }>(chords: C[], durationBeats: number, spacing = 1): ChordOccurrence<C>[] {
   const cycleBeats = chords.reduce((sum, chord) => sum + chord.beats, 0);
   if (cycleBeats <= 0) return [];
 
@@ -54,9 +54,10 @@ export function loopChordsToFill<C extends { beats: number }>(chords: C[], durat
   while (cursor < durationBeats) {
     for (const chord of chords) {
       if (cursor >= durationBeats) break;
-      const duration = Math.min(chord.beats, durationBeats - cursor);
+      const span = chord.beats * spacing;
+      const duration = Math.min(span, durationBeats - cursor);
       occurrences.push({ chord, startTime: cursor, duration });
-      cursor += chord.beats;
+      cursor += span;
     }
   }
   return occurrences;
@@ -94,14 +95,18 @@ export function loopChordsOnOutline<C extends { beats: number }>(chords: C[], ou
 export function resolveChordOccurrences<C extends { beats: number }>(
   section: ChordResolutionSource<C>,
   durationBeats: number,
+  spacing = 1,
 ): ChordOccurrence<C>[] {
   const outline =
     section.harmonyMeterOutline ??
     (section.harmonyFollowsDrums === false ? null : (section.drumMeterOutline ?? null));
   const chords = section.chords ?? [];
+  // `spacing` (the Bend density nudge) only re-times the PLAIN per-chord
+  // case — an authored Euclidean outline (harmony or drums) is a grid and
+  // is never stretched. Default 1 = exactly the historical behavior.
   const occurrences = outline
     ? loopChordsOnOutline(chords, outline, durationBeats)
-    : loopChordsToFill(chords, durationBeats);
+    : loopChordsToFill(chords, durationBeats, spacing);
   return applySyncopation(occurrences, section.syncopationOffset);
 }
 

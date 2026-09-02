@@ -1,7 +1,7 @@
 import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect } from "@music-theory/core";
 import type { NoteDescription } from "@ableton-extensions/sdk";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
-import { resolveChordOccurrences } from "@drum/library";
+import { resolveChordOccurrences, resolveStyleProfile, styleHarmonize, styleSpacing } from "@drum/library";
 
 export interface ChordClipPlan {
   name: string;
@@ -25,11 +25,13 @@ const DEFAULT_VELOCITY = 96;
  */
 export function planChordClips(song: BlueprintSong, octave: number = DEFAULT_OCTAVE): ChordClipPlan[] {
   return sectionSpans(song).map(({ section, startBeat, durationBeats }) => {
+    const profile = resolveStyleProfile(section, song);
     const notes: NoteDescription[] = [];
-    for (const occurrence of resolveChordOccurrences(section, durationBeats)) {
+    for (const occurrence of resolveChordOccurrences(section, durationBeats, styleSpacing(profile.density))) {
       const rootPc = pitchClass(occurrence.chord.root);
+      const quality = styleHarmonize(occurrence.chord, profile.harmony);
       let chordNotes: NoteDescription[] = [];
-      for (const pitch of chordToMidiNotes(rootPc, occurrence.chord.quality as ChordQuality, octave)) {
+      for (const pitch of chordToMidiNotes(rootPc, quality as ChordQuality, octave)) {
         chordNotes.push({ pitch, startTime: occurrence.startTime, duration: occurrence.duration, velocity: DEFAULT_VELOCITY });
       }
 

@@ -7,8 +7,11 @@ import {
   resolveStyleProfile,
   styleBackbeat,
   styleFeel,
+  styleHarmonize,
   styleProfileToEngineTargets,
   styleSeed,
+  styleSpacing,
+  styleVelocityTarget,
   velocityScaleFor,
   type StyleProfile,
 } from "../src/style.js";
@@ -30,6 +33,57 @@ describe("velocityScaleFor — energy → velocity scale", () => {
   it("clamps out-of-range input", () => {
     expect(velocityScaleFor(-1)).toBeCloseTo(0.55, 5);
     expect(velocityScaleFor(2)).toBeCloseTo(1.2, 5);
+  });
+});
+
+describe("styleVelocityTarget — energy → scaled peak velocity", () => {
+  it("neutral energy → the base target unchanged", () => {
+    expect(styleVelocityTarget(96, DEFAULT_STYLE_PROFILE)).toBe(96);
+  });
+
+  it("high energy scales up, low scales down, both clamped to 1..127", () => {
+    const loud = { ...DEFAULT_STYLE_PROFILE, energy: 1 };
+    const quiet = { ...DEFAULT_STYLE_PROFILE, energy: 0 };
+    expect(styleVelocityTarget(96, loud)).toBeGreaterThan(96);
+    expect(styleVelocityTarget(96, quiet)).toBeLessThan(96);
+    expect(styleVelocityTarget(120, loud)).toBeLessThanOrEqual(127);
+    expect(styleVelocityTarget(30, quiet)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("styleHarmonize — chord extension tint", () => {
+  it("neutral harmony → quality unchanged", () => {
+    expect(styleHarmonize({ quality: "maj" }, 0.5)).toBe("maj");
+    expect(styleHarmonize({ quality: "maj7" }, 0.5)).toBe("maj7");
+  });
+
+  it("high harmony extends triads toward 7ths", () => {
+    expect(styleHarmonize({ quality: "maj" }, 1)).toBe("maj7");
+    expect(styleHarmonize({ quality: "min" }, 1)).toBe("min7");
+    expect(styleHarmonize({ quality: "7" }, 1)).toBe("7"); // already dominant
+  });
+
+  it("low harmony reduces 7ths toward triads", () => {
+    expect(styleHarmonize({ quality: "maj7" }, 0)).toBe("maj");
+    expect(styleHarmonize({ quality: "min7" }, 0)).toBe("min");
+  });
+
+  it("an authored extendedSuffix always wins", () => {
+    expect(styleHarmonize({ quality: "maj", extendedSuffix: "maj9" }, 1)).toBe("maj");
+    expect(styleHarmonize({ quality: "min", extendedSuffix: "m11" }, 0)).toBe("min");
+  });
+});
+
+describe("styleSpacing — harmony rhythm nudge", () => {
+  it("neutral density → 1.0 (no re-timing)", () => {
+    expect(styleSpacing(0.5)).toBe(1.0);
+  });
+
+  it("sparse (low) holds longer (>1), dense (high) tightens (<1)", () => {
+    expect(styleSpacing(0)).toBeCloseTo(1.1, 5);
+    expect(styleSpacing(1)).toBeCloseTo(0.9, 5);
+    expect(styleSpacing(0.25)).toBeGreaterThan(1);
+    expect(styleSpacing(0.75)).toBeLessThan(1);
   });
 });
 

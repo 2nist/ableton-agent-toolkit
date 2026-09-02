@@ -12,6 +12,9 @@ import {
   occurrenceSeed,
   pickVariantIndex,
   songSignalsFor,
+  hasBend,
+  resolveStyleProfile,
+  styleSeed,
   type DrumPattern,
   type PackedVariant,
   type PackedNote,
@@ -33,7 +36,7 @@ import {
  *  signals the bridge does (via the shared `songSignalsFor`), killing the
  *  drift where a fast (bpm≥160 → dnb) or 808/trap-leaning song previewed
  *  one way but arrived in Ableton another. */
-type SongSignals = Partial<Pick<BlueprintSong, "bpm" | "title" | "concept" | "notes">>;
+type SongSignals = Partial<Pick<BlueprintSong, "bpm" | "title" | "concept" | "notes" | "bend">>;
 
 /**
  * A single drum hit resolved from a pattern/variant — the common shape
@@ -223,14 +226,19 @@ export function resolveOutlineVoiceNecklaces(outline: MeterOutline): VoiceNeckla
  * fallback resolved every auto section to variant 0, which made every
  * song's drums identical — the same hi-hat/snare/kick everywhere. Returns
  * `undefined` only when the pattern has no resolvable preset. */
-export function seededVariantIndex(pattern: DrumPattern, section: BlueprintSection, occurrenceIndex: number): number | undefined {
+export function seededVariantIndex(pattern: DrumPattern, section: BlueprintSection, song?: SongSignals, occurrenceIndex = 0): number | undefined {
   const preset = PRESET_DATA[pattern];
   if (!preset || preset.variants.length === 0) return undefined;
   if (section.drumVariantIndex !== undefined) {
     return Math.max(0, Math.min(section.drumVariantIndex, preset.variants.length - 1));
   }
-  // Downbeats as default (variant 0), variation where the seed dictates.
-  return pickVariantIndex(hashSeed(occurrenceSeed(section.id, occurrenceIndex)), preset.variants.length);
+  // A bend re-seeds the variant deterministically ("controls, not dice" —
+  // the same slider positions always pick the same groove); no bend → the
+  // classic occurrence seed, so existing songs keep their exact output.
+  const seed = hasBend(section, song)
+    ? styleSeed(resolveStyleProfile(section, song), section.id, occurrenceIndex)
+    : occurrenceSeed(section.id, occurrenceIndex);
+  return pickVariantIndex(hashSeed(seed), preset.variants.length);
 }
 
 /** Builds a single-voice `VoiceNecklace` from a free-form Euclidean
@@ -260,7 +268,7 @@ export function resolveSectionVoiceNecklaces(section: BlueprintSection, song?: S
     base = resolveOutlineVoiceNecklaces(section.drumMeterOutline);
   } else {
     const pattern = section.drumPattern ?? inferPatternForSection(section, song);
-    base = resolveVoiceNecklaces(pattern, seededVariantIndex(pattern, section, occurrenceIndex));
+    base = resolveVoiceNecklaces(pattern, seededVariantIndex(pattern, section, song, occurrenceIndex));
   }
   const overrides = section.drumVoicePatterns;
   if (!overrides) return base;
@@ -289,7 +297,7 @@ export function resolveSectionVariant(section: BlueprintSection, song?: SongSign
     return { lengthBeats: bpb, beatsPerBar: bpb, notes, source: { origin: "synth", generator: outline.cellVoices ? "outline-groove" : "outline-click" } };
   }
   const pattern = section.drumPattern ?? inferPatternForSection(section, song);
-  return resolveVariant(pattern, seededVariantIndex(pattern, section, occurrenceIndex));
+  return resolveVariant(pattern, seededVariantIndex(pattern, section, song, occurrenceIndex));
 }
 
 /** Every selectable named pattern — "auto" (`undefined`, deferring to

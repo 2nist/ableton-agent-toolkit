@@ -42,7 +42,7 @@ function sectionDrumKey(section: BlueprintSection, song?: BlueprintSong, occurre
     // Use the same seeded variant the export uses, so a repeated section
     // that resolves to a different variant renders as a pattern change
     // (not "the line just continues").
-    key = `${pattern}::${seededVariantIndex(pattern, section, occurrenceIndex) ?? 0}`;
+    key = `${pattern}::${seededVariantIndex(pattern, section, song, occurrenceIndex) ?? 0}`;
   }
   const ov = section.drumVoicePatterns;
   if (ov) {

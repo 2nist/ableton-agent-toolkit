@@ -35,6 +35,7 @@ import { planBassLine } from "../src/bassLine.js";
 import { planDrumClips } from "../src/drumClips.js";
 import { planColorClips } from "../src/colorClips.js";
 import { makeSong, makeSection, makeChord } from "./helpers.js";
+import { STYLE_RECIPES } from "@drum/library";
 import type { BlueprintSong } from "../src/blueprint.js";
 
 interface Note {
@@ -134,11 +135,56 @@ const outlineSong: BlueprintSong = makeSong({
   arrangement: [{ sectionId: "o", repeats: 1 }],
 });
 
+/** The acoustic song with a whole-song "rock" Bend applied — proves the
+ *  Bend wiring (style seed → variant, velocity scale, feel/backbeat note
+ *  transforms, chord extension, spacing) produces IDENTICAL notes on the
+ *  app side and the bridge. */
+const bentSong: BlueprintSong = makeSong({
+  id: "parity-bent",
+  title: "Parity Bent",
+  bpm: STYLE_RECIPES.rock.tempo,
+  concept: "rock",
+  bend: STYLE_RECIPES.rock,
+  sections: [
+    makeSection({ id: "v", name: "Verse", role: "verse", bars: 4, timeSignatureNumerator: 4, velocity: "mf", chords: [CHORDS[0], CHORDS[1]] }),
+    makeSection({ id: "c", name: "Chorus", role: "chorus", bars: 4, timeSignatureNumerator: 4, velocity: "f", chords: [CHORDS[2], CHORDS[3]] }),
+  ],
+  arrangement: [
+    { sectionId: "v", repeats: 1 },
+    { sectionId: "c", repeats: 1 },
+  ],
+});
+
+/** A per-section override on top of a song master — the section's own bend
+ *  must win on the axes it sets, and both sides must agree. */
+const overrideSong: BlueprintSong = makeSong({
+  id: "parity-override",
+  title: "Parity Override",
+  bpm: 120,
+  concept: "pop",
+  bend: { energy: 0.6, feel: 0.3 }, // master: mid energy, straighter
+  sections: [
+    makeSection({
+      id: "bridge",
+      name: "Bridge",
+      role: "bridge",
+      bars: 4,
+      timeSignatureNumerator: 4,
+      velocity: "p",
+      chords: [CHORDS[0], CHORDS[1]],
+      bend: { backbeat: 0.2, feel: 0.85 }, // section: soft backbeat, swung
+    }),
+  ],
+  arrangement: [{ sectionId: "bridge", repeats: 1 }],
+});
+
 const SONGS: Record<string, BlueprintSong> = {
   acoustic: acousticSong,
   dnb: dnbSong,
   oddMeter: oddMeterSong,
   outline: outlineSong,
+  bent: bentSong,
+  override: overrideSong,
 };
 
 // ---------------------------------------------------------------------------
@@ -151,13 +197,13 @@ describe("golden parity — app stems == bridge clips for the same blueprint", (
       const spans = sectionSpans(song);
 
       it("chords match", () => {
-        const app = planChordStem(spans);
+        const app = planChordStem(spans, song);
         const bridge = flattenClips(planChordClips(song));
         expect(sortNotes(app)).toEqual(sortNotes(bridge));
       });
 
       it("bass matches", () => {
-        const app = planBassStem(spans);
+        const app = planBassStem(spans, song);
         const bridge = flattenClips(planBassLine(song));
         expect(sortNotes(app)).toEqual(sortNotes(bridge));
       });
@@ -169,7 +215,7 @@ describe("golden parity — app stems == bridge clips for the same blueprint", (
       });
 
       it("color matches", () => {
-        const app = planColorStem(spans);
+        const app = planColorStem(spans, song);
         const bridge = flattenClips(planColorClips(song));
         expect(sortNotes(app)).toEqual(sortNotes(bridge));
       });

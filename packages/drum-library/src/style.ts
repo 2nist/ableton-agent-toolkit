@@ -108,6 +108,46 @@ export function styleProfileToEngineTargets(profile: StyleProfile): StyleTargets
   };
 }
 
+/** The effective peak velocity for a section, given its authored velocity
+ *  target and the Bend energy axis. Neutral energy → the base target
+ *  unchanged; extremes scale ~0.55x..1.2x, clamped to 1..127. Shared by
+ *  both export paths so app == bridge. */
+export function styleVelocityTarget(baseTarget: number, profile: StyleProfile): number {
+  return Math.max(1, Math.min(127, Math.round(baseTarget * velocityScaleFor(profile.energy))));
+}
+
+/** How the default per-chord spacing tightens (moving) or lengthens
+ *  (holding) as `density` bends. 1.0 at neutral; ~1.1 sparse (hold),
+ *  ~0.9 dense (move). Passed to `resolveChordOccurrences` only where the
+ *  section has no Euclidean outline — an authored grid is never re-timed. */
+export function styleSpacing(density: number): number {
+  const d = clamp01(density);
+  if (d <= 0.5) return lerp(1.1, 1.0, d / 0.5);
+  return lerp(1.0, 0.9, (d - 0.5) / 0.5);
+}
+
+/** Triad → 7th, for the high-harmony (lush) direction — within the
+ *  quality vocabulary the voicing engine (`chordToMidiNotes`) supports. */
+const HARMONY_EXTEND: Record<string, string> = { maj: "maj7", min: "min7" };
+/** 7th → triad, for the low-harmony (simple) direction. */
+const HARMONY_REDUCE: Record<string, string> = { maj7: "maj", min7: "min" };
+
+/** The effective voicing quality for a chord under the Bend harmony axis.
+ *  Below 0.5 reduces 7ths toward triads; above 0.5 extends triads toward
+ *  7ths — within the vocabulary `chordToMidiNotes` supports. An authored
+ *  `extendedSuffix` ALWAYS wins (never overridden). Neutral (0.5) returns
+ *  the quality unchanged. Shared by both export paths so app == bridge. */
+export function styleHarmonize(
+  chord: { quality: string; extendedSuffix?: string | null },
+  harmony: number,
+): string {
+  if (chord.extendedSuffix) return chord.quality;
+  const h = clamp01(harmony);
+  if (h > 0.5) return HARMONY_EXTEND[chord.quality] ?? chord.quality;
+  if (h < 0.5) return HARMONY_REDUCE[chord.quality] ?? chord.quality;
+  return chord.quality;
+}
+
 // ---------------------------------------------------------------------------
 // Deterministic seed
 // ---------------------------------------------------------------------------
@@ -141,16 +181,17 @@ export interface BendSource {
  *  song master first, the section's partial override on top. This is the
  *  SINGLE resolution used by both the web app and the Ableton bridge, so a
  *  bend can never resolve differently on the two sides (parity). Absent
- *  everywhere → `DEFAULT_STYLE_PROFILE` (a no-op). */
-export function resolveStyleProfile(section: BendSource, song: BendSource): StyleProfile {
-  return { ...DEFAULT_STYLE_PROFILE, ...song.bend, ...section.bend };
+ *  everywhere (or an undefined section/song) → `DEFAULT_STYLE_PROFILE`
+ *  (a no-op). */
+export function resolveStyleProfile(section: BendSource | undefined, song: BendSource | undefined): StyleProfile {
+  return { ...DEFAULT_STYLE_PROFILE, ...song?.bend, ...section?.bend };
 }
 
 /** Whether a section has an ACTIVE bend (a song master, or its own
  *  override). The variant-seed path only switches to `styleSeed` when this
  *  is true, so existing songs with no bend keep their exact current output. */
-export function hasBend(section: BendSource, song: BendSource): boolean {
-  return Boolean(song.bend || section.bend);
+export function hasBend(section: BendSource | undefined, song: BendSource | undefined): boolean {
+  return Boolean(song?.bend || section?.bend);
 }
 
 // ---------------------------------------------------------------------------

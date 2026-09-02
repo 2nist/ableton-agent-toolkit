@@ -19,7 +19,7 @@ import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
 import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
-import { planSectionDrumNotes, planSectionBass, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, type SectionDrumInput } from "@drum/library";
+import { planSectionDrumNotes, planSectionBass, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, applyStyleToVariant, resolveStyleProfile, styleHarmonize, styleSpacing, styleVelocityTarget, type SectionDrumInput } from "@drum/library";
 import { planColorStem } from "./colorStem";
 import { planMelodyStem } from "./melody/melodyStem";
 import type { BlueprintSong, BlueprintSection } from "../types/blueprint";
@@ -71,14 +71,17 @@ const GM_DRUM_PITCHES = new Set([36, 37, 38, 39, 41, 42, 44, 45, 46, 47, 49, 51,
 // Stem generators
 // ---------------------------------------------------------------------------
 
-/** Chord notes for one section — block chords with performance effects. */
-export function planChordStem(spans: SectionSpan[]): MidiNote[] {
+/** Chord notes for one section — block chords with performance effects.
+ *  Honors the Bend harmony axis (voicing extension) and density (spacing). */
+export function planChordStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
-    const occurrences = resolveChordOccurrences(span.section, span.durationBeats);
+    const profile = resolveStyleProfile(span.section, song);
+    const occurrences = resolveChordOccurrences(span.section, span.durationBeats, styleSpacing(profile.density));
     for (const occ of occurrences) {
       const rootPc = pitchClass(occ.chord.root);
-      const chordPitches = chordToMidiNotes(rootPc, occ.chord.quality as ChordQuality, CHORD_OCTAVE);
+      const quality = styleHarmonize(occ.chord, profile.harmony);
+      const chordPitches = chordToMidiNotes(rootPc, quality as ChordQuality, CHORD_OCTAVE);
       let chordNotes: MidiNote[] = chordPitches.map((pitch) => ({
         pitch,
         startTime: span.startBeat + occ.startTime,
@@ -109,10 +112,11 @@ export function planChordStem(spans: SectionSpan[]): MidiNote[] {
  *  the SAME generator the Ableton extension's `planBassLine` calls
  *  (`@drum/library`'s `planSectionBass`), so the exported .mid and live
  *  MIDI out match "Send to Ableton" note for note. */
-export function planBassStem(spans: SectionSpan[]): MidiNote[] {
+export function planBassStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
-    const occurrences = resolveChordOccurrences(span.section, span.durationBeats).map((occ) => ({
+    const profile = resolveStyleProfile(span.section, song);
+    const occurrences = resolveChordOccurrences(span.section, span.durationBeats, styleSpacing(profile.density)).map((occ) => ({
       rootPc: pitchClass(occ.chord.root),
       startTime: span.startBeat + occ.startTime,
       duration: occ.duration,
@@ -136,9 +140,16 @@ export function planBassStem(spans: SectionSpan[]): MidiNote[] {
 export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const inputs: SectionDrumInput[] = spans.map((span) => {
     const section = span.section;
+    const profile = resolveStyleProfile(section, song);
     let variant = resolveSectionVariant(section, song, span.occurrenceIndex);
     if (variant && section.drumMeterOutline) {
       variant = { ...variant, notes: humanizeOutlineNotes(variant.notes, section.drumMeterOutline.cellBeats) };
+    }
+    // The Bend note transforms (Feel + Backbeat) apply after any outline
+    // humanization — the same relative point the bridge applies them, so
+    // app == bridge. Neutral profile = no-op.
+    if (variant) {
+      variant = applyStyleToVariant(variant, profile);
     }
     return {
       sectionId: section.id,
@@ -154,7 +165,7 @@ export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
       transitionBars: section.drumTransitionBars,
       gridBeats: section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25,
       durationBeats: span.durationBeats,
-      velocityTarget: velocityNumber(section.velocity),
+      velocityTarget: styleVelocityTarget(velocityNumber(section.velocity), profile),
     };
   });
 
@@ -317,10 +328,10 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
   const spans = sectionSpans(song);
 
   // Generate stems
-  const chordNotes = planChordStem(spans);
-  const bassNotes = planBassStem(spans);
+  const chordNotes = planChordStem(spans, song);
+  const bassNotes = planBassStem(spans, song);
   const drumNotes = planDrumStem(spans, song);
-  const colorNotes = planColorStem(spans);
+  const colorNotes = planColorStem(spans, song);
   const melodyNotes = planMelodyStem(spans);
 
   // --- Conductor track (tempo + time sig + key sig) ---

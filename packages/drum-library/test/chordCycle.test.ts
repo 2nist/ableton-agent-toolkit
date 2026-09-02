@@ -63,6 +63,26 @@ describe("resolveChordOccurrences — follow-drums default + explicit opt-out", 
   });
 });
 
+describe("resolveChordOccurrences — bend spacing (density nudge)", () => {
+  it("spacing re-times the plain per-chord case only", () => {
+    const section = { chords: twoChordCycle };
+    const tight = resolveChordOccurrences(section, 16, 0.9);
+    // 4-beat chords at 0.9 → 3.6-beat spans → more, denser changes.
+    expect(tight.map((o) => o.startTime)).toEqual([0, 3.6, 7.2, 10.8, 14.4]);
+  });
+
+  it("an outline is never stretched (spacing ignored)", () => {
+    const section = { harmonyMeterOutline: SEVEN_EIGHT, chords: twoChordCycle };
+    const occ = resolveChordOccurrences(section, 7, 0.9);
+    expect(occ.map((o) => o.startTime)).toEqual([0, 1, 2, 3.5, 4.5, 5.5]);
+  });
+
+  it("spacing 1 == historical behavior", () => {
+    const section = { chords: twoChordCycle };
+    expect(resolveChordOccurrences(section, 16, 1)).toEqual(resolveChordOccurrences(section, 16));
+  });
+});
+
 describe("applySyncopation — jazz push", () => {
   const occ: ChordOccurrence[] = [
     { chord: C(4), startTime: 0, duration: 4 },

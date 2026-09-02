@@ -20,9 +20,10 @@ import {
   type BiTonalChord,
   type BiTonalOptions,
 } from "@platform/progression-engine";
-import { resolveChordOccurrences } from "@drum/library";
+import { resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
 import type { SectionSpan } from "./arrangement";
 import type { MidiNote } from "./midiExport";
+import type { BlueprintSong } from "../types/blueprint";
 /** Octave of the bi-tonal anchor foundation (Instrument A). Matches the
  *  engine's own default of 4 and Progression Studio's `anchorOctave`. */
 const COLOR_ANCHOR_OCTAVE = 4;
@@ -43,8 +44,8 @@ function chordToBiTonal(chord: { root: string; quality: string; beats: number })
  *  occurrence math as the Chords/Bass stems (including Euclidean harmony
  *  when the section carries a `harmonyMeterOutline`), so the Color layer
  *  spans the whole section rather than just one pass through its cycle. */
-function sectionChordsFilled(span: SectionSpan): BiTonalChord[] {
-  return resolveChordOccurrences(span.section, span.durationBeats).map((occ) => ({
+function sectionChordsFilled(span: SectionSpan, spacing: number): BiTonalChord[] {
+  return resolveChordOccurrences(span.section, span.durationBeats, spacing).map((occ) => ({
     ...chordToBiTonal(occ.chord),
     durationBeats: occ.duration,
   }));
@@ -53,11 +54,13 @@ function sectionChordsFilled(span: SectionSpan): BiTonalChord[] {
 /** The Color Chord layer for the whole song — one continuous stem, each
  *  section's bi-tonal color notes offset to its real start beat.
  *  `colorFlavor` is read per section, falling back to the engine's
- *  `DEFAULT_COLOR_FLAVOR` when a section doesn't set one. */
-export function planColorStem(spans: SectionSpan[]): MidiNote[] {
+ *  `DEFAULT_COLOR_FLAVOR` when a section doesn't set one. Honors the Bend
+ *  density axis (chord spacing). */
+export function planColorStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
-    const chords = sectionChordsFilled(span);
+    const profile = resolveStyleProfile(span.section, song);
+    const chords = sectionChordsFilled(span, styleSpacing(profile.density));
     if (chords.length === 0) continue;
     const opts: BiTonalOptions = {
       anchorOctave: COLOR_ANCHOR_OCTAVE,
