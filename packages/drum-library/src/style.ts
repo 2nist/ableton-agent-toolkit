@@ -126,6 +126,34 @@ export function styleSeed(profile: StyleProfile, sectionId: string, occurrenceIn
 }
 
 // ---------------------------------------------------------------------------
+// Resolution — song master + per-section override (shared so app == bridge)
+// ---------------------------------------------------------------------------
+
+/** The shape the resolver reads — a structural subset of the blueprint's
+ *  `BlueprintSection`/`BlueprintSong` (it only needs `bend`), so this
+ *  package stays decoupled from the schema. */
+export interface BendSource {
+  bend?: Partial<StyleProfile> | null;
+}
+
+/** Resolve a section's EFFECTIVE style profile:
+ *  `{ ...DEFAULT_STYLE_PROFILE, ...song.bend, ...section.bend }` — the
+ *  song master first, the section's partial override on top. This is the
+ *  SINGLE resolution used by both the web app and the Ableton bridge, so a
+ *  bend can never resolve differently on the two sides (parity). Absent
+ *  everywhere → `DEFAULT_STYLE_PROFILE` (a no-op). */
+export function resolveStyleProfile(section: BendSource, song: BendSource): StyleProfile {
+  return { ...DEFAULT_STYLE_PROFILE, ...song.bend, ...section.bend };
+}
+
+/** Whether a section has an ACTIVE bend (a song master, or its own
+ *  override). The variant-seed path only switches to `styleSeed` when this
+ *  is true, so existing songs with no bend keep their exact current output. */
+export function hasBend(section: BendSource, song: BendSource): boolean {
+  return Boolean(song.bend || section.bend);
+}
+
+// ---------------------------------------------------------------------------
 // Note transforms (feel + backbeat) — operate on a resolved variant's notes
 // ---------------------------------------------------------------------------
 

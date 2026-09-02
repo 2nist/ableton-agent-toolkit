@@ -3,6 +3,8 @@ import {
   DEFAULT_STYLE_PROFILE,
   STYLE_RECIPES,
   applyStyleToVariant,
+  hasBend,
+  resolveStyleProfile,
   styleBackbeat,
   styleFeel,
   styleProfileToEngineTargets,
@@ -63,6 +65,38 @@ describe("styleSeed — deterministic, tempo-independent, occurrence-aware", () 
 
   it("repeated occurrences seed differently (via occurrenceSeed)", () => {
     expect(styleSeed(DEFAULT_STYLE_PROFILE, "chorus", 0)).not.toBe(styleSeed(DEFAULT_STYLE_PROFILE, "chorus", 1));
+  });
+});
+
+describe("resolveStyleProfile / hasBend — song master + per-section override", () => {
+  const song = { bend: { energy: 0.9, feel: 0.2, tempo: 132 } };
+  const section = {};
+
+  it("no bend anywhere → neutral profile and hasBend false", () => {
+    expect(hasBend({}, {})).toBe(false);
+    expect(resolveStyleProfile({}, {})).toEqual(DEFAULT_STYLE_PROFILE);
+  });
+
+  it("song master applies to a section with no override", () => {
+    expect(hasBend(section, song)).toBe(true);
+    const resolved = resolveStyleProfile(section, song);
+    expect(resolved.energy).toBe(0.9);
+    expect(resolved.feel).toBe(0.2);
+    expect(resolved.tempo).toBe(132);
+    expect(resolved.backbeat).toBe(0.5); // unset axes fall through to neutral
+  });
+
+  it("a section override wins over the master, axis by axis (Partial)", () => {
+    const overridden = { bend: { feel: 0.9 } }; // only feel differs from the master
+    const resolved = resolveStyleProfile(overridden, song);
+    expect(resolved.feel).toBe(0.9); // override wins
+    expect(resolved.energy).toBe(0.9); // still from master
+    expect(resolved.tempo).toBe(132); // still from master
+    expect(resolved.density).toBe(0.5); // neutral elsewhere
+  });
+
+  it("a section-only bend counts as active", () => {
+    expect(hasBend({ bend: { energy: 0.8 } }, {})).toBe(true);
   });
 });
 

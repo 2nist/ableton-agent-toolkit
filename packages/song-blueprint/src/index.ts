@@ -183,6 +183,30 @@ export interface BassProfile {
   velocity?: number;
 }
 
+/** The seven macro "Bend" style axes a user can tint the whole song or
+ *  one section with. Structurally identical to `@drum/library`'s
+ *  `StyleProfile`; declared here independently for the same
+ *  schema-decoupling reason `BassProfile`/`MeterOutline` are. All values
+ *  0..1 except `tempo` (absolute bpm); 0.5 is the neutral point on every
+ *  0..1 axis (a neutral profile is a no-op — the engine's current
+ *  behavior). */
+export interface StyleProfile {
+  /** 0 = delicate … 1 = driving (the generated drums' peak velocity). */
+  energy: number;
+  /** 0 = sparse … 1 = busy/dense (pattern family + fill rate). */
+  density: number;
+  /** 0 = soft, no strong backbeat … 1 = locked 2&4 backbeat. */
+  backbeat: number;
+  /** 0 = straight/tight grid … 1 = swung/human feel. */
+  feel: number;
+  /** 0 = acoustic kit … 1 = electronic machine. */
+  kit: number;
+  /** 0 = triads/simple … 1 = extended/lush (7/9/11 + color intensity). */
+  harmony: number;
+  /** Tempo in bpm (absolute — not normalized). */
+  tempo: number;
+}
+
 /** A single captured melody note — one sung/hummed pitch, segmented from
  *  the microphone by the Melody tab's audio-to-MIDI pipeline. Timing is
  *  in song beats relative to the section start (the same timebase as
@@ -242,6 +266,11 @@ export interface BlueprintSection {
    *  export / Send to Ableton / real-time MIDI out). Absent → a single
    *  sustained root per chord at octave 3 (the historical behavior). */
   bassProfile?: BassProfile;
+  /** Per-section "Bend" override — a `Partial<StyleProfile>` (any subset
+   *  of the seven macro axes) that tints THIS section on top of the song
+   *  master. Absent → the section follows the song master, which itself
+   *  defaults to the engine's neutral behavior. */
+  bend?: Partial<StyleProfile>;
   /** Captured monophonic melody for this section — a sung/hummed line
    *  recorded from the microphone and segmented into notes by the Melody
    *  tab (audio-to-MIDI). Notes are beats-relative-to-section-start, so
@@ -538,6 +567,13 @@ export interface BlueprintSong {
   beatOffset?: number;
 
   concept?: string;
+  /** Whole-song "Bend" master — any subset of the seven macro style axes
+   *  (Energy/Density/Backbeat/Feel/Kit/Harmony/Tempo) tinting every
+   *  section that doesn't carry its own `bend` override. Partial so you
+   *  only author the axes you're bending; unset axes stay neutral (the
+   *  resolver merges with the defaults). Absent → the engine's current
+   *  behavior. */
+  bend?: Partial<StyleProfile>;
   notes?: SongNotes;
   additionalIdeas?: string[];
   references?: string[];
