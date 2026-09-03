@@ -342,6 +342,22 @@ export function inferPatternForSection(section: BlueprintSection, song?: SongSig
   );
 }
 
+/** The section's effective drum voice as a short display label — what will
+ *  actually play, honoring the song's genre (Groove DNA) and the section's
+ *  own authored outline/pattern. The single source for every readout
+ *  (timeline cards, Studio console): an authored `drumMeterOutline` shows
+ *  `euclid · N` (N = its onset count), an explicit `drumPattern` shows that
+ *  name, and otherwise the heuristic resolves the family. */
+export function drumFamilyLabel(section: BlueprintSection, song?: SongSignals): string {
+  if (section.drumMeterOutline) {
+    const num = section.drumMeterOutline.cells.reduce((a, b) => a + b, 0);
+    return `euclid · ${num}`;
+  }
+  if (section.drumPattern === "none") return "muted";
+  if (section.drumPattern) return section.drumPattern;
+  return inferPatternForSection(section, song);
+}
+
 /**
  * A small, deliberately conservative keyword table from a genre map slot's
  * free-text `groove` description to an explicit, legacy-representable

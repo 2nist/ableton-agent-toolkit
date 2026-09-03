@@ -7,6 +7,7 @@ import { getAbletonClock } from "../../lib/playback/abletonClock";
 import { playSong, stopSong } from "../../lib/playback/transportControl";
 import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 import ArrangementTimeline from "./ArrangementTimeline";
+import StudioConsole from "./StudioConsole";
 import AbletonStatus from "./AbletonStatus";
 import MidiSetupPanel from "./MidiSetupPanel";
 import ExportMenu from "./ExportMenu";
@@ -103,10 +104,10 @@ export default function StudioView() {
   }
 
   return (
-    <div className="p-4 max-w-6xl space-y-3">
+    <div className="h-full p-4 max-w-6xl flex flex-col min-h-0">
       {/* Single transport bar — key/tempo left, clock/transport/export
           right, so nothing wraps into a second row above the arrangement. */}
-      <div className="flex items-center gap-2 border-b border-edge pb-2">
+      <div className="shrink-0 flex items-center gap-2 border-b border-edge pb-2">
         {/* Left: key + tempo — editable "song identity" controls */}
         <div className="flex items-center gap-2 mr-auto">
           <div className="flex items-center gap-1">
@@ -242,15 +243,24 @@ export default function StudioView() {
       </div>
 
       {song.sections.length === 0 ? (
-        <p className="text-inkMuted text-sm">
-          Add sections in the Structure tab first — Studio shows your song's arrangement here once it has some.
-        </p>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-inkMuted text-sm">
+            Add sections in the Structure tab first — Studio shows your song's arrangement here once it has some.
+          </p>
+        </div>
       ) : (
-        <div className="flex items-stretch gap-3">
-          <div className="flex-1 min-w-0">
-            <ArrangementTimeline song={song} />
+        /* The arrangement is the section *index* (click a block to target
+           its mix); the console below mirrors that section's actual
+           harmony/drums/melody — the freed vertical band put to musical
+           use. Bend sliders stay pinned on the right. */
+        <div className="flex-1 min-h-0 flex items-stretch gap-3 mt-3">
+          <div className="flex-1 min-w-0 flex flex-col gap-3 min-h-0">
+            <div className="shrink-0">
+              <ArrangementTimeline song={song} />
+            </div>
+            <StudioConsole song={song} />
           </div>
-          <div className="w-72 shrink-0">
+          <div className="w-72 shrink-0 min-h-0 overflow-y-auto">
             <BendPanel />
           </div>
         </div>

@@ -8,8 +8,8 @@ import { classifySong } from "../../lib/classification";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
-import { inferPatternForSection } from "../../lib/playback/drumPreview";
-import type { BlueprintSection, BlueprintSong } from "../../types/blueprint";
+import { drumFamilyLabel } from "../../lib/playback/drumPreview";
+import type { BlueprintSong } from "../../types/blueprint";
 
 const PX_PER_BEAT = 2;
 // Wide enough for the per-section readout strip (harmony/drums/melody)
@@ -92,19 +92,6 @@ function progressionText(span: SectionSpan, song: BlueprintSong): string {
   return span.section.chords
     .map((c) => `${c.romanNumeral} (${chordDisplayName(pitchClass(c.root), c.quality, keyName)})`)
     .join("  ·  ");
-}
-
-/** The section's effective drum voice as a short label — what will
- *  actually play, honoring the song's genre (Groove DNA) and the section's
- *  own authored outline/pattern. The per-block readout under each section. */
-function drumFamilyLabel(section: BlueprintSection, song: BlueprintSong): string {
-  if (section.drumMeterOutline) {
-    const num = section.drumMeterOutline.cells.reduce((a, b) => a + b, 0);
-    return `euclid · ${num}`;
-  }
-  if (section.drumPattern === "none") return "muted";
-  if (section.drumPattern) return section.drumPattern;
-  return inferPatternForSection(section, song);
 }
 
 /** The first visualization of `sectionSpans` anywhere in the app — the
