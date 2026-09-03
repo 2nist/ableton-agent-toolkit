@@ -7,6 +7,7 @@ import { roleStyle } from "../../lib/roleColors";
 import { classifySong } from "../../lib/classification";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
+import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import type { BlueprintSong } from "../../types/blueprint";
 
 const PX_PER_BEAT = 2;
@@ -98,6 +99,8 @@ function progressionText(span: SectionSpan, song: BlueprintSong): string {
 export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
+  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const spans = sectionSpans(song);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [tick, setTick] = useState<TransportTick | null>(null);
@@ -128,16 +131,21 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
             const style = roleStyle(span.section.role);
             const rawWidth = span.durationBeats * PX_PER_BEAT;
             const width = isFinite(rawWidth) ? Math.max(MIN_BLOCK_WIDTH, rawWidth) : MIN_BLOCK_WIDTH;
+            const isSelected = selectedSectionId === span.sectionId;
             return (
               <button
                 key={`${span.sectionId}-${span.occurrenceIndex}-${i}`}
-                className="h-12 shrink-0 rounded-[4px] flex flex-col items-start justify-center px-2 overflow-hidden hover:opacity-90 transition-opacity text-left"
+                className={`h-12 shrink-0 rounded-[4px] flex flex-col items-start justify-center px-2 overflow-hidden transition-opacity text-left ${
+                  isSelected ? "ring-1 ring-accent ring-inset opacity-100" : "hover:opacity-90"
+                }`}
                 style={{ width, background: style.bg, color: style.text }}
                 onMouseEnter={() => setHoveredIndex(i)}
                 onMouseLeave={() => setHoveredIndex((cur) => (cur === i ? null : cur))}
                 onFocus={() => setHoveredIndex(i)}
                 onBlur={() => setHoveredIndex((cur) => (cur === i ? null : cur))}
-                onClick={() => navigate(`/song/${songId}/harmony?section=${span.sectionId}`)}
+                onClick={() => setSelectedSectionId(span.sectionId)}
+                onDoubleClick={() => navigate(`/song/${songId}/harmony?section=${span.sectionId}`)}
+                title="Click to target its mix · double-click to edit"
               >
                 <span className="text-[10.5px] font-medium leading-tight truncate w-full">{span.section.name}</span>
                 <span className="text-[9px] opacity-80 font-mono leading-tight">{Math.round(span.bars)} bars</span>
@@ -157,7 +165,7 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
           </p>
         ) : (
           <p className="text-inkMuted/60">
-            {Math.round(totalBars(spans))} bars total · hover a section for its progression, click to edit
+            {Math.round(totalBars(spans))} bars total · click a section to target its mix, double-click to edit
           </p>
         )}
       </div>

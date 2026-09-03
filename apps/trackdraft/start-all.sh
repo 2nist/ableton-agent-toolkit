@@ -13,7 +13,6 @@ cd "$DIR"
 LAN_MODE=0
 if [ "$1" = "lan" ]; then
   LAN_MODE=1
-fi
 
 echo "═══════════════════════════════════════"
 echo "  TrackDraft — Dev Launcher${LAN_MODE:+ (LAN mode)}"

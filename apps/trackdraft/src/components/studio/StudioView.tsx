@@ -10,6 +10,7 @@ import ArrangementTimeline from "./ArrangementTimeline";
 import AbletonStatus from "./AbletonStatus";
 import MidiSetupPanel from "./MidiSetupPanel";
 import ExportMenu from "./ExportMenu";
+import BendPanel from "../style/BendPanel";
 
 const SCALES: ScaleType[] = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
 
@@ -102,7 +103,7 @@ export default function StudioView() {
   }
 
   return (
-    <div className="p-4 max-w-5xl space-y-3">
+    <div className="p-4 max-w-6xl space-y-3">
       {/* Single transport bar — key/tempo left, clock/transport/export
           right, so nothing wraps into a second row above the arrangement. */}
       <div className="flex items-center gap-2 border-b border-edge pb-2">
@@ -245,7 +246,14 @@ export default function StudioView() {
           Add sections in the Structure tab first — Studio shows your song's arrangement here once it has some.
         </p>
       ) : (
-        <ArrangementTimeline song={song} />
+        <div className="flex items-stretch gap-3">
+          <div className="flex-1 min-w-0">
+            <ArrangementTimeline song={song} />
+          </div>
+          <div className="w-72 shrink-0">
+            <BendPanel />
+          </div>
+        </div>
       )}
     </div>
   );
