@@ -8,10 +8,13 @@ import { classifySong } from "../../lib/classification";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
-import type { BlueprintSong } from "../../types/blueprint";
+import { inferPatternForSection } from "../../lib/playback/drumPreview";
+import type { BlueprintSection, BlueprintSong } from "../../types/blueprint";
 
 const PX_PER_BEAT = 2;
-const MIN_BLOCK_WIDTH = 32;
+// Wide enough for the per-section readout strip (harmony/drums/melody)
+// beneath each block to stay legible — this is a glance-at-the-song view.
+const MIN_BLOCK_WIDTH = 64;
 // Tailwind's `gap-0.5` (0.125rem at the default 16px root) — the block
 // row's own gap, needed here too so the playhead's pixel math accounts
 // for the same spacing between blocks, not just their widths.
@@ -91,6 +94,19 @@ function progressionText(span: SectionSpan, song: BlueprintSong): string {
     .join("  ·  ");
 }
 
+/** The section's effective drum voice as a short label — what will
+ *  actually play, honoring the song's genre (Groove DNA) and the section's
+ *  own authored outline/pattern. The per-block readout under each section. */
+function drumFamilyLabel(section: BlueprintSection, song: BlueprintSong): string {
+  if (section.drumMeterOutline) {
+    const num = section.drumMeterOutline.cells.reduce((a, b) => a + b, 0);
+    return `euclid · ${num}`;
+  }
+  if (section.drumPattern === "none") return "muted";
+  if (section.drumPattern) return section.drumPattern;
+  return inferPatternForSection(section, song);
+}
+
 /** The first visualization of `sectionSpans` anywhere in the app — the
  *  beat-accurate arrangement layout every "one clip/cue per section"
  *  Ableton generator already computes, but that no component has ever
@@ -132,24 +148,71 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
             const rawWidth = span.durationBeats * PX_PER_BEAT;
             const width = isFinite(rawWidth) ? Math.max(MIN_BLOCK_WIDTH, rawWidth) : MIN_BLOCK_WIDTH;
             const isSelected = selectedSectionId === span.sectionId;
+            const section = span.section;
+            const melodyCount = section.melody?.notes?.length ?? 0;
+            const harmony = section.chords.length > 0 ? section.chords.map((c) => c.romanNumeral).join(" ") : null;
+            const drum = drumFamilyLabel(section, song);
+            const jump = (tab: string) => navigate(`/song/${songId}/${tab}?section=${section.id}`);
             return (
-              <button
+              <div
                 key={`${span.sectionId}-${span.occurrenceIndex}-${i}`}
-                className={`h-12 shrink-0 rounded-[4px] flex flex-col items-start justify-center px-2 overflow-hidden transition-opacity text-left ${
-                  isSelected ? "ring-1 ring-accent ring-inset opacity-100" : "hover:opacity-90"
-                }`}
-                style={{ width, background: style.bg, color: style.text }}
+                className="shrink-0 flex flex-col"
+                style={{ width }}
                 onMouseEnter={() => setHoveredIndex(i)}
                 onMouseLeave={() => setHoveredIndex((cur) => (cur === i ? null : cur))}
                 onFocus={() => setHoveredIndex(i)}
                 onBlur={() => setHoveredIndex((cur) => (cur === i ? null : cur))}
-                onClick={() => setSelectedSectionId(span.sectionId)}
-                onDoubleClick={() => navigate(`/song/${songId}/harmony?section=${span.sectionId}`)}
-                title="Click to target its mix · double-click to edit"
               >
-                <span className="text-[10.5px] font-medium leading-tight truncate w-full">{span.section.name}</span>
-                <span className="text-[9px] opacity-80 font-mono leading-tight">{Math.round(span.bars)} bars</span>
-              </button>
+                {/* the select/edit block itself (role-colored) */}
+                <button
+                  className={`h-12 rounded-[4px] flex flex-col items-start justify-center px-2 overflow-hidden transition-opacity text-left ${
+                    isSelected ? "ring-1 ring-accent ring-inset opacity-100" : "hover:opacity-90"
+                  }`}
+                  style={{ background: style.bg, color: style.text }}
+                  onClick={() => setSelectedSectionId(span.sectionId)}
+                  onDoubleClick={() => jump("harmony")}
+                  title="Click to target its mix · double-click to edit"
+                >
+                  <span className="text-[10.5px] font-medium leading-tight truncate w-full">{section.name}</span>
+                  <span className="text-[9px] opacity-80 font-mono leading-tight">{Math.round(span.bars)} bars</span>
+                </button>
+                {/* readout strip — harmony / drums / melody, each row jumps
+                    into its detail tab for this section */}
+                <div className="text-[9px] font-mono leading-tight mt-1 px-0.5 space-y-0.5">
+                  <div className="flex items-center gap-1 w-full">
+                    {harmony ? (
+                      <button
+                        className="truncate flex-1 text-left text-inkMuted hover:text-accent"
+                        onClick={() => jump("harmony")}
+                        title="This section's harmony — edit in Harmony"
+                      >
+                        {harmony}
+                      </button>
+                    ) : (
+                      <span className="truncate flex-1 text-left text-inkMuted/40">no chords</span>
+                    )}
+                    {melodyCount > 0 && (
+                      <button
+                        className="shrink-0 text-inkMuted/80 hover:text-accent"
+                        onClick={() => jump("melody")}
+                        title={`${melodyCount} melody note(s) — edit in Melody`}
+                      >
+                        ♪{melodyCount}
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    className="truncate w-full text-left text-inkMuted hover:text-accent"
+                    onClick={() => jump("drums")}
+                    title="This section's drums — edit in Drums"
+                  >
+                    {drum}
+                    {song.genre && !section.drumPattern && !section.drumMeterOutline ? (
+                      <span className="text-accent/80"> · {song.genre}</span>
+                    ) : null}
+                  </button>
+                </div>
+              </div>
             );
           })}
         </div>

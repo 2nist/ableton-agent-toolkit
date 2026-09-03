@@ -338,7 +338,11 @@ export default function SongEditorLayout() {
         )}
       </div>
 
-      {!isStructure && (
+      {/* Studio is the "taste + arc" hub now — its arrangement blocks carry
+          per-section harmony/drums/melody readouts and the Mix/Bend panel
+          sits to the right, so the bottom Info dock (the only content Studio
+          ever registered) is dropped there. Every other tab keeps it. */}
+      {!isStructure && activeTab !== "studio" && (
         <footer className="shrink-0 border-t border-edge bg-panel flex flex-col max-h-[45vh]">
           {bottomTabs.length > 1 && (
             <DockTabStrip tabs={bottomTabs} activePanel={activePanel} onSelect={setActivePanel} />
