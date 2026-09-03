@@ -19,6 +19,7 @@ export * from "./handoffs.js";
 export * from "./meter.js";
 export * from "./chordCycle.js";
 export * from "./transitions.js";
+export * from "./grooves.js";
 export * from "./section.js";
 export * from "./bass.js";
 export * from "./style.js";

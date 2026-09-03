@@ -2,7 +2,7 @@ import type { NoteDescription } from "@ableton-extensions/sdk";
 import {
   PRESET_DATA,
   FILL_DATA,
-  inferDrumPattern,
+  inferPatternForGenre,
   songSignalsFor,
   humanizeOutlineNotes,
   planSectionDrumNotes,
@@ -118,7 +118,7 @@ export function planDrumClips(
   const resolved: (PackedVariant | null)[] = spans.map(({ section, occurrenceIndex }) => {
     if (section.drumMeterOutline) return outlineVariant(section.drumMeterOutline, presetData);
 
-    const pattern = section.drumPattern ?? inferDrumPattern(
+    const pattern = section.drumPattern ?? inferPatternForGenre(
       {
         role: section.role,
         velocity: section.velocity,
@@ -127,6 +127,7 @@ export function planDrumClips(
         timeSignatureDenominator: 2 ** section.timeSignatureDenPower,
       },
       songSignals,
+      song.genre,
     );
     const preset = presetData[pattern];
     if (!preset || preset.variants.length === 0) return null;

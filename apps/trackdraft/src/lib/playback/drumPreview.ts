@@ -1,6 +1,6 @@
 import {
   PRESET_DATA,
-  inferDrumPattern,
+  inferPatternForGenre,
   tileGrooveVaried,
   voiceOf,
   outlineBeatsPerBar,
@@ -36,7 +36,7 @@ import {
  *  signals the bridge does (via the shared `songSignalsFor`), killing the
  *  drift where a fast (bpm≥160 → dnb) or 808/trap-leaning song previewed
  *  one way but arrived in Ableton another. */
-type SongSignals = Partial<Pick<BlueprintSong, "bpm" | "title" | "concept" | "notes" | "bend">>;
+type SongSignals = Partial<Pick<BlueprintSong, "bpm" | "title" | "concept" | "notes" | "bend" | "genre">>;
 
 /**
  * A single drum hit resolved from a pattern/variant — the common shape
@@ -329,7 +329,7 @@ export function variantCount(pattern: DrumPattern | undefined): number {
  * and, worse, miss the bpm/notes signals the bridge sees, which is
  * exactly the drift this parameter closes. */
 export function inferPatternForSection(section: BlueprintSection, song?: SongSignals): DrumPattern {
-  return inferDrumPattern(
+  return inferPatternForGenre(
     {
       role: section.role,
       velocity: section.velocity,
@@ -338,6 +338,7 @@ export function inferPatternForSection(section: BlueprintSection, song?: SongSig
       timeSignatureDenominator: 2 ** section.timeSignatureDenPower,
     },
     songSignalsFor(song),
+    song?.genre,
   );
 }
 

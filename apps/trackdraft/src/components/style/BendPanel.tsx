@@ -95,8 +95,17 @@ export default function BendPanel() {
     const recipe = STYLE_RECIPES[name];
     if (!recipe) return;
     const { tempo, ...axes } = recipe;
-    updateCurrentSong((s) => ({ ...s, bend: axes, bpm: tempo }));
+    // A recipe is its genre: it sets the tint (bend + tempo) AND the groove
+    // DNA (song.genre drives which drum families the sections reach for).
+    updateCurrentSong((s) => ({ ...s, genre: name, bend: axes, bpm: tempo }));
   };
+
+  const clearGenre = () =>
+    updateCurrentSong((s) => {
+      const next = { ...s };
+      delete next.genre;
+      return next;
+    });
 
   const setSectionOverride = (on: boolean) => {
     if (!activeSection) return;
@@ -140,12 +149,12 @@ export default function BendPanel() {
 
       {/* Song master */}
       <Block title="Song" hint={song.bend ? "whole-song mix" : "neutral = today's sound"}>
-        <div className="flex items-center gap-1.5 mb-2">
+        <div className="flex items-center gap-1.5 mb-1.5">
           <select
             className="flex-1 bg-panelAlt border border-edge rounded px-1.5 py-0.5 text-xs text-ink font-mono"
             value=""
             onChange={(e) => e.target.value && applyRecipe(e.target.value)}
-            title="A genre recipe sets the sliders — then bend from there"
+            title="A genre recipe sets the groove family + the sliders — then bend from there"
           >
             <option value="" disabled>Style…</option>
             {Object.keys(STYLE_RECIPES).map((name) => (
@@ -156,12 +165,25 @@ export default function BendPanel() {
             <button
               className="text-[10px] px-1.5 py-0.5 rounded border border-edge text-inkMuted hover:text-ink font-mono"
               onClick={clearMaster}
-              title="Reset the whole-song mix to neutral"
+              title="Reset the whole-song mix to neutral (keeps the genre)"
             >
               reset
             </button>
           )}
         </div>
+        {song.genre && (
+          <p className="flex items-center gap-1.5 text-[10px] font-mono mb-2">
+            <span className="text-accent uppercase tracking-wide">{song.genre}</span>
+            <span className="text-inkMuted/40">groove DNA</span>
+            <button
+              className="text-inkMuted/60 hover:text-ink"
+              onClick={clearGenre}
+              title="Clear the genre — drums fall back to role/velocity picking"
+            >
+              ✕
+            </button>
+          </p>
+        )}
         <div className="space-y-2">
           {STYLE_AXES.map((axis) => (
             <AxisSlider

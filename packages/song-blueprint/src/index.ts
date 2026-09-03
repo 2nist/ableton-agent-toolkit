@@ -567,6 +567,11 @@ export interface BlueprintSong {
   beatOffset?: number;
 
   concept?: string;
+  /** The song's genre label (e.g. "rock", "bossa", "trap") — the key into
+   *  the drum engine's `GENRE_GROOVES` family-lean table (Groove DNA), and
+   *  the label a Bend style recipe writes. Absent → drums are picked from
+   *  role/velocity/meter alone, exactly as before. */
+  genre?: string;
   /** Whole-song "Bend" master — any subset of the seven macro style axes
    *  (Energy/Density/Backbeat/Feel/Kit/Harmony/Tempo) tinting every
    *  section that doesn't carry its own `bend` override. Partial so you

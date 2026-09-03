@@ -144,6 +144,7 @@ const bentSong: BlueprintSong = makeSong({
   title: "Parity Bent",
   bpm: STYLE_RECIPES.rock.tempo,
   concept: "rock",
+  genre: "rock", // the recipe sets genre too → Groove DNA drives family choice
   bend: STYLE_RECIPES.rock,
   sections: [
     makeSection({ id: "v", name: "Verse", role: "verse", bars: 4, timeSignatureNumerator: 4, velocity: "mf", chords: [CHORDS[0], CHORDS[1]] }),
