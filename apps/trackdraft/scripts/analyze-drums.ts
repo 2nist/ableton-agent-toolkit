@@ -24,18 +24,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseAnalysisFile } from "../src/lib/drumImport/analysisFile";
 import { asciiBars, LANE_NAMES, transcribe } from "./drumAnalysis/transcribe";
+import { arrangementSpans, type SongLike } from "./drumAnalysis/song";
 
 const SAMPLE_RATE = 22050;
-
-interface SongLike {
-  id?: string;
-  title?: string;
-  bpm?: number;
-  timeSignatureNumerator?: number;
-  timeSignatureDenPower?: number;
-  sections?: { id: string; name: string; bars: number }[];
-  arrangement?: { sectionId: string; repeats?: number }[];
-}
 
 function usage(): never {
   console.error("Usage: npx tsx scripts/analyze-drums.ts <song.trackdraft.json> <audio> [--out <file>] [--steps 16|12] [--k <n>] [--offset <sec>] [--scale <x>] [--debug]");
@@ -60,28 +51,6 @@ function decodeAudio(audioPath: string): Float32Array {
   const buf = res.stdout;
   const usable = buf.length - (buf.length % 4);
   return new Float32Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + usable));
-}
-
-interface Span { sectionId: string; startBar: number; bars: number; name: string }
-
-/** Flat arrangement timeline: one span per section occurrence. */
-function arrangementSpans(song: SongLike): { spans: Span[]; totalBars: number } {
-  const byId = new Map((song.sections ?? []).map((s) => [s.id, s]));
-  const spans: Span[] = [];
-  let bar = 0;
-  const entries = song.arrangement && song.arrangement.length > 0
-    ? song.arrangement
-    : (song.sections ?? []).map((s) => ({ sectionId: s.id, repeats: 1 }));
-  for (const entry of entries) {
-    const sec = byId.get(entry.sectionId);
-    if (!sec) continue;
-    const repeats = Math.max(0, Math.round(entry.repeats ?? 1));
-    for (let r = 0; r < repeats; r++) {
-      spans.push({ sectionId: sec.id, startBar: bar, bars: sec.bars, name: sec.name });
-      bar += sec.bars;
-    }
-  }
-  return { spans, totalBars: bar };
 }
 
 function main(): void {

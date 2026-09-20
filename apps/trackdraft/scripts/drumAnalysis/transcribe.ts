@@ -117,10 +117,13 @@ export function velocityFromStrength(rel: number): number {
 }
 
 /** Backbeat priors (16-step 4/4 bar): where each lane CLAIMS its steps.
- *  Kick: beats 1 & 3 plus the syncopated 16ths around them; snare: beats
- *  2 & 4, nothing else; hats: eighths (even steps) — kept flattish and
+ *  Kick: beats 1 & 3 plus the classic 8th pushes — &-of-2 and &-of-3 are
+ *  the common syncopations, &-of-1 is rare (it just doubles the downbeat;
+ *  cross-checked against the Drive My Car multitrack session and its drum
+ *  MIDI, which both play &-of-2/&-of-3 and never &-of-1). Snare: beats 2
+ *  & 4, nothing else; hats: eighths (even steps) — kept flattish and
  *  low-weight so they can only break ties, never steer the vote. */
-const KICK_PRIOR = [1.0, 0.05, 0.5, 0.05, 0.2, 0.05, 0.5, 0.05, 0.9, 0.05, 0.4, 0.05, 0.2, 0.05, 0.5, 0.05];
+const KICK_PRIOR = [1.0, 0.05, 0.25, 0.05, 0.2, 0.05, 0.6, 0.05, 0.9, 0.05, 0.6, 0.05, 0.2, 0.05, 0.5, 0.05];
 const SNARE_PRIOR = [0.05, 0.05, 0.05, 0.05, 1.0, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 1.0, 0.05, 0.05, 0.05];
 const HAT_PRIOR = [0.4, 0.3, 0.4, 0.3, 0.4, 0.3, 0.4, 0.3, 0.4, 0.3, 0.4, 0.3, 0.4, 0.3, 0.4, 0.3];
 const LANE_VOTE_WEIGHT: Record<LaneName, number> = { kick: 1, snare: 1.3, hat: 0.3 };
@@ -404,7 +407,7 @@ export function transcribe(samples: Float32Array, opts: TranscribeOptions): Tran
 }
 
 /** ASCII view of the first bars — the CLI's debug readout. */
-export function asciiBars(result: TranscribeResult, maxBars = 4, fromBar = 0): string {
+export function asciiBars(result: { bars: number; lanes: Record<LaneName, number[][]> }, maxBars = 4, fromBar = 0): string {
   const lines: string[] = [];
   const last = Math.min(result.bars, fromBar + maxBars);
   for (let bar = fromBar; bar < last; bar++) {
