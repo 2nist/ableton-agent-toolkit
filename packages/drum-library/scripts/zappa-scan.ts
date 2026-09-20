@@ -30,7 +30,7 @@ import { parseMidi } from "midi-file";
 import { measureFeel } from "../src/features.js";
 import type { DrumNote } from "../src/types.js";
 
-const DEFAULT_DIR = "/Users/Matthew/ableton-agent-toolkit/packages/ZAPPA";
+const DEFAULT_DIR = path.join(import.meta.dirname, "..", "..", "..", "data", "ZAPPA");
 /** Bars are sliced on a 16th grid: a bar of length L quarter-beats gets
  *  round(L × 4) steps (4/4 → 16, 7/8 → 14, 21/16 → 21, 9/4 → 36). */
 const STEPS_PER_QUARTER = 4;
