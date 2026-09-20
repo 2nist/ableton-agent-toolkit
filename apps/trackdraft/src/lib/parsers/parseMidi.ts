@@ -225,25 +225,33 @@ export function parseMidiBytes(bytes: Uint8Array): ParsedMidi {
     }
   }
 
-  // Collect all notes with on/off pairing
-  const noteOns: Map<string, { note: number; velocity: number; startTick: number; channel: number; track: number }> = new Map();
+  // Collect all notes with on/off pairing. The same pitch can retrigger
+  // before its noteOff (flams, ghost-note stacks — common in real drum
+  // takes), so each key holds a FIFO queue: a noteOff closes the *oldest*
+  // open noteOn. A single-slot map used to overwrite the older noteOn,
+  // mispairing the ends and silently dropping notes.
+  const noteOns: Map<string, Array<{ note: number; velocity: number; startTick: number; channel: number; track: number }>> = new Map();
   const notes: ParsedMidi["notes"] = [];
 
   for (let t = 0; t < tracks.length; t++) {
     for (const event of tracks[t].events) {
       if (event.type === "noteOn" && event.note != null) {
         const key = `${event.channel}-${event.note}`;
-        noteOns.set(key, {
+        const entry = {
           note: event.note,
           velocity: event.velocity ?? 64,
           startTick: event.tick,
           channel: event.channel ?? 0,
           track: t,
-        });
+        };
+        const queue = noteOns.get(key);
+        if (queue) queue.push(entry);
+        else noteOns.set(key, [entry]);
       }
       if (event.type === "noteOff" && event.note != null) {
         const key = `${event.channel}-${event.note}`;
-        const on = noteOns.get(key);
+        const queue = noteOns.get(key);
+        const on = queue?.shift();
         if (on) {
           notes.push({
             note: on.note,
@@ -252,15 +260,17 @@ export function parseMidiBytes(bytes: Uint8Array): ParsedMidi {
             endTick: event.tick,
             track: on.track,
           });
-          noteOns.delete(key);
+          if (queue!.length === 0) noteOns.delete(key);
         }
       }
     }
   }
   // Close any hanging notes at max tick
   const maxTick = notes.reduce((max, n) => Math.max(max, n.endTick), 0);
-  for (const [, on] of noteOns) {
-    notes.push({ ...on, endTick: maxTick + ticksPerQuarter * 4 });
+  for (const [, queue] of noteOns) {
+    for (const on of queue) {
+      notes.push({ ...on, endTick: maxTick + ticksPerQuarter * 4 });
+    }
   }
 
   return {

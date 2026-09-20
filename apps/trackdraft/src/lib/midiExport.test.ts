@@ -125,6 +125,35 @@ describe("songToMidi", () => {
     expect(parsed.scale).toBe("aeolian");
   });
 
+  it("applies outputOffsetBeats to every stem, clamped at tick 0", () => {
+    const base = parseMidiBytes(songToMidi(testSong()));
+    expect(base.ticksPerQuarter).toBe(480);
+
+    const shiftedSong = testSong();
+    shiftedSong.outputOffsetBeats = -1; // one beat earlier
+    const shifted = parseMidiBytes(songToMidi(shiftedSong));
+
+    expect(shifted.notes.length).toBe(base.notes.length);
+    for (let i = 0; i < base.notes.length; i++) {
+      expect(shifted.notes[i].startTick).toBe(Math.max(0, base.notes[i].startTick - 480));
+      expect(shifted.notes[i].endTick).toBe(Math.max(0, base.notes[i].endTick - 480));
+    }
+
+    // a huge negative offset clamps everything to 0 rather than going negative
+    const clampedSong = testSong();
+    clampedSong.outputOffsetBeats = -1000;
+    const clamped = parseMidiBytes(songToMidi(clampedSong));
+    expect(clamped.notes.every((n) => n.startTick === 0 && n.endTick === 0)).toBe(true);
+
+    // positive offsets are allowed too (output later than the grid)
+    const lateSong = testSong();
+    lateSong.outputOffsetBeats = 1;
+    const late = parseMidiBytes(songToMidi(lateSong));
+    const firstLate = Math.min(...late.notes.map((n) => n.startTick));
+    const firstBase = Math.min(...base.notes.map((n) => n.startTick));
+    expect(firstLate).toBe(firstBase + 480);
+  });
+
   it("generates chord notes at the correct pitches", () => {
     const bytes = songToMidi(testSong());
     const parsed = parseMidiBytes(bytes);

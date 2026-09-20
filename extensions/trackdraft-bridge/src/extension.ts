@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { initialize, MidiTrack, type ActivationContext, type Handle, type NoteDescription } from "@ableton-extensions/sdk";
-import { cuePointNamesFor, planCuePoints, sectionSpans, type BlueprintSong } from "./blueprint.js";
+import { applyOutputOffset, cuePointNamesFor, planCuePoints, sectionSpans, type BlueprintSong } from "./blueprint.js";
 import { planChordClips } from "./chordClips.js";
 import { planDrumClips } from "./drumClips.js";
 import { planBassLine } from "./bassLine.js";
@@ -98,10 +98,19 @@ export function activate(activation: ActivationContext) {
   // previous result instead of piling up overlapping clips — clips don't
   // carry a stable identity to dedupe by name the way CuePoints do, so
   // the whole range is cleared instead.
-  async function applyClipPlan(track: MidiTrack<"1.0.0">, plan: ClipPlanEntry[]) {
+  //
+  // `offsetBeats` is the song's rendered-output offset
+  // (BlueprintSong.outputOffsetBeats): negative moves everything earlier
+  // against the record. `applyOutputOffset` shifts the clip positions,
+  // shifting notes inside a first clip that can't start before bar 1.
+  async function applyClipPlan(track: MidiTrack<"1.0.0">, plan: ClipPlanEntry[], offsetBeats = 0) {
     if (plan.length === 0) return;
-    const last = plan[plan.length - 1];
-    const totalBeats = last.startBeat + last.durationBeats;
+    const shifted = applyOutputOffset(plan, offsetBeats);
+    const last = shifted[shifted.length - 1];
+    // Clear far enough back for BOTH the unshifted and shifted spans — a
+    // prior run without the offset may have placed clips past the new end.
+    const unshiftedEnd = plan[plan.length - 1].startBeat + plan[plan.length - 1].durationBeats;
+    const totalBeats = Math.max(unshiftedEnd, last.startBeat + last.durationBeats);
 
     await context.withinTransaction(() => track.clearClipsInRange(0, totalBeats));
 
@@ -109,13 +118,13 @@ export function activate(activation: ActivationContext) {
     // object can't be created and have its properties modified in the
     // same transaction block.
     const clips = await context.withinTransaction(() => {
-      return Promise.all(plan.map((entry) => track.createMidiClip(entry.startBeat, entry.durationBeats)));
+      return Promise.all(shifted.map((entry) => track.createMidiClip(entry.startBeat, entry.durationBeats)));
     });
 
     await context.withinTransaction(() => {
       clips.forEach((clip, i) => {
-        clip.name = plan[i].name;
-        clip.notes = plan[i].notes;
+        clip.name = shifted[i].name;
+        clip.notes = shifted[i].notes;
       });
     });
   }
@@ -298,7 +307,7 @@ export function activate(activation: ActivationContext) {
       const blueprints = loadBlueprints(context.environment.storageDirectory);
       const blueprint = await pickBlueprint(blueprints);
       if (!blueprint) return;
-      await applyClipPlan(track, planChordClips(blueprint));
+      await applyClipPlan(track, planChordClips(blueprint), blueprint.outputOffsetBeats ?? 0);
     }),
   );
 
@@ -312,7 +321,7 @@ export function activate(activation: ActivationContext) {
       if (!blueprint) return;
       const plan = planDrumClips(blueprint);
       const mapping = await resolveTrackPadMapping(track);
-      await applyClipPlan(track, remapClipPlanPitches(plan, mapping));
+      await applyClipPlan(track, remapClipPlanPitches(plan, mapping), blueprint.outputOffsetBeats ?? 0);
     }),
   );
 
@@ -324,7 +333,7 @@ export function activate(activation: ActivationContext) {
       const blueprints = loadBlueprints(context.environment.storageDirectory);
       const blueprint = await pickBlueprint(blueprints);
       if (!blueprint) return;
-      await applyClipPlan(track, planBassLine(blueprint));
+      await applyClipPlan(track, planBassLine(blueprint), blueprint.outputOffsetBeats ?? 0);
     }),
   );
 
@@ -342,7 +351,7 @@ export function activate(activation: ActivationContext) {
         durationBeats,
         notes: [],
       }));
-      await applyClipPlan(track, plan);
+      await applyClipPlan(track, plan, blueprint.outputOffsetBeats ?? 0);
     }),
   );
 
@@ -423,17 +432,17 @@ export function activate(activation: ActivationContext) {
           // case-insensitively, so the template's existing tracks get
           // reused rather than duplicated.
           const chordsTrack = await findOrCreateMidiTrack("chord");
-          await applyClipPlan(chordsTrack, planChordClips(blueprint));
+          await applyClipPlan(chordsTrack, planChordClips(blueprint), blueprint.outputOffsetBeats ?? 0);
 
           const bassTrack = await findOrCreateMidiTrack("crave");
-          await applyClipPlan(bassTrack, planBassLine(blueprint));
+          await applyClipPlan(bassTrack, planBassLine(blueprint), blueprint.outputOffsetBeats ?? 0);
 
           const drumsTrack = await findOrCreateMidiTrack("kit");
           const drumMapping = await resolveTrackPadMapping(drumsTrack);
-          await applyClipPlan(drumsTrack, remapClipPlanPitches(planDrumClips(blueprint), drumMapping));
+          await applyClipPlan(drumsTrack, remapClipPlanPitches(planDrumClips(blueprint), drumMapping), blueprint.outputOffsetBeats ?? 0);
 
           const colorTrack = await findOrCreateMidiTrack("color");
-          await applyClipPlan(colorTrack, planColorClips(blueprint));
+          await applyClipPlan(colorTrack, planColorClips(blueprint), blueprint.outputOffsetBeats ?? 0);
 
           console.log(`[trackdraft-bridge] queue: applied blueprint "${blueprint.title}" (cue points + chord/crave/kit/color)`);
           break;

@@ -24,11 +24,27 @@ describe("midi — SMF reader + GM quantization", () => {
     expect(smf.format).toBe(0);
     expect(smf.division).toBe(96);
     expect(smf.notes).toEqual([
-      { tick: 0, note: 36, velocity: 100 },
-      { tick: 24, note: 38, velocity: 90 },
-      { tick: 120, note: 42, velocity: 56 },
-      { tick: 144, note: 49, velocity: 64 },
+      { tick: 0, note: 36, velocity: 100, channel: 0 },
+      { tick: 24, note: 38, velocity: 90, channel: 0 },
+      { tick: 120, note: 42, velocity: 56, channel: 0 },
+      { tick: 144, note: 49, velocity: 64, channel: 0 },
     ]);
+  });
+
+  it("filters by channel and accepts extra GM mappings (toms, tambourine)", () => {
+    const notes = [
+      { tick: 0, note: 38, velocity: 90, channel: 0 }, // melodic-channel note in GM drum range
+      { tick: 0, note: 36, velocity: 100, channel: 9 },
+      { tick: 48, note: 47, velocity: 70, channel: 9 }, // low-mid tom
+      { tick: 96, note: 54, velocity: 60, channel: 9 }, // tambourine
+    ];
+    const q = quantizeToGrid(notes, 96, 16, 0, { channel: 9, laneMap: { 47: "snare", 54: "hat" } });
+    expect(q.mapped).toBe(3);
+    expect(q.lanes.kick[0][0]).toBe(100);
+    expect(q.lanes.snare[0][0]).toBe(0); // the channel-0 note was skipped, not mapped
+    expect(q.lanes.snare[0][2]).toBe(70);
+    expect(q.lanes.hat[0][4]).toBe(60);
+    expect(q.unmapped).toEqual({});
   });
 
   it("quantizes to the step grid: mapping, carry, offsets, merging", () => {

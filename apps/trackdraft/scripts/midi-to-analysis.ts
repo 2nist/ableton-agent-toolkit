@@ -16,6 +16,14 @@
  *   --bar-offset <n>  songBar = midiBar + n — vendor files number bars from
  *                     their own first notated bar; shift them onto the song
  *   --velocity <n>    override every hit's velocity (instead of the MIDI's)
+ *   --channel <n|auto> only read this MIDI channel. Default "auto": use
+ *                     channel 9 (GM drums) when it carries drum notes —
+ *                     full transcriptions' bass/piano collide with the GM
+ *                     drum note range otherwise
+ *   --toms <lane|skip> map toms (41/43/45/47/48/50) onto a lane (default skip)
+ *   --tamb <lane|skip> map tambourine (54) onto a lane (default skip)
+ *   --lanemap <n:lane,...> arbitrary GM note → lane mappings, e.g.
+ *                         "51:hat,53:hat,59:hat" for ride cymbals
  *   --debug           print the first bars of the resulting grid
  *
  * Then merge with the importer runner:
@@ -24,12 +32,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseAnalysisFile } from "../src/lib/drumImport/analysisFile";
-import { asciiBars, LANE_NAMES } from "./drumAnalysis/transcribe";
-import { parseSmf, quantizeToGrid } from "./drumAnalysis/midi";
+import { asciiBars, LANE_NAMES, type LaneName } from "./drumAnalysis/transcribe";
+import { GM_DRUM_LANES, parseSmf, quantizeToGrid } from "./drumAnalysis/midi";
 import { arrangementSpans, type SongLike } from "./drumAnalysis/song";
 
 function usage(): never {
-  console.error("Usage: npx tsx scripts/midi-to-analysis.ts <song.trackdraft.json> <drums.mid> [--out <file>] [--steps 16|12] [--bar-offset <n>] [--velocity <n>] [--debug]");
+  console.error("Usage: npx tsx scripts/midi-to-analysis.ts <song.trackdraft.json> <drums.mid> [--out <file>] [--steps 16|12] [--bar-offset <n>] [--velocity <n>] [--channel <n|auto>] [--toms <lane|skip>] [--tamb <lane|skip>] [--lanemap <n:lane,...>] [--debug]");
   process.exit(1);
 }
 
@@ -64,6 +72,30 @@ function main(): void {
   }
   const barOffset = flags.has("--bar-offset") ? Number(flags.get("--bar-offset")) : 0;
   const velocity = flags.has("--velocity") ? Number(flags.get("--velocity")) : undefined;
+  const channelFlag = flags.has("--channel") ? String(flags.get("--channel")) : "auto";
+  const asLane = (raw: string, what: string): LaneName | null => {
+    if (raw === "skip") return null;
+    if ((LANE_NAMES as readonly string[]).includes(raw)) return raw as LaneName;
+    console.error(`✗ --${what}: "${raw}" must be kick | snare | hat | skip`);
+    process.exit(1);
+  };
+  const tomsLane = asLane(flags.has("--toms") ? String(flags.get("--toms")) : "skip", "toms");
+  const tambLane = asLane(flags.has("--tamb") ? String(flags.get("--tamb")) : "skip", "tamb");
+  const laneMap: Record<number, LaneName> = {};
+  if (tomsLane) for (const n of [41, 43, 45, 47, 48, 50]) laneMap[n] = tomsLane;
+  if (tambLane) laneMap[54] = tambLane;
+  if (flags.has("--lanemap")) {
+    for (const pair of String(flags.get("--lanemap")).split(",")) {
+      const [noteStr, laneStr] = pair.split(":");
+      const note = Number(noteStr);
+      const lane = asLane(laneStr ?? "", `lanemap ${pair}`);
+      if (!Number.isInteger(note) || !lane) {
+        console.error(`✗ --lanemap expects <note:lane,...> — got ${pair}`);
+        process.exit(1);
+      }
+      laneMap[note] = lane;
+    }
+  }
   const num = song.timeSignatureNumerator ?? 4;
   const denPower = song.timeSignatureDenPower ?? 2;
   const beatsPerBar = num * (4 / 2 ** denPower);
@@ -77,9 +109,23 @@ function main(): void {
   console.log(`${song.title ?? path.basename(songPath)}  ·  ${totalBars} bars`);
   console.log(`reading ${path.basename(midiPath)} …`);
   const smf = parseSmf(fs.readFileSync(midiPath));
-  console.log(`  SMF format ${smf.format} · division ${smf.division} ppq · ${smf.notes.length} note-ons`);
+  let channel: number | undefined;
+  if (channelFlag !== "auto") {
+    channel = Number(channelFlag);
+    if (!Number.isInteger(channel) || channel < 0 || channel > 15) {
+      console.error(`✗ --channel: "${channelFlag}" must be 0-15 or auto`);
+      process.exit(1);
+    }
+  } else if (smf.notes.some((n) => n.channel === 9 && GM_DRUM_LANES[n.note])) {
+    channel = 9; // GM drum channel carries the kit — melodic channels would collide with the map
+  }
+  console.log(`  SMF format ${smf.format} · division ${smf.division} ppq · ${smf.notes.length} note-ons${channel !== undefined ? ` · reading channel ${channel}` : " · reading all channels"}`);
+  if (tomsLane || tambLane) {
+    const extras = [tomsLane ? `toms→${tomsLane}` : null, tambLane ? `tambourine→${tambLane}` : null].filter(Boolean).join(" · ");
+    console.log(`  extra mappings: ${extras}`);
+  }
 
-  const q = quantizeToGrid(smf.notes, smf.division, stepsPerBar, barOffset);
+  const q = quantizeToGrid(smf.notes, smf.division, stepsPerBar, barOffset, { channel, laneMap });
   const droppedBars = Math.max(0, q.bars - totalBars);
 
   const lanes = {} as Record<(typeof LANE_NAMES)[number], number[][]>;

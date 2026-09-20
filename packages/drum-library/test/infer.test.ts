@@ -58,6 +58,12 @@ describe("inferDrumPattern — meter wins first", () => {
     expect(inferDrumPattern({ role: "verse", timeSignatureNumerator: 6, timeSignatureDenominator: 8 })).toBe("68");
     expect(inferDrumPattern({ role: "verse", timeSignatureNumerator: 5, timeSignatureDenominator: 4 })).toBe("54");
     expect(inferDrumPattern({ role: "verse", timeSignatureNumerator: 3, timeSignatureDenominator: 4 })).toBe("68");
+    // A 5/8 bar is 2.5 quarter beats — NOT a 5/4 bar. It must fall through
+    // to the role-based family so the meter-aware pick can reach the mined
+    // 5/8 grooves instead of a drifting 5/4 variant.
+    expect(
+      inferDrumPattern({ role: "verse", velocity: "mf", timeSignatureNumerator: 5, timeSignatureDenominator: 8 }),
+    ).toBe("standard");
   });
 });
 
@@ -68,9 +74,14 @@ describe("inferDrumPattern — acoustic family", () => {
     expect(inferDrumPattern({ role: "chorus", velocity: "mf" })).toBe("driving");
     expect(inferDrumPattern({ role: "chorus", velocity: "ff" })).toBe("intense");
     expect(inferDrumPattern({ role: "bridge", velocity: "mf" })).toBe("bridge_sparse");
+    // Loud (ff+) bridges keep a full groove — sparse is the default, not a rule.
+    expect(inferDrumPattern({ role: "bridge", velocity: "ff" })).toBe("standard");
     expect(inferDrumPattern({ role: "breakdown", velocity: "pp" })).toBe("kick_only");
     expect(inferDrumPattern({ role: "breakdown", velocity: "f" })).toBe("half_time");
     expect(inferDrumPattern({ role: "outro", velocity: "p" })).toBe("bridge_sparse");
+    // Loud outros get the big groove; mid outros keep half_time.
+    expect(inferDrumPattern({ role: "outro", velocity: "mf" })).toBe("half_time");
+    expect(inferDrumPattern({ role: "outro", velocity: "ff" })).toBe("intense");
   });
 
   it("lets dynamics pull a section sparse or driving", () => {

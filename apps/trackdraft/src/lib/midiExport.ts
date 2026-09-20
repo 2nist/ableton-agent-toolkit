@@ -364,24 +364,37 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
   const conductorTrack = buildTrackChunk(conductorEvents, song.title);
 
   // --- Stem tracks ---
+  // Per-song output alignment (`outputOffsetBeats`, see song-blueprint):
+  // some catalog songs' quantized section timing landed a beat off the
+  // reference recording, so RENDERED output shifts to lock with it. The
+  // conductor stays at tick 0 and notes clamp at 0; in-app playback and
+  // live MIDI out intentionally do NOT apply this — the app's own grid is
+  // what they play against.
+  const outputOffsetTicks = Math.round((song.outputOffsetBeats ?? 0) * TICKS_PER_QUARTER);
+  const stemEvents = (notes: MidiNote[], channel: number): RawMidiEvent[] => {
+    const events = notesToEvents(notes, channel);
+    return outputOffsetTicks === 0
+      ? events
+      : events.map((e) => ({ ...e, tick: Math.max(0, e.tick + outputOffsetTicks) }));
+  };
   const chordTrack = buildTrackChunk(
-    notesToEvents(chordNotes, 0),
+    stemEvents(chordNotes, 0),
     "Chords",
   );
   const bassTrack = buildTrackChunk(
-    notesToEvents(bassNotes, 1),
+    stemEvents(bassNotes, 1),
     "Bass",
   );
   const drumTrack = buildTrackChunk(
-    notesToEvents(drumNotes, 9), // channel 10 = GM drums
+    stemEvents(drumNotes, 9), // channel 10 = GM drums
     "Drums",
   );
   const colorTrack = buildTrackChunk(
-    notesToEvents(colorNotes, 2),
+    stemEvents(colorNotes, 2),
     "Color",
   );
   const melodyTrack = buildTrackChunk(
-    notesToEvents(melodyNotes, 4), // channel 5 (0-based 4) — the template's melody track
+    stemEvents(melodyNotes, 4), // channel 5 (0-based 4) — the template's melody track
     "Melody",
   );
 

@@ -130,6 +130,7 @@ export function parseImportedSong(raw: unknown): BlueprintSong {
     suiteGroup: (obj.suiteGroup as BlueprintSong["suiteGroup"]) ?? undefined,
     alternates: Array.isArray(obj.alternates) ? (obj.alternates as BlueprintSong["alternates"]) : undefined,
     status: (obj.status as BlueprintSong["status"]) ?? undefined,
+    outputOffsetBeats: typeof obj.outputOffsetBeats === "number" ? obj.outputOffsetBeats : undefined,
     createdAt: typeof obj.createdAt === "string" ? obj.createdAt : now,
     updatedAt: now,
   };

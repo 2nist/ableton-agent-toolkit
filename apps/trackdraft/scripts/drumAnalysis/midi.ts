@@ -12,7 +12,7 @@
 
 import type { LaneName } from "./transcribe";
 
-export interface MidiNote { tick: number; note: number; velocity: number }
+export interface MidiNote { tick: number; note: number; velocity: number; channel?: number }
 
 export interface Smf {
   format: number;
@@ -75,7 +75,7 @@ export function parseSmf(bytes: Uint8Array): Smf {
           const note = bytes[pos];
           const vel = bytes[pos + 1];
           pos += 2;
-          if (hi === 0x90 && vel > 0) notes.push({ tick, note, velocity: vel });
+          if (hi === 0x90 && vel > 0) notes.push({ tick, note, velocity: vel, channel: status & 0x0f });
         } else if (hi === 0xc0 || hi === 0xd0) {
           pos += 1;
         } else {
@@ -102,6 +102,17 @@ export interface QuantizedDrums {
   unmapped: Record<number, number>;
 }
 
+export interface QuantizeOptions {
+  /** Only consider notes on this MIDI channel. Full mixed-channel
+   *  transcription files carry melodic notes (bass, piano) whose note
+   *  numbers collide with the GM drum map — filter to 9 (the GM drum
+   *  channel) and they stop reading as false kicks/snares/hats. */
+  channel?: number;
+  /** Extra/override GM note → lane mappings (e.g. toms → snare,
+   *  tambourine → hat). Merged over GM_DRUM_LANES. */
+  laneMap?: Record<number, LaneName>;
+}
+
 /**
  * Quantize MIDI notes onto the step grid. `barOffset` maps the file's bar
  * numbering onto the song's: songBar = midiBar + barOffset (vendor files
@@ -112,7 +123,9 @@ export function quantizeToGrid(
   division: number,
   stepsPerBar: number,
   barOffset: number,
+  opts: QuantizeOptions = {},
 ): QuantizedDrums {
+  const map = opts.laneMap ? { ...GM_DRUM_LANES, ...opts.laneMap } : GM_DRUM_LANES;
   const barTicks = division * 4;
   const stepTicks = barTicks / stepsPerBar;
   const cells = new Map<string, { bar: number; step: number; lane: LaneName; vel: number }>();
@@ -121,7 +134,8 @@ export function quantizeToGrid(
   let beforeStart = 0;
   let maxBar = -1;
   for (const n of notes) {
-    const lane = GM_DRUM_LANES[n.note];
+    if (opts.channel !== undefined && n.channel !== opts.channel) continue;
+    const lane = map[n.note];
     if (!lane) {
       unmapped[n.note] = (unmapped[n.note] ?? 0) + 1;
       continue;

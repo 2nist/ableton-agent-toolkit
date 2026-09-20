@@ -18,7 +18,7 @@ export type PackedNote = [beat: number, pitch: number, velocity: number];
  * silently). `synth` variants name their generator instead.
  */
 export interface VariantSource {
-  origin: "egmd" | "synth";
+  origin: "egmd" | "synth" | "zappa";
   refs?: Partial<Record<Limb, SegmentRef>>;
   generator?: string;
 }
@@ -43,6 +43,18 @@ export interface PresetLibraryMeta {
   generatedAt: string;
   /** Files indexed in the extraction the bake drew from. */
   takesIndexed?: number;
+  /** Curated material minted on top of the corpus bake (scripts/mint-zappa.ts).
+   *  A fresh corpus re-bake rewrites this file from scratch and drops it —
+   *  re-run the miner afterwards. */
+  mined?: {
+    zappa?: {
+      grooves: number;
+      fills: number;
+      mintedAt: string;
+      scan: string;
+      source: string;
+    };
+  };
 }
 
 /** On-disk shape written by `scripts/build-presets.ts` (format 2). */

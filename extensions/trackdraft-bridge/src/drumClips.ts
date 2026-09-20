@@ -11,7 +11,7 @@ import {
   outlineToGroovePattern,
   occurrenceSeed,
   hashSeed,
-  pickVariantIndex,
+  pickVariantIndexFor,
   applyStyleToVariant,
   hasBend,
   resolveStyleProfile,
@@ -115,7 +115,7 @@ export function planDrumClips(
 
   // First pass: choose the base pattern + variant per section, so the
   // handoff planner can look at the *next* section's resolved target too.
-  const resolved: (PackedVariant | null)[] = spans.map(({ section, occurrenceIndex }) => {
+  const resolved: (PackedVariant | null)[] = spans.map(({ section, occurrenceIndex, durationBeats }) => {
     if (section.drumMeterOutline) return outlineVariant(section.drumMeterOutline, presetData);
 
     const pattern = section.drumPattern ?? inferPatternForGenre(
@@ -133,18 +133,20 @@ export function planDrumClips(
     if (!preset || preset.variants.length === 0) return null;
 
     // Explicit variant index when the user chose one (clamped to valid range);
-    // otherwise the deterministic pick that defaults to the clean downbeat
-    // groove (variant 0) most of the time, with the corpus variants as
-    // seeded variation — matches the app's preview/export via `pickVariantIndex`.
+    // otherwise the deterministic meter-aware pick that defaults to the clean
+    // downbeat groove (variant 0) most of the time, with the corpus/mined
+    // variants as seeded variation — matches the app's preview/export.
     const variantIndex = section.drumVariantIndex !== undefined
       ? Math.max(0, Math.min(section.drumVariantIndex, preset.variants.length - 1))
-      : pickVariantIndex(
+      : pickVariantIndexFor(
           hashSeed(
             hasBend(section, song)
               ? styleSeed(resolveStyleProfile(section, song), section.id, occurrenceIndex)
               : occurrenceSeed(section.id, occurrenceIndex),
           ),
-          preset.variants.length,
+          preset.variants,
+          durationBeats,
+          beatsPerBar(section),
         );
     return preset.variants[variantIndex];
   });

@@ -24,6 +24,7 @@ export * from "./section.js";
 export * from "./blocks.js";
 export * from "./bass.js";
 export * from "./style.js";
+export * from "./match.js";
 
 // Drum import (grid → Drum Block[]). Explicit names only: the module's
 // structural copies of DrumBlock / DrumLaneId / DrumBlockNote / KitVoice /

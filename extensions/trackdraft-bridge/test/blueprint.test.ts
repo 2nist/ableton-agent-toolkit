@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cuePointNamesFor, planCuePoints, sectionSpans } from "../src/blueprint.js";
+import { applyOutputOffset, cuePointNamesFor, planCuePoints, sectionSpans } from "../src/blueprint.js";
 import { makeSection, makeSong } from "./helpers.js";
 
 const twinFish = makeSong({
@@ -188,5 +188,44 @@ describe("cuePointNamesFor", () => {
       ],
     });
     expect(cuePointNamesFor(song)).toEqual(new Set(["Chorus"]));
+  });
+});
+
+describe("applyOutputOffset", () => {
+  const note = (startTime: number) => ({ pitch: 60, startTime, duration: 1, velocity: 100 });
+  const plan = () => [
+    { name: "Intro", startBeat: 0, durationBeats: 16, notes: [note(0), note(2.5)] },
+    { name: "Verse", startBeat: 16, durationBeats: 32, notes: [note(4)] },
+    { name: "Chorus", startBeat: 48, durationBeats: 32, notes: [note(0)] },
+  ];
+
+  it("returns the plan untouched for a zero offset", () => {
+    const original = plan();
+    expect(applyOutputOffset(original, 0)).toBe(original);
+  });
+
+  it("a negative offset moves every clip earlier, leaving notes clip-relative", () => {
+    const shifted = applyOutputOffset(plan(), -1);
+    // Clip 0's -1 is clamped to 0 (its notes shift instead — covered below).
+    expect(shifted.map((c) => c.startBeat)).toEqual([0, 15, 47]);
+    expect(shifted[1].notes).toEqual(plan()[1].notes);
+    expect(shifted[2].notes).toEqual(plan()[2].notes);
+    expect(shifted.map((c) => c.durationBeats)).toEqual([16, 32, 32]);
+  });
+
+  it("clamps a first clip that would start before bar 1 by shifting its notes instead", () => {
+    const shifted = applyOutputOffset(plan(), -1);
+    // Clip 0 stays at 0; its notes carry the -1 themselves, clamped at 0.
+    expect(shifted[0].startBeat).toBe(0);
+    expect(shifted[0].notes.map((n) => n.startTime)).toEqual([0, 1.5]);
+    // A note that was already inside the first beat squashes to 0, not negative.
+    const tiny = applyOutputOffset([{ name: "Intro", startBeat: 0, durationBeats: 4, notes: [note(0.5)] }], -1);
+    expect(tiny[0].notes[0].startTime).toBe(0);
+  });
+
+  it("a positive offset moves clips later and never touches notes", () => {
+    const shifted = applyOutputOffset(plan(), 2);
+    expect(shifted.map((c) => c.startBeat)).toEqual([2, 18, 50]);
+    expect(shifted.map((c) => c.notes)).toEqual([plan()[0].notes, plan()[1].notes, plan()[2].notes]);
   });
 });

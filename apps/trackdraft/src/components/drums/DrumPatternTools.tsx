@@ -9,6 +9,7 @@ import {
   variantCount,
   resolveSectionVoiceNecklaces,
   resolveOutlineVoiceNecklaces,
+  resolveSectionVariant,
   velocityNumber,
 } from "../../lib/playback/drumPreview";
 import { TRANSITION_COLOR, TRANSITION_LABEL, TRANSITION_MODELS } from "./transitionStyle";
@@ -22,6 +23,8 @@ import {
   numerator as outlineNumerator,
   countLabel,
   planSectionTransitions,
+  rankPatternMatches,
+  type PatternMatch,
   type KitVoice,
 } from "@drum/library";
 import type { BlueprintSection, DrumPattern, DrumTransitionModel, DrumCellVoice, MeterOutline } from "../../types/blueprint";
@@ -134,6 +137,9 @@ export default function DrumPatternTools() {
   // The preset to restore when Auto is toggled back off — kept locally so
   // switching to Auto doesn't forget the groove you were just on.
   const lastPresetRef = useRef<DrumPattern | null>(null);
+  // Pattern-match results for the current section — null while the "Match…"
+  // panel is closed, [] when the section has no pattern material to score.
+  const [matches, setMatches] = useState<PatternMatch[] | null>(null);
 
   // Switching sections throws away any uncommitted draft — a draft is a
   // "this section, right now" working surface, not song data. Careful: an
@@ -147,6 +153,7 @@ export default function DrumPatternTools() {
     setVoice(null);
     setCellIndex(0);
     setVCellIndex(0);
+    setMatches(null);
     lastPresetRef.current = null;
   }, [selectedSectionId, clearDraft]);
 
@@ -296,6 +303,36 @@ export default function DrumPatternTools() {
       const cur = sec.drumVariantIndex ?? 0;
       return { ...sec, drumVariantIndex: Math.max(0, Math.min(total - 1, cur + delta)) };
     });
+  }
+
+  /** Score the section's current groove against every library preset and
+   *  open the substitution list — "which canonical pattern IS this?", so a
+   *  close-but-more-sensible preset can replace the material in one click. */
+  function showMatches() {
+    const variant = resolveSectionVariant(eff, song);
+    if (!variant || variant.notes.length === 0) {
+      setMatches([]);
+      return;
+    }
+    setMatches(
+      rankPatternMatches(
+        variant.notes.map(([beat, pitch]) => ({ beat, pitch })),
+        // Only schema-selectable presets: the library's engine vocabulary
+        // also carries synth-only idioms (four_on_floor/trap/breakbeat)
+        // that a section's `drumPattern` field can't hold.
+        { top: 5, patterns: DRUM_PATTERN_OPTIONS },
+      ),
+    );
+  }
+
+  /** Swap the section onto a matched preset (keeps the draft flow — Apply
+   *  still commits, Revert still discards). */
+  function applyMatch(m: PatternMatch) {
+    // Safe: candidates are restricted to DRUM_PATTERN_OPTIONS above.
+    const pattern = m.pattern as DrumPattern;
+    lastPresetRef.current = pattern;
+    draftWith((sec) => ({ ...sec, drumPattern: pattern, drumVariantIndex: m.variantIndex, drumMeterOutline: undefined }));
+    setMatches(null);
   }
 
   /** Regenerate the whole section's rhythm as a free-form Euclidean meter
@@ -545,6 +582,13 @@ export default function DrumPatternTools() {
             <button className={CHIP} onClick={() => stepVariant(1)}>▶</button>
           </div>
         )}
+        <button
+          className={matches !== null ? CHIP_ON : CHIP}
+          onClick={matches !== null ? () => setMatches(null) : showMatches}
+          title="Score this section's groove against every library preset and offer the closest as substitutes"
+        >
+          Match…
+        </button>
         {isDraft && (
           <div className="flex items-center gap-1 shrink-0" title="Commit or discard the working draft">
             <button
@@ -562,6 +606,29 @@ export default function DrumPatternTools() {
           </div>
         )}
       </div>
+
+      {matches !== null && (
+        <div className="flex flex-wrap items-center gap-1 rounded border border-edge bg-panelAlt/50 px-2 py-1.5">
+          <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted mr-1">closest presets</span>
+          {matches.length === 0 && (
+            <span className="text-2xs text-inkMuted">no pattern material to score in this section.</span>
+          )}
+          {matches.map((m) => (
+            <button
+              key={`${m.pattern}-${m.variantIndex}`}
+              className={CHIP}
+              onClick={() => applyMatch(m)}
+              title={
+                `kick ${m.perLane.kick.toFixed(2)} · snare ${m.perLane.snare.toFixed(2)} · hat ${m.perLane.hat.toFixed(2)}` +
+                (m.rotation > 0 ? ` · best as a rotated reading (+${m.rotation} steps)` : "") +
+                " — click to use this preset"
+              }
+            >
+              {m.pattern} · v{m.variantIndex + 1} — {m.score.toFixed(2)}
+            </button>
+          ))}
+        </div>
+      )}
 
       {tab === "pattern" && (
         <div className="space-y-2.5">

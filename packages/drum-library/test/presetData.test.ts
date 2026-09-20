@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PRESET_DATA, PRESET_META, FILL_DATA } from "../src/presetData.js";
+import { fillPool } from "../src/handoffs.js";
 import { ABLETON_SAFE_NOTES } from "../src/ableton.js";
 
 /**
@@ -24,7 +25,7 @@ describe("PRESET_DATA (merged library)", () => {
         expect(variant.lengthBeats, pattern).toBeGreaterThan(0);
         expect(variant.beatsPerBar, pattern).toBeGreaterThan(0);
         expect(variant.notes.length, pattern).toBeGreaterThan(0);
-        expect(["egmd", "synth"], pattern).toContain(variant.source.origin);
+        expect(["egmd", "synth", "zappa"], pattern).toContain(variant.source.origin);
       }
     }
   });
@@ -33,21 +34,30 @@ describe("PRESET_DATA (merged library)", () => {
     for (const pattern of ["four_on_floor", "trap", "breakbeat", "dnb"] as const) {
       expect(PRESET_DATA[pattern]!.variants.every((v) => v.source.origin === "synth"), pattern).toBe(true);
     }
-    // 78 is synth-only because the corpus has none — but it must exist now.
-    expect(PRESET_DATA["78"]!.variants.every((v) => v.source.origin === "synth")).toBe(true);
+    // 78 was synth-only because the corpus had none — the Zappa mint now
+    // supplies real 7/8 grooves, so the family is synth + zappa (never egmd).
+    expect(PRESET_DATA["78"]!.variants.some((v) => v.source.origin === "synth")).toBe(true);
+    expect(PRESET_DATA["78"]!.variants.some((v) => v.source.origin === "zappa")).toBe(true);
+    expect(PRESET_DATA["78"]!.variants.every((v) => v.source.origin !== "egmd")).toBe(true);
     // 54/68 must have at least the synthesized supplement.
     expect(PRESET_DATA["54"]!.variants.some((v) => v.source.origin === "synth")).toBe(true);
     expect(PRESET_DATA["68"]!.variants.some((v) => v.source.origin === "synth")).toBe(true);
   });
 
-  it("acoustic staples remain corpus-sourced (with the clean downbeat default in front)", () => {
+  it("acoustic staples stay corpus-sourced behind the clean downbeat default (mined material may follow)", () => {
     for (const pattern of ["standard", "half_time", "driving", "intense", "bridge_sparse"] as const) {
       const variants = PRESET_DATA[pattern]!.variants;
       // Variant 0 is the synthesized clean downbeat groove (snare on the
-      // downbeats) — the auto default; every variant behind it stays a
-      // corpus take.
+      // downbeats) — the auto default; every variant behind it is baked
+      // corpus material or mined Zappa material (origin "zappa").
       expect(variants[0]!.source.origin, `${pattern} variant 0`).toBe("synth");
-      expect(variants.slice(1).every((v) => v.source.origin === "egmd"), pattern).toBe(true);
+      expect(
+        variants.slice(1).every((v) => v.source.origin === "egmd" || v.source.origin === "zappa"),
+        pattern,
+      ).toBe(true);
+      // A wholesale synth takeover (the machine-idiom policy) must not
+      // creep into the acoustic families.
+      expect(variants.slice(1).some((v) => v.source.origin === "synth"), pattern).toBe(false);
     }
   });
 
@@ -76,13 +86,36 @@ describe("PRESET_DATA (merged library)", () => {
     expect(PRESET_META.generatedAt).toBeTruthy();
   });
 
-  it("ships synthesized fills for every meter the presets produce", () => {
+  it("ships fills for every meter the corpus/synth presets produce (baseline fill-completeness)", () => {
+    // The pre-Zappa guarantee: any groove drawn from the corpus bake or the
+    // synth idioms has a fill pool in its own meter. (Mined Zappa meters
+    // only get fills where the scan actually found fill material —
+    // `fillPool` degrades gracefully to "no fill" otherwise, and the
+    // transition gestures still apply.)
     const meters = new Set(
-      Object.values(PRESET_DATA).flatMap((preset) => preset.variants.map((v) => String(v.beatsPerBar))),
+      Object.values(PRESET_DATA).flatMap((preset) =>
+        preset.variants.filter((v) => v.source.origin !== "zappa").map((v) => String(v.beatsPerBar)),
+      ),
     );
     for (const meter of meters) {
       const available = (FILL_DATA.synth[meter]?.length ?? 0) + (FILL_DATA.acoustic[meter]?.length ?? 0);
       expect(available, `fills for ${meter} beats/bar`).toBeGreaterThan(0);
+    }
+  });
+
+  it("zappa fills are pooled by meter and reach grooves in that meter", () => {
+    const zappaFillMeters = Object.entries(FILL_DATA.acoustic)
+      .filter(([, fills]) => fills.some((f) => f.source.origin === "zappa"))
+      .map(([meter]) => meter);
+    expect(zappaFillMeters.length).toBeGreaterThan(0);
+    for (const meter of zappaFillMeters) {
+      const probe = {
+        lengthBeats: Number(meter),
+        beatsPerBar: Number(meter),
+        notes: [[0, 36, 100]] as Array<[number, number, number]>,
+        source: { origin: "zappa" as const },
+      };
+      expect(fillPool(probe, FILL_DATA).length, `pool for ${meter}`).toBeGreaterThan(0);
     }
   });
 });

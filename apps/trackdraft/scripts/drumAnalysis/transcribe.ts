@@ -133,6 +133,14 @@ const LANE_VOTE_WEIGHT: Record<LaneName, number> = { kick: 1, snare: 1.3, hat: 0
  * shift k ∈ [−8..8] by how well the region's hit positions (raw + k)
  * match the backbeat priors, and keep the best shift only when it beats
  * the unshifted labeling by 15 %+ (and prefer the nearest shift on ties).
+ *
+ * NOTE (2026-09-20): an attempt to refuse votes on sparse sections (min
+ * hit count + absolute gain floor) was REVERTED — `Girl` proved that
+ * small-material votes can be right: its refrains' raw backbeat sits ~3
+ * steps off the grid and only the vote (on ~10 hits, score gain < 2)
+ * puts them back on {4,12}. Do not re-add such guards without a test that
+ * covers the Girl case. `PHASE_VOTE_DEBUG=1` prints each section's
+ * base/best margins for tuning.
  */
 function voteSectionPhases(
   rows: { raw: number; kick: boolean; snare: boolean; hat: boolean }[],
@@ -163,6 +171,9 @@ function voteSectionPhases(
       const base = scores.get(0) ?? 0;
       let bestScore = -Infinity;
       for (const sc of scores.values()) if (sc > bestScore) bestScore = sc;
+      if (process.env.PHASE_VOTE_DEBUG) {
+        console.log(`  vote@${span.startBar}: hits ${used} · base ${base.toFixed(2)} · best ${bestScore.toFixed(2)} (×${(bestScore / Math.max(base, 1e-9)).toFixed(2)})`);
+      }
       if (base > 0 && bestScore >= 1.15 * base) {
         // Among near-best shifts prefer the SMALLEST |k|: a half-bar-rotated
         // representative (k ± 8) ties on symmetric patterns and would

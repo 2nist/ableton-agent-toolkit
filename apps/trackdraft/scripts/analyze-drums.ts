@@ -14,6 +14,9 @@
  *   --k <n>           onset-peak sensitivity — lower = more hits (default 6)
  *   --offset <sec>    fix the grid offset instead of fitting it
  *   --scale <x>       fix the tempo multiplier instead of fitting it
+ *   --no-vote         skip the per-section phase vote (keep the raw read —
+ *                     right for grooves that fight the backbeat priors,
+ *                     e.g. a kick on 1 / &-of-2 / 3 like I Want To Hold Your Hand)
  *   --debug           print the fitted grid + first bars
  *
  * Then merge with the importer runner:
@@ -29,7 +32,7 @@ import { arrangementSpans, type SongLike } from "./drumAnalysis/song";
 const SAMPLE_RATE = 22050;
 
 function usage(): never {
-  console.error("Usage: npx tsx scripts/analyze-drums.ts <song.trackdraft.json> <audio> [--out <file>] [--steps 16|12] [--k <n>] [--offset <sec>] [--scale <x>] [--debug]");
+  console.error("Usage: npx tsx scripts/analyze-drums.ts <song.trackdraft.json> <audio> [--out <file>] [--steps 16|12] [--k <n>] [--offset <sec>] [--scale <x>] [--no-vote] [--debug]");
   process.exit(1);
 }
 
@@ -59,7 +62,7 @@ function main(): void {
   const flags = new Map<string, string | true>();
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a === "--debug" || a === "--dump-onsets") {
+    if (a === "--debug" || a === "--dump-onsets" || a === "--no-vote") {
       flags.set(a, true);
     } else if (a.startsWith("--")) {
       const v = args[++i];
@@ -115,7 +118,9 @@ function main(): void {
     totalBeats,
     peakK: flags.has("--k") ? Number(flags.get("--k")) : undefined,
     fixed,
-    sectionSpans: spans.map((s) => ({ startBar: s.startBar, bars: s.bars })),
+    sectionSpans: flags.has("--no-vote")
+      ? undefined
+      : spans.map((s) => ({ startBar: s.startBar, bars: s.bars })),
   });
   console.log(`transcribed in ${((Date.now() - t0) / 1000).toFixed(1)}s\n`);
 

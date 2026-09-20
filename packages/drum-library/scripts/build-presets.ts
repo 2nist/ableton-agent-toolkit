@@ -15,6 +15,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
+import { createGunzip } from "node:zlib";
 import { buildIndex } from "../src/library-index.js";
 import { PRESETS, type DrumPattern } from "../src/presets.js";
 import { selectGroove } from "../src/select.js";
@@ -33,8 +34,14 @@ const EGMD_ROOT = process.env.EGMD_ROOT ?? "/Users/Matthew/Datasets/e-gmd-v1.0.0
 // it without anyone re-running the extraction pipeline first.
 const OUT_PATH = path.join(import.meta.dirname, "..", "src", "presets-data.json");
 
-/** Variants per preset. Several rather than one, so sections sharing a preset don't play the identical groove — the same reason `selectGroove` takes a seed at all. */
-const VARIANTS_PER_PRESET = 16;
+/** Variants per preset. Several rather than one, so sections sharing a preset don't play the identical groove — the same reason `selectGroove` takes a seed at all.
+ *
+ * Raised 16→24 for the 2026-09 re-bake: a selection audit measured the old
+ * 16-variant pool flattening whole songs (46/194 dominated by one
+ * pattern·variant). More variants = more per-song variety AND a finer-grained
+ * `rankPatternMatches` (the Match… panel scores every variant).
+ */
+const VARIANTS_PER_PRESET = 24;
 
 /**
  * Candidate pool size passed to `selectGroove`, kept independent of
@@ -46,13 +53,17 @@ const VARIANTS_PER_PRESET = 16;
  * `selectGroove`) collide often. A larger, decoupled pool gives each seed
  * more room to land somewhere genuinely different.
  */
-const POOL_SIZE = 40;
+const POOL_SIZE = 64;
 
 async function main(): Promise<void> {
   const takesPath = path.join(DATA_DIR, "takes.json");
-  const segmentsPath = path.join(DATA_DIR, "segments.ndjson");
+  // Prefer the gzipped segments (the full corpus writes ~4.3 GB raw);
+  // the uncompressed name remains readable for older extractions.
+  const gzPath = path.join(DATA_DIR, "segments.ndjson.gz");
+  const rawPath = path.join(DATA_DIR, "segments.ndjson");
+  const segmentsPath = fs.existsSync(gzPath) ? gzPath : rawPath;
   if (!fs.existsSync(takesPath) || !fs.existsSync(segmentsPath)) {
-    console.error(`Missing ${takesPath} or ${segmentsPath}. Run 'npm run extract -- --all' first.`);
+    console.error(`Missing ${takesPath} or ${rawPath}(.gz). Run 'npm run extract -- --all' first.`);
     process.exit(1);
   }
 
@@ -220,15 +231,18 @@ function round4(value: number): number {
 
 /**
  * Read newline-delimited JSON line by line rather than one
- * `readFileSync(...).split("\n")` call. A full corpus's `segments.ndjson`
- * can approach the size where reading it as a single string risks the same
+ * `readFileSync(...).split("\n")` call. A full corpus's segments file can
+ * approach the size where reading it as a single string risks the same
  * V8 string-length ceiling that broke the write side; streaming avoids ever
  * materialising the whole file as one string, at the cost of holding only
  * the parsed objects (much smaller than their JSON text) in memory.
+ * Transparently gunzips when the extraction wrote `segments.ndjson.gz`.
  */
 async function readNdjson<T>(filePath: string): Promise<T[]> {
   const records: T[] = [];
-  const rl = readline.createInterface({ input: fs.createReadStream(filePath), crlfDelay: Infinity });
+  const source = fs.createReadStream(filePath);
+  const input = filePath.endsWith(".gz") ? source.pipe(createGunzip()) : source;
+  const rl = readline.createInterface({ input, crlfDelay: Infinity });
   for await (const line of rl) {
     if (line.length > 0) records.push(JSON.parse(line));
   }

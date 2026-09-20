@@ -159,10 +159,13 @@ export function inferPatternForGenre(
 ): DrumPattern {
   const numerator = section.timeSignatureNumerator ?? 4;
   const denominator = section.timeSignatureDenominator ?? 4;
-  // Odd meters win regardless of genre (mirrors inferDrumPattern's own rule).
+  // Odd meters win regardless of genre (mirrors inferDrumPattern's own rule:
+  // dedicated families are quarter-metred — 7/8 → 3.5, 6/8 and 3/4 → 3,
+  // 5/4 → 5; x/8 fives fall through so the meter-aware pick reaches the
+  // mined 5/8 grooves in the role families).
   if (numerator === 7 && denominator === 8) return "78";
   if (numerator === 6 && denominator === 8) return "68";
-  if (numerator === 5) return "54";
+  if (numerator === 5 && denominator === 4) return "54";
   if (numerator === 3 && denominator === 4) return "68";
 
   if (genre) {

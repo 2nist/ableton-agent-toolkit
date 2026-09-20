@@ -10,7 +10,7 @@ import {
   euclidOnsetSteps,
   hashSeed,
   occurrenceSeed,
-  pickVariantIndex,
+  pickVariantIndexFor,
   songSignalsFor,
   hasBend,
   resolveStyleProfile,
@@ -22,6 +22,7 @@ import {
 } from "@drum/library";
 import {
   sectionDurationBeats,
+  beatsPerBar,
   type BlueprintSection,
   type BlueprintSong,
   type MeterOutline,
@@ -238,7 +239,16 @@ export function seededVariantIndex(pattern: DrumPattern, section: BlueprintSecti
   const seed = hasBend(section, song)
     ? styleSeed(resolveStyleProfile(section, song), section.id, occurrenceIndex)
     : occurrenceSeed(section.id, occurrenceIndex);
-  return pickVariantIndex(hashSeed(seed), preset.variants.length);
+  // Meter-aware: a section in an odd meter draws the mined variants that
+  // are actually in that meter (the Zappa material) instead of corpus 4/4
+  // grooves that would drift against the barline. 4/4 sections are
+  // untouched — every variant is compatible there.
+  return pickVariantIndexFor(
+    hashSeed(seed),
+    preset.variants,
+    sectionDurationBeats(section),
+    beatsPerBar(section),
+  );
 }
 
 /** Builds a single-voice `VoiceNecklace` from a free-form Euclidean

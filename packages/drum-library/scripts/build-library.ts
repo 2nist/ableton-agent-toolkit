@@ -12,6 +12,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createGzip } from "node:zlib";
 import { parseCatalog, type CatalogEntry } from "../src/catalog.js";
 import { loadTake, validateTake, takeLengthBeats, type TakeProblem } from "../src/take.js";
 import { segmentTake } from "../src/segment.js";
@@ -112,12 +113,24 @@ class Reservoir<T> {
  * `'drain'` when the OS-level buffer is full bounds it on the flush side.
  */
 class NdjsonWriter {
-  private readonly stream: fs.WriteStream;
+  private readonly stream: NodeJS.WritableStream;
+  private readonly fileStream: fs.WriteStream;
   private readonly flushEvery: number;
   private buffer: string[] = [];
 
   constructor(filePath: string, flushEvery = 5000) {
-    this.stream = fs.createWriteStream(filePath);
+    this.fileStream = fs.createWriteStream(filePath);
+    if (filePath.endsWith(".gz")) {
+      // A full-corpus run writes ~4.3 GB raw — gzip keeps it under ~1 GB,
+      // which matters on a machine whose disk is already 98% full. Writes
+      // (and their backpressure) go through the gzip stream; `close`
+      // additionally waits for the underlying file to finish flushing.
+      const gzip = createGzip();
+      gzip.pipe(this.fileStream);
+      this.stream = gzip;
+    } else {
+      this.stream = this.fileStream;
+    }
     this.flushEvery = flushEvery;
   }
 
@@ -138,8 +151,15 @@ class NdjsonWriter {
   async close(): Promise<void> {
     await this.flush();
     await new Promise<void>((resolve, reject) => {
-      this.stream.end((error: Error | null | undefined) => (error ? reject(error) : resolve()));
+      this.stream.once("error", reject);
+      this.stream.end(() => resolve());
     });
+    if (this.stream !== this.fileStream) {
+      await new Promise<void>((resolve, reject) => {
+        this.fileStream.once("finish", () => resolve());
+        this.fileStream.once("error", reject);
+      });
+    }
   }
 }
 
@@ -157,7 +177,7 @@ async function main(): Promise<void> {
   console.log(`catalog: ${catalog.length} takes | extracting: ${selected.length}`);
 
   fs.mkdirSync(args.out, { recursive: true });
-  const segmentsWriter = new NdjsonWriter(path.join(args.out, "segments.ndjson"));
+  const segmentsWriter = new NdjsonWriter(path.join(args.out, "segments.ndjson.gz"));
 
   const problems: TakeProblem[] = [];
   const takeIndex: Record<string, TakeSummary> = {};
@@ -273,7 +293,7 @@ function report(
     );
   }
 
-  console.log(`\nwrote ${out}/takes.json, segments.ndjson, problems.json`);
+  console.log(`\nwrote ${out}/takes.json, segments.ndjson.gz, problems.json`);
 }
 
 main().catch((error) => {

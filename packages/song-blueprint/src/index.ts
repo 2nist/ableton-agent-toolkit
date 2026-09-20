@@ -647,6 +647,18 @@ export interface BlueprintSong {
    *  numeric input. Default 0 means no offset applied. */
   beatOffset?: number;
 
+  /** Per-song alignment nudge for RENDERED output, in beats (negative =
+   *  earlier). Some catalog songs' quantized section timing landed a beat
+   *  off the reference recording — e.g. You Won't See Me, where the
+   *  record's bar lines sit one beat ahead of the app's grid (verified
+   *  against the jcrd change times, the mix's low-band profile, and a
+   *  bar-accurate MIDI transcription; the user's ear confirmed both the
+   *  unshifted in-app render AND the shifted export). In-app playback and
+   *  live MIDI out keep the app's own grid; RENDERED exports
+   *  (`songToMidi` / "Send to Ableton") shift every note by this much so
+   *  the output locks with the record. Absent/0 → no shift. */
+  outputOffsetBeats?: number;
+
   concept?: string;
   /** The song's genre label (e.g. "rock", "bossa", "trap") — the key into
    *  the drum engine's `GENRE_GROOVES` family-lean table (Groove DNA), and

@@ -79,3 +79,32 @@ export function planCuePoints(song: BlueprintSong): CuePointPlan[] {
 export function cuePointNamesFor(song: BlueprintSong): Set<string> {
   return new Set(song.sections.map((section) => section.name));
 }
+
+/**
+ * Applies a song's rendered-output offset (BlueprintSong.outputOffsetBeats)
+ * to any "one clip per section" plan: negative shifts everything earlier
+ * against the record it was transcribed from, positive later. Clip start
+ * positions move by the offset; a first clip that would begin before bar 1
+ * stays at 0 and has its notes shifted instead (clamped at 0) — the same
+ * clamping midiExport.ts applies to note-on ticks when rendering the SMF,
+ * so both outputs sit identically against the record. Durations are kept
+ * as authored in the clamped case (Live clip notes can't start before 0,
+ * and a short note at bar 1 beats a dropped one).
+ */
+export function applyOutputOffset<T extends { startBeat: number; notes: { startTime: number }[] }>(
+  plan: T[],
+  offsetBeats: number,
+): T[] {
+  if (!offsetBeats) return plan;
+  return plan.map((entry) => {
+    const target = entry.startBeat + offsetBeats;
+    const clipStart = Math.max(0, target);
+    const noteShift = target - clipStart; // negative only for the clamp case
+    if (noteShift === 0) return { ...entry, startBeat: clipStart };
+    return {
+      ...entry,
+      startBeat: clipStart,
+      notes: entry.notes.map((note) => ({ ...note, startTime: Math.max(0, note.startTime + noteShift) })),
+    };
+  });
+}

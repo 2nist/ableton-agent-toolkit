@@ -70,17 +70,92 @@ export function fillPool(variant: PackedVariant, fills: FillLibrary): PackedVari
 }
 
 /**
- * The auto variant pick for a seeded section — defaults to the clean
- * downbeat groove (variant 0, snare on the downbeats) most of the time,
- * with the corpus/synth variants as seeded variation — "downbeats as
- * default, variation where the logic dictates". Shared by the app's
+ * The auto variant pick for a seeded section — the clean downbeat groove
+ * (variant 0, snare on the downbeats) stays the single most common pick,
+ * with the corpus/synth variants spread behind it. Shared by the app's
  * preview/export and the bridge's Ableton plan so they agree.
+ *
+ * The clean weight was 60% until a catalog audit measured what that did
+ * to whole songs (`.audit-patterns.ts`: 60.3% of all multi-variant picks
+ * landed on v0, 46/194 songs were dominated by one pattern·variant combo,
+ * 9.6% of adjacent section pairs were literally identical grooves). 35%
+ * keeps the no-flam default common without flattening entire songs into
+ * one groove — the seeded spread over the 79 corpus variants is the point
+ * of having them.
  */
 export function pickVariantIndex(seed: number, variantCount: number): number {
   if (variantCount <= 1) return 0;
-  // ~60% land on the clean default (variant 0); the rest spread across
-  // the remaining variants.
-  return seed % 100 < 60 ? 0 : 1 + (seed % (variantCount - 1));
+  // ~35% land on the clean default (variant 0); the rest spread across
+  // every other variant.
+  return seed % 100 < 35 ? 0 : 1 + (seed % (variantCount - 1));
+}
+
+/** Meter arithmetic tolerance — MIDI-derived meters are exact quarter
+ *  beats (7/8 = 3.5, 21/16 = 5.25) but variant data rounds to 4 decimals. */
+const METER_EPSILON = 0.01;
+
+/** True when `value` is (within tolerance) an integer multiple of `unit`:
+ *  divides(14, 3.5) → true, divides(5.25, 3.5) → false. */
+function divides(value: number, unit: number): boolean {
+  if (unit <= 0) return false;
+  const quotient = value / unit;
+  return Math.abs(quotient - Math.round(quotient)) * unit < METER_EPSILON;
+}
+
+/**
+ * Indices of variants that can play a section cleanly:
+ *
+ *  - the groove's own meter matches the section's bar length (a 4/4 groove
+ *    is never compatible with a 7/8 section), and
+ *  - the phrase either tiles the section exactly
+ *    (`sectionBeats % lengthBeats === 0`) or spans whole bars
+ *    (`lengthBeats % barBeats === 0`), so a truncated final loop still
+ *    lands on a barline.
+ *
+ * Every baked corpus variant is whole bars of its own meter, so on a 4/4
+ * section this returns the full list — existing picks are unchanged.
+ * Returns `[]` when nothing is compatible (callers fall back to the full
+ * list, preserving the legacy pick).
+ */
+export function compatibleVariantIndices(
+  variants: ReadonlyArray<Pick<PackedVariant, "lengthBeats" | "beatsPerBar">>,
+  sectionBeats: number,
+  barBeats: number,
+): number[] {
+  const out: number[] = [];
+  variants.forEach((variant, index) => {
+    if (Math.abs(variant.beatsPerBar - barBeats) > METER_EPSILON) return;
+    if (divides(sectionBeats, variant.lengthBeats) || divides(variant.lengthBeats, barBeats)) {
+      out.push(index);
+    }
+  });
+  return out;
+}
+
+/**
+ * Meter-aware `pickVariantIndex`. Identical seeding and the same 35%
+ * clean-downbeat default whenever the full set is compatible (any 4/4
+ * section — picks stay bit-identical), but when the section's meter
+ * excludes part of the pool it picks only among the variants that fit:
+ * 7/8 sections draw the mined Zappa 7/8 grooves, 5/4 sections the 5/4
+ * ones, and so on. Falls back to the full list when nothing is compatible
+ * so an unmined meter keeps its old (drifting) behavior rather than
+ * losing its drums entirely.
+ */
+export function pickVariantIndexFor(
+  seed: number,
+  variants: ReadonlyArray<Pick<PackedVariant, "lengthBeats" | "beatsPerBar">>,
+  sectionBeats: number,
+  barBeats: number,
+): number {
+  if (variants.length <= 1) return 0;
+  const compatible = compatibleVariantIndices(variants, sectionBeats, barBeats);
+  const pool = compatible.length > 0 ? compatible : variants.map((_, index) => index);
+  if (pool.length === 1) return pool[0];
+  const cleanSlot = pool.indexOf(0);
+  if (cleanSlot >= 0 && seed % 100 < 35) return 0;
+  const spread = cleanSlot >= 0 ? pool.filter((index) => index !== 0) : pool;
+  return spread[seed % spread.length];
 }
 
 export interface HandoffSectionInput {

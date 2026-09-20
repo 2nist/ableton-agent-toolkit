@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import {
   DRUM_LANE_PRIMARY,
   FILL_DATA,
+  PRESET_DATA,
+  compatibleVariantIndices,
   hashSeed,
   occurrenceSeed,
   planSectionHandoffFills,
@@ -15,12 +17,12 @@ import { useDrumsDraftStore } from "../../../store/drumsDraftStore";
 import { updateSection } from "../../../lib/sections";
 import { sectionSpans, totalBars, type SectionSpan } from "../../../lib/arrangement";
 import { resolveSectionLaneHits, type LaneHit, type LaneHits } from "../../../lib/timeline/drumLaneHits";
-import { inferPatternForSection, resolveSectionVariant, seededVariantIndex, variantCount, velocityNumber } from "../../../lib/playback/drumPreview";
+import { inferPatternForSection, resolveSectionVariant, seededVariantIndex, velocityNumber } from "../../../lib/playback/drumPreview";
 import {
   BAR_PX, TOP_PAD, TRACK_H, X0,
   barX, beatsPerBarOf, gridStepForZoom, snapBeat, spanBeatToX, spanXToBeat, xToSpanBeat,
 } from "../../../lib/timeline/beatMap";
-import { beatsPerBar, type BlueprintSection, type DrumBlock, type DrumBlockNote, type DrumVoiceName } from "../../../types/blueprint";
+import { beatsPerBar, sectionDurationBeats, type BlueprintSection, type DrumBlock, type DrumBlockNote, type DrumVoiceName } from "../../../types/blueprint";
 import { DRUM_LANES } from "../laneStyle";
 import { SECTION_ROLE_COLOR } from "../sectionRoleStyle";
 import { TRANSITION_COLOR, TRANSITION_LABEL } from "../transitionStyle";
@@ -781,21 +783,32 @@ export default function DrumBlocksView() {
   }, [effectiveSection, laneRangeMaterial, writeSection, setRange, setSelectedSectionId]);
 
   /** The section's next seeded variant — what Regenerate rolls to (null on
-   *  sections with no variants: outline / blocks-only / none). */
+   *  sections with no variants: outline / blocks-only / none). Odd-meter
+   *  sections roll only through variants that fit their meter — the mined
+   *  Zappa grooves — so a regenerate never lands a 7/8 section on a 4/4
+   *  groove that drifts against the barline. */
   const regenerate = useMemo(() => {
     if (!song || !anchorSpan || !selectionSection) return null;
     const pattern = selectionSection.drumPattern ?? inferPatternForSection(selectionSection, song);
-    const count = variantCount(pattern);
-    if (count <= 1) return null;
+    const preset = PRESET_DATA[pattern];
+    const all = preset?.variants ?? [];
+    if (all.length <= 1) return null;
+    const compatible = compatibleVariantIndices(
+      all,
+      sectionDurationBeats(selectionSection),
+      beatsPerBar(selectionSection),
+    );
+    const pool = compatible.length > 1 ? compatible : all.map((_, i) => i);
     const current = selectionSection.drumVariantIndex
       ?? seededVariantIndex(pattern, selectionSection, song, anchorSpan.occurrenceIndex)
       ?? 0;
-    return { count, current };
+    return { pool, current };
   }, [song, anchorSpan, selectionSection]);
 
   const regenerateVariant = useCallback(() => {
     if (!anchorSpan || !regenerate) return;
-    const next = (regenerate.current + 1) % regenerate.count;
+    const position = regenerate.pool.indexOf(regenerate.current);
+    const next = regenerate.pool[(position + 1) % regenerate.pool.length];
     writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({ ...sec, drumVariantIndex: next }));
   }, [anchorSpan, regenerate, writeSection]);
 

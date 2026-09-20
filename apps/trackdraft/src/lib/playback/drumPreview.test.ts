@@ -135,28 +135,41 @@ describe("resolveVoiceNecklaces", () => {
 
 describe("seeded variant selection (the 'same drums everywhere' fix)", () => {
   it("different sections resolve to different variants, not all variant 0", () => {
-    // The auto pick defaults to the clean downbeat groove (variant 0) most
-    // of the time, but across many distinct sections the seeded variation
-    // must still produce more than one groove — the old bug was variant 0
-    // for EVERY section. 20 distinct ids ⇒ P(all land on variant 0) is ~0.
+    // The auto pick leans on the clean downbeat groove (variant 0) but
+    // spreads the rest over the corpus variants; across many distinct
+    // sections the seeded variation must still produce more than one
+    // groove — the old bug was variant 0 for EVERY section.
     const notes = Array.from({ length: 20 }, (_, i) =>
       resolveSectionVariant(makeSection({ id: `song-${i}-section` }))!.notes.join("|"),
     );
     expect(new Set(notes).size).toBeGreaterThan(1);
   });
 
-  it("defaults to the clean downbeat groove (snare on beats 1 & 3) most of the time", () => {
-    // The majority of auto sections resolve to variant 0 of "standard" —
-    // the clean downbeat default, snare exactly on beats 1 and 3, no flams.
+  it("keeps the clean downbeat groove as the single most common pick — without dominating", () => {
+    // Variant 0 (snare exactly on beats 1 & 3, no flams) is the most likely
+    // single outcome, but a 2026-09 catalog audit measured the old 60%
+    // weight flattening whole songs (46/194 dominated by one combo), so the
+    // contract is now: the clean groove is the MODE, not a majority.
     const snarePitch = 38;
-    const variants = Array.from({ length: 40 }, (_, i) =>
+    const variants = Array.from({ length: 120 }, (_, i) =>
       resolveSectionVariant(makeSection({ id: `verse-${i}` }))!,
     );
-    const cleanCount = variants.filter((v) => {
+    const isClean = (v: { notes: number[][] }) => {
       const snares = v.notes.filter((n) => n[1] === snarePitch).map((n) => n[0]);
       return snares.length === 2 && snares[0] === 0 && snares[1] === 2;
-    }).length;
-    expect(cleanCount).toBeGreaterThan(variants.length / 2);
+    };
+    const cleanCount = variants.filter(isClean).length;
+    // The mode: no other single variant shape reaches this count.
+    const byShape = new Map<string, number>();
+    for (const v of variants) {
+      const key = v.notes.join("|");
+      byShape.set(key, (byShape.get(key) ?? 0) + 1);
+    }
+    const topCount = Math.max(...byShape.values());
+    expect(cleanCount).toBe(topCount);
+    // Bounded: present but not flattening the spread.
+    expect(cleanCount).toBeGreaterThan(variants.length * 0.15);
+    expect(cleanCount).toBeLessThan(variants.length * 0.5);
   });
 
   it("is deterministic: same section id + occurrence → the same variant", () => {

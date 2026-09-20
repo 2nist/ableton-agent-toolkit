@@ -611,6 +611,11 @@ describe("planDrumClips — per-voice overrides and detours reach the export", (
           name: "Verse",
           bars: 1,
           timeSignatureNumerator: 4,
+          // Pin variant 0 so this test doesn't ride on the seeded variant
+          // picker — its assertions describe the fixture's base groove
+          // (kicks 0/2, snare 1/3), not whichever corpus variant a seed
+          // happens to land on.
+          drumVariantIndex: 0,
           drumVoicePatterns: { kick: { k: 1, n: 4, rotation: 0 } },
         }),
       ],

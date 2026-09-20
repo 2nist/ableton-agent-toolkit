@@ -110,10 +110,15 @@ export function inferDrumPattern(section: InferSection, song: InferSong = {}): D
   const numerator = section.timeSignatureNumerator ?? 4;
   const denominator = section.timeSignatureDenominator ?? 4;
 
-  // Odd meters, regardless of style or role.
+  // Odd meters, regardless of style or role. Each dedicated family is
+  // metered in quarter-note beats (mint-zappa targets these for the
+  // Zappa-mined material): 7/8 → 3.5, 6/8 and 3/4 → 3, 5/4 → 5. A x/5
+  // meter with an eighth denominator (5/8 → 2.5) is NOT a 5/4 bar — it
+  // falls through to the role-based families, where the meter-aware
+  // variant pick finds the mined 5/8 grooves.
   if (numerator === 7 && denominator === 8) return "78";
   if (numerator === 6 && denominator === 8) return "68";
-  if (numerator === 5) return "54";
+  if (numerator === 5 && denominator === 4) return "54";
   // 3/4 shares the 6/8 grooves' 3-quarter-beat bar; a compound-feel waltz
   // is an approximation, but an honest one — the corpus has no simple-3/4
   // preset and a 4-beat groove in a 3-beat bar is not an option.
@@ -175,9 +180,14 @@ export function inferDrumPattern(section: InferSection, song: InferSong = {}): D
     case "pre_chorus": return "driving";
     case "chorus": return loud ? "intense" : "driving";
     case "solo": return loud ? "intense" : "driving";
-    case "bridge": return "bridge_sparse";
+    // A loud bridge keeps a full groove ("standard") — sparse is the
+    // understated default, not a rule. A catalog audit found every one of
+    // 197 mf/f bridges was getting bridge_sparse with no loud branch.
+    case "bridge": return loud ? "standard" : "bridge_sparse";
     case "breakdown": return quiet ? "kick_only" : "half_time";
-    case "outro": return quiet ? "bridge_sparse" : "half_time";
+    // Loud outros are a statement, not a wind-down: give them the big
+    // groove instead of the same half_time every outro used to get.
+    case "outro": return quiet ? "bridge_sparse" : loud ? "intense" : "half_time";
     default: return quiet ? "bridge_sparse" : loud ? "driving" : "standard";
   }
 }
