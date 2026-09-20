@@ -136,9 +136,14 @@ export default function DrumPatternTools() {
   const lastPresetRef = useRef<DrumPattern | null>(null);
 
   // Switching sections throws away any uncommitted draft — a draft is a
-  // "this section, right now" working surface, not song data.
+  // "this section, right now" working surface, not song data. Careful: an
+  // edit in the timeline (cell toggle, velocity drag) writes the draft AND
+  // sets the selection in the same tick — if we cleared unconditionally
+  // here, that first edit would be silently discarded. Only drafts that
+  // belong to a *different* section are dropped.
   useEffect(() => {
-    clearDraft();
+    const draftId = useDrumsDraftStore.getState().sectionId;
+    if (draftId !== null && draftId !== selectedSectionId) clearDraft();
     setVoice(null);
     setCellIndex(0);
     setVCellIndex(0);

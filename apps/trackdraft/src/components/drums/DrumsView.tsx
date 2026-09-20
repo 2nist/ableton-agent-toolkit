@@ -19,7 +19,13 @@ import { TRANSITION_COLOR, TRANSITION_LABEL } from "./transitionStyle";
 import { SECTION_ROLE_COLOR } from "./sectionRoleStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
 import DrumPatternTools from "./DrumPatternTools";
+import DrumBlocksView from "./blocks/DrumBlocksView";
 import { planSectionHandoffFills, planSectionTransitions, FILL_DATA, outlineBeatsPerBar, numerator as outlineNumerator, hashSeed, occurrenceSeed, buildEuclideanOutline, twoThreeCellCounts, type HandoffSectionInput } from "@drum/library";
+
+/** The Drums tab's two surfaces: the classic whole-song canvas and the
+ *  Drum Blocks (beta) authoring view. */
+const VIEW_MODES = ["classic", "blocks"] as const;
+type DrumsViewMode = (typeof VIEW_MODES)[number];
 
 /** A stable identity for a section's *resolved* drum content — same
  *  preset+variant (or same outline cells/voicing) means literally the
@@ -255,6 +261,26 @@ export default function DrumsView() {
   const barW = BAR_PX * zoom;
   const barX = (bar: number): number => X0 + bar * barW;
 
+  // Classic ↔ Blocks (beta) — the Drum Blocks view is a parallel authoring
+  // surface for the range-scoped `drumBlocks` model (dotted step lanes +
+  // the selection's XY pad). The classic canvas stays the default until
+  // Blocks reaches parity; the choice persists per browser, not per song.
+  const [viewMode, setViewMode] = useState<DrumsViewMode>(() => {
+    try {
+      return localStorage.getItem("trackdraft-drums-view") === "blocks" ? "blocks" : "classic";
+    } catch {
+      return "classic";
+    }
+  });
+  const chooseView = (mode: DrumsViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("trackdraft-drums-view", mode);
+    } catch {
+      /* ignore */
+    }
+  };
+
   // A working draft from the Pattern editor — when one exists for a
   // section, the timeline renders it instead of the committed section so
   // slider edits preview live on the lines/necklaces before Apply/Revert.
@@ -471,6 +497,29 @@ export default function DrumsView() {
   return (
     <div className="px-2 pt-1.5 pb-3">
       {!anyLaneHits && <p className="text-inkMuted text-xs mb-2">No drum voices resolve for this song yet.</p>}
+      <div className="flex items-center gap-1.5 mb-1.5">
+        {VIEW_MODES.map((m) => (
+          <button
+            key={m}
+            onClick={() => chooseView(m)}
+            className={`font-mono text-2xs rounded px-2 py-1 border ${
+              viewMode === m
+                ? "border-[#E8B54A] text-[#E8B54A] bg-[#E8B54A]/10"
+                : "border-edge text-inkMuted hover:text-ink"
+            }`}
+          >
+            {m === "classic" ? "Classic" : "Blocks (beta)"}
+          </button>
+        ))}
+        <span className="text-2xs text-inkMuted ml-1">
+          {viewMode === "blocks"
+            ? "step dots + marquee → XY pad"
+            : "necklaces · detours · transitions"}
+        </span>
+      </div>
+      {viewMode === "blocks" ? (
+        <DrumBlocksView />
+      ) : (
       <div className="relative overflow-x-auto border border-edge rounded bg-black">
         {/* Zoom controls live on the timeline's top row — floating at the
             top-left corner of the viewport (the empty corner above the lane
@@ -824,6 +873,7 @@ export default function DrumsView() {
           })}
         </svg>
       </div>
+      )}
     </div>
   );
 }

@@ -331,6 +331,30 @@ describe("planDrumStem — authoring fields reach the exported drums", () => {
     expect(tail.length).toBeGreaterThan(0);
     expect(tail.filter((n) => n.startTime > 4)).toHaveLength(0);
   });
+
+  it("a muted base (drumPattern: 'none') still exports its authored blocks", () => {
+    const song = testSong();
+    song.sections[0].drumPattern = "none";
+    song.sections[0].drumBlocks = [
+      { id: "imp-1", lane: "snare", startBeat: 0, endBeat: 4, mode: "euclid", euclid: { k: 2, n: 8, rotation: 0 } },
+    ];
+    song.arrangement = [{ sectionId: "s1", repeats: 1 }];
+    const notes = planDrumStem(sectionSpans(song), song);
+    // Blocks-only: exactly the compiled block — beats 0 and 2, snare (38).
+    expect(notes.map((n) => [n.startTime, n.pitch])).toEqual([
+      [0, 38],
+      [2, 38],
+    ]);
+    expect(notes.every((n) => n.velocity > 0)).toBe(true);
+  });
+
+  it("a muted base with no blocks stays silent", () => {
+    const song = testSong();
+    song.sections[0].drumPattern = "none";
+    song.arrangement = [{ sectionId: "s1", repeats: 1 }];
+    const notes = planDrumStem(sectionSpans(song), song);
+    expect(notes).toHaveLength(0);
+  });
 });
 
 describe("planBassStem", () => {

@@ -10,12 +10,31 @@ import { create } from "zustand";
  *  (Chorus playing three times) has one underlying section to edit, and
  *  selecting any one of its timeline blocks should edit that same
  *  section, visibly updating every occurrence at once. */
+/** A range selection inside one section — section-relative beats
+ *  [startBeat, endBeat) plus the lane family keys the marquee covered.
+ *  The Drum Blocks view treats this as its editing interface: the docked
+ *  XY pad and the step editor operate on whatever this range names. */
+export interface DrumsRangeSelection {
+  startBeat: number;
+  endBeat: number;
+  laneKeys: string[];
+}
+
 interface DrumsSelectionState {
   selectedSectionId: string | null;
   setSelectedSectionId: (id: string | null) => void;
+  range: DrumsRangeSelection | null;
+  setRange: (range: DrumsRangeSelection) => void;
+  clearRange: () => void;
 }
 
 export const useDrumsSelectionStore = create<DrumsSelectionState>((set) => ({
   selectedSectionId: null,
-  setSelectedSectionId: (id) => set({ selectedSectionId: id }),
+  // Switching sections drops any range selection — a range is meaningless
+  // on a different section's timeline.
+  setSelectedSectionId: (id) =>
+    set((s) => (s.selectedSectionId === id ? { selectedSectionId: id } : { selectedSectionId: id, range: null })),
+  range: null,
+  setRange: (range) => set({ range }),
+  clearRange: () => set({ range: null }),
 }));

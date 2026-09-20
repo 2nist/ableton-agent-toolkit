@@ -22,7 +22,7 @@ import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
 import { planSectionDrumNotes, planSectionBass, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, applyStyleToVariant, resolveStyleProfile, styleHarmonize, styleSpacing, styleVelocityTarget, type SectionDrumInput } from "@drum/library";
 import { planColorStem } from "./colorStem";
 import { planMelodyStem } from "./melody/melodyStem";
-import type { BlueprintSong, BlueprintSection } from "../types/blueprint";
+import { beatsPerBar, type BlueprintSong, type BlueprintSection } from "../types/blueprint";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -155,9 +155,11 @@ export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
       sectionId: section.id,
       occurrenceIndex: span.occurrenceIndex,
       role: section.role ?? null,
+      beatsPerBar: beatsPerBar(section),
       variant,
       outline: section.drumMeterOutline ?? null,
       voiceOverrides: section.drumVoicePatterns,
+      blocks: section.drumBlocks,
       variation: section.drumVariationOutline ?? null,
       variationBars: section.drumVariationBars,
       variationStartBeat: section.drumVariationStartBeat,
@@ -178,7 +180,7 @@ export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
       notes.push({
         pitch: n.pitch,
         startTime: span.startBeat + n.beat,
-        duration: DRUM_HIT_DURATION,
+        duration: n.duration ?? DRUM_HIT_DURATION,
         velocity: n.velocity,
       });
     }

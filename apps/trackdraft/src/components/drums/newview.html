@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrackDraft · Drum Blocks v3 — docked pad + step lanes</title>
+<style>
+  :root{
+    --canvas:#383838; --panel:#4E4E4E; --panelAlt:#5C5C5C; --edge:#2C2C2C;
+    --ink:#fff; --muted:#B0B0B0; --accent:#FFA500; --amber:#E8B54A; --newc:#22D3EE;
+    --kick:#E8B54A; --snare:#D96459; --rim:#D9954A; --hat:#8B94A1; --cym:#4FA3A5; --tom:#9678C8;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--canvas);color:var(--ink);
+       font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .page{max-width:1240px;margin:0 auto;padding:14px 20px 46px}
+  .mono{font-family:var(--mono)}
+
+  .banner{display:flex;align-items:center;gap:10px;border:1px dashed rgba(34,211,238,.45);
+          background:#0b2a33;color:#bdeef8;padding:6px 10px;border-radius:3px;font-size:12px;margin-bottom:10px}
+  .banner b{color:#fff;letter-spacing:.04em}
+
+  .appbar{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--edge);
+          border-bottom:none;background:var(--canvas);padding:5px 10px;border-radius:3px 3px 0 0}
+  .appbar .l{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+  .appbar .l b{color:var(--ink);font-size:13px}
+  .transport{display:flex;align-items:center;gap:6px;font-size:12px}
+  .transport .tbtn{width:24px;height:20px;display:flex;align-items:center;justify-content:center;
+                   border:1px solid var(--edge);border-radius:2px;color:var(--muted)}
+  .transport .pos{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:4px}
+  .send{border:1px solid var(--accent);color:var(--accent);background:rgba(255,165,0,.08);
+        border-radius:3px;padding:3px 9px;font-size:12px}
+  .navbar{display:flex;gap:2px;border:1px solid var(--edge);border-bottom:none;background:var(--canvas);padding:0 8px}
+  .navbar span{padding:6px 10px;font-size:13px;color:var(--muted)}
+  .navbar span.on{color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}
+  .viewbar{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--edge);
+           background:var(--canvas);padding:6px 10px;border-radius:0 0 3px 3px;margin-bottom:12px}
+  .toggle{display:flex;gap:4px;align-items:center}
+  .tchip{border:1px solid var(--edge);border-radius:3px;padding:2px 10px;font-size:12px;color:var(--muted)}
+  .tchip.on{border-color:var(--amber);color:var(--amber);background:rgba(232,181,74,.08)}
+  .viewbar .hint{font-size:11px;color:var(--muted)}
+
+  .pillnum{display:inline-flex;width:18px;height:18px;border-radius:50%;align-items:center;justify-content:center;
+           font-size:11px;font-weight:700;color:#9BE9F7;background:#062A36;border:1px solid var(--newc);
+           margin-right:6px;flex:none;font-family:var(--mono)}
+
+  .tlhead{display:flex;align-items:baseline;justify-content:space-between;margin:2px 2px 6px}
+  .tlhead .title{font-size:13px;letter-spacing:.03em}
+  .tlhead .meta{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .tlwrap{position:relative;overflow-x:auto;border:1px solid var(--edge);border-radius:3px;background:#000}
+  .tlwrap svg{display:block}
+  .zoompill{position:absolute;top:6px;left:6px;z-index:2;display:flex;align-items:center;gap:4px;
+            border:1px solid var(--edge);border-radius:3px;background:rgba(0,0,0,.9);
+            padding:2px 5px;font-family:var(--mono);font-size:10px;color:var(--muted)}
+
+  .cards3{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0}
+  .icard{background:var(--panel);border:1px solid var(--edge);border-radius:3px;padding:9px 10px 8px}
+  .icard .hd{display:flex;align-items:center;font-size:12.5px;margin-bottom:7px}
+  .icard svg{display:block;width:100%;height:auto;border-radius:3px}
+  .icard p{margin:7px 0 0;font-size:11.5px;color:var(--muted)}
+  .icard p b{color:#d9d9d9;font-weight:600}
+
+  .fxgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .fx{border:1px solid var(--edge);border-radius:3px;background:#0D0F14;padding:5px 7px;font-family:var(--mono);font-size:10px;color:#cfcfcf}
+  .fx small{display:block;color:var(--muted);font-size:9px;margin-top:2px}
+  .fxhdr{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin:2px 0 4px}
+
+  .modal{background:var(--panel);border:1px solid var(--edge);border-radius:3px;margin-bottom:12px}
+  .mhead{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--edge);padding:7px 10px}
+  .mhead .t{font-size:12.5px}
+  .mhead .sp{flex:1}
+  .mchip{font-size:11px;color:var(--muted);border:1px solid var(--edge);border-radius:3px;padding:2px 8px;font-family:var(--mono)}
+  .mchip.on{color:var(--amber);border-color:var(--amber);background:rgba(232,181,74,.1)}
+  .mbody{display:grid;grid-template-columns:1.15fr 1fr;gap:14px;padding:10px 12px 12px}
+  .insp{font-size:11.5px;color:#d9d9d9}
+  .insp .row{display:flex;align-items:center;gap:8px;margin:5px 0}
+  .insp .lab{font-family:var(--mono);font-size:10px;color:var(--muted);width:88px;flex:none}
+  .insp .val{font-family:var(--mono);font-size:10.5px}
+  .meter{height:7px;border-radius:2px;background:#2a2f36;flex:1;position:relative;overflow:hidden}
+  .meter i{position:absolute;left:0;top:0;bottom:0;background:var(--amber);opacity:.8}
+  .hint{font-size:10.5px;color:var(--muted)}
+  .mfoot{display:flex;align-items:center;gap:8px;border-top:1px solid var(--edge);padding:7px 10px}
+  .btn{border:1px solid var(--edge);background:transparent;color:var(--muted);border-radius:3px;
+       padding:3px 10px;font-size:11px;font-family:var(--mono)}
+  .btn.amber{border-color:var(--amber);color:var(--amber);background:rgba(232,181,74,.1)}
+  .btn.acc{border-color:var(--accent);color:var(--accent);background:rgba(255,165,0,.1)}
+
+  .dock{background:var(--panel);border:1px solid var(--edge);border-radius:3px;margin-bottom:12px}
+  .drow{display:flex;align-items:center;gap:8px;padding:7px 10px;flex-wrap:wrap}
+  .drow .sp{flex:1}
+  .chip{border:1px solid var(--edge);background:transparent;color:var(--muted);border-radius:3px;
+        padding:2px 8px;font-size:11px;font-family:var(--mono)}
+  .preview{font-family:var(--mono);font-size:10px;color:var(--amber)}
+  .sel{font-family:var(--mono);font-size:10.5px;color:#d9d9d9}
+  .dhint{border-top:1px solid var(--edge);padding:5px 10px;font-size:10.5px;color:var(--muted)}
+
+  .legend{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+  .lcol{background:var(--panel);border:1px solid var(--edge);border-radius:3px;padding:10px 12px}
+  .lcol h3{margin:0 0 8px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#d9d9d9}
+  .lcol ul{margin:0;padding:0;list-style:none}
+  .lcol li{display:flex;gap:2px;font-size:11.5px;color:var(--muted);margin:7px 0;align-items:flex-start}
+  .lcol li b{color:#e6e6e6;font-weight:600}
+  .keptdot{display:inline-flex;width:8px;height:8px;border-radius:50%;border:1px solid #8a8a8a;margin:5px 10px 0 5px;flex:none}
+  footer{font-size:11px;color:var(--muted);border-top:1px solid var(--edge);padding-top:8px}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="banner"><b>PROPOSED v3</b> Step lanes + docked XY pad · zoom/dot-growth = next pass · static dry run · numbered markers = the changes</div>
+
+  <header class="appbar">
+    <div class="l"><span>←</span><b>Demo Song</b><span>120 BPM · 4/4 · 26 bars · 5 sections</span></div>
+    <div class="transport"><span class="tbtn">▶</span><span class="tbtn">⏸</span><span class="tbtn">⏹</span><span class="pos">13.2.1</span></div>
+    <div><span class="send">Send to Ableton</span></div>
+  </header>
+  <nav class="navbar"><span>Studio</span><span>Structure</span><span>Harmony</span><span class="on">Drums</span><span>Lyrics</span></nav>
+  <div class="viewbar">
+    <div class="toggle">
+      <span class="tchip">Classic</span><span class="tchip on">● Blocks (beta)</span>
+      <span class="hint">feature-flagged — Classic (today's DrumsView) stays untouched</span>
+    </div>
+    <div class="hint mono">draft ● preview · Apply / Revert unchanged</div>
+  </div>
+
+  <div class="tlhead">
+    <div class="title">Drums · whole song <span class="hint">— every lane is a step row; the selection is the interface</span></div>
+    <div class="meta">dots = beats (zoom → 8ths / 16ths) · ◇ = off-grid hit · click = toggle · drag = velocity · pad docks right of the selection</div>
+  </div>
+  <div class="tlwrap">
+    <div class="zoompill">− <span>100%</span> +</div>
+    <svg id="tl" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+
+  <div class="cards3">
+    <div class="icard">
+      <div class="hd"><span class="pillnum">8</span> Marquee → selection → pad</div>
+      <svg id="vA" viewBox="0 0 372 96"></svg>
+      <p><b>Drag beats × drums</b> on empty dots: release isolates the range and the pad <b>docks to its right</b> —
+         the pattern you're editing stays visible. No pattern boxes to find; the range <i>is</i> the editor.</p>
+    </div>
+    <div class="icard">
+      <div class="hd"><span class="pillnum">5</span> Motion mode — transitions as a gesture</div>
+      <svg id="vB" viewBox="0 0 372 96"></svg>
+      <p>Same pad, Motion mode: <b>↗ build (dense)</b> · <b>↖ crescendo</b> · <b>↓ break</b> · <b>↙ thin</b>.
+         Distance = intensity. Compiles to the existing transition models (+ energy), so playback/export keep up.</p>
+    </div>
+    <div class="icard">
+      <div class="hd"><span class="pillnum">7</span> Step FX — on the pad, in the editor</div>
+      <div class="fxhdr">per step</div>
+      <div class="fxgrid">
+        <div class="fx">VELOCITY <small>shade on the dot</small></div>
+        <div class="fx">NUDGE <small>± micro-timing</small></div>
+        <div class="fx">GATE <small>step length</small></div>
+        <div class="fx">PROBABILITY <small>seeded / native later</small></div>
+        <div class="fx">RATCHET <small>×2 ×3 roll</small></div>
+        <div class="fx">FLAM <small>grace hit</small></div>
+      </div>
+      <div class="fxhdr" style="margin-top:7px">per range</div>
+      <div class="fxgrid">
+        <div class="fx">SWING <small>0–67%</small></div>
+        <div class="fx">HUMANIZE <small>seeded feel</small></div>
+        <div class="fx">QUANTIZE <small>strength</small></div>
+        <div class="fx">VEL CURVE <small>soft → hard</small></div>
+      </div>
+      <p>All of it <b>bakes deterministically</b> at plan time → preview ≡ .mid ≡ live-out ≡ Ableton.</p>
+    </div>
+    <div class="icard">
+      <div class="hd"><span class="pillnum">9</span> Zoom &amp; dot growth <span class="hint" style="margin-left:6px">(next pass)</span></div>
+      <svg id="vC" viewBox="0 0 372 96"></svg>
+      <p>Dots <b>grow and subdivide with zoom</b> (½ → ×4, same rhythm shown here) so steps stay easy to hit.
+         Built <b>with the XY mouse controls</b> — one shared pointer/hit-testing layer for drag, velocity and the pad.</p>
+    </div>
+  </div>
+
+  <section class="modal">
+    <div class="mhead">
+      <span class="pillnum">6</span><span class="t">⤢ Selection editor — Chorus · bars 11–15 · KICK + SNR</span>
+      <span class="sp"></span>
+      <span class="mchip on">Steps</span><span class="mchip">Euclid</span><span class="mchip">Motion</span><span class="mchip">FX</span>
+      <span class="mchip">✕</span>
+    </div>
+    <div class="mbody">
+      <div>
+        <div class="fxhdr">bar 11 of 4 · 16th grid (grid follows zoom)</div>
+        <svg id="mgrid" viewBox="0 0 520 120" width="100%" height="120"></svg>
+      </div>
+      <div class="insp">
+        <div class="fxhdr">selected step — KICK · bar 11 · step 5</div>
+        <div class="row"><span class="lab">VELOCITY</span><span class="meter"><i style="width:75%"></i></span><span class="val">96</span></div>
+        <div class="row"><span class="lab">NUDGE</span><span class="meter"><i style="width:38%"></i></span><span class="val">+12 ticks</span></div>
+        <div class="row"><span class="lab">GATE</span><span class="meter"><i style="width:25%"></i></span><span class="val">1/16</span></div>
+        <div class="row"><span class="lab">PROBABILITY</span><span class="meter"><i style="width:80%"></i></span><span class="val">80%</span></div>
+        <div class="row"><span class="lab">RATCHET</span><span class="meter"><i style="width:20%"></i></span><span class="val">×2</span></div>
+        <div class="row"><span class="lab">FLAM</span><span class="meter"><i style="width:0%"></i></span><span class="val">off</span></div>
+        <div class="fxhdr" style="margin-top:9px">range FX</div>
+        <div class="row"><span class="lab">SWING</span><span class="meter"><i style="width:12%"></i></span><span class="val">12%</span></div>
+        <div class="row"><span class="lab">HUMANIZE</span><span class="meter"><i style="width:30%"></i></span><span class="val">30%</span></div>
+        <div class="row"><span class="lab">QUANTIZE</span><span class="meter"><i style="width:90%"></i></span><span class="val">90%</span></div>
+        <div class="row"><span class="lab">VEL CURVE</span><span class="meter"><i style="width:55%"></i></span><span class="val">soft → hard</span></div>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn amber">Flatten</button><button class="btn">Regenerate</button>
+      <span class="hint">flatten freezes the algorithm into editable dots · a resize after flatten stretches them</span>
+      <span class="sp" style="flex:1"></span>
+      <button class="btn">Revert</button><button class="btn acc">Apply</button>
+    </div>
+  </section>
+
+  <section class="dock">
+    <div class="drow">
+      <span class="preview">● preview</span>
+      <button class="chip">Auto</button><button class="chip">Euclid</button><button class="chip">Preset ▾</button><button class="chip">◀ 2/3 ▶</button>
+      <span class="sel">Selection · Chorus bars 11–15 · KICK+SNR · 9/16 ↻3 · density 56%</span>
+      <span class="sp"></span>
+      <button class="btn">⤢ Editor</button><button class="btn">Flatten</button>
+      <button class="btn acc">Apply</button><button class="btn">Revert</button>
+    </div>
+    <div class="dhint">click a dot = toggle hit · drag a dot up/down = velocity · marquee = selection + pad ·
+      ⌥drag = copy · everything flows through the same draft (1 gesture = 1 undo)</div>
+  </section>
+
+  <section class="legend">
+    <div class="lcol">
+      <h3>New in this revision</h3>
+      <ul>
+        <li><span class="pillnum">1</span><span><b>Dotted step lanes</b> — the detour lane is retired; every lane is a row of editable steps (click = toggle, drag = velocity). Zoom subdivides the grid; off-grid hits render as ◇ until you zoom.</span></li>
+        <li><span class="pillnum">2</span><span><b>Marquee = the interface</b> — drag beats × drums; the range becomes the editable selection (isolation dims the rest).</span></li>
+        <li><span class="pillnum">3</span><span><b>XY pad, docked right</b> — the pad + mode buttons live in one cluster anchored to the selection's right edge (connector line), so the pattern stays visible while you shape it. <b>X = rotation ↻</b>, <b>Y = hits k</b>; the necklace ring is the live Euclidean reference.</span></li>
+        <li><span class="pillnum">4</span><span><b>Multi-drum = interleave</b> — one rhythm distributed across the selected drums by priority (KICK ▸ SNR ▸ TOM ▸ PERC); necklace dots colour per drum, lanes show their share.</span></li>
+        <li><span class="pillnum">5</span><span><b>Motion mode</b> — the same pad sets transitions/energy gestures (↗ build · ↖ crescendo · ↓ break · ↙ thin); distance = intensity.</span></li>
+        <li><span class="pillnum">6</span><span><b>⤢ Selection editor</b> — enlarged modal with <b>Steps / Euclid / Motion / FX</b> modes and the per-step inspector.</span></li>
+        <li><span class="pillnum">7</span><span><b>Step FX</b> — velocity, nudge, gate, probability, ratchet, flam per step; swing, humanize, quantize, vel curve per range. Deterministic bake keeps all four outputs identical.</span></li>
+        <li><span class="pillnum">8</span><span><b>Compact tags</b> — tiny mono chips (<span class="mono">9/16 ↻3</span>, <span class="mono">MOTION ↑70%</span>, <span class="mono">5/8</span>, <span class="mono">TACET</span>) replace block boxes, domes, hexes and energy gutters.</span></li>
+        <li><span class="pillnum">9</span><span><b>Zoom &amp; dot growth</b> <i>(next pass)</i> — dots scale and the grid subdivides ½ → ×4 so steps stay easy to hit; implemented with the same pointer work as the pad (shared hit-testing, drag + velocity gestures).</span></li>
+      </ul>
+    </div>
+    <div class="lcol">
+      <h3>Kept / retired</h3>
+      <ul>
+        <li><span class="keptdot"></span><span><b>Kept:</b> bar/beat ruler + the amber split grid inside decoupled ranges (5/8 HAT), zoom pill, playhead, draft flow (● preview · Apply/Revert).</span></li>
+        <li><span class="keptdot"></span><span><b>Kept:</b> the whole engine — transitions, variation/detour data, voice overrides still export exactly as before; old songs unchanged; everything here compiles through <span class="mono">planSectionDrumNotes</span>.</span></li>
+        <li><span class="keptdot"></span><span><b>Retired:</b> DETOUR row + arcs · static necklaces on lanes · fill domes · transition hexagons · block boxes / energy gutters · Pattern/Detour/Transition dock tabs (folded into the editor modes).</span></li>
+        <li><span class="keptdot"></span><span><b>Later:</b> zoom + dot-growth pass (with the pad's pointer controls) · X-axis alt-modes (pattern change / step duration) · native Ableton probability + velocity deviation · an AI mode chip that sets k/n/rotation from a prompt.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    Static mock v3 — no interactions. Geometry mirrors <span class="mono">DrumsView.tsx</span> (X0 104 · BAR_PX 40 · TRACK_H 36 · TOP_PAD 40); real app tokens.
+    The pad edits exactly the engine's <span class="mono">EuclidPattern &#123;k, n, rotation&#125;</span>; Motion compiles to the existing transition models.
+  </footer>
+</div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs,parent){const n=document.createElementNS(NS,tag);for(const k in attrs)n.setAttribute(k,attrs[k]);if(parent)parent.appendChild(n);return n;}
+function txt(parent,x,y,s,o={}){const t=el('text',{x,y,'text-anchor':o.anchor||'middle',fill:o.fill||'#fff','font-size':o.size||10,
+  'font-family':"'IBM Plex Mono',ui-monospace,Menlo,monospace",'font-weight':o.weight||400,opacity:o.opacity==null?1:o.opacity},parent);t.textContent=s;return t;}
+
+const X0=104,BAR=40,TOP=40,LANEB=256,W=1184,H=290,BARS=26;
+const barX=b=>X0+b*BAR, beatX=b=>X0+b*10;
+const LANES=[
+ {key:'kick',label:'KICK',color:'#E8B54A',y:58},
+ {key:'snare',label:'SNR',color:'#D96459',y:94},
+ {key:'rim',label:'RIM',color:'#D9954A',y:130},
+ {key:'hat',label:'HAT',color:'#8B94A1',y:166},
+ {key:'cym',label:'CYM',color:'#4FA3A5',y:202},
+ {key:'tom',label:'TOM',color:'#9678C8',y:238}];
+const SECT=[
+ {name:'Intro',rim:'#565F70',startBar:0,bars:2},
+ {name:'Verse 1',rim:'#7FA86B',startBar:2,bars:8},
+ {name:'Chorus',rim:'#E8B54A',startBar:10,bars:8},
+ {name:'Bridge',rim:'#5B84C4',startBar:18,bars:4},
+ {name:'Outro',rim:'#565F70',startBar:22,bars:4}];
+
+const svg=document.getElementById('tl');
+svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('width',W);svg.setAttribute('height',H);
+const defs=el('defs',{},svg);
+const mg=el('linearGradient',{id:'motiongrad',x1:'0',y1:'0',x2:'1',y2:'0'},defs);
+el('stop',{offset:'0','stop-color':'#E8B54A','stop-opacity':'0'},mg);
+el('stop',{offset:'1','stop-color':'#E8B54A','stop-opacity':'0.14'},mg);
+el('rect',{x:0,y:0,width:W,height:H,fill:'#000'},svg);
+
+/* ruler grid */
+for(let b=0;b<BARS;b++)for(let q=0;q<4;q++)
+  el('line',{x1:barX(b)+q*10,y1:TOP,x2:barX(b)+q*10,y2:LANEB,stroke:'#fff','stroke-opacity':q===0?0.14:0.06,'stroke-width':1},svg);
+el('line',{x1:barX(BARS),y1:TOP,x2:barX(BARS),y2:LANEB,stroke:'#fff','stroke-opacity':0.14,'stroke-width':1},svg);
+
+/* section labels + brackets + bar numbers */
+SECT.forEach(s=>{
+  const x=barX(s.startBar),w=s.bars*BAR;
+  txt(svg,x+w/2,12,s.name,{fill:s.rim,size:12,weight:600});
+  el('path',{d:`M ${x} 20 L ${x} 26 L ${x+w} 26 L ${x+w} 20`,fill:'none',stroke:s.rim,'stroke-width':1.6,'stroke-opacity':0.6},svg);
+});
+for(let b=0;b<=BARS;b++) txt(svg,barX(b),32,String(b),{fill:'#7a7a80',size:10});
+
+/* lane labels */
+LANES.forEach(L=>txt(svg,90,L.y+4,L.label,{fill:L.color,size:12,weight:600,anchor:'end'}));
+
+/* empty step dots (every beat, every lane) */
+LANES.forEach(L=>{for(let b=0;b<BARS;b++)for(let q=0;q<4;q++)
+  el('circle',{cx:barX(b)+q*10,cy:L.y,r:1.5,fill:'none',stroke:'#3d444e','stroke-width':1},svg);});
+
+/* ---------- authored hits (fictional demo song) ---------- */
+const BK=(bar,beat)=>barX(bar)+beat*10;
+const HITS={kick:[],snare:[],rim:[],hat:[],cym:[],tom:[]};
+HITS.kick.push([0,0],[1,0]);
+HITS.hat.push([0,2],[1,2]);
+for(let b=2;b<=9;b++){HITS.kick.push([b,0],[b,2]);HITS.snare.push([b,1],[b,3]);for(let q=0;q<4;q++)HITS.hat.push([b,q]);}
+HITS.snare.push([9,2]);
+HITS.rim.push([3,1],[7,1]);
+HITS.tom.push([8,2],[8,3],[9,0],[9,1],[9,2],[9,3]);
+HITS.kick.push([10,0],[10,2],[15,0],[15,2]);
+/* selection (bars 11–15 excl.) — one 9/16 rhythm split K 5 / S 4 */
+HITS.kick.push([11,1],[12,1],[13,0],[14,0],[14,3]);
+HITS.snare.push([11,3],[12,3],[13,2],[14,2]);
+HITS.kick.push([18,0],[19,0]);
+for(const b of [22,23,24]) HITS.kick.push([b,0],[b,2]);
+HITS.kick.push([25,0]);
+HITS.cym.push([22,0],[24,0]);
+
+LANES.forEach(L=>{
+  (HITS[L.key]||[]).forEach(h=>{
+    const accent=h[1]===0, crash=(L.key==='cym'&&h[1]===0);
+    const r=crash?4:accent?3:2.5, a=crash?1:accent?1:0.68;
+    el('circle',{cx:BK(h[0],h[1]),cy:L.y,r,fill:L.color,'fill-opacity':a},svg);
+  });
+});
+
+/* chorus HAT — 5/8 (2+3) decoupled grid; off-grid onsets show as diamonds */
+{
+  const y=LANES[3].y, solid='#E8B54A';
+  for(let x=beatX(40);x<=824;x+=25){
+    if(x>504) el('line',{x1:x,y1:y-13,x2:x,y2:y+13,stroke:solid,'stroke-opacity':0.18,'stroke-width':1.3},svg);
+    el('line',{x1:x+10,y1:y-13,x2:x+10,y2:y+13,stroke:solid,'stroke-opacity':0.08,'stroke-width':1,'stroke-dasharray':'1 4'},svg);
+  }
+  let t=40;
+  while(t<72){
+    for(const o of [t,t+1]){
+      if(o>=72) continue;
+      const x=beatX(o);
+      if(Number.isInteger(o)) el('circle',{cx:x,cy:y,r:2.4,fill:'#8B94A1','fill-opacity':0.6},svg);
+      else el('polygon',{points:`${x},${y-2.6} ${x+2.6},${y} ${x},${y+2.6} ${x-2.6},${y}`,fill:'#8B94A1','fill-opacity':0.85},svg);
+    }
+    t+=2.5;
+  }
+}
+
+/* motion gesture zone (bars 8–10, into the chorus) */
+el('polygon',{points:`${beatX(32)},${LANEB} ${beatX(40)},40 ${beatX(40)},${LANEB}`,fill:'url(#motiongrad)'},svg);
+el('line',{x1:beatX(32)+8,y1:250,x2:beatX(40)-8,y2:48,stroke:'#E8B54A','stroke-width':1.2,'stroke-opacity':0.5,'stroke-dasharray':'4 4'},svg);
+el('polygon',{points:`${beatX(40)-8},48 ${beatX(40)-15},58 ${beatX(40)-1},58`,fill:'#E8B54A','fill-opacity':0.6},svg);
+
+/* selection marquee (KICK + SNR rows, bars 11–15) */
+el('rect',{x:barX(11),y:40,width:160,height:72,fill:'rgba(232,181,74,0.05)',stroke:'#E8B54A','stroke-width':1.2,'stroke-dasharray':'5 4'},svg);
+[[barX(11),40],[barX(15),40],[barX(11),112],[barX(15),112]].forEach(p=>
+  el('rect',{x:p[0]-2.5,y:p[1]-2.5,width:5,height:5,fill:'#E8B54A'},svg));
+
+/* ---------- the XY pad cluster — docked RIGHT of the selection ---------- */
+{
+  const panX=728,panY=40,panW=200,panH=86;
+  el('rect',{x:panX,y:panY,width:panW,height:panH,rx:6,fill:'rgba(11,13,17,0.9)',stroke:'#E8B54A','stroke-opacity':0.4,'stroke-width':1},svg);
+  /* connector into the selection's right edge */
+  el('line',{x1:704,y1:76,x2:panX,y2:76,stroke:'#E8B54A','stroke-opacity':0.6,'stroke-width':1.2},svg);
+  el('polygon',{points:'706,72 702,76 706,80',fill:'#E8B54A','fill-opacity':0.8},svg);
+  const cx=764,cy=72,R=26,k=9,n=16;
+  el('circle',{cx,cy,r:R,fill:'#0b0d11','fill-opacity':0.97,stroke:'#E8B54A','stroke-width':1.3},svg);
+  /* axes with arrowheads: X = rotation, Y = hits */
+  el('line',{x1:cx-30,y1:cy,x2:cx+30,y2:cy,stroke:'#E8B54A','stroke-opacity':0.16,'stroke-width':1},svg);
+  el('line',{x1:cx,y1:cy-30,x2:cx,y2:cy+30,stroke:'#E8B54A','stroke-opacity':0.16,'stroke-width':1},svg);
+  el('polygon',{points:`${cx+30},${cy} ${cx+25},${cy-3} ${cx+25},${cy+3}`,fill:'#E8B54A','fill-opacity':0.3},svg);
+  el('polygon',{points:`${cx-30},${cy} ${cx-25},${cy-3} ${cx-25},${cy+3}`,fill:'#E8B54A','fill-opacity':0.3},svg);
+  el('polygon',{points:`${cx},${cy-30} ${cx-3},${cy-25} ${cx+3},${cy-25}`,fill:'#E8B54A','fill-opacity':0.3},svg);
+  el('polygon',{points:`${cx},${cy+30} ${cx-3},${cy+25} ${cx+3},${cy+25}`,fill:'#E8B54A','fill-opacity':0.3},svg);
+  /* necklace: all ticks + k onsets coloured per drum (interleave) */
+  for(let s=0;s<n;s++){const a=-Math.PI/2+s/n*2*Math.PI;
+    el('line',{x1:cx+Math.cos(a)*19,y1:cy+Math.sin(a)*19,x2:cx+Math.cos(a)*23,y2:cy+Math.sin(a)*23,stroke:'#E8B54A','stroke-opacity':0.25,'stroke-width':0.8},svg);}
+  [1,3,5,7,8,10,12,14,15].forEach((s,i)=>{const a=-Math.PI/2+s/n*2*Math.PI;
+    el('circle',{cx:cx+Math.cos(a)*21,cy:cy+Math.sin(a)*21,r:2.5,fill:i%2===0?'#E8B54A':'#D96459'},svg);});
+  /* handle */
+  el('line',{x1:cx,y1:cy,x2:cx+12,y2:cy-12,stroke:'#E8B54A','stroke-opacity':0.5,'stroke-width':1},svg);
+  el('circle',{cx:cx+12,cy:cy-12,r:6,fill:'#E8B54A',stroke:'#0b0d11','stroke-width':2},svg);
+  el('circle',{cx:cx+12,cy:cy-12,r:1.8,fill:'#0b0d11'},svg);
+  /* mode buttons — same cluster as the pad */
+  [['Euclid ●',1],['Motion',0],['⤢ EDITOR',0]].forEach((c,i)=>{
+    const w=c[0].length*5.3+16,x=806,y=46+i*22;
+    el('rect',{x,y,width:w,height:16,rx:3,fill:c[1]?'rgba(232,181,74,0.14)':'#0b0d11',
+      stroke:c[1]?'#E8B54A':'#565F70','stroke-width':1},svg);
+    txt(svg,x+w/2,y+11,c[0],{fill:c[1]?'#E8B54A':'#B0B0B0',size:8.5,weight:600});
+  });
+  /* readout */
+  el('rect',{x:734,y:107,width:188,height:15,rx:7,fill:'#0b0d11',stroke:'#E8B54A','stroke-opacity':0.5},svg);
+  txt(svg,828,117,'9/16 · ↻3 · DENSITY 56%',{fill:'#E8B54A',size:8.5,weight:600});
+}
+
+/* bottom tags (compact chips) */
+function tag(cx,label,tickTo){
+  const w=label.length*5.3+16;
+  if(tickTo) el('line',{x1:cx,y1:268,x2:cx,y2:tickTo,stroke:'#565F70','stroke-width':1,'stroke-dasharray':'2 3','stroke-opacity':0.6},svg);
+  el('rect',{x:cx-w/2,y:268,width:w,height:16,rx:3,fill:'#0D0F14',stroke:'#565F70','stroke-width':1},svg);
+  txt(svg,cx,279,label,{fill:'#B0B0B0',size:8.5,weight:600});
+}
+tag(464,'MOTION ↑ 70%',250);
+tag(664,'5/8 · 2+3',182);
+tag(904,'TACET −2',182);
+
+/* playhead */
+const px=barX(13.4);
+el('line',{x1:px,y1:4,x2:px,y2:LANEB,stroke:'#fff','stroke-opacity':0.35,'stroke-width':1.2},svg);
+el('polygon',{points:`${px-3.5},34 ${px+3.5},34 ${px},40`,fill:'#fff','fill-opacity':0.5},svg);
+
+/* numbered change markers */
+function badge(n,x,y,lx,ly){
+  if(lx!=null) el('line',{x1:x,y1:y,x2:lx,y2:ly,stroke:'#22D3EE','stroke-width':1,'stroke-dasharray':'2 3',opacity:0.65},svg);
+  el('circle',{cx:x,cy:y,r:8.5,fill:'#062A36',stroke:'#22D3EE','stroke-width':1.2},svg);
+  txt(svg,x,y+3.3,String(n),{fill:'#9BE9F7',size:9.5,weight:700});
+}
+badge(1,306,146,306,163);      /* step dots */
+badge(2,528,48,541,44);        /* marquee */
+badge(3,714,140,726,127);      /* docked pad */
+badge(4,764,30,764,44);        /* interleave necklace */
+badge(5,398,276);              /* motion */
+badge(8,560,276);              /* compact tags */
+
+/* ---------- vignette A: marquee → selection → pad docks right ---------- */
+(function(){
+  const v=document.getElementById('vA');
+  function dots(g){
+    for(let i=0;i<8;i++) for(const rc of [[30,'#E8B54A'],[58,'#D96459']])
+      el('circle',{cx:22+i*18,cy:rc[0],r:2,fill:'none',stroke:'#3d444e','stroke-width':1},g);
+  }
+  const p1=el('g',{transform:'translate(0,0)'},v);
+  el('rect',{x:0,y:0,width:178,height:92,rx:3,fill:'#000',stroke:'#2C2C2C'},p1);
+  dots(p1);
+  el('rect',{x:28,y:14,width:104,height:62,fill:'rgba(232,181,74,0.06)',stroke:'#E8B54A','stroke-width':1.2,'stroke-dasharray':'5 4'},p1);
+  txt(p1,89,9,'drag across beats × drums',{fill:'#B0B0B0',size:9});
+  const p2=el('g',{transform:'translate(194,0)'},v);
+  el('rect',{x:0,y:0,width:178,height:92,rx:3,fill:'#000',stroke:'#2C2C2C'},p2);
+  dots(p2);
+  el('rect',{x:24,y:14,width:88,height:62,fill:'rgba(232,181,74,0.05)',stroke:'#E8B54A','stroke-width':1.2},p2);
+  for(let i=0;i<4;i++) el('circle',{cx:38+i*20,cy:30,r:2.6,fill:'#E8B54A','fill-opacity':0.9},p2);
+  for(let i=0;i<3;i++) el('circle',{cx:48+i*20,cy:58,r:2.6,fill:'#D96459','fill-opacity':0.9},p2);
+  el('line',{x1:112,y1:46,x2:127,y2:46,stroke:'#E8B54A','stroke-opacity':0.6,'stroke-width':1},p2);
+  el('polygon',{points:'116,43 113,46 116,49',fill:'#E8B54A','fill-opacity':0.8},p2);
+  const pcx=146,pcy=46,pr=15;
+  el('circle',{cx:pcx,cy:pcy,r:pr,fill:'#0b0d11','fill-opacity':0.97,stroke:'#E8B54A','stroke-width':1.2},p2);
+  for(let s=0;s<8;s++){const a=-Math.PI/2+s/8*2*Math.PI;
+    el('circle',{cx:pcx+Math.cos(a)*11,cy:pcy+Math.sin(a)*11,r:1.8,fill:s%2===0?'#E8B54A':'#D96459'},p2);}
+  el('circle',{cx:pcx+7,cy:pcy-7,r:3.4,fill:'#E8B54A',stroke:'#0b0d11','stroke-width':1.2},p2);
+  txt(p2,89,9,'pad docks right of the selection',{fill:'#B0B0B0',size:9});
+})();
+
+/* ---------- vignette B: motion quadrants ---------- */
+(function(){
+  const v=document.getElementById('vB');
+  el('rect',{x:0,y:0,width:372,height:96,rx:3,fill:'#000',stroke:'#2C2C2C'},v);
+  const cx=186,cy=50,R=30;
+  el('circle',{cx,cy,r:R,fill:'#0b0d11',stroke:'#E8B54A','stroke-width':1.2},v);
+  el('line',{x1:cx-R,y1:cy,x2:cx+R,y2:cy,stroke:'#E8B54A','stroke-opacity':0.14,'stroke-width':1},v);
+  el('line',{x1:cx,y1:cy-R,x2:cx,y2:cy+R,stroke:'#E8B54A','stroke-opacity':0.14,'stroke-width':1},v);
+  el('line',{x1:cx,y1:cy,x2:cx+18,y2:cy-18,stroke:'#E8B54A','stroke-width':1.2,'stroke-dasharray':'3 3'},v);
+  el('circle',{cx:cx+18,cy:cy-18,r:5.5,fill:'#E8B54A'},v);
+  txt(v,286,22,'BUILD · DENSE',{fill:'#E8B54A',size:9});
+  txt(v,88,22,'CRESCENDO',{fill:'#cfcfcf',size:9});
+  txt(v,88,88,'THIN',{fill:'#cfcfcf',size:9});
+  txt(v,286,88,'BREAK',{fill:'#cfcfcf',size:9});
+  txt(v,186,14,'distance = intensity · compiles to existing transition models',{fill:'#B0B0B0',size:8.5});
+})();
+
+/* ---------- vignette C: zoom & dot growth (next pass) ---------- */
+(function(){
+  const v=document.getElementById('vC');
+  el('rect',{x:0,y:0,width:372,height:96,rx:3,fill:'#000',stroke:'#2C2C2C'},v);
+  const rows=[[16,'×0.5',2,1.6],[38,'×1',4,2.1],[60,'×2',8,2.7],[82,'×4',16,3.4]];
+  rows.forEach(r=>{
+    const y=r[0],label=r[1],n=r[2],rad=r[3];
+    txt(v,10,y+3,label,{fill:'#B0B0B0',size:8.5,anchor:'start'});
+    for(let i=0;i<n;i++){
+      const x=48+i*10,isHit=(i===0||i===n/2);
+      if(isHit) el('circle',{cx:x,cy:y,r:rad,fill:'#E8B54A','fill-opacity':i===0?1:0.75},v);
+      else el('circle',{cx:x,cy:y,r:rad,fill:'none',stroke:'#3d444e','stroke-width':1},v);
+    }
+    const bw=(n-1)*10;
+    el('path',{d:`M ${48-5} ${y+10} L ${48-5} ${y+13} L ${48+bw+5} ${y+13} L ${48+bw+5} ${y+10}`,fill:'none',stroke:'#E8B54A','stroke-opacity':0.25,'stroke-width':1},v);
+    txt(v,48+bw+16,y+4,'1 bar',{fill:'#7a7a80',size:8,anchor:'start'});
+  });
+})();
+
+/* ---------- modal step grid ---------- */
+(function(){
+  const m=document.getElementById('mgrid');
+  const x0=48,sw=28,rows=[['KICK','#E8B54A',30],['SNR','#D96459',64]];
+  for(let i=0;i<=16;i++) el('line',{x1:x0+i*sw,y1:14,x2:x0+i*sw,y2:84,stroke:'#fff','stroke-opacity':i%4===0?0.18:0.07,'stroke-width':1},m);
+  rows.forEach(r=>txt(m,38,r[2]+4,r[0],{fill:r[1],size:10,weight:600,anchor:'end'}));
+  for(let c=0;c<16;c++){
+    for(const r of rows) el('circle',{cx:x0+c*sw+sw/2,cy:r[2],r:2.4,fill:'none',stroke:'#3d444e','stroke-width':1},m);
+    txt(m,x0+c*sw+sw/2,100,String(c+1),{fill:'#7a7a80',size:8.5});
+  }
+  el('circle',{cx:x0+4*sw+sw/2,cy:30,r:5,fill:'#E8B54A'},m);
+  el('circle',{cx:x0+12*sw+sw/2,cy:64,r:5,fill:'#D96459'},m);
+  el('circle',{cx:x0+6*sw+sw/2,cy:30,r:3,fill:'#E8B54A','fill-opacity':0.5},m);
+  el('circle',{cx:x0+4*sw+sw/2,cy:30,r:8.5,fill:'none',stroke:'#E8B54A','stroke-width':1.4},m);
+})();
+</script>
+</body>
+</html>
