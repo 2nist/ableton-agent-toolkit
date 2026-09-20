@@ -66,3 +66,74 @@ logic is sound on inspection. **Re-verify with `vitest run`.**
 
 This machine has no `node`/`npm`/`vitest`/`tsx`/`tsc` on `PATH`, so tests/types could not be run here.
 Re-run under the app's toolchain (`npm run test` / `npm run typecheck`).
+
+---
+
+# Integration status (2026-09-20) — DONE
+
+Shipped into `apps/trackdraft/src/lib/lyrics/` exactly as the prompt specified
+(`lyricBrief.refactored.ts` → `lyricBrief.ts`; its test renamed to match; old
+`lyricBrief.ts` NOT shipped). Verified under the app's real toolchain:
+**53 test files / 593 tests pass, `tsc --noEmit` clean**, and the UI was
+exercised live in the dev app (below).
+
+## Decisions (the ones the prompt asked to call out)
+
+1. **Syllable counting** — the official *analysis* counter is `phonetics.ts`
+   (syllables + stress from ARPAbet; it is what the brief/line-check use).
+   `syllables.ts` (npm `syllable`) is kept as the plain per-line counter in the
+   **LyricsEditor gutter only** (sync, no pronouncer, count-only display).
+   Not two "official" counters: analysis = phonetics, gutter = syllables.ts.
+2. **Rhyme** — analysis (`rhymeKey`/`rhymeRelation`/`rhymeScheme`, `priorScheme`)
+   is phonetics-only now. Datamuse `rel_rhy` (`rhymes.ts`) is kept for the
+   *suggestion list* box; `localRhymeGuess` remains its offline fallback and is
+   never used for analysis. The phonetic engine replaced `localRhymeGuess` as
+   the analysis path everywhere.
+3. **Where the brief lives** — **live on `BlueprintSection`** (TrackDraft
+   instantiates sections from templates and discards the slots, so the live
+   section is the only durable source). `briefInput.ts` maps both shapes
+   structurally (`SectionLike`/`SlotLike`); the slot adapter is for pre-apply
+   preview. Reroll/roll/subjectRoll persist as integers in the new
+   `store/lyricsSparkStore.ts` (localStorage) — the engines stay deterministic.
+4. **Pronouncer** — network path chosen: Datamuse `md=r` with an aggressive
+   cache (`lib/lyrics/pronouncer.ts`): in-memory + localStorage cache, negative
+   caching for dictionary-confirmed misses, failures never cached (retry).
+   `components/lyrics/usePronouncer.ts` primes it; unknown words are shown
+   dotted + summarized in the panel's Line check.
+
+## Known issues — resolution
+
+- `guessSyllables("people")` → **verified 2** in this version (regression test
+  `engineRegression.test.ts`); no fix needed.
+- Unknown-word trochaic fallback (e.g. `guitar`) — **documented**: still
+  trochaic (the conventional English default) *for genuinely unknown words*;
+  the real fix is the injected dictionary, and Datamuse resolves `guitar`
+  correctly. Guessed words are surfaced in the UI, so the guess is visible.
+- `FUNCTION_WORDS` small — **extended** (pronouns/auxiliaries/modals; "we",
+  "are", "the" etc. demote correctly; see regression test).
+- `prosodyIssues` ignored secondary stress — **fixed** (`stress !== 0`);
+  secondary stress on a weak slot now flags.
+- `deal()` empty-pool guard — **fixed**: `deal([])` now throws; `composeSpark`
+  falls back to its unfiltered banks so filtered pools can never be empty.
+- `segmentPhrases` spread (`Math.max(...g.map(...))`) — **fixed** with a loop.
+- `metricWeight` pre-bar-line = downbeat — **confirmed deliberate**, documented
+  in the code comment.
+- `hashSeed` duplication — moot (old file not shipped).
+
+## Shuffle test under vitest
+
+The `seeded shuffle` failure was indeed a runner artifact: it is green under
+`vitest run`, no logic changes needed.
+
+## Live UI verification (dev app, 2026-09-20)
+
+- `buildBrief` renders from a real catalog section (chord cycle, cadence,
+  energy step 6→4, FEEL lifted from the slot purpose).
+- **Reroll**: scheme suggestion walked ABAB → ABCB → AABB → ABAB (deck rotation,
+  deterministic; counters persisted as integers).
+- Spark **Roll** changed rule/POV/challenge; **subject** stayed sticky across
+  sections of the song; `existingSubject` used the song's own notes when set.
+- Pronouncer live: real ARPAbet stress on "Drive My Car" lyrics; unknown words
+  ("somethin", "beep") marked dotted + listed as guessed.
+- Template (`Neo-Psychedelia`) applied on a throwaway song for the reroll test;
+  the test song was deleted afterwards and the throwaway counters cleared.
