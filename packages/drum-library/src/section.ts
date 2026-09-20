@@ -19,6 +19,7 @@ import {
   type HandoffSectionInput,
 } from "./handoffs.js";
 import { tileGrooveVaried } from "./vary.js";
+import { applyDrumBlocks, type DrumBlock } from "./blocks.js";
 import { extractGroove, applyGroove } from "./groove.js";
 import {
   synthesizeTransition,
@@ -63,6 +64,9 @@ export interface TiledNote {
   beat: number;
   pitch: number;
   velocity: number;
+  /** Gate / step length in beats — authored by Drum Blocks' step FX
+   *  (`durBeats`); absent → the caller's fixed hit duration (0.25). */
+  duration?: number;
 }
 
 /** Structurally compatible with song-blueprint's `EuclidPattern` (k/n/rotation)
@@ -350,12 +354,20 @@ export interface SectionDrumInput {
    *  or `null` for silence. The caller resolves outline-vs-pattern because
    *  that path needs song-blueprint / song-structure types. */
   variant: PackedVariant | null;
+  /** The section's own beats-per-bar (4 for 4/4). Anchors motion blocks on
+   *  a blocks-only section — one whose base groove resolved to `null` —
+   *  where there's no variant to read a bar length from. Absent → 4. */
+  beatsPerBar?: number;
   /** The section's `drumMeterOutline`, for outline-driven sections only —
    *  used to inject a synthesized fill for its (often fractional)
    *  beats-per-bar, which `FILL_DATA` has nothing for. */
   outline?: OutlineWithVoices | null;
   /** Per-voice Euclidean overrides (`drumVoicePatterns`). */
   voiceOverrides?: Partial<Record<KitVoice, EuclidLike>>;
+  /** Authored drum blocks (`BlueprintSection.drumBlocks`) — the range-scoped
+   *  authoring layer applied last, after the detour/transition gestures, so
+   *  authored material always wins within its lane+range. */
+  blocks?: DrumBlock[];
   /** Ending detour (`drumVariationOutline`). */
   variation?: OutlineWithVoices | null;
   variationBars?: number;
@@ -481,7 +493,24 @@ export function planSectionDrumNotes(
 
   return inputs.map((input, i) => {
     const variant = resolved[i];
-    if (!variant) return { notes: [] };
+
+    // Blocks-only section — e.g. an importer's transcribed material over a
+    // muted base (`drumPattern: "none"`). The timeline preview compiles the
+    // authored blocks over an empty tiled base, so the export must too:
+    // compile here and nothing else — no fills, no auto transitions, no
+    // crash — so imported material stays exactly what was authored.
+    if (!variant) {
+      if (!input.blocks || input.blocks.length === 0) return { notes: [] };
+      return {
+        notes: applyDrumBlocks([], input.blocks, {
+          durationBeats: input.durationBeats,
+          beatsPerBar: input.beatsPerBar ?? 4,
+          velocityTarget: input.velocityTarget,
+          gridBeats: input.gridBeats,
+          seed: occurrenceSeed(input.sectionId, input.occurrenceIndex),
+        }),
+      };
+    }
 
     const velocityTarget = input.velocityTarget;
     const scaled = scaleToVelocityPreset(variant.notes, velocityTarget);
@@ -526,6 +555,21 @@ export function planSectionDrumNotes(
         velocityTarget,
         gridBeats: input.gridBeats,
         flavor,
+      });
+    }
+
+    // Authored drum blocks (`drumBlocks`) — the range-scoped authoring
+    // layer. Applied last of the content layers so authored material always
+    // wins over automatic fills/transitions; the crash guard below sees the
+    // final notes (an authored crash on the cym lane at beat 0 suppresses
+    // the automatic one via the existing check).
+    if (input.blocks && input.blocks.length > 0) {
+      tiled = applyDrumBlocks(tiled, input.blocks, {
+        durationBeats: input.durationBeats,
+        beatsPerBar: variant.beatsPerBar,
+        velocityTarget,
+        gridBeats: input.gridBeats,
+        seed: occurrenceSeed(input.sectionId, input.occurrenceIndex),
       });
     }
 

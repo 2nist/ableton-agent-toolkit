@@ -12,6 +12,7 @@ import {
 } from "../src/section.js";
 import type { PackedVariant } from "../src/presetData.js";
 import type { FillLibrary } from "../src/handoffs.js";
+import type { DrumBlock } from "../src/blocks.js";
 
 const KICK = 36;
 const SNARE = 38;
@@ -268,5 +269,87 @@ describe("planSectionDrumNotes", () => {
       { beat: 4, pitch: KICK, velocity: 100 },
       { beat: 4, pitch: SNARE, velocity: 100 },
     ]);
+  });
+});
+
+describe("planSectionDrumNotes — blocks-only (null-variant) sections", () => {
+  const snareEuclid: DrumBlock = {
+    id: "b1",
+    lane: "snare",
+    startBeat: 0,
+    endBeat: 4,
+    mode: "euclid",
+    euclid: { k: 2, n: 8, rotation: 0 },
+  };
+
+  it("compiles authored blocks over a muted base instead of exporting silence", () => {
+    const inputs: SectionDrumInput[] = [
+      {
+        sectionId: "s1",
+        occurrenceIndex: 0,
+        variant: null, // drumPattern: "none" — the importer's empty base
+        blocks: [snareEuclid],
+        durationBeats: 4,
+        velocityTarget: 100,
+        gridBeats: 0.25,
+      },
+    ];
+    const [plan] = planSectionDrumNotes(inputs, EMPTY_FILLS);
+    // k=2, n=8 over 4 beats → steps 0/4 × stepBeats 0.5 = beats 0 and 2;
+    // lane primary pitch (snare); velocityTarget — nothing to inherit over silence.
+    expect(plan.notes).toEqual([
+      { beat: 0, pitch: SNARE, velocity: 100 },
+      { beat: 2, pitch: SNARE, velocity: 100 },
+    ]);
+  });
+
+  it("stays silent — no crash, no fill — when a null-variant section has no blocks", () => {
+    const inputs: SectionDrumInput[] = [
+      { sectionId: "a", occurrenceIndex: 0, variant: BASE, role: "verse", durationBeats: 4, velocityTarget: 100 },
+      { sectionId: "s1", occurrenceIndex: 0, variant: null, durationBeats: 4, velocityTarget: 100 },
+    ];
+    const plans = planSectionDrumNotes(inputs, EMPTY_FILLS);
+    expect(plans[1].notes).toEqual([]);
+  });
+
+  it("anchors a motion block with beatsPerBar (explicit 4 === the default)", () => {
+    const motion: DrumBlock = {
+      id: "m1",
+      lane: "kick",
+      startBeat: 0,
+      endBeat: 8,
+      mode: "motion",
+      motion: { x: 0.5, y: 0.5 },
+    };
+    const base: SectionDrumInput = {
+      sectionId: "s1",
+      occurrenceIndex: 0,
+      variant: null,
+      blocks: [motion],
+      durationBeats: 8,
+      velocityTarget: 100,
+      gridBeats: 0.25,
+    };
+    const [explicit] = planSectionDrumNotes([{ ...base, beatsPerBar: 4 }], EMPTY_FILLS);
+    const [fallback] = planSectionDrumNotes([base], EMPTY_FILLS);
+    expect(explicit.notes.length).toBeGreaterThan(0);
+    expect(explicit.notes.every((n) => n.beat >= 0 && n.beat < 8)).toBe(true);
+    expect(explicit.notes).toEqual(fallback.notes);
+  });
+
+  it("an inherit-only section stays silent — there are no base notes to carry FX", () => {
+    const inherit: DrumBlock = {
+      id: "i1",
+      lane: "hat",
+      startBeat: 0,
+      endBeat: 4,
+      mode: "inherit",
+      fx: { swing: 0.5 },
+    };
+    const [plan] = planSectionDrumNotes(
+      [{ sectionId: "s1", occurrenceIndex: 0, variant: null, blocks: [inherit], durationBeats: 4, velocityTarget: 100 }],
+      EMPTY_FILLS,
+    );
+    expect(plan.notes).toEqual([]);
   });
 });

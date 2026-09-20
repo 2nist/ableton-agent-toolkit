@@ -81,6 +81,80 @@ export interface MeterOutline {
  */
 export type DrumTransitionModel = "buildUp" | "breakDown" | "cut" | "dropOut";
 
+/** The six lane families the Drum Blocks timeline stages (KICK / SNR / RIM /
+ *  HAT / CYM / TOM) — mirrors `@drum/library`'s lane mapping, declared here
+ *  independently for the same schema-decoupling reason as `DrumVoiceName`. */
+export type DrumLaneId = "kick" | "snare" | "rim" | "hat" | "cym" | "tom";
+
+/** One authored step inside a `steps`-mode `DrumBlock`. `beat` is
+ *  block-relative. `offsetBeats`/`durBeats` are the micro-timing and gate
+ *  the piano-roll layer writes; `prob`/`ratchet`/`flam` are the per-step
+ *  effects — all baked deterministically at plan time (seeded per
+ *  occurrence) so preview, .mid, live-out and Send-to-Ableton stay
+ *  identical. */
+export interface DrumBlockNote {
+  beat: number;
+  voice: DrumVoiceName;
+  velocity: number;
+  /** Micro-timing nudge in beats (negative = early). */
+  offsetBeats?: number;
+  /** Gate / step length in beats. Absent → the block's grid. */
+  durBeats?: number;
+  /** Keep probability 0..1 (seeded per occurrence). Absent → always plays. */
+  prob?: number;
+  /** Sub-hits packed into the step's gate (1..4). Absent → 1. */
+  ratchet?: number;
+  /** Grace note a hair before the step. Absent → off. */
+  flam?: boolean;
+}
+
+/** Range-level effects for a `DrumBlock` — applied to the block's own notes
+ *  after generation, deterministically (seeded from the occurrence). */
+export interface DrumBlockFx {
+  /** Delays off-8th hits toward the triplet feel (0..1). */
+  swing?: number;
+  /** Seeded timing/velocity jitter (0..1). */
+  humanize?: number;
+  /** Pull notes toward the 16th grid (0..1). */
+  quantize?: number;
+  /** Velocity remap, soft (-1) → hard (+1). */
+  velCurve?: number;
+}
+
+/** A range-scoped, per-lane drum authoring block — the Drum Blocks
+ *  timeline's unit of edit. `startBeat`/`endBeat` are section-relative and
+ *  clamped to the section (blocks never bleed across section lines).
+ *
+ *  - `inherit` — leave the base groove; `fx` (if any) still applies to the
+ *    lane's existing notes in range.
+ *  - `euclid` — replace the lane's notes in range with `k` onsets over `n`
+ *    steps, rotated by `rotation` (the XY pad's X/Y axes).
+ *  - `outline` — replace with a 2s/3s outline pattern (`outlineToGroovePattern`
+ *    when `cellVoices` is set, a plain click otherwise), tiled across the range.
+ *  - `steps` — replace with the authored `notes` (the dotted lane / piano roll).
+ *  - `motion` — a transition gesture: `motion.x`/`motion.y` (each -1..1,
+ *    y up) resolve to a transition model (+ intensity via magnitude) and the
+ *    range's content is replaced with the synthesized gesture.
+ *
+ *  Blocks sharing a `groupId` with `interleave: true` are treated as ONE
+ *  cluster: a single Euclidean rhythm spread across their lanes by priority
+ *  (kick > snare > toms > percussion) — rolls and fills, not stacked hits. */
+export interface DrumBlock {
+  id: string;
+  lane: DrumLaneId;
+  groupId?: string;
+  startBeat: number;
+  endBeat: number;
+  mode: "inherit" | "euclid" | "outline" | "steps" | "motion";
+  euclid?: EuclidPattern;
+  outline?: MeterOutline;
+  notes?: DrumBlockNote[];
+  /** Motion gesture vector, each axis -1..1; +y = build, +x = dense. */
+  motion?: { x: number; y: number };
+  interleave?: boolean;
+  fx?: DrumBlockFx;
+}
+
 // Re-export the adapters module so consumers (youtubeFullImport.ts,
 // chordmini-bridge.ts) import from one place.
 export { parseChordName, parseSyncedLyrics, chordMiniAppToBlueprintSong } from "./adapters";
@@ -333,6 +407,13 @@ export interface BlueprintSection {
    *  the base pattern (preset / outline / heuristic). This is the "edit
    *  the drums voice by voice" path. */
   drumVoicePatterns?: Partial<Record<DrumVoiceName, EuclidPattern>>;
+  /** Range-scoped Drum Blocks — the Drum Blocks timeline's authoring layer
+   *  (dotted step lanes, XY Euclidean pads, motion gestures, step FX).
+   *  Absent → byte-identical to the pre-blocks pipeline. Applied at export
+   *  as the LAST content layer (`@drum/library`'s `applyDrumBlocks`), so
+   *  authored material always wins over automatic fills/transitions/
+   *  detours; the automatic ending machinery still runs underneath. */
+  drumBlocks?: DrumBlock[];
   /** Euclidean harmony — a `MeterOutline` whose onsets (each 2s/3s cell's
    *  start) drive when the chord progression advances, instead of each
    *  chord's `beats`. Reuses the exact drum-outline machinery, so harmony
