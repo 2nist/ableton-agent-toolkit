@@ -6,7 +6,7 @@ See `docs/architecture.md` for the design and `docs/m4l-scaffolding-risk.md` bef
 
 ## Status
 
-86 tests passing repo-wide (`npm run test`).
+~1,400 tests passing repo-wide (`npm run verify` = typecheck + tests; 0 type errors across all workspaces).
 
 - [x] **Phase 0** — repo scaffold, `extensions/hello-world` dev-loop validation
 - [x] **Phase 1** — `packages/test-harness`: fakes only `initializeExtensionHost`, real SDK does the rest
@@ -14,7 +14,13 @@ See `docs/architecture.md` for the design and `docs/m4l-scaffolding-risk.md` bef
 - [x] **Phase 3** — `extensions/chord-assistant`: right-click a MIDI Arrangement selection → inserts a chord progression as one MIDI clip per lane. Logically verified; real-Live manual QA still outstanding
 - [x] **Phase 4** — `packages/cli`: `create extension` is real and non-interactive (agents can't answer prompts), end-to-end verified — built a throwaway extension, installed it, built it, deleted it
 - [x] **Phase 5** — `create device`: hand-authored `reference.amxd` in Live, reverse-engineered the (undocumented) `.amxd` binary format byte-by-byte to patch it programmatically. Fully verified end-to-end in real Live, including a genuine gotcha found along the way — `jweb` silently drops custom JS→Max messages without an undocumented `nonstandardoutletcalls 1` attribute, which doesn't survive a save and has to be re-asserted via `loadbang` on every load. See `docs/m4l-scaffolding-risk.md`
-- [ ] **Phase 6+** — `osc-bridge`, on-demand `ui-kit` components, master-Set consolidation tooling
+- [x] **Phase 6** — `osc-bridge` is implemented and running: relays Ableton transport/beat state over WebSocket (`ws://127.0.0.1:8081`) and serves M4L telemetry + the blueprint command queue over REST (`http://localhost:5200`). See `packages/osc-bridge`.
+- [ ] **Phase 7+** — on-demand `ui-kit` components, master-Set consolidation tooling
+
+### Apps, extensions, and the flagship
+- **`apps/trackdraft`** — the main React songwriting app (structure/harmony/lyrics/drums/melody) built on `@music-theory/*` and `@platform/*`.
+- **`extensions/trackdraft-bridge`** — the flagship Ableton Extension: applies a song blueprint to Live as chord/drum/bass/color clips, with a picker/viewer webview and a file-based command queue polled from the extension host.
+- **User song library** — lives in `~/TrackDraft/library` (read by `packages/song-mcp`, `osc-bridge`, and the bridge extension). The source/draft songs are kept in `~/Downloads/lalo-chezia`.
 
 ## Dev loop (Phase 0)
 

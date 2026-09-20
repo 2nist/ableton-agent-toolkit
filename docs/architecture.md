@@ -42,7 +42,7 @@ interface ActivationContext {
 | `@music-theory/song-structure` | Arrangement/form analysis, depends on `core`. |
 | `@platform/ui-kit` | Shared components + `bridge.ts` host adapter + design tokens. |
 | `@platform/test-harness` | Fakes `initializeExtensionHost`, calls the real SDK's `initialize()`. |
-| `@platform/osc-bridge` | Thin wrapper over the already-installed AbletonOSC remote script, for realtime control Extensions can't do. Stubbed until there's a real consumer. |
+| `@platform/osc-bridge` | Thin wrapper over the already-installed AbletonOSC remote script, for realtime control Extensions can't do. **Implemented and running**: `bridge.ts` relays Ableton transport/beat state to WebSocket clients; `telemetry.ts` serves M4L telemetry + the blueprint command queue over REST; `cli.ts` wires both together. |
 | `@platform/cli` | `create extension` / `create device` scaffolding. |
 
 ## Why AbletonOSC, not a new realtime layer

@@ -20,6 +20,5 @@ apps/trackdraft/scripts/output/
 # Local bundles / scratch
 *.zip
 temp template Project/
-tempdrumpatgencode/
 # E-GMD raw dataset (45k MIDI files, ~300MB) — local source material, never commit
 packages/drum-library/e-gmd-v1.0.0/

@@ -5,10 +5,11 @@
  *
  *   npx tsx scripts/zappa-audition.ts [--out <file.mid>]
  *
- * Default output: <repo>/tempdrumpatgencode/zappa-audition.mid (gitignored).
+ * Default output: ~/trackdraft-import-cache/zappa-audition.mid.
  * Coverage copies are skipped — they duplicate another item's notes.
  */
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { writeMidi } from "midi-file";
 import { PRESET_DATA, FILL_DATA } from "../src/index.js";
@@ -40,7 +41,7 @@ function main(): void {
   const outPath =
     outIdx >= 0
       ? args[outIdx + 1]
-      : path.join(import.meta.dirname, "..", "..", "..", "tempdrumpatgencode", "zappa-audition.mid");
+      : path.join(os.homedir(), "trackdraft-import-cache", "zappa-audition.mid");
 
   const items: Item[] = [];
   for (const family of FAMILIES) {

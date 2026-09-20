@@ -100,7 +100,7 @@ function roundToQuarterBeat(beats: number): number {
  * and 63 sections carry no chords. 44 % of the gaps are whole-bar
  * multiples (likely unannotated final repeats — repeating the last chord
  * would tile those); the rest are beat-level remainders needing a per-case
- * policy. Details: tempdrumpatgencode/importer-runner-reply.md.
+ * policy. Details: ~/trackdraft-import-cache/exchange/importer-runner-reply.md.
  *
  * UPDATE 2026-09-20: the tiling is now part of this ingest pipeline — the
  * section builder below holds the last chord through tail gaps >3 beats
