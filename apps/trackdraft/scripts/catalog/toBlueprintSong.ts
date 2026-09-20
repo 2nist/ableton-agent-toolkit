@@ -101,6 +101,13 @@ function roundToQuarterBeat(beats: number): number {
  * multiples (likely unannotated final repeats — repeating the last chord
  * would tile those); the rest are beat-level remainders needing a per-case
  * policy. Details: tempdrumpatgencode/importer-runner-reply.md.
+ *
+ * UPDATE 2026-09-20: the tiling landed as a post-ingest repair
+ * (`repair-chord-tracks.ts` holds the last chord bar-aligned through
+ * gaps >3; applied catalog-wide — 821 sections, now 1459/1459 within
+ * policy; `audit-catalog.ts` flags regressions). Fold the pad INTO this
+ * function at the next ingest rework so a regenerated catalog comes out
+ * tiled; until then, re-run the repair after any re-ingest.
  */
 export function snapProgressionToGrid(
   chords: Chord[],

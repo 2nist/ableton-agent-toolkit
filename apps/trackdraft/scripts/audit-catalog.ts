@@ -242,6 +242,19 @@ function scoreChords(song: BlueprintSong, jcrdChordCount: number | null): Dimens
       );
       score -= 0.02;
     }
+    // Chord track should (nearly) tile the section: `snapProgressionToGrid`
+    // promises at most a ≤3-beat tail rest; anything larger means the
+    // annotation stops early and looping playback restarts the cycle under
+    // the tail (see `repair-chord-tracks.ts`).
+    if (s.chords.length > 0) {
+      const beatsPerBar = (s.timeSignatureNumerator ?? 4) * (4 / 2 ** (s.timeSignatureDenPower ?? 2));
+      const totalBeats = s.chords.reduce((sum, c) => sum + (c.beats > 0 ? c.beats : 0), 0);
+      const gap = s.bars * beatsPerBar - totalBeats;
+      if (gap > 3) {
+        issues.push('chord track ends ' + gap + ' beats short in "' + s.name + '"');
+        score -= 0.02;
+      }
+    }
   }
 
   if (jcrdChordCount === null) {
