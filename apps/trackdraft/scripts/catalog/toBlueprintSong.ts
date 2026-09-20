@@ -273,8 +273,20 @@ export function catalogSongToBlueprintSong({ id, raw, lyricLines, hasSyncedLyric
     // makes the song run ~10-20% ahead of the audio (e.g. Drive My Car's
     // verses are 8 bars in the recording but only 7 from chord durations).
     // Taking the max keeps the longer count when chords genuinely outlast
-    // the raw span, so nothing gets cut off either way.
+    // the raw span, so nothing gets cut off either way. The tail gap is
+    // then closed below by HOLDING the last chord (bar-aligned) so the
+    // track tiles the section — chord playback loops the progression, and
+    // without the hold the cycle restarts under the section-end fills.
     const finalBars = Math.max(rawChords.length > 0 ? snappedBars : 0, bars);
+
+    if (chords.length > 0) {
+      const gap = finalBars * DEFAULT_TIME_SIG_NUMERATOR - chords.reduce((s, c) => s + c.beats, 0);
+      if (gap > 3) {
+        const pad = gap - (gap % DEFAULT_TIME_SIG_NUMERATOR);
+        const last = chords[chords.length - 1];
+        chords[chords.length - 1] = { ...last, beats: last.beats + pad };
+      }
+    }
 
     // ---- return section object ---------------------------------------
 

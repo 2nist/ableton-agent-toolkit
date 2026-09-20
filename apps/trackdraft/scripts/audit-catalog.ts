@@ -235,7 +235,10 @@ function scoreChords(song: BlueprintSong, jcrdChordCount: number | null): Dimens
 
   for (const s of song.sections) {
     const density = s.bars > 0 ? s.chords.length / s.bars : 0;
-    if (s.chords.length > 0 && density < 0.5) {
+    // Deliberate long holds (≥8 beats) are deliberate, not sparse — only
+    // flag sections whose chord changes are genuinely few AND short.
+    const longest = s.chords.reduce((m, c) => Math.max(m, c.beats), 0);
+    if (s.chords.length > 0 && density < 0.5 && longest < 8) {
       issues.push(
         'sparse chords in "' + s.name + '" (' +
         s.chords.length + " over " + s.bars + " bars)",
@@ -428,13 +431,16 @@ function loadJcrdIndex(): Map<string, JcrdRef> {
         0,
       );
       const key = raw.metadata?.key?.replace("Key ", "") ?? "?";
-      index.set(title.toLowerCase(), {
+      const ref: JcrdRef = {
         chordCount: jcrdCount,
         rawTitle: title,
         rawKey: key,
         rawBpm: raw.metadata?.tempo ?? 0,
         sectionCount: (raw.sections ?? []).length,
-      });
+      };
+      index.set(title.toLowerCase(), ref);
+      const strippedTitle = title.replace(/^\d+\s*[-–]\s*/, "").trim().toLowerCase();
+      if (!index.has(strippedTitle)) index.set(strippedTitle, ref);
     } catch {}
   }
   return index;
@@ -443,13 +449,16 @@ function loadJcrdIndex(): Map<string, JcrdRef> {
 function findJcrdMatch(bpTitle: string, index: Map<string, JcrdRef>): JcrdRef | null {
   const key = bpTitle.toLowerCase();
   if (index.has(key)) return index.get(key)!;
-  const stripped = key.replace(/^\\d+\\s*[-–]\\s*/, "");
+  const stripped = key.replace(/^\d+\s*[-–]\s*/, "");
   if (index.has(stripped)) return index.get(stripped)!;
   for (const [jcrdTitle, ref] of index) {
-    const bpWords = new Set(key.split(/\\s+/).filter((w) => w.length > 2));
-    const jcrdWords = new Set(jcrdTitle.split(/\\s+/).filter((w) => w.length > 2));
+    const bpWords = new Set(key.split(/\s+/).filter((w) => w.length > 2));
+    const jcrdWords = new Set(jcrdTitle.split(/\s+/).filter((w) => w.length > 2));
     const combined = [...bpWords].filter((w) => jcrdWords.has(w));
-    if (combined.length >= 3) return ref;
+    // Titles of two significant words can never reach three matches —
+    // accept a full overlap of the shorter title's words instead.
+    const shorter = Math.min(bpWords.size, jcrdWords.size);
+    if (combined.length >= 3 || (combined.length >= 2 && combined.length >= shorter)) return ref;
   }
   return null;
 }

@@ -55,6 +55,23 @@ describe("catalogSongToBlueprintSong", () => {
     expect(song.sections[1].chords[0].romanNumeral).toBe("vi"); // lowercase: minor quality
   });
 
+  it("holds the last chord through a long tail so the track tiles the section", () => {
+    const ragged: RawCatalogSong = {
+      ...twoSectionSong,
+      sections: [
+        {
+          name: "Vamp",
+          startSec: 0,
+          endSec: 10, // 20 beats = 5 bars
+          chords: [{ startSec: 0, endSec: 6, root: "D", quality: "min" }], // 12 beats — 8 short
+        },
+      ],
+    };
+    const song = catalogSongToBlueprintSong({ id: "test-1", raw: ragged });
+    expect(song.sections[0].bars).toBe(5);
+    expect(song.sections[0].chords[0].beats).toBe(20); // held: 12 + 8, bar-aligned
+  });
+
   it("buckets LRC lyric lines into the section whose beat range contains them", () => {
     const song = catalogSongToBlueprintSong({
       id: "test-1",
