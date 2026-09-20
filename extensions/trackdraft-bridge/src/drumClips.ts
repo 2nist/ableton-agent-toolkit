@@ -24,7 +24,7 @@ import {
   type SectionDrumInput,
 } from "@drum/library";
 import { getVelocity } from "@music-theory/song-structure";
-import type { MeterOutline } from "@music-theory/song-blueprint";
+import { beatsPerBar, type MeterOutline } from "@music-theory/song-blueprint";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
 
 export interface DrumClipPlan {
@@ -162,9 +162,11 @@ export function planDrumClips(
       sectionId: section.id,
       occurrenceIndex,
       role: section.role ?? null,
+      beatsPerBar: beatsPerBar(section),
       variant,
       outline: section.drumMeterOutline ?? null,
       voiceOverrides: section.drumVoicePatterns,
+      blocks: section.drumBlocks,
       variation: section.drumVariationOutline ?? null,
       variationBars: section.drumVariationBars,
       variationStartBeat: section.drumVariationStartBeat,
@@ -181,10 +183,10 @@ export function planDrumClips(
   return spans.map(({ section, startBeat, durationBeats }, i) => {
     const notes: NoteDescription[] = plans[i].notes
       .sort((a, b) => a.beat - b.beat || a.pitch - b.pitch)
-      .map(({ beat, pitch, velocity }) => ({
+      .map(({ beat, pitch, velocity, duration }) => ({
         pitch,
         startTime: beat,
-        duration: HIT_DURATION,
+        duration: duration ?? HIT_DURATION,
         velocity,
       }));
 

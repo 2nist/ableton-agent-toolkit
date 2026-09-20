@@ -179,6 +179,49 @@ const overrideSong: BlueprintSong = makeSong({
   arrangement: [{ sectionId: "bridge", repeats: 1 }],
 });
 
+/** Drum Blocks — range-scoped authored content (euclid pad output, an
+ *  interleave cluster, authored steps + step FX, a motion gesture) must
+ *  compile to identical notes in both planners, since both feed the same
+ *  `applyDrumBlocks` inside `planSectionDrumNotes`. */
+const blocksSong: BlueprintSong = makeSong({
+  id: "parity-blocks",
+  title: "Parity Blocks",
+  bpm: 120,
+  concept: "pop",
+  sections: [
+    makeSection({
+      id: "v",
+      name: "Verse",
+      role: "verse",
+      bars: 4,
+      timeSignatureNumerator: 4,
+      velocity: "mf",
+      chords: [CHORDS[0], CHORDS[1]],
+      drumBlocks: [
+        { id: "b1", lane: "kick", startBeat: 0, endBeat: 8, mode: "euclid", euclid: { k: 5, n: 8, rotation: 1 } },
+        {
+          id: "b2", lane: "snare", groupId: "g1", interleave: true,
+          startBeat: 8, endBeat: 16, mode: "euclid", euclid: { k: 5, n: 8, rotation: 0 },
+        },
+        {
+          id: "b3", lane: "tom", groupId: "g1", interleave: true,
+          startBeat: 8, endBeat: 16, mode: "euclid", euclid: { k: 5, n: 8, rotation: 0 },
+        },
+        {
+          id: "b4", lane: "hat", startBeat: 0, endBeat: 4, mode: "steps",
+          notes: [
+            { beat: 0, voice: "closedHat", velocity: 96 },
+            { beat: 1.5, voice: "openHat", velocity: 74, ratchet: 2 },
+          ],
+          fx: { swing: 0.4 },
+        },
+        { id: "b5", lane: "cym", startBeat: 12, endBeat: 16, mode: "motion", motion: { x: 0.7, y: 0.7 } },
+      ],
+    }),
+  ],
+  arrangement: [{ sectionId: "v", repeats: 1 }],
+});
+
 const SONGS: Record<string, BlueprintSong> = {
   acoustic: acousticSong,
   dnb: dnbSong,
@@ -186,6 +229,7 @@ const SONGS: Record<string, BlueprintSong> = {
   outline: outlineSong,
   bent: bentSong,
   override: overrideSong,
+  blocks: blocksSong,
 };
 
 // ---------------------------------------------------------------------------
