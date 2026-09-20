@@ -1,13 +1,16 @@
 import { motionModelFor, type DrumLaneId } from "@drum/library";
 import { TOP_PAD, TRACK_H } from "../../../lib/timeline/beatMap";
-import type { DrumBlock } from "../../../types/blueprint";
+import type { DrumBlock, DrumBlockFx } from "../../../types/blueprint";
+import { normalizeFx } from "./fxParams";
 
 /**
  * Geometry + gesture math shared by the Drum Blocks view, its docked XY pad
  * and the exploded selection editor — one place for how a ring drag maps to
- * euclid values, how the step-value boxes are laid out, and how a motion
- * vector reads as a gesture name. Keeping it here means the compact pad and
- * the big modal display can never disagree.
+ * euclid values, how the step-value boxes are laid out, how a motion vector
+ * reads as a gesture name, and how the RANGE FX family (swing / humanize /
+ * quantize / velCurve) is written onto — and kept alive across — the
+ * selection's blocks. Keeping it here means the compact pad and the big
+ * modal display can never disagree.
  */
 
 /** Air between the top of a lane and its cell row. */
@@ -19,6 +22,142 @@ export function upsertBlocks(blocks: DrumBlock[] | undefined, changes: DrumBlock
   const byId = new Map((blocks ?? []).map((b) => [b.id, b]));
   for (const c of changes) byId.set(c.id, c);
   return [...byId.values()];
+}
+
+// ---------------------------------------------------------------------------
+// Range FX — the DrumBlockFx family (swing / humanize / quantize / velCurve)
+// ---------------------------------------------------------------------------
+
+/** Tolerance for "exactly this range" matches — ids are built from these
+ *  numbers, so the writers' own rounding is the only source of drift. */
+const RANGE_EPS = 1e-6;
+
+/** True when a block covers exactly this range — the identity every
+ *  selection writer upserts by (the range IS the block's key). */
+export function isExactRange(b: DrumBlock, startBeat: number, endBeat: number): boolean {
+  return Math.abs(b.startBeat - startBeat) < RANGE_EPS && Math.abs(b.endBeat - endBeat) < RANGE_EPS;
+}
+
+/** The range FX in effect for a lane — carried by any exact-range block
+ *  (a mode block with `fx` merged on, or an `inherit` carrier). */
+export function fxForRange(
+  blocks: readonly DrumBlock[] | undefined,
+  lane: DrumLaneId,
+  startBeat: number,
+  endBeat: number,
+): DrumBlockFx | undefined {
+  for (const b of blocks ?? []) {
+    if (b.lane !== lane || !isExactRange(b, startBeat, endBeat)) continue;
+    const fx = normalizeFx(b.fx);
+    if (fx) return fx;
+  }
+  return undefined;
+}
+
+/** The first selected lane that has range FX — what the sliders seed from
+ *  (same convention as `existingEuclid`'s first-lane lookup). */
+export function fxForLanes(
+  blocks: readonly DrumBlock[] | undefined,
+  lanes: readonly DrumLaneId[],
+  startBeat: number,
+  endBeat: number,
+): DrumBlockFx | undefined {
+  for (const lane of lanes) {
+    const fx = fxForRange(blocks, lane, startBeat, endBeat);
+    if (fx) return fx;
+  }
+  return undefined;
+}
+
+/** Drop exact-range `inherit` CARRIERS for these lanes — called when a mode
+ *  write adopts their fx into the new blocks (or when fx is cleared). */
+export function stripFxCarriers(
+  blocks: readonly DrumBlock[] | undefined,
+  lanes: readonly DrumLaneId[],
+  startBeat: number,
+  endBeat: number,
+): DrumBlock[] {
+  const laneSet = new Set(lanes);
+  return (blocks ?? []).filter(
+    (b) => !(b.mode === "inherit" && laneSet.has(b.lane) && isExactRange(b, startBeat, endBeat)),
+  );
+}
+
+/** A MODE write (euclid ring / motion pad / step flatten) that keeps range
+ *  FX alive: each touched lane's fx (from any exact-range block — including
+ *  an `inherit` carrier) is adopted onto the new blocks, and the carriers
+ *  it absorbed are dropped so the fx can never apply twice. */
+export function upsertModeBlocks(
+  blocks: DrumBlock[] | undefined,
+  startBeat: number,
+  endBeat: number,
+  changes: DrumBlock[],
+): DrumBlock[] {
+  const adopted = changes.map((c) => {
+    const fx = fxForRange(blocks, c.lane, startBeat, endBeat);
+    return fx ? { ...c, fx } : c;
+  });
+  return upsertBlocks(
+    stripFxCarriers(blocks, changes.map((c) => c.lane), startBeat, endBeat),
+    adopted,
+  );
+}
+
+/** Strip a block's fx field (immutably). */
+function withoutFx(b: DrumBlock): DrumBlock {
+  if (!b.fx) return b;
+  const copy = { ...b };
+  delete copy.fx;
+  return copy;
+}
+
+/**
+ * The RANGE FX write — swing / humanize / quantize / velCurve for every
+ * selected lane over the exact selection range:
+ *  - a lane WITH an exact-range block gets the fx ON that block, so a later
+ *    euclid/motion/step rewrite adopts it back (and motion's bake applies it
+ *    to the gesture it synthesizes);
+ *  - a lane with nothing there gets an `inherit` CARRIER — the compiler's
+ *    inherit semantics apply the fx to the base groove's notes in range;
+ *  - clearing (all-zero fx) strips the field and drops the carrier, so
+ *    "no effect" leaves no orphan blocks behind.
+ *
+ * Blocks overlapping the range without matching it exactly are untouched —
+ * the same exact-range identity every selection writer upserts by. */
+export function fxBlocksFor(
+  blocks: readonly DrumBlock[] | undefined,
+  lanes: readonly DrumLaneId[],
+  startBeat: number,
+  endBeat: number,
+  fxIn: DrumBlockFx,
+): DrumBlock[] {
+  const fx = normalizeFx(fxIn);
+  const laneSet = new Set(lanes);
+  const out: DrumBlock[] = [];
+  const covered = new Set<string>();
+  for (const b of blocks ?? []) {
+    if (!laneSet.has(b.lane) || !isExactRange(b, startBeat, endBeat)) {
+      out.push(b);
+      continue;
+    }
+    if (b.mode === "inherit") continue; // carriers are rebuilt below
+    out.push(fx ? { ...b, fx } : withoutFx(b));
+    covered.add(b.lane);
+  }
+  if (fx) {
+    for (const lane of lanes) {
+      if (covered.has(lane)) continue;
+      out.push({
+        id: `blk-${lane}-${startBeat}-${endBeat}-fx`,
+        lane,
+        startBeat,
+        endBeat,
+        mode: "inherit",
+        fx,
+      });
+    }
+  }
+  return out;
 }
 
 /** The euclid blocks a ring gesture writes: one per selected lane, linked

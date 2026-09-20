@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DrumLaneId } from "@drum/library";
 import type { SectionSpan } from "../../../lib/arrangement";
 import { beatsPerBarOf } from "../../../lib/timeline/beatMap";
-import type { BlueprintSection } from "../../../types/blueprint";
+import type { BlueprintSection, DrumBlockFx } from "../../../types/blueprint";
 import type { LaneHits } from "../../../lib/timeline/drumLaneHits";
 import { DRUM_LANES } from "../laneStyle";
-import { EuclidRing, MotionRing } from "./SelectionDisplays";
-import { euclidBlocksFor, motionBlockFor, motionLabelFor, upsertBlocks } from "./selectionMath";
+import { EuclidRing, FxPanel, MotionRing } from "./SelectionDisplays";
+import { euclidBlocksFor, fxBlocksFor, fxForLanes, motionBlockFor, motionLabelFor, upsertModeBlocks } from "./selectionMath";
 
 /**
  * The exploded selection editor — the docked pad opened into a workbench.
@@ -19,9 +19,10 @@ import { euclidBlocksFor, motionBlockFor, motionLabelFor, upsertBlocks } from ".
  * MOTION are live: the euclid display is a big ring whose drag arm runs
  * from the center all the way out to the display edge (angle = rotation,
  * distance = density) with each selected lane's necklace NESTED inside
- * the previous one; the motion display is the transition gesture ring.
- * VELOCITY / STEP FX are the next control families and get their cards
- * here so the layout is already planned.
+ * the previous one; the motion display is the transition gesture ring;
+ * FX is live too — the Range FX rows (swing / humanize / quantize /
+ * velCurve). VELOCITY is the next control family and gets its card here
+ * so the layout is already planned.
  *
  * Every edit goes through the same draft store as the main view (the
  * `onWrite` prop), so ● preview / Apply / Revert behave identically —
@@ -138,6 +139,10 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
     ) ?? null,
     [section.drumBlocks, firstLane, range.startBeat, range.endBeat],
   );
+  const existingFx = useMemo(
+    () => fxForLanes(section.drumBlocks, lanes, range.startBeat, range.endBeat),
+    [section.drumBlocks, lanes, range.startBeat, range.endBeat],
+  );
 
   const [euclid, setEuclid] = useState(() => ({
     k: existingEuclid?.euclid?.k ?? Math.max(1, Math.round(nBeats / 2)),
@@ -147,12 +152,16 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
     x: existingMotion?.motion?.x ?? 0,
     y: existingMotion?.motion?.y ?? 0,
   }));
+  const [fx, setFx] = useState<DrumBlockFx>(() => existingFx ?? {});
 
   const writeEuclid = useCallback((k: number, rotation: number) => {
     setEuclid({ k, rotation });
     onWrite((sec) => ({
       ...sec,
-      drumBlocks: upsertBlocks(sec.drumBlocks, euclidBlocksFor(lanes, range.startBeat, range.endBeat, k, nBeats, rotation)),
+      drumBlocks: upsertModeBlocks(
+        sec.drumBlocks, range.startBeat, range.endBeat,
+        euclidBlocksFor(lanes, range.startBeat, range.endBeat, k, nBeats, rotation),
+      ),
     }));
   }, [lanes, range.startBeat, range.endBeat, nBeats, onWrite]);
 
@@ -160,7 +169,18 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
     setMotion({ x, y });
     onWrite((sec) => ({
       ...sec,
-      drumBlocks: upsertBlocks(sec.drumBlocks, [motionBlockFor(lanes[0], range.startBeat, range.endBeat, x, y)]),
+      drumBlocks: upsertModeBlocks(
+        sec.drumBlocks, range.startBeat, range.endBeat,
+        [motionBlockFor(lanes[0], range.startBeat, range.endBeat, x, y)],
+      ),
+    }));
+  }, [lanes, range.startBeat, range.endBeat, onWrite]);
+
+  const writeFx = useCallback((next: DrumBlockFx) => {
+    setFx(next);
+    onWrite((sec) => ({
+      ...sec,
+      drumBlocks: fxBlocksFor(sec.drumBlocks, lanes, range.startBeat, range.endBeat, next),
     }));
   }, [lanes, range.startBeat, range.endBeat, onWrite]);
 
@@ -177,8 +197,8 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
   const chips: { id: Mode; label: string; live: boolean }[] = [
     { id: "euclid", label: "Euclid", live: true },
     { id: "motion", label: "Motion", live: true },
+    { id: "fx", label: "FX", live: true },
     { id: "velocity", label: "Velocity", live: false },
-    { id: "fx", label: "Step FX", live: false },
   ];
 
   return (
@@ -349,7 +369,8 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
             </div>
 
             {/* the control display — the shared ring components (identical
-                to the docked workbench's) */}
+                to the docked workbench's) — and, for FX, the same Range FX
+                panel the workbench renders */}
             {(panel === "euclid" || panel === "motion") && (
               <div className="border border-edge rounded bg-black/40">
                 <div className="p-2">
@@ -371,6 +392,12 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
                       : "↗ build · ↖ crescendo · ↓ break · ↙ thin"}
                   </div>
                 </div>
+              </div>
+            )}
+
+            {panel === "fx" && (
+              <div className="border border-edge rounded bg-black/40">
+                <FxPanel values={fx} onChange={writeFx} />
               </div>
             )}
 
@@ -397,16 +424,6 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
                 lines={[
                   "v1: the step boxes under the grid show + drag each step's velocity.",
                   "Next: shape the whole selection — ramps, accents, alternating, humanize.",
-                ]}
-              />
-            )}
-            {panel === "fx" && (
-              <PlaceholderCard
-                title="Step FX"
-                lines={[
-                  "Per-step effects that bake into the export today:",
-                  "nudge · gate · probability · ratchet · flam",
-                  "Controls land here once the selection surface settles.",
                 ]}
               />
             )}

@@ -1,6 +1,8 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { euclidOnsetSteps, type DrumLaneId } from "@drum/library";
+import type { DrumBlockFx } from "../../../types/blueprint";
 import { DRUM_LANES } from "../laneStyle";
+import { FX_PARAMS, FX_SPECS, type FxParam } from "./fxParams";
 import { euclidFromRing, ringHand } from "./selectionMath";
 
 /**
@@ -59,7 +61,7 @@ export function EuclidRing({ k, n, rotation, lanes, onChange }: {
       style={{ cursor: "grab" }}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
-        (e.currentTarget as Element).setPointerCapture(e.pointerId);
+        try { (e.currentTarget as Element).setPointerCapture(e.pointerId); } catch { /* not capturable — fine */ }
         dragging.current = true;
         const l = local(e);
         setDragVis(l);
@@ -138,7 +140,7 @@ export function MotionRing({ x, y, onChange }: {
       style={{ cursor: "grab" }}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
-        (e.currentTarget as Element).setPointerCapture(e.pointerId);
+        try { (e.currentTarget as Element).setPointerCapture(e.pointerId); } catch { /* not capturable — fine */ }
         dragging.current = true;
         const l = local(e);
         setDragVis(l);
@@ -173,5 +175,97 @@ export function MotionRing({ x, y, onChange }: {
       />
       <circle cx={DISP_C} cy={DISP_C} r={3} fill={AMBER} />
     </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Range FX — swing / humanize / quantize / velCurve, the per-range family
+// (`DrumBlockFx`). Same units the compiler bakes; the write path lives in
+// selectionMath's `fxBlocksFor` so both surfaces stay identical.
+// ---------------------------------------------------------------------------
+
+export function FxPanel({ values, onChange }: {
+  /** The selection's fx — engine units, rest fields absent. */
+  values: DrumBlockFx;
+  onChange: (fx: DrumBlockFx) => void;
+}) {
+  const anyActive = FX_PARAMS.some((p) => values[p]);
+  const set = (id: FxParam, v: number) => {
+    const next: DrumBlockFx = { ...values };
+    if (v === FX_SPECS[id].rest) delete next[id];
+    else next[id] = v;
+    onChange(next);
+  };
+  return (
+    <div className="px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Range FX</span>
+        <span className="flex-1" />
+        {anyActive && (
+          <button
+            onClick={() => onChange({})}
+            className="font-mono text-2xs text-inkMuted hover:text-ink border border-edge rounded px-1.5 py-0.5"
+          >
+            ⟲ clear
+          </button>
+        )}
+      </div>
+      <div className="mt-2 flex flex-col gap-1.5">
+        {FX_PARAMS.map((id) => (
+          <FxRow key={id} id={id} value={values[id] ?? FX_SPECS[id].rest} onChange={(v) => set(id, v)} />
+        ))}
+      </div>
+      <div className="font-mono text-2xs text-inkMuted mt-2">
+        Bakes at plan time (quantize → swing → humanize → velCurve) — preview ≡ .mid ≡ live-out ≡ Ableton.
+      </div>
+      <div className="font-mono text-2xs text-inkMuted/70 mt-0.5">
+        Per-step: drag the value boxes under the lanes.
+      </div>
+    </div>
+  );
+}
+
+function FxRow({ id, value, onChange }: { id: FxParam; value: number; onChange: (v: number) => void }) {
+  const spec = FX_SPECS[id];
+  const track = useRef<HTMLDivElement | null>(null);
+  const dragging = useRef(false);
+  const active = value !== spec.rest;
+  const applyAt = (clientX: number) => {
+    const rect = track.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0) return;
+    onChange(spec.fromFrac(clamp((clientX - rect.left) / rect.width, 0, 1)));
+  };
+  return (
+    <div className="flex items-center gap-2" title={spec.hint}>
+      <span className={`font-mono text-2xs w-[62px] shrink-0 ${active ? "text-[#E8B54A]" : "text-inkMuted"}`}>
+        {spec.label.toUpperCase()}
+      </span>
+      <div
+        ref={track}
+        className="relative flex-1 h-3.5 rounded-sm bg-black/50 border border-edge cursor-ew-resize touch-none"
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          try { (e.currentTarget as Element).setPointerCapture(e.pointerId); } catch { /* not capturable — fine */ }
+          dragging.current = true;
+          applyAt(e.clientX);
+        }}
+        onPointerMove={(e) => { if (dragging.current) applyAt(e.clientX); }}
+        onPointerUp={() => { dragging.current = false; }}
+        onPointerCancel={() => { dragging.current = false; }}
+      >
+        <div
+          className="absolute inset-y-0 left-0"
+          style={{
+            width: `${spec.toFrac(value) * 100}%`,
+            background: active ? AMBER : "#3A3F47",
+            opacity: active ? 0.9 : 0.5,
+          }}
+        />
+        {spec.min < 0 && <div className="absolute inset-y-0 left-1/2 w-px bg-white/25" />}
+      </div>
+      <span className={`font-mono text-2xs w-[64px] shrink-0 text-right ${active ? "text-[#E8B54A]" : "text-inkMuted/70"}`}>
+        {spec.format(value)}
+      </span>
+    </div>
   );
 }

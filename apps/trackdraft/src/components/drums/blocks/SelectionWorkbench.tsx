@@ -2,17 +2,18 @@ import { useCallback, useMemo, useState } from "react";
 import type { DrumLaneId } from "@drum/library";
 import type { SectionSpan } from "../../../lib/arrangement";
 import { beatsPerBarOf } from "../../../lib/timeline/beatMap";
-import type { BlueprintSection } from "../../../types/blueprint";
+import type { BlueprintSection, DrumBlockFx } from "../../../types/blueprint";
 import { DRUM_LANES } from "../laneStyle";
-import { EuclidRing, MotionRing } from "./SelectionDisplays";
-import { euclidBlocksFor, motionBlockFor, motionLabelFor, upsertBlocks } from "./selectionMath";
+import { EuclidRing, FxPanel, MotionRing } from "./SelectionDisplays";
+import { euclidBlocksFor, fxBlocksFor, fxForLanes, motionBlockFor, motionLabelFor, upsertModeBlocks } from "./selectionMath";
 
 /**
  * The Selection Workbench — the working area that comes up WITH a
  * selection (and goes away with it). It is the docked home for every
- * control family the drum timeline grows: today the big nested-Euclidean
- * display (one ring per selected drum) and the Motion gesture ring; next
- * the Velocity / Step FX families plug into the same slots.
+ * control family the drum timeline grows: the big nested-Euclidean display
+ * (one ring per selected drum), the Motion gesture ring, and the Range FX
+ * rows (swing / humanize / quantize / velCurve); the Velocity family plugs
+ * into the same slots next.
  * Edits write through the shared draft store, so Apply/Cancel behave
  * exactly like every other surface — and both of them END the selection
  * session (the whole point: no popup to click away).
@@ -58,12 +59,17 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
     ) ?? null : null),
     [section, range, lanes],
   );
+  const existingFx = useMemo(
+    () => (section && range ? fxForLanes(section.drumBlocks, lanes, range.startBeat, range.endBeat) : undefined),
+    [section, range, lanes],
+  );
 
   // Keyed by range so switching sections/selections re-seeds the controls.
   const seedKey = `${span?.section.id ?? "-"}:${range?.startBeat ?? "-"}:${range?.endBeat ?? "-"}:${lanes.join("+")}`;
   const [seeded, setSeeded] = useState("");
   const [euclid, setEuclid] = useState({ k: 1, rotation: 0 });
   const [motion, setMotion] = useState({ x: 0, y: 0 });
+  const [fx, setFx] = useState<DrumBlockFx>({});
   if (range && seeded !== seedKey) {
     setSeeded(seedKey);
     setEuclid({
@@ -71,6 +77,7 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
       rotation: existingEuclid?.euclid?.rotation ?? 0,
     });
     setMotion({ x: existingMotion?.motion?.x ?? 0, y: existingMotion?.motion?.y ?? 0 });
+    setFx(existingFx ?? {});
   }
 
   const writeEuclid = useCallback((k: number, rotation: number) => {
@@ -78,7 +85,10 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
     setEuclid({ k, rotation });
     onWrite((sec) => ({
       ...sec,
-      drumBlocks: upsertBlocks(sec.drumBlocks, euclidBlocksFor(lanes, range.startBeat, range.endBeat, k, nBeats, rotation)),
+      drumBlocks: upsertModeBlocks(
+        sec.drumBlocks, range.startBeat, range.endBeat,
+        euclidBlocksFor(lanes, range.startBeat, range.endBeat, k, nBeats, rotation),
+      ),
     }));
   }, [range, lanes, nBeats, onWrite]);
 
@@ -87,7 +97,19 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
     setMotion({ x, y });
     onWrite((sec) => ({
       ...sec,
-      drumBlocks: upsertBlocks(sec.drumBlocks, [motionBlockFor(lanes[0], range.startBeat, range.endBeat, x, y)]),
+      drumBlocks: upsertModeBlocks(
+        sec.drumBlocks, range.startBeat, range.endBeat,
+        [motionBlockFor(lanes[0], range.startBeat, range.endBeat, x, y)],
+      ),
+    }));
+  }, [range, lanes, onWrite]);
+
+  const writeFx = useCallback((next: DrumBlockFx) => {
+    if (!range) return;
+    setFx(next);
+    onWrite((sec) => ({
+      ...sec,
+      drumBlocks: fxBlocksFor(sec.drumBlocks, lanes, range.startBeat, range.endBeat, next),
     }));
   }, [range, lanes, onWrite]);
 
@@ -106,8 +128,8 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
   const chips: { id: Mode; label: string; live: boolean }[] = [
     { id: "euclid", label: "Euclid", live: true },
     { id: "motion", label: "Motion", live: true },
+    { id: "fx", label: "FX", live: true },
     { id: "velocity", label: "Velocity", live: false },
-    { id: "fx", label: "Step FX", live: false },
   ];
 
   return (
@@ -193,10 +215,9 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
         ]} />
       )}
       {panel === "fx" && (
-        <Card title="Step FX" lines={[
-          "Per-step, export-safe bakes: nudge · gate · probability · ratchet · flam.",
-          "Lands here with the parameter lane dropdown.",
-        ]} />
+        <div className="border-b border-edge">
+          <FxPanel values={fx} onChange={writeFx} />
+        </div>
       )}
 
       {/* footer */}

@@ -27,7 +27,7 @@ import { TRANSITION_COLOR, TRANSITION_LABEL } from "../transitionStyle";
 import SelectionPad, { PAD_PANEL_H, PAD_PANEL_W, PAD_SCALE } from "./SelectionPad";
 import SelectionEditorModal from "./SelectionEditorModal";
 import SelectionWorkbench from "./SelectionWorkbench";
-import { boxMetrics, CELL_TOP_PAD, motionLabelFor, upsertBlocks } from "./selectionMath";
+import { boxMetrics, CELL_TOP_PAD, euclidBlocksFor, motionBlockFor, motionLabelFor, upsertModeBlocks } from "./selectionMath";
 import { clampParam, cycleValue, PARAM_SPECS, STEP_PARAMS, type ParamDraftNote, type StepParam } from "./stepParams";
 
 /**
@@ -449,9 +449,8 @@ export default function DrumBlocksView() {
         endBeat: end,
         mode: "steps",
         notes,
-        fx: existing?.fx,
       };
-      writeSection(span.section.id, span.section, (s) => ({ ...s, drumBlocks: upsertBlocks(s.drumBlocks, [block]) }));
+      writeSection(span.section.id, span.section, (s) => ({ ...s, drumBlocks: upsertModeBlocks(s.drumBlocks, start, end, [block]) }));
       setSelectedSectionId(span.section.id);
     },
     [effectiveSection, song, writeSection, setSelectedSectionId],
@@ -521,9 +520,8 @@ export default function DrumBlocksView() {
       endBeat: end,
       mode: "steps",
       notes,
-      fx: existing?.fx,
     };
-    writeSection(cell.span.section.id, cell.span.section, (s) => ({ ...s, drumBlocks: upsertBlocks(s.drumBlocks, [block]) }));
+    writeSection(cell.span.section.id, cell.span.section, (s) => ({ ...s, drumBlocks: upsertModeBlocks(s.drumBlocks, start, end, [block]) }));
   }, [effectiveSection, song, writeSection, zoom]);
 
   const onCanvasDown = useCallback((e: ReactPointerEvent) => {
@@ -650,7 +648,7 @@ export default function DrumBlocksView() {
       mode: "steps",
       notes,
     };
-    writeSection(span.section.id, span.section, (sec) => ({ ...sec, drumBlocks: upsertBlocks(sec.drumBlocks, [block]) }));
+    writeSection(span.section.id, span.section, (sec) => ({ ...sec, drumBlocks: upsertModeBlocks(sec.drumBlocks, s.start, s.end, [block]) }));
   }, [writeSection, zoom]);
 
   const onCanvasMove = useCallback((e: ReactPointerEvent) => {
@@ -829,30 +827,20 @@ export default function DrumBlocksView() {
       const rotation = ((d.rotation + Math.round(dx * (nn / 80))) % nn + nn) % nn;
       writeSection(d.span.section.id, d.span.section, (sec) => ({
         ...sec,
-        drumBlocks: upsertBlocks(sec.drumBlocks, d.laneKeys.map((laneKey) => ({
-          id: `blk-${laneKey}-${d.range.startBeat}-${d.range.endBeat}-euclid`,
-          lane: laneKey as DrumLaneId,
-          groupId: d.laneKeys.length > 1 ? `grp-${d.range.startBeat}-${d.range.endBeat}` : undefined,
-          interleave: d.laneKeys.length > 1,
-          startBeat: d.range.startBeat,
-          endBeat: d.range.endBeat,
-          mode: "euclid" as const,
-          euclid: { k, n: nn, rotation },
-        }))),
+        drumBlocks: upsertModeBlocks(
+          sec.drumBlocks, d.range.startBeat, d.range.endBeat,
+          euclidBlocksFor(d.laneKeys as DrumLaneId[], d.range.startBeat, d.range.endBeat, k, nn, rotation),
+        ),
       }));
     } else {
       const x = clamp(dx / 40, -1, 1);
       const y = clamp(-dy / 40, -1, 1);
       writeSection(d.span.section.id, d.span.section, (sec) => ({
         ...sec,
-        drumBlocks: upsertBlocks(sec.drumBlocks, [{
-          id: `blk-${d.laneKeys[0]}-${d.range.startBeat}-${d.range.endBeat}-motion`,
-          lane: d.laneKeys[0] as DrumLaneId,
-          startBeat: d.range.startBeat,
-          endBeat: d.range.endBeat,
-          mode: "motion" as const,
-          motion: { x, y },
-        }]),
+        drumBlocks: upsertModeBlocks(
+          sec.drumBlocks, d.range.startBeat, d.range.endBeat,
+          [motionBlockFor(d.laneKeys[0] as DrumLaneId, d.range.startBeat, d.range.endBeat, x, y)],
+        ),
       }));
     }
   }, [padMode, writeSection]);
