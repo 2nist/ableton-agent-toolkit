@@ -25,6 +25,9 @@ export default function StudioView() {
   const setClockSource = useSongStore((s) => s.setClockSource);
   const [isPlaying, setIsPlaying] = useState(false);
   const [abletonConnected, setAbletonConnected] = useState(false);
+  /** Whether Live's own transport is rolling — the streamed parts only
+   *  sound (and can only be locked) while it is. */
+  const [abletonPlaying, setAbletonPlaying] = useState(false);
   const [abletonTelemetry, setAbletonTelemetry] = useState<{
     bpm?: number;
     scale?: string;
@@ -69,6 +72,7 @@ export default function StudioView() {
     clock.connect();
     return clock.onChange((state) => {
       setAbletonConnected(state.connected);
+      setAbletonPlaying(state.isPlaying);
       setAbletonTelemetry({
         bpm: state.abletonBpm,
         scale: state.abletonScale,
@@ -172,6 +176,11 @@ export default function StudioView() {
                     ? "border-accent text-accent bg-accent/10"
                     : "border-edge text-inkMuted hover:text-ink"
                 }`}
+                title={
+                  mode === "internal"
+                    ? "App clock — TrackDraft runs its own timeline, so MIDI streamed into Live free-runs against Live's grid"
+                    : "Ableton clock — takes Live's position as the master, so the parts streamed into Live land on Live's grid and stay there"
+                }
                 onClick={() => {
                   if (isPlaying) getSongTransport().stop();
                   setClockSource(mode);
@@ -183,6 +192,14 @@ export default function StudioView() {
             {clockSource === "ableton" && (
               <>
                 <AbletonStatus connected={abletonConnected} />
+                {abletonConnected && !abletonPlaying && (
+                  <span
+                    className="text-[10px] font-mono text-amber-400"
+                    title="Live's transport is stopped, so there's no grid to lock the streamed chords/bass/drums to. Press play in Live — the parts start streaming from wherever Live is, on its beats."
+                  >
+                    ⏸ live stopped
+                  </span>
+                )}
                 {abletonConnected && abletonTelemetry.bpm !== undefined && (
                   <span className="text-[10px] text-inkMuted font-mono ml-1">
                     {abletonTelemetry.rootNote} {abletonTelemetry.scale}, {abletonTelemetry.bpm} bpm

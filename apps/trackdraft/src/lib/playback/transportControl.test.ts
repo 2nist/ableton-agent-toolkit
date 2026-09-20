@@ -3,7 +3,7 @@ import type { BlueprintSong } from "../../types/blueprint";
 
 // Mutable state the module-level mocks read, so tests can flip port/play
 // state without re-importing the module.
-const midiState = vi.hoisted(() => ({ midiOutputId: "port" as string }));
+const midiState = vi.hoisted(() => ({ midiOutputId: "port" as string, outputAvailable: true }));
 const draftState = vi.hoisted(() => ({
   sectionId: "s1" as string | null,
   section: null as { id: string; drumPattern: string } | null,
@@ -25,14 +25,31 @@ const transport = vi.hoisted(() => ({
 const scheduler = vi.hoisted(() => ({
   isRunning: true,
   loopRegion: null as { start: number; end: number } | null,
+  /** The external (Ableton) clock the running schedule is slaved to, if any. */
+  activeClock: null as { id: string } | null,
   start: vi.fn(),
   pause: vi.fn(),
   stop: vi.fn(),
 }));
 const output = vi.hoisted(() => ({ send: vi.fn() }));
+/** Stand-in for the clock `abletonSyncClock` builds — identity is all the
+ *  tests care about (does the stream/re-plan keep the same master?). */
+const abletonSync = vi.hoisted(() => ({
+  clock: { id: "ableton-clock" },
+  createAbletonSyncClock: vi.fn(),
+}));
 
 vi.mock("./songTransport", () => ({ getSongTransport: () => transport }));
-vi.mock("./liveMidiOut", () => ({ getLiveMidiScheduler: () => scheduler, getMidiOutput: async () => output }));
+vi.mock("./liveMidiOut", () => ({
+  getLiveMidiScheduler: () => scheduler,
+  getMidiOutput: async () => (midiState.outputAvailable ? output : null),
+}));
+vi.mock("./abletonSyncClock", () => ({
+  createAbletonSyncClock: (song: unknown) => {
+    abletonSync.createAbletonSyncClock(song);
+    return abletonSync.clock;
+  },
+}));
 vi.mock("../../store/midiSettingsStore", () => ({
   useMidiSettingsStore: { getState: () => ({ midiOutputId: midiState.midiOutputId, channels: { drums: 1, bass: 2, chords: 3, color: 4, melody: 5 } }) },
 }));
@@ -40,7 +57,7 @@ vi.mock("../../store/drumsDraftStore", () => ({
   useDrumsDraftStore: { getState: () => ({ sectionId: draftState.sectionId, section: draftState.section }) },
 }));
 
-const { liveRefresh } = await import("./transportControl");
+const { liveRefresh, playSong } = await import("./transportControl");
 
 function song(): BlueprintSong {
   return {
@@ -60,13 +77,56 @@ function song(): BlueprintSong {
   };
 }
 
+describe("playSong under the Ableton clock", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    midiState.midiOutputId = "port";
+    midiState.outputAvailable = true;
+    scheduler.activeClock = null;
+  });
+
+  it("streams the song's parts locked to Live's own transport", async () => {
+    const started = await playSong(song(), "ableton");
+
+    expect(started).toBe(true);
+    expect(transport.syncToAbleton).toHaveBeenCalledTimes(1);
+    expect(scheduler.start).toHaveBeenCalledTimes(1);
+    const [, out, channels, opts] = scheduler.start.mock.calls[0];
+    expect(out).toBe(output);
+    expect(channels).toEqual({ drums: 1, bass: 2, chords: 3, color: 4, melody: 5 });
+    // The clock is what makes the take land on Live's grid — without it the
+    // stream would free-run against Live's transport again.
+    expect(opts.clock).toBe(abletonSync.clock);
+    expect(abletonSync.createAbletonSyncClock).toHaveBeenCalledTimes(1);
+    expect((abletonSync.createAbletonSyncClock.mock.calls[0][0] as BlueprintSong).id).toBe("x");
+  });
+
+  it("follows Live without streaming when no MIDI port is selected", async () => {
+    midiState.midiOutputId = "";
+    const started = await playSong(song(), "ableton");
+
+    expect(started).toBe(true);
+    expect(transport.syncToAbleton).toHaveBeenCalledTimes(1);
+    expect(scheduler.start).not.toHaveBeenCalled();
+  });
+
+  it("reports a stale port instead of pretending the stream started", async () => {
+    midiState.outputAvailable = false; // the saved port id no longer resolves
+    expect(await playSong(song(), "ableton")).toBe(false);
+    expect(scheduler.start).not.toHaveBeenCalled();
+    midiState.outputAvailable = true;
+  });
+});
+
 describe("liveRefresh", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     midiState.midiOutputId = "port";
+    midiState.outputAvailable = true;
     draftState.sectionId = null;
     draftState.section = null;
     scheduler.loopRegion = null;
+    scheduler.activeClock = null;
   });
 
   it("stages a re-plan at the next bar instead of re-planning immediately", async () => {
@@ -123,6 +183,17 @@ describe("liveRefresh", () => {
     transport.onNextBar.mock.calls[0][0]();
     const [, , , opts] = scheduler.start.mock.calls[0];
     expect(opts).toEqual({ startBeat: 16, loopStart: 0, loopEnd: 16 });
+  });
+
+  it("keeps following Live when the re-plan lands (clock carried over)", async () => {
+    scheduler.activeClock = abletonSync.clock;
+    await liveRefresh(song());
+    transport.onNextBar.mock.calls[0][0]();
+    const [, , , opts] = scheduler.start.mock.calls[0];
+    // Without this the re-planned stream would silently drop back to the
+    // app's free-running clock and start drifting against Live again.
+    expect(opts.clock).toBe(abletonSync.clock);
+    expect(opts.startBeat).toBe(16);
   });
 
   it("no-ops when the transport is not playing", async () => {

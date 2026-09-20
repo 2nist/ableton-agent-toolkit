@@ -7,7 +7,14 @@
  */
 
 import { getSongTransport } from "./songTransport";
-import { getLiveMidiScheduler, getMidiOutput, type LiveMidiChannelMap } from "./liveMidiOut";
+import { createAbletonSyncClock } from "./abletonSyncClock";
+import {
+  getLiveMidiScheduler,
+  getMidiOutput,
+  type LiveMidiChannelMap,
+  type LiveSchedulerOptions,
+  type SchedulerClock,
+} from "./liveMidiOut";
 import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { sectionSpans } from "../arrangement";
@@ -19,8 +26,10 @@ import type { ClockSource } from "../../store/songStore";
  * - Internal clock: silent playhead + live MIDI out (when a port is
  *   selected and reachable). If the transport is paused, resumes from the
  *   paused beat; otherwise plays from the top.
- * - Ableton clock: follow Ableton's transport via osc-bridge (Ableton
- *   itself makes the sound).
+ * - Ableton clock: follow Ableton's transport via osc-bridge, and stream
+ *   the song's parts into it on that same clock. Live is the master here —
+ *   the notes carry Live's position, so a take lands on Live's grid
+ *   instead of drifting against it (see `abletonSyncClock`).
  *
  * Returns true when playback started (or needs no MIDI port); false when a
  * selected port was stale and playback was rolled back — the caller can
@@ -33,6 +42,15 @@ export async function playSong(song: BlueprintSong, clockSource: ClockSource): P
 
   if (clockSource === "ableton") {
     transport.syncToAbleton(song);
+    // Follow-only when no port is selected (the previous behavior).
+    const { midiOutputId, channels } = useMidiSettingsStore.getState();
+    if (!midiOutputId) return true;
+    const output = await getMidiOutput(midiOutputId);
+    // A stale port still leaves the playhead following Live, which is
+    // useful on its own — but the streaming the user asked for isn't
+    // happening, so say so rather than pretend it started.
+    if (!output) return false;
+    getLiveMidiScheduler().start(song, output, channels, { clock: createAbletonSyncClock(song) });
     return true;
   }
 
@@ -88,6 +106,10 @@ let stagedRefresh: {
   output: MIDIOutput;
   channels: LiveMidiChannelMap;
   loop: { start: number; end: number } | null;
+  /** The external clock the re-plan must keep following (Ableton mode), or
+   *  null when the app's own clock is driving (the re-plan then re-bases it
+   *  at `atBeat`, as it always did). */
+  clock: SchedulerClock | null;
 } | null = null;
 
 /** Drop any pending staged re-plan. Playback restarts (play/loop/stop/
@@ -116,14 +138,17 @@ export async function liveRefresh(song: BlueprintSong): Promise<void> {
   }
 
   const atBeat = transport.getNextBarBeat();
-  stagedRefresh = { atBeat, song, output, channels, loop: scheduler.loopRegion };
+  stagedRefresh = { atBeat, song, output, channels, loop: scheduler.loopRegion, clock: scheduler.activeClock };
   transport.onNextBar(() => {
     const s = stagedRefresh;
     stagedRefresh = null;
     if (!s) return;
-    const opts = s.loop
-      ? { startBeat: s.atBeat, loopStart: s.loop.start, loopEnd: s.loop.end }
-      : { startBeat: s.atBeat };
+    const opts: LiveSchedulerOptions = { startBeat: s.atBeat };
+    if (s.loop) {
+      opts.loopStart = s.loop.start;
+      opts.loopEnd = s.loop.end;
+    }
+    if (s.clock) opts.clock = s.clock;
     scheduler.start(withDrumDraft(s.song), s.output, s.channels, opts);
   });
 }

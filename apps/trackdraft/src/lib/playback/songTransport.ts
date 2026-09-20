@@ -79,6 +79,11 @@ class SongTransport {
   private nextBarAt = -1;
   private tickListeners = new Set<(tick: TransportTick) => void>();
   private abletonUnsub: (() => void) | null = null;
+  /** Latest song-relative beat reported under an external (Ableton) clock.
+   *  `startedAtMs` means nothing in that mode — the app's own wall clock
+   *  isn't the one running — so positions have to be remembered as they
+   *  arrive (see `currentBeat`). */
+  private syncedBeat: number | null = null;
   /** Which clock is driving — set by StudioView from the persisted store
    *  before calling play()/syncToAbleton(). */
   clockSource: "internal" | "ableton" = "internal";
@@ -156,8 +161,11 @@ class SongTransport {
   }
 
   /** The playhead beat right now — the same folded value the tick loop
-   *  emits (a looped playback folds back into its loop region). */
+   *  emits (a looped playback folds back into its loop region). Under an
+   *  external clock this reports the beat Ableton last reported (plus its
+   *  interpolation), since the app's own wall clock isn't the one driving. */
   private currentBeat(): number {
+    if (this.clockSource === "ableton") return this.syncedBeat ?? 0;
     let beat = (performance.now() - this.startedAtMs) / 1000 / this.secPerBeat;
     if (this.looping && beat >= this.loopEnd) {
       const span = this.loopEnd - this.loopStart;
@@ -255,6 +263,10 @@ class SongTransport {
    *  slightly-off bpm assumption never accumulates past one beat. */
   syncToAbleton(song: BlueprintSong): void {
     this.stop();
+    // Own the mode rather than trusting the caller to have set it: every
+    // position this class reports while following Live comes from Live's
+    // messages, so it must read the clock source that way (`currentBeat`).
+    this.clockSource = "ableton";
     this.spans = sectionSpans(song);
     if (this.spans.length === 0) return;
 
@@ -276,6 +288,15 @@ class SongTransport {
       if (reallyPlaying && lastBeat !== null) {
         const estimatedAbletonBeat = lastBeat + (performance.now() - lastBeatAtMs) / (secPerBeat * 1000);
         const beat = Math.max(0, estimatedAbletonBeat - offset);
+        this.syncedBeat = beat;
+        // A staged live edit still lands on the bar under this clock: the
+        // boundary is crossed between the bridge's whole-beat messages, and
+        // this interpolated estimate is what sees it.
+        if (this.nextBarCb !== null && beat >= this.nextBarAt) {
+          const cb = this.nextBarCb;
+          this.nextBarCb = null;
+          cb();
+        }
         this.emit({ beat, isPlaying: true, sectionIndex: sectionIndexAt(this.spans, beat) });
       }
       this.schedulerId = requestAnimationFrame(tickLoop);
@@ -286,12 +307,14 @@ class SongTransport {
       reallyPlaying = state.isPlaying;
       if (state.abletonBeat === null) {
         lastBeat = null;
+        this.syncedBeat = 0;
         this.emit({ beat: 0, isPlaying: state.isPlaying, sectionIndex: -1 });
         return;
       }
       lastBeat = state.abletonBeat;
       lastBeatAtMs = performance.now();
       const beat = Math.max(0, state.abletonBeat - offset);
+      this.syncedBeat = beat;
       this.emit({ beat, isPlaying: state.isPlaying, sectionIndex: sectionIndexAt(this.spans, beat) });
     });
 
@@ -317,6 +340,7 @@ class SongTransport {
   stop(): void {
     this.pausedBeat = null;
     this.nextBarCb = null;
+    this.syncedBeat = null;
     if (this.schedulerId !== null) {
       cancelAnimationFrame(this.schedulerId);
       this.schedulerId = null;

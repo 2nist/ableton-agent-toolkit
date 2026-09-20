@@ -423,6 +423,33 @@ describe("SongTransport.syncToAbleton", () => {
 
     unsub();
   });
+
+  it("reports the followed position from getBeat, not the app's idle wall clock", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120);
+    getSongTransport().syncToAbleton(song);
+    abletonChangeListener?.({ abletonBeat: 12, isPlaying: true });
+
+    // The app's own clock was never started in this mode, so a stale
+    // `startedAtMs` would report a huge nonsense beat here.
+    expect(getSongTransport().getBeat()).toBe(12);
+    expect(getSongTransport().getNextBarBeat()).toBe(16); // next 4/4 bar
+  });
+
+  it("lands a bar-staged live edit on the bar, using the interpolated clock", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120);
+    getSongTransport().syncToAbleton(song);
+    abletonChangeListener?.({ abletonBeat: 4, isPlaying: true });
+
+    const onBar = vi.fn();
+    getSongTransport().onNextBar(onBar); // queue for beat 8
+
+    // 4 beats at 120bpm = 2000ms, reached purely by interpolation — the
+    // bridge's next whole-beat message is never involved.
+    vi.advanceTimersByTime(1900);
+    expect(onBar).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(200);
+    expect(onBar).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("TRANSPORT_CHANNEL_NAME", () => {
