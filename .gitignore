@@ -20,3 +20,4 @@ apps/trackdraft/scripts/output/
 # Local bundles / scratch
 *.zip
 temp template Project/
+tempdrumpatgencode/
