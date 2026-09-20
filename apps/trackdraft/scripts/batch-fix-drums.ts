@@ -3,8 +3,8 @@
  *
  * For every catalog song that doesn't have drums authored yet:
  *   1. finds its audio in the master archive (fuzzy title match),
- *   2. separates a drums stem with demucs (cached under tempdrumpatgencode/stems),
- *   3. transcribes it with analyze-drums (cached under tempdrumpatgencode/analyses),
+ *   2. separates a drums stem with demucs (cached under ~/trackdraft-import-cache/stems),
+ *   3. transcribes it with analyze-drums (cached under ~/trackdraft-import-cache/analyses),
  *   4. merges the result into the catalog blueprint IN PLACE (backed up once
  *      to scripts/output/catalog/_pre-drums-backup/).
  *
@@ -38,11 +38,14 @@ if (!fs.existsSync(path.join(APP_DIR, "scripts", "output", "catalog"))) {
   console.error("✗ run this from apps/trackdraft (scripts/output/catalog not found)");
   process.exit(1);
 }
-const REPO_ROOT = path.resolve(APP_DIR, "..", "..");
 const CATALOG_DIR = path.join(APP_DIR, "scripts", "output", "catalog");
 const BACKUP_DIR = path.join(CATALOG_DIR, "_pre-drums-backup");
-const STEMS_DIR = path.join(REPO_ROOT, "tempdrumpatgencode", "stems");
-const ANALYSES_DIR = path.join(REPO_ROOT, "tempdrumpatgencode", "analyses");
+/** Derived caches (demucs stems + transcription grids) — durable, OUTSIDE
+ *  the repo: the stems are hours of compute, and a `git clean -xdf` would
+ *  collect them along with every other ignored file. Override: DRUM_CACHE. */
+const CACHE_ROOT = process.env.DRUM_CACHE ?? path.join(os.homedir(), "trackdraft-import-cache");
+const STEMS_DIR = path.join(CACHE_ROOT, "stems");
+const ANALYSES_DIR = path.join(CACHE_ROOT, "analyses");
 const REPORT_PATH = path.join(APP_DIR, "scripts", "output", "drums-batch-report.json");
 const DEFAULT_AUDIO_ROOT = "/Users/Matthew/beatles data/audio";
 const DEFAULT_DEMUCS = path.join(os.homedir(), ".pyenv", "versions", "chord-extractor-env", "bin", "demucs");
