@@ -234,6 +234,28 @@ describe("LiveMidiScheduler under an external clock", () => {
     for (const m of replayed) expect(beatOf(m, clock)).toBeLessThanOrEqual(4.8);
   });
 
+  it("ignores sub-beat re-anchors instead of silencing on every beat (live-sync stutter)", () => {
+    const out = new FakeOutput();
+    const clock = new FakeClock();
+    scheduler.start(song(), out as unknown as MIDIOutput, channels, { clock });
+
+    // Walk forward, but dip the position a hair once per beat — what a
+    // late beat message re-anchoring behind the interpolation looks like.
+    // The old behavior treated every dip as a seek: all-notes-off plus a
+    // full rebase each beat, chopping sustained notes into per-beat stubs.
+    for (let pos = 0.5; pos <= 6 + 1e-9; pos += 0.5) {
+      clock.pos = pos;
+      vi.advanceTimersByTime(50);
+      clock.pos = pos - 0.12;
+      vi.advanceTimersByTime(50);
+    }
+
+    // No silencing while the stream stays continuous…
+    expect(allNotesOff(out)).toHaveLength(0);
+    // …and the notes still flow across the whole run.
+    expect(noteOns(out).length).toBeGreaterThan(4);
+  });
+
   it("keeps a clock handed back to a re-plan, and disposes it on stop", () => {
     const out = new FakeOutput();
     const clock = new FakeClock();

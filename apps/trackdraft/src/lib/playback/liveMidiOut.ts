@@ -88,6 +88,13 @@ const SCHEDULER_INTERVAL_MS = 50;
  *  (immediately, a few ms late) instead of being silently skipped. */
 const START_CATCH_UP_MS = 60;
 const ALL_NOTES_OFF_CC = 123;
+/** Backward position dips smaller than this many beats are clock jitter —
+ *  e.g. a late beat message re-anchoring a hair behind the interpolation —
+ *  not a seek. Treating them as seeks fired all-notes-off plus a full
+ *  rebase on every beat under Ableton sync, chopping sustained notes into
+ *  per-beat stubs (the "live-sync stutter"). Real seeks — a Live loop
+ *  wrap, a jump — move at least a beat and still rebase. */
+const SEEK_TOLERANCE_BEATS = 0.5;
 
 interface ScheduledNote {
   note: MidiNote;
@@ -257,9 +264,17 @@ class LiveMidiScheduler {
     const lookaheadBeats = LOOKAHEAD_MS / 1000 / this.secPerBeat;
     const windowEndBeats = pos + lookaheadBeats;
     let from = this.lastScheduledElapsed;
+    // A sub-beat backward dip is clock jitter — a late beat message
+    // re-anchoring behind the interpolation — not a seek: everything up to
+    // `from` is already queued and fires on its own timestamps, so just
+    // wait for the clock to catch back up (milliseconds). Silencing here
+    // was the every-beat all-notes-off stutter under Ableton sync.
+    if (from !== null && windowEndBeats < from && from - windowEndBeats < SEEK_TOLERANCE_BEATS) {
+      return;
+    }
     if (from === null || windowEndBeats < from) {
-      // First tick, or the master jumped backwards past what we already
-      // queued (a seek, or a loop wrap in Live): rebase the window.
+      // First tick, or the master genuinely jumped backwards past what we
+      // already queued (a seek, or a loop wrap in Live): rebase the window.
       const seeking = from !== null;
       // Anything the abandoned window queued is silenced first — those
       // messages can't be unsent, and firing them late sounds worse than
