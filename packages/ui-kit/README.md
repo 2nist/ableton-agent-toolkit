@@ -21,6 +21,6 @@ Both facts are cited from primary sources in `bridge.ts`'s module doc comment �
 
 ## `theme/tokens.ts`
 
-Follows the pattern documented from devtoolbox-reaper-master's Lua theming system (not a port of that code, which wasn't portable — a re-implementation of the same *pattern*): a fixed, small set of semantic roles (`background`, `panel`, `text`, `accent`, ...), plus one hue-parameterized `generateFromHue(hue)` function that derives every role via HSL math. `PRESETS` are just fixed hues run through that same generator — not hand-tuned per-role overrides.
+A fixed, small set of semantic roles (`background`, `panel`, `text`, `accent`, ...), plus one hue-parameterized `generateFromHue(hue)` function that derives every role via HSL math. `PRESETS` are just fixed hues run through that same generator — not hand-tuned per-role overrides. (The role-set + hue-generator design was originally inspired by a Reaper theming script, but this is a from-scratch TypeScript implementation with Ableton-specific presets — no shared code.)
 
 `ABLETON_DARK` is a separate, fixed (non-generated) palette matching Live's own webview chrome exactly, taken from the SDK's own webview boilerplate — use it when a webview UI should visually blend into Live rather than stand out.

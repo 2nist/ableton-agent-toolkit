@@ -1,11 +1,12 @@
 /**
- * Design tokens, following the pattern documented from
- * devtoolbox-reaper-master's theming system (enhanced_theming_panel.lua):
- * a fixed, small set of semantic ROLES (not per-widget colors), plus one
- * hue-parameterized generator that derives every role from a single input
- * hue via HSL math. That generator function is the reusable piece — this
- * file is a new TypeScript implementation of the same pattern, not a port
- * of the original Lua (which wasn't portable code, just a design to copy).
+ * Design tokens: a fixed, small set of semantic ROLES (not per-widget
+ * colors), plus one hue-parameterized generator that derives every role
+ * from a single input hue via HSL math. The generator is the reusable
+ * piece — pass any hue, get a coherent dark palette back.
+ *
+ * (Historical note: the role-set + hue-generator approach was inspired by
+ * a Reaper theming script's design, but this is a from-scratch TypeScript
+ * implementation with Ableton-specific presets below — no shared code.)
  */
 
 export interface PaletteRoles {
