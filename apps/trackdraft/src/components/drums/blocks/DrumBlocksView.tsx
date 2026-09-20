@@ -15,7 +15,7 @@ import { useDrumsDraftStore } from "../../../store/drumsDraftStore";
 import { updateSection } from "../../../lib/sections";
 import { sectionSpans, totalBars, type SectionSpan } from "../../../lib/arrangement";
 import { resolveSectionLaneHits, type LaneHit, type LaneHits } from "../../../lib/timeline/drumLaneHits";
-import { resolveSectionVariant, velocityNumber } from "../../../lib/playback/drumPreview";
+import { inferPatternForSection, resolveSectionVariant, seededVariantIndex, variantCount, velocityNumber } from "../../../lib/playback/drumPreview";
 import {
   BAR_PX, TOP_PAD, TRACK_H, X0,
   barX, beatsPerBarOf, gridStepForZoom, snapBeat, spanBeatToX, spanXToBeat, xToSpanBeat,
@@ -27,8 +27,9 @@ import { TRANSITION_COLOR, TRANSITION_LABEL } from "../transitionStyle";
 import SelectionPad, { PAD_PANEL_H, PAD_PANEL_W, PAD_SCALE } from "./SelectionPad";
 import SelectionEditorModal from "./SelectionEditorModal";
 import SelectionWorkbench from "./SelectionWorkbench";
-import { boxMetrics, CELL_TOP_PAD, euclidBlocksFor, motionBlockFor, motionLabelFor, upsertModeBlocks } from "./selectionMath";
+import { boxMetrics, CELL_TOP_PAD, copyBlocksToRange, euclidBlocksFor, motionBlockFor, motionLabelFor, replaceRangeBlocks, stripFxCarriers, upsertBlocks, upsertModeBlocks } from "./selectionMath";
 import { clampParam, cycleValue, PARAM_SPECS, STEP_PARAMS, type ParamDraftNote, type StepParam } from "./stepParams";
+import { scaleVelocity, velocityOpFactor, type VelocityOp } from "./velocityOps";
 
 /**
  * The Drum Blocks view — the alternate drums timeline. Every lane is a row
@@ -114,6 +115,18 @@ interface PressState {
   scrub?: ParamScrubTarget | null;
 }
 
+/** An in-flight ⌥-drag copy of the selection. */
+interface CopyDragState {
+  span: SectionSpan;
+  range: { startBeat: number; endBeat: number; laneKeys: string[] };
+  /** The beat under the press — the drag delta is measured from here. */
+  grabBeat: number;
+  /** The step grid captured at grab time (deltas snap to it). */
+  grid: number;
+  /** Where the copy will land (updated on every move). */
+  destStart: number;
+}
+
 /** A press-time snapshot for a selection-wide parameter scrub: every step
  *  in the range that has an authored note or a resolved hit, with its full
  *  note draft preserved so other parameters survive the edit. */
@@ -162,6 +175,7 @@ export default function DrumBlocksView() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [paramMenu, setParamMenu] = useState<string | null>(null);
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
+  const [copyDrag, setCopyDrag] = useState<{ dxPx: number; destStart: number } | null>(null);
   const [velocityDrag, setVelocityDrag] = useState<{ x: number; y: number; text: string; label: string; frac: number } | null>(null);
   /** Per-lane parameter lane — which step parameter the value boxes show
    *  and edit (the "effects lane" dropdown). Persisted per browser. */
@@ -183,6 +197,7 @@ export default function DrumBlocksView() {
   const pressRef = useRef<PressState | null>(null);
   const handleRef = useRef<HandleDragState | null>(null);
   const padDragRef = useRef<PadDragState | null>(null);
+  const copyRef = useRef<CopyDragState | null>(null);
   const zoomRef = useRef(zoom);
   useEffect(() => {
     zoomRef.current = zoom;
@@ -532,6 +547,24 @@ export default function DrumBlocksView() {
     if (!startHit) return;
     capture(e.currentTarget as Element, e.pointerId);
 
+    // ⌥-drag inside the selection = copy. Capture the source up front; the
+    // drop writes the authored blocks (or the audible material) elsewhere.
+    if (e.altKey && range && anchorSpan) {
+      const inSel = selRects.some((r) => x >= r.x1 - 2 && x <= r.x2 + 2 && y >= r.y1 - 2 && y <= r.y2 + 2);
+      if (inSel) {
+        copyRef.current = {
+          span: anchorSpan,
+          range: { startBeat: range.startBeat, endBeat: range.endBeat, laneKeys: [...range.laneKeys] },
+          grabBeat: spanXToBeat(anchorSpan, x, zoom),
+          grid: gridStepForZoom(zoom),
+          destStart: range.startBeat,
+        };
+        setCopyDrag({ dxPx: 0, destStart: range.startBeat });
+        setMarquee(null);
+        return;
+      }
+    }
+
     // Resolve the surface under the press up front — the circular CELL
     // (click-to-toggle + drag = the lane's parameter) or the value BOX
     // below it (the parameter surface; a click never toggles the step).
@@ -576,7 +609,7 @@ export default function DrumBlocksView() {
     }
     pressRef.current = { x0: x, y0: y, cell, zone, param, paramStart, editable, velMode: false };
     setMarquee({ x0: x, y0: y, x1: x, y1: y });
-  }, [spans, zoom, toLocal, hitsForSpan, paramFor, authoredNotesFor]);
+  }, [spans, zoom, toLocal, hitsForSpan, paramFor, authoredNotesFor, range, anchorSpan, selRects]);
 
   /** Press-time snapshot for a selection-wide parameter scrub: every step
    *  in the range (authored notes stay canonical — a probability-dropped
@@ -651,7 +684,134 @@ export default function DrumBlocksView() {
     writeSection(span.section.id, span.section, (sec) => ({ ...sec, drumBlocks: upsertModeBlocks(sec.drumBlocks, s.start, s.end, [block]) }));
   }, [writeSection, zoom]);
 
+  /** The selection's audible material for one lane, grouped per step — what
+   *  flatten writes verbatim and what the velocity ops scale. */
+  const laneRangeMaterial = useCallback(
+    (span: SectionSpan, laneKey: DrumLaneId, start: number, end: number) => {
+      const grid = gridStepForZoom(zoom);
+      const hits = (hitsForSpan(span).get(laneKey) ?? [])
+        .filter((h) => h.beat >= start - 1e-9 && h.beat < end - 1e-9);
+      if (hits.length === 0) return null;
+      const stepCount = Math.max(1, Math.ceil((end - start) / grid - 1e-9));
+      const entries = hits.map((h) => ({
+        h,
+        stepIdx: clamp(Math.round((h.beat - start) / grid), 0, stepCount - 1),
+      }));
+      const peaks = new Array<number>(stepCount).fill(0);
+      for (const e of entries) peaks[e.stepIdx] = Math.max(peaks[e.stepIdx], e.h.velocity);
+      return { entries, peaks, stepCount, peak: Math.max(...peaks) };
+    },
+    [zoom, hitsForSpan],
+  );
+
+  const stepsBlockFor = (laneKey: DrumLaneId, start: number, end: number, notes: DrumBlockNote[]): DrumBlock => ({
+    id: `blk-${laneKey}-${round4(start)}-${round4(end)}-steps`,
+    lane: laneKey,
+    startBeat: start,
+    endBeat: end,
+    mode: "steps",
+    notes,
+  });
+
+  /** Flatten — freeze the selection's audible material into editable dots
+   *  (the algorithm underneath is replaced, so the dots are what plays). */
+  const flattenSelection = useCallback((span: SectionSpan, rng: { startBeat: number; endBeat: number; laneKeys: string[] }) => {
+    const lanes = rng.laneKeys as DrumLaneId[];
+    const changes: DrumBlock[] = [];
+    for (const laneKey of lanes) {
+      const mat = laneRangeMaterial(span, laneKey, rng.startBeat, rng.endBeat);
+      if (!mat) continue;
+      changes.push(stepsBlockFor(laneKey, rng.startBeat, rng.endBeat, mat.entries.map(({ h }) => ({
+        beat: round4(h.beat - rng.startBeat), voice: h.voice as DrumVoiceName, velocity: h.velocity,
+      }))));
+    }
+    if (changes.length === 0) return;
+    writeSection(span.section.id, span.section, (sec) => ({
+      ...sec,
+      drumBlocks: replaceRangeBlocks(sec.drumBlocks, lanes, rng.startBeat, rng.endBeat, changes),
+    }));
+  }, [laneRangeMaterial, writeSection]);
+
+  /** The one-shot velocity ops — ramp / accents / alternate / humanize /
+   *  scale — baked into steps dots (a step's relative dynamics survive). */
+  const applyVelocityOp = useCallback((span: SectionSpan, rng: { startBeat: number; endBeat: number; laneKeys: string[] }, op: VelocityOp) => {
+    const lanes = rng.laneKeys as DrumLaneId[];
+    const changes: DrumBlock[] = [];
+    for (const laneKey of lanes) {
+      const mat = laneRangeMaterial(span, laneKey, rng.startBeat, rng.endBeat);
+      if (!mat) continue;
+      const seed = `${span.section.id}:${laneKey}`;
+      const notes = mat.entries.map(({ h, stepIdx }) => ({
+        beat: round4(h.beat - rng.startBeat),
+        voice: h.voice as DrumVoiceName,
+        velocity: scaleVelocity(h.velocity, velocityOpFactor(op, stepIdx, { stepCount: mat.stepCount, peakVelocity: mat.peak, seed })),
+      }));
+      changes.push(stepsBlockFor(laneKey, rng.startBeat, rng.endBeat, notes));
+    }
+    if (changes.length === 0) return;
+    writeSection(span.section.id, span.section, (sec) => ({
+      ...sec,
+      drumBlocks: replaceRangeBlocks(sec.drumBlocks, lanes, rng.startBeat, rng.endBeat, changes),
+    }));
+  }, [laneRangeMaterial, writeSection]);
+
+  /** ⌥-drag drop — copy the source range's authored blocks (or, for lanes
+   *  with none, their audible material) to the destination, then move the
+   *  selection onto the copy so it stays the working range. */
+  const dropCopy = useCallback((span: SectionSpan, rng: { startBeat: number; endBeat: number; laneKeys: string[] }, destStart: number) => {
+    const lanes = rng.laneKeys as DrumLaneId[];
+    const destEnd = round4(destStart + (rng.endBeat - rng.startBeat));
+    const copies = copyBlocksToRange(effectiveSection(span).drumBlocks, lanes, rng.startBeat, rng.endBeat, destStart);
+    const covered = new Set(copies.map((c) => c.lane));
+    for (const laneKey of lanes) {
+      if (covered.has(laneKey)) continue;
+      const mat = laneRangeMaterial(span, laneKey, rng.startBeat, rng.endBeat);
+      if (!mat) continue;
+      copies.push(stepsBlockFor(laneKey, destStart, destEnd, mat.entries.map(({ h }) => ({
+        beat: round4(h.beat - rng.startBeat), voice: h.voice as DrumVoiceName, velocity: h.velocity,
+      }))));
+    }
+    if (copies.length === 0) return;
+    writeSection(span.section.id, span.section, (sec) => ({
+      ...sec,
+      drumBlocks: upsertBlocks(stripFxCarriers(sec.drumBlocks, lanes, destStart, destEnd), copies),
+    }));
+    setSelectedSectionId(span.section.id);
+    setRange({ startBeat: destStart, endBeat: destEnd, laneKeys: rng.laneKeys });
+  }, [effectiveSection, laneRangeMaterial, writeSection, setRange, setSelectedSectionId]);
+
+  /** The section's next seeded variant — what Regenerate rolls to (null on
+   *  sections with no variants: outline / blocks-only / none). */
+  const regenerate = useMemo(() => {
+    if (!song || !anchorSpan || !selectionSection) return null;
+    const pattern = selectionSection.drumPattern ?? inferPatternForSection(selectionSection, song);
+    const count = variantCount(pattern);
+    if (count <= 1) return null;
+    const current = selectionSection.drumVariantIndex
+      ?? seededVariantIndex(pattern, selectionSection, song, anchorSpan.occurrenceIndex)
+      ?? 0;
+    return { count, current };
+  }, [song, anchorSpan, selectionSection]);
+
+  const regenerateVariant = useCallback(() => {
+    if (!anchorSpan || !regenerate) return;
+    const next = (regenerate.current + 1) % regenerate.count;
+    writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({ ...sec, drumVariantIndex: next }));
+  }, [anchorSpan, regenerate, writeSection]);
+
   const onCanvasMove = useCallback((e: ReactPointerEvent) => {
+    const copy = copyRef.current;
+    if (copy) {
+      const { x } = toLocal(e);
+      const length = copy.range.endBeat - copy.range.startBeat;
+      const delta = snapBeat(spanXToBeat(copy.span, x, zoom) - copy.grabBeat, copy.grid);
+      copy.destStart = round4(clamp(copy.range.startBeat + delta, 0, Math.max(0, copy.span.durationBeats - length)));
+      setCopyDrag({
+        dxPx: spanBeatToX(copy.span, copy.destStart, zoom) - spanBeatToX(copy.span, copy.range.startBeat, zoom),
+        destStart: copy.destStart,
+      });
+      return;
+    }
     const d = pressRef.current;
     if (!d) return;
     const { x, y } = toLocal(e);
@@ -682,6 +842,15 @@ export default function DrumBlocksView() {
   }, [toLocal, writeStepParam, buildParamScrub, scrubParam, zoom]);
 
   const onCanvasUp = useCallback((e: ReactPointerEvent) => {
+    const copy = copyRef.current;
+    if (copy) {
+      copyRef.current = null;
+      setCopyDrag(null);
+      if (Math.abs(copy.destStart - copy.range.startBeat) > 1e-6) {
+        dropCopy(copy.span, copy.range, copy.destStart);
+      }
+      return;
+    }
     const d = pressRef.current;
     pressRef.current = null;
     setMarquee(null);
@@ -746,7 +915,7 @@ export default function DrumBlocksView() {
     const i1 = inTitle ? LANE_COUNT - 1 : clamp(Math.floor((Math.max(d.y0, y) - TOP_PAD - 1e-6) / TRACK_H), 0, LANE_COUNT - 1);
     setSelectedSectionId(span.section.id);
     setRange({ startBeat: b0, endBeat: b1, laneKeys: DRUM_LANES.slice(i0, i1 + 1).map((l) => l.key) });
-  }, [spans, zoom, toLocal, clearRange, setSelectedSectionId, setRange, toggleStep, writeStepParam]);
+  }, [spans, zoom, toLocal, clearRange, setSelectedSectionId, setRange, toggleStep, writeStepParam, dropCopy]);
 
   /** Browsers can CANCEL a pointer mid-gesture (context menu, HMR swap,
    *  OS-level gesture, devtools). Without this the press / marquee / slider
@@ -756,7 +925,9 @@ export default function DrumBlocksView() {
     pressRef.current = null;
     handleRef.current = null;
     padDragRef.current = null;
+    copyRef.current = null;
     setMarquee(null);
+    setCopyDrag(null);
     setVelocityDrag(null);
   }, []);
 
@@ -870,7 +1041,7 @@ export default function DrumBlocksView() {
           not shift mid-gesture (velocity drags compute from client coords) */}
       <div className="flex items-center justify-between mb-1.5 min-h-6">
         <span className="text-xs text-inkMuted">
-          Click a cell to toggle · drag cells or their value boxes ↑↓ = the lane's parameter (chip in the gutter picks it) · wheel over the grid zooms · drag beats × lanes → controls · click a title selects the section
+          Click a cell to toggle · drag cells or their value boxes ↑↓ = the lane's parameter (chip in the gutter picks it) · wheel over the grid zooms · drag beats × lanes → controls · click a title selects the section · ⌥-drag the selection = copy
         </span>
         <span className="flex items-center gap-1.5">
           {draftSection && <span className="font-mono text-2xs uppercase tracking-wider text-[#E8B54A]">● preview</span>}
@@ -1244,6 +1415,16 @@ export default function DrumBlocksView() {
             />
           )}
 
+          {/* ⌥-drag copy ghost — the selection's outline at its drop spot */}
+          {copyDrag && selRects.map((r, i) => (
+            <rect
+              key={`copyghost-${i}`}
+              x={r.x1 + copyDrag.dxPx} y={r.y1} width={r.x2 - r.x1} height={r.y2 - r.y1}
+              fill="rgba(232,181,74,0.10)" stroke="#E8B54A" strokeWidth={1.2} strokeDasharray="2 3"
+              pointerEvents="none"
+            />
+          ))}
+
           {/* floating velocity slider — shown only while dragging a cell
               up/down; afterwards just the strip bar below the cell remains */}
           {velocityDrag && (
@@ -1348,6 +1529,9 @@ export default function DrumBlocksView() {
           stepBeats={gridStepForZoom(zoom)}
           hasDraft={!!draftSection}
           onWrite={(mutate) => writeSection(anchorSpan.section.id, anchorSpan.section, mutate)}
+          onVelocityOp={(op) => applyVelocityOp(anchorSpan, range, op)}
+          onFlatten={() => flattenSelection(anchorSpan, range)}
+          onRegenerate={regenerate ? regenerateVariant : null}
           onApply={applyDraft}
           onCancel={revertDraft}
           onClose={() => setEditorOpen(false)}
@@ -1364,6 +1548,9 @@ export default function DrumBlocksView() {
           section={selectionSection}
           range={range}
           onWrite={(mutate) => writeSection(anchorSpan.section.id, anchorSpan.section, mutate)}
+          onVelocityOp={(op) => applyVelocityOp(anchorSpan, range, op)}
+          onFlatten={() => flattenSelection(anchorSpan, range)}
+          onRegenerate={regenerate ? regenerateVariant : null}
           hasDraft={!!draftSection}
           onApply={applyDraft}
           onCancel={revertDraft}

@@ -5,8 +5,9 @@ import { beatsPerBarOf } from "../../../lib/timeline/beatMap";
 import type { BlueprintSection, DrumBlockFx } from "../../../types/blueprint";
 import type { LaneHits } from "../../../lib/timeline/drumLaneHits";
 import { DRUM_LANES } from "../laneStyle";
-import { EuclidRing, FxPanel, MotionRing } from "./SelectionDisplays";
+import { EuclidRing, FxPanel, MotionRing, VelocityPanel } from "./SelectionDisplays";
 import { euclidBlocksFor, fxBlocksFor, fxForLanes, motionBlockFor, motionLabelFor, upsertModeBlocks } from "./selectionMath";
+import type { VelocityOp } from "./velocityOps";
 
 /**
  * The exploded selection editor — the docked pad opened into a workbench.
@@ -21,8 +22,8 @@ import { euclidBlocksFor, fxBlocksFor, fxForLanes, motionBlockFor, motionLabelFo
  * distance = density) with each selected lane's necklace NESTED inside
  * the previous one; the motion display is the transition gesture ring;
  * FX is live too — the Range FX rows (swing / humanize / quantize /
- * velCurve). VELOCITY is the next control family and gets its card here
- * so the layout is already planned.
+ * velCurve) — and so is VELOCITY (the one-shot shaping panel: ramp /
+ * accents / alternate / humanize / scale).
  *
  * Every edit goes through the same draft store as the main view (the
  * `onWrite` prop), so ● preview / Apply / Revert behave identically —
@@ -48,6 +49,12 @@ interface SelectionEditorModalProps {
   stepBeats: number;
   /** Write into the draft (same path as the main view). */
   onWrite: (mutate: (sec: BlueprintSection) => BlueprintSection) => void;
+  /** One-shot velocity shaping over the selection (ramp / accents / …). */
+  onVelocityOp: (op: VelocityOp) => void;
+  /** Freeze the selection's audible material into editable dots. */
+  onFlatten: () => void;
+  /** Roll the section to its next seeded variant (null → disabled). */
+  onRegenerate: (() => void) | null;
   hasDraft: boolean;
   onApply: () => void;
   onCancel: () => void;
@@ -61,7 +68,7 @@ const AMBER = "#E8B54A";
 type Mode = "euclid" | "motion" | "velocity" | "fx";
 
 export default function SelectionEditorModal(props: SelectionEditorModalProps) {
-  const { span, section, range, hits, spans, stepBeats, onWrite, hasDraft, onApply, onCancel, onClose } = props;
+  const { span, section, range, hits, spans, stepBeats, onWrite, onVelocityOp, onFlatten, onRegenerate, hasDraft, onApply, onCancel, onClose } = props;
 
   const [panel, setPanel] = useState<Mode>("euclid");
 
@@ -198,7 +205,7 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
     { id: "euclid", label: "Euclid", live: true },
     { id: "motion", label: "Motion", live: true },
     { id: "fx", label: "FX", live: true },
-    { id: "velocity", label: "Velocity", live: false },
+    { id: "velocity", label: "Velocity", live: true },
   ];
 
   return (
@@ -419,13 +426,9 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
 
             {/* planned control families */}
             {panel === "velocity" && (
-              <PlaceholderCard
-                title="Velocity patterns"
-                lines={[
-                  "v1: the step boxes under the grid show + drag each step's velocity.",
-                  "Next: shape the whole selection — ramps, accents, alternating, humanize.",
-                ]}
-              />
+              <div className="border border-edge rounded bg-black/40">
+                <VelocityPanel onOp={onVelocityOp} />
+              </div>
             )}
           </div>
         </div>
@@ -438,6 +441,25 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
             <span className="font-mono text-2xs text-inkMuted">no edits yet — drag the ring to stage one</span>
           )}
           <span className="flex-1" />
+          <button
+            onClick={onFlatten}
+            className="font-mono text-xs rounded px-3 py-1.5 border border-edge text-inkMuted hover:text-ink"
+            title="Freeze the selection's audible material into editable dots"
+          >
+            ❄ Flatten
+          </button>
+          <button
+            onClick={onRegenerate ?? undefined}
+            disabled={!onRegenerate}
+            className={`font-mono text-xs rounded px-3 py-1.5 border ${
+              onRegenerate
+                ? "border-edge text-inkMuted hover:text-ink"
+                : "border-edge text-inkMuted/40 cursor-not-allowed"
+            }`}
+            title={onRegenerate ? "Roll the section to its next seeded variant" : "No variants for this section's pattern"}
+          >
+            ⟳ Regenerate
+          </button>
           <span className="font-mono text-2xs text-inkMuted mr-2">Esc closes · Apply/Cancel also close the selection</span>
           <button
             onClick={onApply}
@@ -453,17 +475,6 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function PlaceholderCard({ title, lines }: { title: string; lines: string[] }) {
-  return (
-    <div className="border border-edge rounded p-2.5">
-      <div className="font-mono text-2xs uppercase tracking-wider text-inkMuted">{title}</div>
-      {lines.map((l, i) => (
-        <div key={i} className="font-mono text-2xs text-inkMuted/80 mt-1">{l}</div>
-      ))}
     </div>
   );
 }

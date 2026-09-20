@@ -4,6 +4,7 @@ import type { DrumBlockFx } from "../../../types/blueprint";
 import { DRUM_LANES } from "../laneStyle";
 import { FX_PARAMS, FX_SPECS, type FxParam } from "./fxParams";
 import { euclidFromRing, ringHand } from "./selectionMath";
+import type { VelocityOp } from "./velocityOps";
 
 /**
  * The big control displays — shared by the docked Selection Workbench and
@@ -266,6 +267,60 @@ function FxRow({ id, value, onChange }: { id: FxParam; value: number; onChange: 
       <span className={`font-mono text-2xs w-[64px] shrink-0 text-right ${active ? "text-[#E8B54A]" : "text-inkMuted/70"}`}>
         {spec.format(value)}
       </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Velocity patterns — the one-shot selection shaping family (ramp / accents
+// every N / alternate / humanize / scale). The factors live in velocityOps.ts
+// and the write path in DrumBlocksView, so both surfaces trigger the exact
+// same bake; every op lands in the draft as editable dots.
+// ---------------------------------------------------------------------------
+
+export function VelocityPanel({ onOp }: { onOp: (op: VelocityOp) => void }) {
+  const [every, setEvery] = useState(4);
+  const [target, setTarget] = useState(100);
+  const btn = "font-mono text-2xs rounded px-1.5 py-0.5 border border-edge text-inkMuted hover:text-ink";
+  const active = "border-[#E8B54A] text-[#E8B54A] bg-[#E8B54A]/10";
+  return (
+    <div className="px-3 py-2.5">
+      <div className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Velocity patterns</div>
+      <div className="mt-2 flex flex-col gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-2xs w-[62px] shrink-0 text-inkMuted">RAMP</span>
+          <button onClick={() => onOp({ kind: "ramp", dir: "up" })} className={btn} title="Fade the selection from soft to loud">↑ rise</button>
+          <button onClick={() => onOp({ kind: "ramp", dir: "down" })} className={btn} title="Fade the selection from loud to soft">↓ fall</button>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="font-mono text-2xs w-[62px] shrink-0 text-inkMuted">ACCENTS</span>
+          {[2, 3, 4, 6, 8].map((n) => (
+            <button
+              key={n}
+              onClick={() => { setEvery(n); onOp({ kind: "accents", every: n }); }}
+              className={`${btn} ${every === n ? active : ""}`}
+              title={`Accent every ${n}th step, duck the rest`}
+            >
+              every {n}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-2xs w-[62px] shrink-0 text-inkMuted">SHAPE</span>
+          <button onClick={() => onOp({ kind: "alternate" })} className={btn} title="Accent even steps, duck odd — a steady ride feel">alternate</button>
+          <button onClick={() => onOp({ kind: "humanize" })} className={btn} title="Seeded ±12% velocity jitter — same dice every time">humanize</button>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-2xs w-[62px] shrink-0 text-inkMuted">SCALE TO</span>
+          <button onClick={() => setTarget((t) => Math.max(20, t - 5))} className={btn}>−</button>
+          <span className="font-mono text-2xs text-ink w-7 text-center tabular-nums">{target}</span>
+          <button onClick={() => setTarget((t) => Math.min(127, t + 5))} className={btn}>+</button>
+          <button onClick={() => onOp({ kind: "scale", target })} className={btn} title="Scale the selection so its loudest hit lands on this value">apply</button>
+        </div>
+      </div>
+      <div className="font-mono text-2xs text-inkMuted mt-2">
+        One-shot shaping of the selection — bakes editable dots (preview ≡ export), Apply to keep.
+      </div>
     </div>
   );
 }

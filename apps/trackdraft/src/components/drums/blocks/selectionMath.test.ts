@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  boxMetrics, euclidFromRing, fxBlocksFor, fxForLanes, fxForRange, isExactRange, motionLabelFor,
-  ringHand, scrubbedNotes, stripFxCarriers, upsertBlocks, upsertModeBlocks,
+  boxMetrics, copyBlocksToRange, euclidFromRing, fxBlocksFor, fxForLanes, fxForRange, isExactRange, motionLabelFor,
+  replaceRangeBlocks, ringHand, scrubbedNotes, stripFxCarriers, upsertBlocks, upsertModeBlocks,
   type VelocityScrubTarget,
 } from "./selectionMath";
 import type { DrumBlock, DrumBlockFx } from "../../../types/blueprint";
@@ -145,5 +145,52 @@ describe("selectionMath — range FX writes", () => {
     expect(isExactRange(blocks[0], 0, 4)).toBe(true);
     expect(isExactRange(blocks[0], 0, 3.999)).toBe(false);
     expect(stripFxCarriers(blocks, ["snare"], 0, 4)).toEqual([blocks[0]]);
+  });
+});
+
+describe("selectionMath — flatten & copy writes", () => {
+  const steps = (lane: "kick" | "snare", start: number, end: number): DrumBlock => ({
+    id: `blk-${lane}-${start}-${end}-steps`,
+    lane,
+    startBeat: start,
+    endBeat: end,
+    mode: "steps",
+    notes: [],
+  });
+
+  it("replaceRangeBlocks swaps a lane's mode block, adopting its fx", () => {
+    const old = { ...steps("kick", 0, 4), id: "blk-kick-0-4-euclid", mode: "euclid" as const, euclid: { k: 2, n: 4, rotation: 1 }, fx: { swing: 0.5 } };
+    const other = steps("snare", 0, 4);
+    const next = steps("kick", 0, 4);
+    const out = replaceRangeBlocks([old, other], ["kick"], 0, 4, [next]);
+    expect(out.find((b) => b.mode === "euclid")).toBeUndefined();
+    const written = out.find((b) => b.id === "blk-kick-0-4-steps")!;
+    expect(written.fx).toEqual({ swing: 0.5 });
+    expect(out.find((b) => b.id === other.id)).toEqual(other); // other lane untouched
+  });
+
+  it("replaceRangeBlocks absorbs a carrier and adopts its fx", () => {
+    const carrier: DrumBlock = { id: "blk-kick-0-4-fx", lane: "kick", startBeat: 0, endBeat: 4, mode: "inherit", fx: { humanize: 1 } };
+    const out = replaceRangeBlocks([carrier], ["kick"], 0, 4, [steps("kick", 0, 4)]);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("blk-kick-0-4-steps");
+    expect(out[0].fx).toEqual({ humanize: 1 });
+  });
+
+  it("copyBlocksToRange re-anchors ids/ranges and deep-copies content", () => {
+    const src: DrumBlock = { id: "blk-kick-0-4-euclid", lane: "kick", startBeat: 0, endBeat: 4, mode: "euclid", euclid: { k: 2, n: 4, rotation: 1 } };
+    const notes = [{ beat: 0, voice: "snare" as const, velocity: 90 }];
+    const srcSteps: DrumBlock = { id: "blk-snare-0-4-steps", lane: "snare", startBeat: 0, endBeat: 4, mode: "steps", notes };
+    const motion: DrumBlock = { id: "blk-hat-0-4-motion", lane: "hat", startBeat: 0, endBeat: 4, mode: "motion", motion: { x: 0.5, y: 0.6 } };
+    const carrier: DrumBlock = { id: "blk-tom-0-4-fx", lane: "tom", startBeat: 0, endBeat: 4, mode: "inherit", fx: { swing: 1 } };
+    const out = copyBlocksToRange([src, srcSteps, motion, carrier], ["kick", "snare", "hat", "tom"], 0, 4, 8);
+    expect(out.map((b) => b.id)).toEqual(["blk-kick-8-12-euclid", "blk-snare-8-12-steps", "blk-hat-8-12-motion"]);
+    expect(out[0].euclid).toEqual({ k: 2, n: 4, rotation: 1 });
+    expect(out[0].euclid).not.toBe(src.euclid); // deep copy, not an alias
+    expect(out[1].notes).toEqual(notes);
+    expect(out[1].notes![0]).not.toBe(notes[0]);
+    expect(out[2].motion).toEqual({ x: 0.5, y: 0.6 });
+    // inherit carriers are never copied; other ranges/lanes are skipped
+    expect(out.find((b) => b.mode === "inherit")).toBeUndefined();
   });
 });

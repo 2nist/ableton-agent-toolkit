@@ -160,6 +160,69 @@ export function fxBlocksFor(
   return out;
 }
 
+const round4 = (n: number): number => Math.round(n * 10000) / 10000;
+
+/** Replace a range's mode blocks outright — flatten's / velocity ops' write.
+ *  Every exact-range non-carrier block for the touched lanes is dropped (so
+ *  a stale euclid/motion can't keep driving the pad rings or resurrect its
+ *  material), the range's fx is adopted onto the new blocks, and carriers
+ *  are absorbed. Blocks outside the range and inherit carriers elsewhere
+ *  are untouched. */
+export function replaceRangeBlocks(
+  blocks: readonly DrumBlock[] | undefined,
+  lanes: readonly DrumLaneId[],
+  startBeat: number,
+  endBeat: number,
+  changes: DrumBlock[],
+): DrumBlock[] {
+  const laneSet = new Set(lanes);
+  const adopted = changes.map((c) => {
+    const fx = fxForRange(blocks, c.lane, startBeat, endBeat);
+    return fx ? { ...c, fx } : c;
+  });
+  const kept = (blocks ?? []).filter(
+    (b) => !(laneSet.has(b.lane) && isExactRange(b, startBeat, endBeat) && b.mode !== "inherit"),
+  );
+  return upsertBlocks(stripFxCarriers(kept, lanes, startBeat, endBeat), adopted);
+}
+
+/**
+ * ⌥-drag copy: re-anchor a range's authored blocks to a new start. Mode
+ * content is copied verbatim (euclid params, outline cells, steps notes,
+ * motion vector, fx — deep-copied, never aliased) and ids are re-keyed for
+ * the destination range so the copy is an independent block. `inherit`
+ * carriers are skipped (fx-only); lanes with nothing authored are the
+ * caller's business — it may materialize the audible hits instead.
+ */
+export function copyBlocksToRange(
+  blocks: readonly DrumBlock[] | undefined,
+  lanes: readonly DrumLaneId[],
+  fromStart: number,
+  fromEnd: number,
+  toStart: number,
+): DrumBlock[] {
+  const laneSet = new Set(lanes);
+  const span = fromEnd - fromStart;
+  const toEnd = round4(toStart + span);
+  const out: DrumBlock[] = [];
+  for (const b of blocks ?? []) {
+    if (!laneSet.has(b.lane) || b.mode === "inherit" || !isExactRange(b, fromStart, fromEnd)) continue;
+    out.push({
+      ...b,
+      id: `blk-${b.lane}-${round4(toStart)}-${toEnd}-${b.mode}`,
+      startBeat: toStart,
+      endBeat: toEnd,
+      groupId: b.groupId ? `grp-${round4(toStart)}-${toEnd}` : undefined,
+      euclid: b.euclid ? { ...b.euclid } : undefined,
+      outline: b.outline ? { ...b.outline, cells: [...b.outline.cells], cellVoices: b.outline.cellVoices ? [...b.outline.cellVoices] : undefined } : undefined,
+      motion: b.motion ? { ...b.motion } : undefined,
+      notes: b.notes ? b.notes.map((n) => ({ ...n })) : undefined,
+      fx: b.fx ? { ...b.fx } : undefined,
+    });
+  }
+  return out;
+}
+
 /** The euclid blocks a ring gesture writes: one per selected lane, linked
  *  as an interleave cluster when more than one lane moves together. */
 export function euclidBlocksFor(

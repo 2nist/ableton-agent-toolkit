@@ -4,16 +4,17 @@ import type { SectionSpan } from "../../../lib/arrangement";
 import { beatsPerBarOf } from "../../../lib/timeline/beatMap";
 import type { BlueprintSection, DrumBlockFx } from "../../../types/blueprint";
 import { DRUM_LANES } from "../laneStyle";
-import { EuclidRing, FxPanel, MotionRing } from "./SelectionDisplays";
+import { EuclidRing, FxPanel, MotionRing, VelocityPanel } from "./SelectionDisplays";
 import { euclidBlocksFor, fxBlocksFor, fxForLanes, motionBlockFor, motionLabelFor, upsertModeBlocks } from "./selectionMath";
+import type { VelocityOp } from "./velocityOps";
 
 /**
  * The Selection Workbench — the working area that comes up WITH a
  * selection (and goes away with it). It is the docked home for every
  * control family the drum timeline grows: the big nested-Euclidean display
- * (one ring per selected drum), the Motion gesture ring, and the Range FX
- * rows (swing / humanize / quantize / velCurve); the Velocity family plugs
- * into the same slots next.
+ * (one ring per selected drum), the Motion gesture ring, the Range FX rows
+ * (swing / humanize / quantize / velCurve) and the Velocity patterns
+ * panel — every family is live now.
  * Edits write through the shared draft store, so Apply/Cancel behave
  * exactly like every other surface — and both of them END the selection
  * session (the whole point: no popup to click away).
@@ -33,13 +34,19 @@ interface SelectionWorkbenchProps {
   section: BlueprintSection | null;
   range: { startBeat: number; endBeat: number; laneKeys: string[] } | null;
   onWrite: (mutate: (sec: BlueprintSection) => BlueprintSection) => void;
+  /** One-shot velocity shaping over the selection (ramp / accents / …). */
+  onVelocityOp: (op: VelocityOp) => void;
+  /** Freeze the selection's audible material into editable dots. */
+  onFlatten: () => void;
+  /** Roll the section to its next seeded variant (null → disabled). */
+  onRegenerate: (() => void) | null;
   hasDraft: boolean;
   onApply: () => void;
   onCancel: () => void;
 }
 
 export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
-  const { span, section, range, onWrite, hasDraft, onApply, onCancel } = props;
+  const { span, section, range, onWrite, onVelocityOp, onFlatten, onRegenerate, hasDraft, onApply, onCancel } = props;
   const [panel, setPanel] = useState<Mode>("euclid");
 
   const lanes = (range?.laneKeys ?? []) as DrumLaneId[];
@@ -129,7 +136,7 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
     { id: "euclid", label: "Euclid", live: true },
     { id: "motion", label: "Motion", live: true },
     { id: "fx", label: "FX", live: true },
-    { id: "velocity", label: "Velocity", live: false },
+    { id: "velocity", label: "Velocity", live: true },
   ];
 
   return (
@@ -209,10 +216,9 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
 
       {/* planned control families */}
       {panel === "velocity" && (
-        <Card title="Velocity patterns" lines={[
-          "Now: drag the value boxes under the grid — one step, or the whole selection together.",
-          "Next here: ramps · accents every N · alternate · humanize · scale to value.",
-        ]} />
+        <div className="border-b border-edge">
+          <VelocityPanel onOp={onVelocityOp} />
+        </div>
       )}
       {panel === "fx" && (
         <div className="border-b border-edge">
@@ -227,6 +233,27 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
         ) : (
           <span className="font-mono text-2xs text-inkMuted">no edits yet — drag a ring to stage one</span>
         )}
+        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+          <button
+            onClick={onFlatten}
+            className="font-mono text-2xs rounded px-2 py-1 border border-edge text-inkMuted hover:text-ink"
+            title="Freeze the selection's audible material into editable dots"
+          >
+            ❄ Flatten
+          </button>
+          <button
+            onClick={onRegenerate ?? undefined}
+            disabled={!onRegenerate}
+            className={`font-mono text-2xs rounded px-2 py-1 border ${
+              onRegenerate
+                ? "border-edge text-inkMuted hover:text-ink"
+                : "border-edge text-inkMuted/40 cursor-not-allowed"
+            }`}
+            title={onRegenerate ? "Roll the section to its next seeded variant" : "No variants for this section's pattern"}
+          >
+            ⟳ Regenerate
+          </button>
+        </div>
         <div className="flex items-center gap-2 mt-2">
           <button
             onClick={onApply}
@@ -251,16 +278,5 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
         </div>
       </div>
     </aside>
-  );
-}
-
-function Card({ title, lines }: { title: string; lines: string[] }) {
-  return (
-    <div className="px-3 py-2.5 border-b border-edge">
-      <div className="font-mono text-2xs uppercase tracking-wider text-inkMuted">{title}</div>
-      {lines.map((l, i) => (
-        <div key={i} className="font-mono text-2xs text-inkMuted/80 mt-1">{l}</div>
-      ))}
-    </div>
   );
 }
