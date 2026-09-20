@@ -92,6 +92,15 @@ function roundToQuarterBeat(beats: number): number {
  *   Rounded   [8, 8, 8] = 24  (already whole)
  *   Bars      ceil(24/4) = 6       → 24 beats, no gap
  *   (The source annotation had 8 bars; the chords actually fill 6.)
+ *
+ * KNOWN FOLLOW-UP (queued 2026-09-20, the "chord track" pass): a catalog
+ * scan found 821 of 1459 chord-bearing sections end >3 beats short of
+ * their bars (the built catalog keeps each annotation's bar count while
+ * this function rounds chord material conservatively), none tile exactly,
+ * and 63 sections carry no chords. 44 % of the gaps are whole-bar
+ * multiples (likely unannotated final repeats — repeating the last chord
+ * would tile those); the rest are beat-level remainders needing a per-case
+ * policy. Details: tempdrumpatgencode/importer-runner-reply.md.
  */
 export function snapProgressionToGrid(
   chords: Chord[],
