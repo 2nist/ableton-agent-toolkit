@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
 import { useDockStore } from "../../store/dockStore";
@@ -21,6 +21,8 @@ import NecklaceGlyph from "./NecklaceGlyph";
 import DrumPatternTools from "./DrumPatternTools";
 import DrumBlocksView from "./blocks/DrumBlocksView";
 import { planSectionHandoffFills, planSectionTransitions, FILL_DATA, outlineBeatsPerBar, numerator as outlineNumerator, hashSeed, occurrenceSeed, buildEuclideanOutline, twoThreeCellCounts, type HandoffSectionInput } from "@drum/library";
+import { parseAnalysisFile } from "../../lib/drumImport/analysisFile";
+import { applySectionPatch, planSectionImport } from "../../lib/drumImport/runner";
 
 /** The Drums tab's two surfaces: the classic whole-song canvas and the
  *  Drum Blocks (beta) authoring view. */
@@ -281,6 +283,51 @@ export default function DrumsView() {
     }
   };
 
+  // ---- Import analysis (the drum importer's UI half) ----------------------
+  // A drum-analysis grid (see lib/drumImport/analysisFile.ts — what the
+  // audio→grid side writes) for the SELECTED section stages straight into
+  // the drums draft store, so the timeline previews it exactly like any
+  // other drum edit and the usual Apply/Revert commits or discards it.
+  const analysisInputRef = useRef<HTMLInputElement | null>(null);
+  const [importStatus, setImportStatus] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const onAnalysisFile = async (file: File) => {
+    try {
+      let raw: unknown;
+      try {
+        raw = JSON.parse(await file.text());
+      } catch {
+        throw new Error("Not a JSON file.");
+      }
+      const parsed = parseAnalysisFile(raw);
+      const current = useSongStore.getState().currentSong();
+      if (!current) throw new Error("No song open.");
+      if (parsed.songId !== undefined && parsed.songId !== current.id) {
+        throw new Error(`Analysis is for "${parsed.songId}" — open that song (or re-export the analysis) before importing.`);
+      }
+      const target = current.sections.find((s) => s.id === selectedSectionId) ?? current.sections[0];
+      if (!target) throw new Error("This song has no sections yet.");
+      const staged = useDrumsDraftStore.getState();
+      if (staged.sectionId !== null && staged.sectionId !== target.id) {
+        throw new Error("Another section has staged edits — Apply or Revert them first.");
+      }
+      const result = planSectionImport(parsed, target);
+      if (!result) {
+        const names = parsed.sections.slice(0, 8).map((e) => e.sectionId ?? e.sectionName ?? "?").join(", ");
+        throw new Error(`No span in the analysis matches "${target.name}" — the file covers: ${names}${parsed.sections.length > 8 ? ", …" : ""}.`);
+      }
+      useDrumsDraftStore.getState().setDraft(target.id, applySectionPatch(target, result.patch));
+      setSelectedSectionId(target.id);
+      const st = result.report.stats;
+      setImportStatus({
+        ok: true,
+        text: `Imported "${target.name}": ${result.patch.drumBlocks.length} blocks (${st.euclidBlocks} euclid · ${st.stepsBlocks} steps · ${st.clearBlocks} clears${st.motionBlocks > 0 ? ` · ${st.motionBlocks} motion` : ""}) — preview staged · Apply to keep, Revert to discard`,
+      });
+    } catch (e) {
+      setImportStatus({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    }
+  };
+
   // A working draft from the Pattern editor — when one exists for a
   // section, the timeline renders it instead of the committed section so
   // slider edits preview live on the lines/necklaces before Apply/Revert.
@@ -516,7 +563,31 @@ export default function DrumsView() {
             ? "step dots + marquee → XY pad"
             : "necklaces · detours · transitions"}
         </span>
+        <span className="flex-1" />
+        <input
+          ref={analysisInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void onAnalysisFile(file);
+          }}
+        />
+        <button
+          onClick={() => analysisInputRef.current?.click()}
+          title="Import a drum-analysis grid (16 or 12 steps per bar) as a staged draft for the selected section"
+          className="font-mono text-2xs rounded px-2 py-1 border border-edge text-inkMuted hover:text-ink"
+        >
+          ⤓ Import analysis…
+        </button>
       </div>
+      {importStatus && (
+        <div className={`font-mono text-2xs mb-1.5 ${importStatus.ok ? "text-[#E8B54A]" : "text-red-400"}`}>
+          {importStatus.text}
+        </div>
+      )}
       {viewMode === "blocks" ? (
         <DrumBlocksView />
       ) : (
