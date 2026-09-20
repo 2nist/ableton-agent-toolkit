@@ -24,7 +24,13 @@ import {
  *      time — a flux peak fires on the window that first CONTAINS the
  *      attack, so the event lies up to a window-hop later than the frame
  *      time), and velocities come from body energy relative to the lane's
- *      own p90.
+ *      own p90;
+ *   6. a per-SECTION phase vote re-labels each arrangement region to the
+ *      backbeat-optimal step family — a band's phase relative to a rigid
+ *      grid wanders across a song, and where it crosses a rounding
+ *      boundary the steps flip family mid-song (the snare reading 5,13
+ *      in the first verse then 4,12 after the first chorus — real Drive
+ *      My Car behaviour).
  *
  * Pure + deterministic — see analysis.test.ts for the synthetic-signal
  * pinning.
@@ -74,6 +80,10 @@ export interface TranscribeOptions {
    *  is a SUSTAINED note, not a drum. Defaults: kick 0.5, snare 0.8. */
   kickTailPct?: number;
   snareTailPct?: number;
+  /** Arrangement regions (global bar spans). When given (16-step grids
+   *  only), each region's onsets are re-labeled by the phase vote so its
+   *  pattern reads the backbeat-optimal step family. */
+  sectionSpans?: { startBar: number; bars: number }[];
 }
 
 export interface TranscribeResult {
@@ -90,6 +100,8 @@ export interface TranscribeResult {
   hits: Record<LaneName, number>;
   /** Per-onset measurements + lane decisions — the CLI's tuning view. */
   onsetLog: OnsetLog[];
+  /** Per-region step shift chosen by the phase vote (0 = kept as-is). */
+  phaseShifts: { startBar: number; bars: number; shift: number }[];
 }
 
 export interface OnsetLog {
@@ -102,6 +114,72 @@ export interface OnsetLog {
 /** Velocity from a body energy relative to its lane's p90. */
 export function velocityFromStrength(rel: number): number {
   return Math.max(20, Math.min(120, Math.round(30 + 90 * Math.min(1, rel))));
+}
+
+/** Backbeat priors (16-step 4/4 bar): where each lane CLAIMS its steps.
+ *  Kick: beats 1 & 3 plus the syncopated 16ths around them; snare: beats
+ *  2 & 4, nothing else; hats: eighths (even steps) — kept flattish and
+ *  low-weight so they can only break ties, never steer the vote. */
+const KICK_PRIOR = [1.0, 0.05, 0.5, 0.05, 0.2, 0.05, 0.5, 0.05, 0.9, 0.05, 0.4, 0.05, 0.2, 0.05, 0.5, 0.05];
+const SNARE_PRIOR = [0.05, 0.05, 0.05, 0.05, 1.0, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 1.0, 0.05, 0.05, 0.05];
+const HAT_PRIOR = [0.4, 0.3, 0.4, 0.3, 0.4, 0.3, 0.4, 0.3, 0.4, 0.3, 0.4, 0.3, 0.4, 0.3, 0.4, 0.3];
+const LANE_VOTE_WEIGHT: Record<LaneName, number> = { kick: 1, snare: 1.3, hat: 0.3 };
+
+/**
+ * The per-section phase vote: for one region, score every integer step
+ * shift k ∈ [−8..8] by how well the region's hit positions (raw + k)
+ * match the backbeat priors, and keep the best shift only when it beats
+ * the unshifted labeling by 15 %+ (and prefer the nearest shift on ties).
+ */
+function voteSectionPhases(
+  rows: { raw: number; kick: boolean; snare: boolean; hat: boolean }[],
+  spans: { startBar: number; bars: number }[],
+): { startBar: number; bars: number; shift: number }[] {
+  const out: { startBar: number; bars: number; shift: number }[] = [];
+  for (const span of spans) {
+    const lo = span.startBar * 16;
+    const hi = (span.startBar + span.bars) * 16;
+    const scores = new Map<number, number>();
+    for (let k = -8; k <= 8; k++) scores.set(k, 0);
+    let used = 0;
+    for (const row of rows) {
+      if (row.raw < lo || row.raw >= hi || (!row.kick && !row.snare && !row.hat)) continue;
+      used++;
+      const pos = ((row.raw % 16) + 16) % 16;
+      for (let k = -8; k <= 8; k++) {
+        const p = (pos + k + 16) % 16;
+        let add = 0;
+        if (row.kick) add += LANE_VOTE_WEIGHT.kick * KICK_PRIOR[p];
+        if (row.snare) add += LANE_VOTE_WEIGHT.snare * SNARE_PRIOR[p];
+        if (row.hat) add += LANE_VOTE_WEIGHT.hat * HAT_PRIOR[p];
+        scores.set(k, (scores.get(k) ?? 0) + add);
+      }
+    }
+    let shift = 0;
+    if (used > 0) {
+      const base = scores.get(0) ?? 0;
+      let bestScore = -Infinity;
+      for (const sc of scores.values()) if (sc > bestScore) bestScore = sc;
+      if (base > 0 && bestScore >= 1.15 * base) {
+        // Among near-best shifts prefer the SMALLEST |k|: a half-bar-rotated
+        // representative (k ± 8) ties on symmetric patterns and would
+        // otherwise relocate a section's syncopations for no gain.
+        let bestK = 0;
+        let bestAbs = Infinity;
+        for (const [k, sc] of scores) {
+          if (sc < 0.99 * bestScore) continue;
+          const abs = Math.abs(k);
+          if (abs < bestAbs || (abs === bestAbs && k < bestK)) {
+            bestAbs = abs;
+            bestK = k;
+          }
+        }
+        shift = bestK;
+      }
+    }
+    out.push({ startBar: span.startBar, bars: span.bars, shift });
+  }
+  return out;
 }
 
 /** Leading silence prepended before analysis: a hit exactly at t=0 would
@@ -230,6 +308,9 @@ export function transcribe(samples: Float32Array, opts: TranscribeOptions): Tran
   const decisions: Decision[] = [];
   const onsetLog: OnsetLog[] = [];
 
+  interface Flagged { time: number; kick: boolean; snare: boolean; hat: boolean; raw: number; kickE: number; snareE: number; hatE: number }
+  const flagged: Flagged[] = [];
+
   for (const o of onsets) {
     const isKick = o.kick > laneThresholdPct * p90k && o.kick >= 0.3 * Math.max(o.snare, o.hat)
       && o.kickTail < kickTailPct * o.kick;
@@ -244,24 +325,58 @@ export function transcribe(samples: Float32Array, opts: TranscribeOptions): Tran
       tail: { kick: o.kickTail, snare: o.snareTail, hat: o.hatTail },
       lanes: [...(isKick ? ["kick"] : []), ...(isSnare ? ["snare"] : []), ...(isHat ? ["hat"] : [])] as LaneName[],
     });
-    if (!isKick && !isSnare && !isHat) continue;
+    flagged.push({
+      time: o.time,
+      kick: isKick,
+      snare: isSnare,
+      hat: isHat,
+      raw: Math.round((o.time - gridOffset) / stepSec),
+      kickE: o.kick,
+      snareE: o.snare,
+      hatE: o.hat,
+    });
+  }
 
-    const idx = Math.round((o.time - gridOffset) / stepSec);
+  // The per-section phase vote (see voteSectionPhases): regions whose hits
+  // all fell onto the wrong family get an integer step shift before the
+  // final assignment. Rows need a real residual (inside tolerance) or they
+  // would drag the vote toward noise.
+  const voteRows = flagged
+    .filter((f) => (f.kick || f.snare || f.hat)
+      && f.raw >= 0 && f.raw < totalSteps
+      && Math.abs(f.time - (gridOffset + f.raw * stepSec)) <= tol)
+    .map((f) => ({ raw: f.raw, kick: f.kick, snare: f.snare, hat: f.hat }));
+  const phaseShifts = stepsPerBar === 16 && opts.sectionSpans && opts.sectionSpans.length > 0
+    ? voteSectionPhases(voteRows, opts.sectionSpans)
+    : [];
+  const shiftAt = (raw: number): number => {
+    if (phaseShifts.length === 0) return 0;
+    const bar = Math.max(0, Math.min(bars - 1, Math.floor(raw / stepsPerBar)));
+    for (const s of phaseShifts) {
+      if (bar >= s.startBar && bar < s.startBar + s.bars) return s.shift;
+    }
+    return 0;
+  };
+
+  for (const f of flagged) {
+    if (!f.kick && !f.snare && !f.hat) continue;
+    if (f.raw < 0 || f.raw >= totalSteps) continue;
+    if (Math.abs(f.time - (gridOffset + f.raw * stepSec)) > tol) continue;
+    const idx = f.raw + shiftAt(f.raw);
     if (idx < 0 || idx >= totalSteps) continue;
-    if (Math.abs(o.time - (gridOffset + idx * stepSec)) > tol) continue;
     decisions.push({
       bar: Math.floor(idx / stepsPerBar),
       step: idx % stepsPerBar,
-      kick: isKick ? o.kick : 0,
-      snare: isSnare ? o.snare : 0,
-      hat: isHat ? o.hat : 0,
+      kick: f.kick ? f.kickE : 0,
+      snare: f.snare ? f.snareE : 0,
+      hat: f.hat ? f.hatE : 0,
     });
-    if (isKick) fired.kick.push(o.kick);
-    if (isSnare) fired.snare.push(o.snare);
-    if (isHat) fired.hat.push(o.hat);
-    hits.kick += isKick ? 1 : 0;
-    hits.snare += isSnare ? 1 : 0;
-    hits.hat += isHat ? 1 : 0;
+    if (f.kick) fired.kick.push(f.kickE);
+    if (f.snare) fired.snare.push(f.snareE);
+    if (f.hat) fired.hat.push(f.hatE);
+    hits.kick += f.kick ? 1 : 0;
+    hits.snare += f.snare ? 1 : 0;
+    hits.hat += f.hat ? 1 : 0;
   }
 
   // velocities relative to each lane's own fired p90, so quiet songs still
@@ -284,6 +399,7 @@ export function transcribe(samples: Float32Array, opts: TranscribeOptions): Tran
     onsets: onsets.length,
     hits,
     onsetLog,
+    phaseShifts,
   };
 }
 

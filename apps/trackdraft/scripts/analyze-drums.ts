@@ -146,12 +146,16 @@ function main(): void {
     totalBeats,
     peakK: flags.has("--k") ? Number(flags.get("--k")) : undefined,
     fixed,
+    sectionSpans: spans.map((s) => ({ startBar: s.startBar, bars: s.bars })),
   });
   console.log(`transcribed in ${((Date.now() - t0) / 1000).toFixed(1)}s\n`);
 
   const endSec = result.offset + totalBeats * (60 / bpm) * result.scale;
   console.log(`grid: offset ${result.offset.toFixed(3)}s · tempo ×${result.scale.toFixed(4)} · spans ${result.offset.toFixed(2)}s → ${endSec.toFixed(2)}s of ${durSec.toFixed(2)}s`);
   console.log(`onsets ${result.onsets} → hits ${LANE_NAMES.map((l) => `${l} ${result.hits[l]}`).join(" · ")}`);
+  if (result.phaseShifts.some((p) => p.shift !== 0)) {
+    console.log(`section phase shifts (bar:steps): ${result.phaseShifts.map((p) => `${p.startBar}:${p.shift > 0 ? "+" : ""}${p.shift}`).join(" ")}`);
+  }
   if (flags.has("--dump-onsets")) {
     for (const o of result.onsetLog) {
       console.log(

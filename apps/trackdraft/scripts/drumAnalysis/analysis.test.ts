@@ -125,4 +125,42 @@ describe("drumAnalysis — transcription of a known kit", () => {
     expect(stepsOf(r, "kick", 0)).toEqual([0, 8]);
     expect(stepsOf(r, "snare", 0)).toEqual([4, 12]);
   });
+
+  it("phase vote: a mid-song phase step still reads ONE step family", () => {
+    // 16 bars of the same groove at a constant tempo, except that from bar
+    // 8 on the whole kit sits 1.1 steps late (a splice). The envelope fit
+    // centres between the two phases, so the raw pass rounds the second
+    // half onto the NEXT family (snare 5,13 after 4,12) — the per-section
+    // vote must re-label both sections back to kick 1&3 / snare 2&4.
+    const S = 60 / 120 / 4; // 0.125 s per step at the blueprint tempo
+    const D = 1.1 * S;
+    const hits: Hit[] = [];
+    for (let bar = 0; bar < 16; bar++) {
+      const local: Array<[number, Lane, number]> = [
+        [0, "kick", 1], [8, "kick", 0.9], [4, "snare", 0.9], [12, "snare", 1],
+      ];
+      for (let s = 0; s < 16; s += 2) local.push([s, "hat", 0.5]);
+      for (const [step, lane, amp] of local) {
+        const n = bar * 16 + step;
+        hits.push({ time: n * S + (n >= 128 ? D : 0), lane, amp });
+      }
+    }
+    const audio = synth(hits, 33);
+    const spans = [{ startBar: 0, bars: 8 }, { startBar: 8, bars: 8 }];
+
+    const voted = transcribe(audio, { ...OPTS, totalBeats: 64, sectionSpans: spans });
+    for (let bar = 0; bar < 16; bar++) {
+      for (const s of stepsOf(voted, "snare", bar)) expect([4, 12]).toContain(s);
+      for (const s of stepsOf(voted, "kick", bar)) expect([0, 8]).toContain(s);
+      for (const s of stepsOf(voted, "hat", bar)) expect(s % 2).toBe(0);
+    }
+    expect(voted.phaseShifts.some((p) => p.shift !== 0)).toBe(true);
+    expect(voted.hits.snare).toBeGreaterThan(28);
+
+    // …the same audio WITHOUT the vote splits families at the splice
+    const plain = transcribe(audio, { ...OPTS, totalBeats: 64 });
+    const families = new Set<number>();
+    for (let bar = 0; bar < 16; bar++) for (const s of stepsOf(plain, "snare", bar)) families.add(s % 8);
+    expect(families.size).toBeGreaterThan(1);
+  }, 30000);
 });
