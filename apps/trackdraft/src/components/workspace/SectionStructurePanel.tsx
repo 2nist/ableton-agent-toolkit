@@ -3,6 +3,7 @@ import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { removeSection, repeatsFor, updateRepeats, updateSection } from "../../lib/sections";
 import { DRUM_PATTERN_OPTIONS, variantCount } from "../../lib/playback/drumPreview";
 import DrumNecklacePreview from "../structure/DrumNecklacePreview";
+import FitStatus from "../harmony/FitStatus";
 import type { BlueprintSection, DrumPattern, SectionRole, VelocityPreset } from "../../types/blueprint";
 
 const ROLES: SectionRole[] = [
@@ -42,6 +43,15 @@ export default function SectionStructurePanel() {
   }
 
   const repeats = repeatsFor(song, section.id);
+  /** Whether an outline (the harmony's own, or the drums' when the section
+   *  follows them) drives chord timing — mirrors resolveChordOccurrences'
+   *  precedence exactly. The fit readout below describes the per-chord-
+   *  beats path only, so it's hidden while an outline is in charge (the
+   *  outline readout further down covers that shape instead). */
+  const outlineDriven = !!(
+    section.harmonyMeterOutline ??
+    (section.harmonyFollowsDrums === false ? null : section.drumMeterOutline)
+  );
   const onChange = (updater: (s: BlueprintSection) => BlueprintSection) =>
     updateCurrentSong((s) => updateSection(s, section.id, updater));
   const onChangeRepeats = (n: number) => updateCurrentSong((s) => updateRepeats(s, section.id, n));
@@ -113,7 +123,10 @@ export default function SectionStructurePanel() {
             onChange={(e) => onChange((s) => ({ ...s, bars: Number(e.target.value) || 1 }))}
           />
         </label>
-        <label className="flex items-center gap-1" title="Chord changes every N beats — the default chord rhythm">
+        <label
+          className="flex items-center gap-1"
+          title="The default chord rhythm used when BUILDING or importing chords — each chord also carries its own length, and an existing chord's length wins wherever set (edit per-chord timing in the harmony editor)"
+        >
           <span className="uppercase tracking-wide text-3xs">Bts/ch</span>
           <input
             type="number"
@@ -134,6 +147,14 @@ export default function SectionStructurePanel() {
           />
         </label>
       </div>
+
+      {/* Progression-vs-length, honestly: the exact arithmetic the export
+          loops the chord cell with (whole passes + partial tail), plus the
+          one-click "make it a clean loop" action. Hidden in outline mode —
+          the fit math describes the per-chord-beats path only. */}
+      {!outlineDriven && (
+        <FitStatus section={section} onSetBars={(bars) => onChange((s) => ({ ...s, bars }))} />
+      )}
 
       {/* Drums: outline readout or pattern + variant */}
       {section.drumMeterOutline ? (

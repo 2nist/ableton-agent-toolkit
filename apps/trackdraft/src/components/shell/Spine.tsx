@@ -5,6 +5,7 @@ import { roleStyle } from "../../lib/roleColors";
 import { addSection, reorderSections, updateSection } from "../../lib/sections";
 import { NOTE_TO_PC, pitchClass } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
+import { resolveChordOccurrences } from "@drum/library";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import IconBtn from "../common/IconBtn";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
@@ -628,38 +629,60 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
             </div>
 
             {/* Chords lane — the harmony element's ARRANGEMENT face (the
-                two-faces law): chord changes at their default rhythm,
-                aligned to the same bar axis. Width-aware: cells render
-                only when they can be read. */}
+                two-faces law): the progression exactly as the section will
+                PLAY it, aligned to the same bar axis. This lane deliberately
+                runs THE shared resolver — `resolveChordOccurrences`, the same
+                call midiExport / live MIDI out / the Ableton bridge make — not
+                a naive one-pass of `section.chords`: the chord list is a
+                repeating CELL, so a section longer than the cell loops it
+                (the last pass truncated at the section end), and a section
+                whose timing is outline-driven advances chords on the outline's
+                onsets. Drawing the raw list here was the "dead air after the
+                chords" bug: the lane disagreed with playback the moment a
+                drag grew the section past one pass. Cells starting a NEW LAP
+                of the cell get accent styling (tick cells: brighter fill;
+                text cells: accent left border) so a wrap is visible at a
+                glance. Width-aware: text cells once they fit, ticks below,
+                nothing when even a tick wouldn't fit. Spacing stays authored
+                (no bend-density re-timing) — at overview scale the bend's
+                spacing delta is sub-pixel, and a stable lane is worth more
+                than re-jiggling the map every time a Mix/Bend slider moves. */}
             <div className="relative h-[16px] border-t border-edge/50 overflow-hidden">
               {spans.map((span, i) => {
                 const chords = span.section.chords;
                 if (chords.length === 0) return null;
                 const bpb = beatsPerBar(span.section);
-                const bpc = Math.max(0.25, span.section.beatsPerChord || bpb);
-                const cellBarW = (bpc / bpb) * barPx;
-                if (cellBarW < 1.5) return null; // beyond even ticks — zoom in
-                const showText = cellBarW >= 11;
+                const endX = (span.startBar + span.bars) * barPx;
                 const rawKey = span.section.key ?? song.key;
                 const effKey: NoteName = rawKey in NOTE_TO_PC ? (rawKey as NoteName) : "C";
-                return chords.map((c, ci) => {
-                  const x = (span.startBar + (ci * bpc) / bpb) * barPx;
-                  const w = Math.min(cellBarW, (span.startBar + span.bars) * barPx - x);
-                  if (w < 1.5) return null;
+                const occs = resolveChordOccurrences(span.section, span.durationBeats);
+                return occs.map((occ, oi) => {
+                  const x = (span.startBar + occ.startTime / bpb) * barPx;
+                  const w = Math.min((occ.duration / bpb) * barPx, endX - x);
+                  if (w < 1.5) return null; // beyond even ticks — zoom in
+                  const showText = w >= 11;
+                  // Both loopChordsToFill and loopChordsOnOutline emit
+                  // occurrences in strict chord order, so occurrence oi is
+                  // chord oi % n — an index landing on 0 mid-list is a wrap.
+                  const seam = oi > 0 && oi % chords.length === 0;
                   return (
                     <button
-                      key={`${span.sectionId}-${span.occurrenceIndex}-${i}-${ci}`}
+                      key={`${span.sectionId}-${span.occurrenceIndex}-${i}-${oi}`}
                       type="button"
-                      className={`absolute top-0 bottom-0 truncate border-l border-edge/40 hover:bg-panelAlt/40 ${
+                      className={`absolute top-0 bottom-0 truncate hover:bg-panelAlt/40 ${
                         showText
-                          ? "px-0.5 text-left text-[8px] font-mono leading-[16px] text-inkMuted/80 hover:text-ink"
-                          : "bg-inkMuted/30"
+                          ? `border-l px-0.5 text-left text-[8px] font-mono leading-[16px] text-inkMuted/80 hover:text-ink ${
+                              seam ? "border-accent/40" : "border-edge/40"
+                            }`
+                          : seam
+                            ? "bg-accent/40"
+                            : "bg-inkMuted/30"
                       }`}
                       style={{ left: x, width: showText ? w : Math.max(1.5, Math.min(2.5, w)) }}
-                      title={`${c.romanNumeral} — ${chordDisplayName(pitchClass(c.root), c.quality, effKey)}`}
+                      title={`${occ.chord.romanNumeral} — ${chordDisplayName(pitchClass(occ.chord.root), occ.chord.quality, effKey)}`}
                       onClick={() => setSelectedSectionId(span.sectionId)}
                     >
-                      {showText ? c.romanNumeral : ""}
+                      {showText ? occ.chord.romanNumeral : ""}
                     </button>
                   );
                 });
