@@ -277,7 +277,7 @@ export default function StudioView() {
             </div>
             <StudioConsole song={song} />
           </div>
-          <div className="w-72 shrink-0 min-h-0 overflow-y-auto">
+          <div className="w-[216px] shrink-0 min-h-0 overflow-y-auto">
             <BendPanel />
           </div>
         </div>

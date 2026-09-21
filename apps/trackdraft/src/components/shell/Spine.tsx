@@ -47,18 +47,11 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
       title={hint ?? "The Spine — click a section to target it; ←→ walks sections here"}
     >
       <div className="flex items-stretch h-[52px]">
-        {/* Song chip — identity lives at the spine's left end */}
-        <div className="shrink-0 w-44 flex flex-col justify-center px-3 border-r border-edge">
-          <p className="text-xs font-medium text-ink truncate" title={song.title}>
-            {song.title}
-          </p>
-          <p className="text-3xs font-mono text-inkMuted truncate tabular-nums">
-            {song.key} {song.scale} · {song.bpm} BPM
-          </p>
-        </div>
-
         {/* The blocks — proportional to bars, touching (border-separated) so
-            the playhead's % position stays honest. */}
+            the playhead's % position stays honest. Song identity deliberately
+            lives in the legacy header above for now (a chip here duplicated
+            it); the chip returns to the spine's left end in P2, when the
+            header folds into the spine. */}
         <div className="flex-1 min-w-0 relative flex">
           {playheadPct !== null && (
             <div

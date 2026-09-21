@@ -112,7 +112,7 @@ export default function WorkbenchView() {
           )}
         </div>
 
-        <aside className="w-72 shrink-0 border-l border-edge bg-panel min-h-0 overflow-y-auto p-2" aria-label="Context rail — mix / bend lens">
+        <aside className="w-[216px] shrink-0 border-l border-edge bg-panel min-h-0 overflow-y-auto p-2" aria-label="Context rail — mix / bend lens">
           <BendPanel />
         </aside>
       </div>
