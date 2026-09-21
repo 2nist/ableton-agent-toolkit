@@ -6,12 +6,17 @@ import { resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@dru
 import { useSongStore } from "../../store/songStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { sectionSpans, type SectionSpan } from "../../lib/arrangement";
+import { applySongMap } from "../../lib/sections";
+import { STYLE_RECIPES } from "../../lib/style/bend";
+import { SONG_MAPS, type SongMap } from "../../data/songMaps";
+import { GENRE_CATALOG } from "../../data/genre-catalog/index";
 import { roleStyle } from "../../lib/roleColors";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playback/drumPreview";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import Spine from "../shell/Spine";
 import BendPanel from "../style/BendPanel";
+import SectionStructurePanel from "./SectionStructurePanel";
 import HexReadout from "../harmony/HexReadout";
 import NecklaceRow from "../drums/NecklaceRow";
 import MelodyStaff from "../melody/MelodyStaff";
@@ -112,8 +117,13 @@ export default function WorkbenchView() {
           )}
         </div>
 
-        <aside className="w-[216px] shrink-0 border-l border-edge bg-panel min-h-0 overflow-y-auto p-2" aria-label="Context rail — mix / bend lens">
-          <BendPanel />
+        <aside className="w-[216px] shrink-0 border-l border-edge bg-panel min-h-0 overflow-y-auto p-2 space-y-2" aria-label="Context rail — structure edits + mix / bend lens">
+          <CollapsibleCard title="Structure" defaultOpen>
+            <SectionStructurePanel />
+          </CollapsibleCard>
+          <CollapsibleCard title="Mix / Bend">
+            <BendPanel />
+          </CollapsibleCard>
         </aside>
       </div>
 
@@ -143,9 +153,11 @@ export default function WorkbenchView() {
   );
 }
 
-/** Left rail — the song list as an Ableton-style browser: closed until you
- *  need to look for something. Maps/templates/presets drag-ins land here in
- *  later phases. */
+/** Left rail — the Library: Songs · Maps (narrative + genre) · Recipes,
+ *  an Ableton-style browser closed until you need to look for something.
+ *  Maps mint a section skeleton for the whole song (destructive —
+ *  confirmed, undoable); recipes set the mix tint in one click (the
+ *  Mix / Bend group lights up with the result). Songs is the default tab. */
 function LibraryRail({
   songs,
   currentId,
@@ -159,38 +171,118 @@ function LibraryRail({
   onToggle: () => void;
   onPick: (id: string) => void;
 }) {
+  const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
+  const [tab, setTab] = useState<"songs" | "maps" | "recipes">("songs");
+
+  function applyMap(map: SongMap) {
+    if (!window.confirm(`Replace this song's sections with the "${map.name}" map?`)) return;
+    updateCurrentSong((s) => applySongMap(s, map));
+  }
+
+  function applyRecipe(name: string) {
+    const recipe = STYLE_RECIPES[name];
+    if (!recipe) return;
+    const { tempo, ...axes } = recipe;
+    updateCurrentSong((s) => ({ ...s, genre: name, bend: axes, bpm: tempo }));
+  }
+
   return (
     <aside className={`shrink-0 border-r border-edge bg-panel flex flex-col min-h-0 ${open ? "w-56" : "w-9"}`} aria-label="Library">
       <button
         type="button"
         className="h-9 shrink-0 flex items-center justify-center text-inkMuted hover:text-ink text-xs"
         onClick={onToggle}
-        title={open ? "Close the library" : "Library — songs, and later maps/templates (closed until you need it)"}
+        title={open ? "Close the library" : "Library — songs · maps · recipes (closed until you need it)"}
       >
         {open ? "◂" : "▸"}
       </button>
       {open ? (
-        <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
-          <p className="text-3xs font-mono uppercase tracking-widest text-inkMuted px-1 pt-1">Library · songs</p>
-          <div className="mt-1 space-y-0.5">
-            {songs.map((s) => (
+        <div className="flex-1 min-h-0 overflow-y-auto pb-2">
+          {/* Tabs: Songs · Maps · Recipes */}
+          <div className="flex gap-0.5 px-1.5 pt-0.5">
+            {(["songs", "maps", "recipes"] as const).map((t) => (
               <button
-                key={s.id}
+                key={t}
                 type="button"
-                className={`w-full text-left px-1.5 py-1 rounded ${
-                  s.id === currentId ? "bg-panelAlt text-ink" : "text-inkMuted hover:text-ink hover:bg-panelAlt/60"
+                className={`text-3xs font-mono uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                  tab === t ? "bg-panelAlt text-ink" : "text-inkMuted hover:text-ink"
                 }`}
-                onClick={() => onPick(s.id)}
-                title={`Open "${s.title}" in the workbench`}
+                onClick={() => setTab(t)}
               >
-                <span className="block text-xs truncate">{s.title}</span>
-                <span className="block text-3xs font-mono text-inkMuted/60 tabular-nums">
-                  {s.key} {s.scale} · {s.bpm} BPM
-                </span>
+                {t}
               </button>
             ))}
           </div>
-          <p className="text-[9px] font-mono text-inkMuted/40 px-1 pt-3">maps · templates · presets — later phases</p>
+
+          {tab === "songs" && (
+            <div className="px-2">
+              <div className="mt-1 space-y-0.5">
+                {songs.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`w-full text-left px-1.5 py-1 rounded ${
+                      s.id === currentId ? "bg-panelAlt text-ink" : "text-inkMuted hover:text-ink hover:bg-panelAlt/60"
+                    }`}
+                    onClick={() => onPick(s.id)}
+                    title={`Open "${s.title}" in the workbench`}
+                  >
+                    <span className="block text-xs truncate">{s.title}</span>
+                    <span className="block text-3xs font-mono text-inkMuted/60 tabular-nums">
+                      {s.key} {s.scale} · {s.bpm} BPM
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tab === "maps" && (
+            <div className="px-2 mt-1 space-y-3">
+              {([
+                ["Narrative maps", SONG_MAPS],
+                ["Genre maps", GENRE_CATALOG],
+              ] as const).map(([label, maps]) => (
+                <div key={label}>
+                  <p className="text-3xs font-mono uppercase tracking-widest text-inkMuted px-1">{label}</p>
+                  <div className="mt-1 space-y-0.5">
+                    {maps.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        className="w-full text-left px-1.5 py-1 rounded text-inkMuted hover:text-ink hover:bg-panelAlt/60"
+                        onClick={() => applyMap(m)}
+                        title={`${m.description} — replaces the current sections (undoable)`}
+                      >
+                        <span className="block text-xs truncate">{m.name}</span>
+                        <span className="block text-3xs font-mono text-inkMuted/50 truncate">{m.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <p className="text-[9px] font-mono text-inkMuted/40 px-1">applies to the whole song · replaces sections</p>
+            </div>
+          )}
+
+          {tab === "recipes" && (
+            <div className="px-2 mt-1">
+              <p className="text-3xs font-mono uppercase tracking-widest text-inkMuted px-1">Genre recipes · the mix tint</p>
+              <div className="mt-1 space-y-0.5">
+                {Object.keys(STYLE_RECIPES).map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    className="w-full text-left px-1.5 py-1 rounded text-xs text-inkMuted hover:text-ink hover:bg-panelAlt/60 truncate"
+                    onClick={() => applyRecipe(name)}
+                    title={`Set genre "${name}" — seeds the Mix / Bend sliders and the tempo`}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <span className="flex-1" />
@@ -229,6 +321,36 @@ function ElementRow({
         </button>
       </header>
       <div className="p-2.5 flex items-center justify-center min-h-[64px]">{children}</div>
+    </section>
+  );
+}
+
+/** A collapsible rail group — header always visible, content in/out. Group
+ *  headers are how the rail stays "the focused object's panel" without
+ *  becoming a dumping ground (placement law §4). */
+function CollapsibleCard({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="border border-edge rounded-lg bg-panel overflow-hidden">
+      <button
+        type="button"
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left hover:bg-panelAlt/40"
+        onClick={() => setOpen((v) => !v)}
+        title={open ? `Collapse ${title}` : `Expand ${title}`}
+      >
+        <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">{title}</span>
+        <span className="flex-1" />
+        <span className="text-inkMuted/60 text-[10px]">{open ? "▾" : "▸"}</span>
+      </button>
+      {open && <div className="px-2.5 pb-2.5">{children}</div>}
     </section>
   );
 }

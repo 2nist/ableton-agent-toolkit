@@ -56,9 +56,9 @@ until modal parity.)
   into it (P2; v0 keeps the legacy header above while the tabs still exist).
 - The playhead sweeps the full width; descended, it can drop a vertical
   beat line through the workspace so every row stays time-anchored.
-- The bottom workbench is a full-width band too: horizontal genre cards +
-  narrative templates — **hovering a template ghosts the sections it would
-  mint onto the spine** before committing.
+- The bottom workbench band is *freed* by the Library change (maps/recipes
+  moved left, 2026-09-21) — reserved for the future arrangement expansion
+  (lanes + structure gestures) rather than retiring it outright.
 
 ## 3. The spine
 
@@ -106,8 +106,9 @@ until modal parity.)
 
 | Piece | Home |
 |---|---|
-| Mix/Bend | Right rail, **one global panel, scope switch** — Song at Arrangement, selected Section elsewhere. It's a lens on the focus. |
-| Structure right sidebar | becomes the rail's **section reference** (role, bars, chords, groove, ◆ detected, lyric + jump links) |
+| Mix/Bend | stacks beneath Structure in the right rail as a **collapsible group** (open on demand) — the lens on the focus. |
+| Structure right sidebar | becomes the rail's **Structure edits for the focused section** (the SectionCard editor ported: name/role/delete, TS, bars, beats/chord, repeats, drums+variant, velocity, transition note — v1 of arrangement editing; v2 mirrors these writes from direct manipulation on the spine). |
+| Maps · genre recipes | **left Library tabs** (revised 2026-09-21 — was the bottom band): Songs · Maps (narrative + genre) · Recipes. Maps replace sections (confirmed); recipes seed genre + bend + tempo. |
 | Harmony's two menus | chord controls move **into the hex workspace** (anchored panel + progression strip + effects row under the wheel); the dock's section chips **die** — the ribbon is the single navigator |
 | Drums dock | contracts as the Blocks selection palette absorbs authoring (classic tools stay until parity) |
 | Lyrics dock | stays — rhyme/meter are workbench tools (rhyme may later become rail reference) |
