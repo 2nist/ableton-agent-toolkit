@@ -6,7 +6,8 @@
     "bpm": 120,
     "key": "F",
     "scale": "ionian",
-    "concept": "Bossa nova — a syncopated nylon-string 'violao' clave pattern (thumb on 1 and 3, fingers picking chord tones on the syncopated off-beats), soft brushed drums or rim clicks, warm upright bass, and breathy, intimate vocals. Lush extended 7th/9th chords throughout — plain triads never appear. Always straight eighth notes, precise and unhurried, never swung."
+    "concept": "Bossa nova — a syncopated nylon-string 'violao' clave pattern (thumb on 1 and 3, fingers picking chord tones on the syncopated off-beats), soft brushed drums or rim clicks, warm upright bass, and breathy, intimate vocals. Lush extended 7th/9th chords throughout — plain triads never appear. Always straight eighth notes, precise and unhurried, never swung.",
+    "genre": "bossa"
   },
   "slots": [
     {

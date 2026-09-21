@@ -6,7 +6,8 @@
     "bpm": 92,
     "key": "F",
     "scale": "dorian",
-    "concept": "Neo-soul modal groove — extended chord voicings (9ths/11ths/13ths), a laid-back pocket sitting behind the beat, a chromatic jazz turnaround that pivots the tonal center, resolving on an unresolved Major 7th."
+    "concept": "Neo-soul modal groove — extended chord voicings (9ths/11ths/13ths), a laid-back pocket sitting behind the beat, a chromatic jazz turnaround that pivots the tonal center, resolving on an unresolved Major 7th.",
+    "genre": "neo-soul"
   },
   "slots": [
     {

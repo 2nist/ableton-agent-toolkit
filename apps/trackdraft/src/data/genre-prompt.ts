@@ -12,6 +12,7 @@
  */
 
 import type { SongMap } from "./songMaps";
+import { STYLE_RECIPES } from "../lib/style/bend";
 
 /** The full system prompt for genre map generation. */
 export const GENRE_MAP_SYSTEM_PROMPT = `You are a music production researcher and structural analyst. Your task is to generate a "SongMap" — a JSON template that describes the canonical song structure, dynamics, and production aesthetic for a given music genre.
@@ -32,6 +33,7 @@ interface SongMap {
     key?: string;      // Common tonic note (e.g. "E", "C", "F")
     scale?: string;    // Mode (ionian, aeolian, dorian, mixolydian, etc.)
     concept?: string;  // Production aesthetic prose — CRITICAL FIELD
+    genre?: string;    // Engine family slug — ONLY for: rock, pop, bossa, ballad, trap, house, neo-soul, math-rock
   };
   slots: Array<{
     role: string;      // One of: intro, verse, chorus, pre_chorus, bridge, breakdown, solo, outro
@@ -63,6 +65,9 @@ Write 1-2 sentences of plain prose describing the production sound and aesthetic
 - Good: "Neo-soul modal groove — extended chord voicings (9ths/11ths/13ths), a laid-back pocket sitting behind the beat, a chromatic jazz turnaround."
 - Bad: "This is a rock song."
 - Bad: "genre: rock, style: heavy"
+
+### genre (SONG-LEVEL, optional) — ENGINE FAMILY LINK
+Set this ONLY when the genre unambiguously IS one of the drum engine's eight families: \`rock\`, \`pop\`, \`bossa\`, \`ballad\`, \`trap\`, \`house\`, \`neo-soul\`, \`math-rock\`. When set, TrackDraft switches from prose keyword-matching to that family's actual groove templates (Groove DNA) and style recipe on apply — far stronger than the \`concept\` scan. Examples: "Bossa Nova" → \`"bossa"\`; "Neo Soul" → \`"neo-soul"\`; "Trap Metal" → \`"trap"\` (its verse/chorus identity is trap hat patterns). Omit it everywhere else: hybrids that aren't primarily one family ("Grunge / Alternative Rock" carries its character in \`concept\` prose instead), and all genres outside the eight ("Boom Bap", "Synthwave", "Indie Folk"). A wrong slug is worse than none — the family-lean would fight the genre's actual character.
 
 ### role (PER-SLOT)
 Use the standard SectionRole values. A typical song has 4-7 slots. Common patterns:
@@ -140,7 +145,8 @@ Before writing, verify:
     "bpm": 142,
     "key": "C",
     "scale": "ionian",
-    "concept": "Angular math rock in 7/8 — clean finger-tapped guitars, interlocking parts, tight conversational pocket, one deceptive pivot to straight time."
+    "concept": "Angular math rock in 7/8 — clean finger-tapped guitars, interlocking parts, tight conversational pocket, one deceptive pivot to straight time.",
+    "genre": "math-rock"
   },
   "slots": [
     {
@@ -267,6 +273,9 @@ export function buildGenreMapPrompt(genreName: string): string {
  * Validates that a parsed JSON object conforms to the SongMap shape.
  * Returns an array of validation errors, or an empty array if valid.
  */
+/** SectionRole values a map slot may use — mirrors @music-theory/song-structure. */
+const SECTION_ROLES = ["intro", "verse", "pre_chorus", "chorus", "bridge", "solo", "breakdown", "outro", "custom"];
+
 export function validateSongMapShape(obj: unknown): string[] {
   const errors: string[] = [];
   if (!obj || typeof obj !== "object") return ["Not a valid object"];
@@ -285,6 +294,7 @@ export function validateSongMapShape(obj: unknown): string[] {
       slots.forEach((slot: unknown, i: number) => {
         const s = slot as Record<string, unknown>;
         if (typeof s.role !== "string" || !s.role) errors.push(`${label}[${i}]: missing 'role'`);
+        else if (!SECTION_ROLES.includes(s.role)) errors.push(`${label}[${i}]: unknown role "${s.role}" — must be one of: ${SECTION_ROLES.join(", ")}`);
         if (typeof s.label !== "string" || !s.label) errors.push(`${label}[${i}]: missing 'label'`);
         if (typeof s.purpose !== "string" || !s.purpose) errors.push(`${label}[${i}]: missing 'purpose'`);
         if (s.bars !== undefined && typeof s.bars !== "number") errors.push(`${label}[${i}]: 'bars' must be a number`);
@@ -300,6 +310,12 @@ export function validateSongMapShape(obj: unknown): string[] {
           errors.push(`${label}[${i}]: 'swing' must be a number between 0 and 100`);
         }
         if (s.optional !== undefined && typeof s.optional !== "boolean") errors.push(`${label}[${i}]: 'optional' must be a boolean`);
+        if (s.timeSignatureNumerator !== undefined && typeof s.timeSignatureNumerator !== "number") errors.push(`${label}[${i}]: 'timeSignatureNumerator' must be a number`);
+        if (s.timeSignatureDenPower !== undefined && typeof s.timeSignatureDenPower !== "number") errors.push(`${label}[${i}]: 'timeSignatureDenPower' must be a number`);
+        if (s.harmonyRhythm !== undefined && !["beats", "euclid", "follow drums"].includes(s.harmonyRhythm as string)) errors.push(`${label}[${i}]: 'harmonyRhythm' must be "beats", "euclid", or "follow drums"`);
+        if (s.harmonyCellCount !== undefined && (typeof s.harmonyCellCount !== "number" || s.harmonyCellCount < 1)) errors.push(`${label}[${i}]: 'harmonyCellCount' must be a number >= 1`);
+        if (s.harmonyRotation !== undefined && (typeof s.harmonyRotation !== "number" || s.harmonyRotation < 0)) errors.push(`${label}[${i}]: 'harmonyRotation' must be a non-negative number`);
+        if (s.syncopationOffset !== undefined && typeof s.syncopationOffset !== "number") errors.push(`${label}[${i}]: 'syncopationOffset' must be a number`);
       });
     }
   };
@@ -315,6 +331,12 @@ export function validateSongMapShape(obj: unknown): string[] {
       if (d.key !== undefined && typeof d.key !== "string") errors.push("defaults.key must be a string");
       if (d.scale !== undefined && typeof d.scale !== "string") errors.push("defaults.scale must be a string");
       if (d.concept !== undefined && typeof d.concept !== "string") errors.push("defaults.concept must be a string");
+      if (d.genre !== undefined) {
+        const keys = Object.keys(STYLE_RECIPES).join(", ");
+        if (typeof d.genre !== "string" || !(d.genre in STYLE_RECIPES)) {
+          errors.push(`defaults.genre must be an engine genre key (${keys}) — omit it when the genre has no engine family`);
+        }
+      }
     }
   }
 
@@ -335,7 +357,12 @@ export function validateSongMapShape(obj: unknown): string[] {
 }
 
 /**
- * Generates a slug from a genre map id for use as a filename.
+ * The catalog filename for a map — its `id` minus the leading "genre-",
+ * slugified. This IS the catalog's file-naming contract: every file in
+ * data/genre-catalog is named exactly this way (reconciled 2026-09-21 —
+ * five legacy files were renamed to match; before that the helper's
+ * output disagreed with reality, e.g. "math-rock-78.json" vs the real
+ * "math-rock.json").
  */
 export function genreMapFilename(map: SongMap): string {
   const slug = map.id.replace(/^genre-/, "").replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");

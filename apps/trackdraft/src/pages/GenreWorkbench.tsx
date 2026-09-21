@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { GENRE_CATALOG, CATALOGED_GENRE_NAMES } from "../data/genre-catalog/index";
+import { GENRE_CATALOG } from "../data/genre-catalog/index";
 import { buildGenreMapPrompt, validateSongMapShape, genreMapFilename } from "../data/genre-prompt";
 import type { SongMap } from "../data/songMaps";
 
@@ -35,6 +35,25 @@ const ALL_GENRES: string[] = [
 
 type GenerationStatus = "idle" | "generating" | "success" | "error";
 
+/** Slugify a genre name for loose matching — lowercase, parentheses
+ *  dropped, all punctuation/whitespace removed. */
+function genreSlug(name: string): string {
+  return name.toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9]+/g, "");
+}
+
+/** Every slug a catalog map's name covers — the full name plus each
+ *  segment of a compound name ("Grunge / Alternative Rock" covers both
+ *  "Grunge" and "Alternative Rock"). The Workbench checks membership
+ *  here instead of exact name equality, so a genre already researched
+ *  under a longer catalog name (e.g. "Neo Soul" ⊂ "Neo-Soul / Jazz
+ *  Fusion") stops being offered as unresearched. */
+const RESEARCHED_SLUGS: Set<string> = new Set(
+  GENRE_CATALOG.flatMap((m) => [
+    genreSlug(m.name),
+    ...m.name.split(/[/&]/).map((part) => genreSlug(part)),
+  ]),
+);
+
 export default function GenreWorkbench() {
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [generatedJson, setGeneratedJson] = useState<string>("");
@@ -44,21 +63,28 @@ export default function GenreWorkbench() {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
 
-  const researchedGenres = CATALOGED_GENRE_NAMES;
+  const researchedSlugs = RESEARCHED_SLUGS;
 
   const sortedGenres = useMemo(() => {
     return [...ALL_GENRES].sort((a, b) => {
-      const aDone = researchedGenres.has(a.toLowerCase());
-      const bDone = researchedGenres.has(b.toLowerCase());
+      const aDone = researchedSlugs.has(genreSlug(a));
+      const bDone = researchedSlugs.has(genreSlug(b));
       if (aDone !== bDone) return aDone ? 1 : -1;
       return a.localeCompare(b);
     });
-  }, [researchedGenres]);
+  }, [researchedSlugs]);
 
   const catalogEntry = useMemo(() => {
     if (!selectedGenre) return null;
-    return GENRE_CATALOG.find(
-      (m) => m.name.toLowerCase() === selectedGenre.toLowerCase(),
+    // Same slug matching the ✓-list uses, so compound catalog names
+    // ("Neo-Soul / Jazz Fusion", "Grunge / Alternative Rock") resolve to
+    // their master-list entry instead of silently showing no card.
+    const slug = genreSlug(selectedGenre);
+    return (
+      GENRE_CATALOG.find((m) => {
+        if (genreSlug(m.name) === slug) return true;
+        return m.name.split(/[/&]/).some((part) => genreSlug(part) === slug);
+      }) ?? null
     );
   }, [selectedGenre]);
 
@@ -129,7 +155,7 @@ export default function GenreWorkbench() {
             {ALL_GENRES.length} genres
           </div>
           {sortedGenres.map((genre) => {
-            const isResearched = researchedGenres.has(genre.toLowerCase());
+            const isResearched = researchedSlugs.has(genreSlug(genre));
             return (
               <button
                 key={genre}
@@ -171,6 +197,11 @@ export default function GenreWorkbench() {
                     ✓ Already cataloged
                   </p>
                   <p className="text-xs text-inkMuted">{catalogEntry.description}</p>
+                  {catalogEntry.defaults?.genre && (
+                    <p className="text-xs text-accent/80 mt-1">
+                      Engine family: {catalogEntry.defaults.genre} — Groove DNA drives the drums on apply
+                    </p>
+                  )}
                   <p className="text-xs text-inkMuted mt-1">
                     {catalogEntry.slots.length} sections —{" "}
                     {catalogEntry.slots.map((s) => s.role).join(" → ")}

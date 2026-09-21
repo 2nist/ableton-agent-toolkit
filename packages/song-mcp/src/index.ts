@@ -96,6 +96,14 @@ const mapSlotSchema = z.object({
   beatsPerChord: z.number().optional(),
   timeSignatureNumerator: z.number().optional(),
   timeSignatureDenPower: z.number().optional(),
+  progression: z.array(z.string()).optional(),
+  groove: z.string().optional(),
+  swing: z.number().min(0).max(100).optional(),
+  optional: z.boolean().optional(),
+  harmonyRhythm: z.enum(["beats", "euclid", "follow drums"]).optional(),
+  harmonyCellCount: z.number().int().min(1).optional(),
+  harmonyRotation: z.number().int().min(0).optional(),
+  syncopationOffset: z.number().optional(),
 });
 
 const songMapDefaultsSchema = z.object({
@@ -103,6 +111,13 @@ const songMapDefaultsSchema = z.object({
   key: z.string().optional(),
   scale: z.string().optional(),
   concept: z.string().optional(),
+  genre: z.string().optional(),
+});
+
+const songMapVariantSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  slots: z.array(mapSlotSchema),
 });
 
 const templateSchema = z.object({
@@ -111,6 +126,7 @@ const templateSchema = z.object({
   description: z.string(),
   defaults: songMapDefaultsSchema.optional(),
   slots: z.array(mapSlotSchema),
+  variants: z.array(songMapVariantSchema).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -123,6 +139,7 @@ const templateOutputSchema = z.object({
   description: z.string(),
   defaults: songMapDefaultsSchema.optional(),
   slots: z.array(mapSlotSchema),
+  variants: z.array(songMapVariantSchema).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -239,7 +256,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "song_create_template",
       description:
-        "Create a new genre template file in the templates directory. The template must match the catalog shape: id, name, description, optional defaults (bpm, key, scale, concept), and an array of slots (each with role, label, purpose, and optional bars/velocity/beatsPerChord/timeSignature fields).",
+        "Create a new genre template file in the templates directory. The template must match the catalog shape: id, name, description, optional defaults (bpm, key, scale, concept, genre), and an array of slots (each with role, label, purpose, and optional bars/velocity/beatsPerChord/timeSignatureNumerator/timeSignatureDenPower/progression/groove/swing/optional/harmonyRhythm/harmonyCellCount/harmonyRotation/syncopationOffset fields). `genre` is an engine family slug (rock, pop, bossa, ballad, trap, house, neo-soul, math-rock) — set it only when the genre IS that family.",
       inputSchema: {
         type: "object",
         properties: {

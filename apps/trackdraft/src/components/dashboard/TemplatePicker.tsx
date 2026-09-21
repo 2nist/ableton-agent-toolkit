@@ -3,6 +3,7 @@ import { useSongStore } from "../../store/songStore";
 import { GENRE_CATALOG } from "../../data/genre-catalog";
 import { SONG_MAPS } from "../../data/songMaps";
 import type { SongMap } from "../../data/songMaps";
+import { applySongMap } from "../../lib/sections";
 
 /** All templates from both the genre catalog and built-in song maps, deduplicated by id. */
 const ALL_TEMPLATES: SongMap[] = (() => {
@@ -29,16 +30,14 @@ export default function TemplatePicker() {
 
   function handleCreate(template: SongMap) {
     const song = createNewSong(template.name);
-    const defaults = template.defaults;
-    if (defaults) {
-      useSongStore.getState().updateCurrentSong((s) => ({
-        ...s,
-        bpm: defaults.bpm ?? s.bpm,
-        key: (defaults.key as typeof s.key) ?? s.key,
-        scale: (defaults.scale as typeof s.scale) ?? s.scale,
-        concept: defaults.concept ?? s.concept,
-      }));
-    }
+    // Apply the map immediately — the card copy promises "section slots and
+    // genre defaults", and applySongMap is what actually delivers them:
+    // slots (progressions/groove/harmony rhythm) plus defaults (bpm/key/
+    // scale/concept, and for engine-family maps the Groove DNA `genre`).
+    // Before this, create wrote the four defaults only and left sections
+    // empty, so users had to re-pick the same template in Structure's map
+    // picker to get the slots the card advertised.
+    useSongStore.getState().updateCurrentSong((s) => applySongMap(s, template));
     // Navigate directly to Structure so user can immediately see the template slots
     navigate(`/song/${song.id}/structure`);
   }
@@ -74,6 +73,19 @@ export default function TemplatePicker() {
                     {template.defaults.key} {template.defaults.scale ?? ""}
                   </span>
                 )}
+                {template.defaults.genre && (
+                  <span
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-accent/10 border border-accent/30 text-accent"
+                    title="Engine genre — Groove DNA family lean drives the drum engine"
+                  >
+                    🎛 {template.defaults.genre}
+                  </span>
+                )}
+              </div>
+            )}
+            {template.variants && template.variants.length > 0 && (
+              <div className="text-[9px] text-inkMuted mt-1">
+                {template.variants.length} alternate form{template.variants.length !== 1 ? "s" : ""}
               </div>
             )}
             <div className="text-[9px] text-inkMuted mt-2">

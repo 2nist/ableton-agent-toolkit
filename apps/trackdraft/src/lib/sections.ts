@@ -3,6 +3,7 @@ import { buildEuclideanOutline, twoThreeCellCounts } from "@drum/library";
 import type { SongMap, MapSlot } from "../data/songMaps";
 import { honeycombTextToChords } from "./harmony/chordBuilder";
 import { inferGrooveOverride } from "./playback/drumPreview";
+import { STYLE_RECIPES } from "./style/bend";
 
 function newSection(name: string, role: BlueprintSection["role"]): BlueprintSection {
   return {
@@ -92,6 +93,12 @@ export interface ApplySongMapOptions {
   /** Drop every slot marked `optional: true` before applying — for a
    *  shorter arrangement. Slots with no `optional` field are always kept. */
   excludeOptional?: boolean;
+  /** Copy the map's engine `genre` style recipe (STYLE_RECIPES) into the
+   *  song's Bend sliders on apply — tempo excluded (the map's own BPM
+   *  wins). Only meaningful for maps whose `defaults.genre` is set; the
+   *  genre itself is applied either way, and without this flag the song's
+   *  existing `bend` stays untouched (neutral stays neutral). */
+  seedStyleRecipe?: boolean;
 }
 
 /** Replaces the song's sections wholesale with a MAP template's slots.
@@ -103,7 +110,12 @@ export interface ApplySongMapOptions {
  *  blank-section defaults; ids are always minted fresh (they seed
  *  deterministic generation in the Ableton extension, so a template must
  *  never ship them). Song-level defaults apply only where the map sets
- *  them — a map with no `concept` leaves the song's own concept alone.
+ *  them — a map with no `concept` leaves the song's own concept alone,
+ *  and maps without an engine `genre` leave the song's genre alone. An
+ *  engine genre (one of the eight `STYLE_RECIPES` keys) additionally
+ *  writes `song.genre` on apply — engaging the drum engine's Groove DNA
+ *  family-lean — and `options.seedStyleRecipe` seeds the Bend sliders
+ *  from that recipe (tempo excepted; the map's BPM wins).
  *
  *  Three slot fields get real generation, not just storage:
  *  - `progression` (roman-numeral chord cycle) is resolved into actual
@@ -136,6 +148,23 @@ export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplyS
   const defaults = map.defaults ?? {};
   const resolvedKey = defaults.key ?? song.key;
   const resolvedScale = defaults.scale ?? song.scale;
+
+  // Engine genre (Groove DNA): a map whose genre IS one of the eight drum
+  // families writes `song.genre` on apply, so the family-lean matches the
+  // template's identity the same way manually applying a style recipe in
+  // Mix/Bend would. `seedStyleRecipe` goes one step further and copies
+  // that genre's recipe into the Bend sliders — tempo excluded, since the
+  // recipe's BPM is generic while the map's BPM is researched; the map
+  // wins. Without the flag the song's existing `bend` stays untouched.
+  let bend = song.bend;
+  if (options?.seedStyleRecipe && defaults.genre) {
+    const recipe = STYLE_RECIPES[defaults.genre];
+    if (recipe) {
+      const seed: Partial<typeof recipe> = { ...recipe };
+      delete seed.tempo;
+      bend = seed;
+    }
+  }
 
   const sections = slots.map((slot) => {
     const section = newSection(slot.label, slot.role);
@@ -183,6 +212,8 @@ export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplyS
     key: resolvedKey,
     scale: resolvedScale,
     concept: defaults.concept ?? song.concept,
+    genre: defaults.genre ?? song.genre,
+    bend,
     sections,
   });
 }

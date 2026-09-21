@@ -9,7 +9,10 @@ import type { SongMap } from "../songMaps";
 //   "id": "genre-<slug>",
 //   "name": "Human-readable genre name",
 //   "description": "One-line summary of the template's shape",
-//   "defaults": { "bpm", "key", "scale", "concept" } (all optional),
+//   "defaults": { "bpm", "key", "scale", "concept", "genre" } (all optional;
+//               "genre" is an ENGINE family slug — one of rock, pop, bossa,
+//               ballad, trap, house, neo-soul, math-rock — set only when the
+//               genre IS that family; it drives Groove DNA + Bend seeding),
 //   "slots": [{ "role", "label", "purpose", "bars?", "velocity?", "beatsPerChord?",
 //               "timeSignatureNumerator?", "timeSignatureDenPower?",
 //               "progression?", "groove?", "swing?", "optional?",
@@ -20,19 +23,21 @@ import type { SongMap } from "../songMaps";
 //               loop-based vs. song-oriented shape; shares this file's "defaults")
 // }
 //
-// Note: filenames here are the short genre slug (e.g. "math-rock.json"), which
-// doesn't always match what genreMapFilename() in genre-prompt.ts would derive
-// from a longer id like "genre-math-rock-78" (it would produce "math-rock-78.json").
-// These files predate/bypass that helper — worth reconciling one way or the other.
+// Filename contract (reconciled 2026-09-21): each file is named exactly
+// genreMapFilename()'s output — the map id minus the leading "genre-",
+// slugified ("genre-math-rock-78" → "math-rock-78.json"). Five legacy files
+// that predated this rule were renamed to match (math-rock, prog-rock, blues,
+// grunge, neo-soul), so the Genre Workbench's "Copy to catalog" now always
+// names the file that actually exists. Keep new files on the contract.
 
-import mathRock from "./math-rock.json";
+import mathRock from "./math-rock-78.json";
 import stonerSludge from "./stoner-sludge.json";
-import grunge from "./grunge.json";
-import progRock from "./prog-rock.json";
-import neoSoul from "./neo-soul.json";
+import grunge from "./grunge-soft-loud.json";
+import progRock from "./prog-rock-54.json";
+import neoSoul from "./neo-soul-modal.json";
 import boomBap from "./boom-bap.json";
 import indieFolk from "./indie-folk.json";
-import blues from "./blues.json";
+import blues from "./blues-12bar.json";
 import industrial from "./industrial.json";
 import electroIndustrialEbm from "./electro-industrial-ebm.json";
 import trapMetal from "./trap-metal.json";

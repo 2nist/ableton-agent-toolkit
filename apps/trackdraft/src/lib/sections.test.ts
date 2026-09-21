@@ -3,6 +3,7 @@ import { addSection, removeSection, reorderSections, updateRepeats, repeatsFor, 
 import type { BlueprintSong, BlueprintSection } from "../types/blueprint";
 import type { SongMap } from "../data/songMaps";
 import { getGenreMap } from "../data/genre-catalog";
+import { STYLE_RECIPES } from "./style/bend";
 
 function makeSong(sections: Partial<BlueprintSection>[], arrangement: BlueprintSong["arrangement"] = []): BlueprintSong {
   return {
@@ -263,5 +264,61 @@ describe("applySongMap", () => {
     };
     const song = applySongMap(makeSong([]), map, { excludeOptional: true });
     expect(song.sections.map((s) => s.name)).toEqual(["Verse", "Outro"]);
+  });
+});
+
+describe("applySongMap — engine genre (Groove DNA) + Bend seeding", () => {
+  it("writes song.genre when the map declares defaults.genre, and leaves it alone otherwise", () => {
+    const withGenre: SongMap = {
+      id: "t1",
+      name: "T1",
+      description: "",
+      defaults: { genre: "math-rock" },
+      slots: [{ role: "verse", label: "V", purpose: "" }],
+    };
+    const noGenre: SongMap = {
+      id: "t2",
+      name: "T2",
+      description: "",
+      slots: [{ role: "verse", label: "V", purpose: "" }],
+    };
+    const base = makeSong([]);
+    expect(applySongMap(base, withGenre).genre).toBe("math-rock");
+    expect(applySongMap(base, noGenre).genre).toBeUndefined();
+    // A map without an engine genre must not clear the song's existing one.
+    expect(applySongMap({ ...base, genre: "rock" }, noGenre).genre).toBe("rock");
+  });
+
+  it("seedStyleRecipe copies the genre's STYLE_RECIPES entry into bend — tempo excluded, map BPM wins", () => {
+    const map: SongMap = {
+      id: "t3",
+      name: "T3",
+      description: "",
+      defaults: { genre: "neo-soul", bpm: 88 },
+      slots: [{ role: "verse", label: "V", purpose: "" }],
+    };
+    const song = applySongMap(makeSong([]), map, { seedStyleRecipe: true });
+    const recipe = STYLE_RECIPES["neo-soul"];
+    expect(song.genre).toBe("neo-soul");
+    expect(song.bpm).toBe(88); // the map's researched tempo beats the recipe's generic one
+    expect(song.bend?.energy).toBe(recipe.energy);
+    expect(song.bend?.backbeat).toBe(recipe.backbeat);
+    expect((song.bend as Record<string, unknown> | undefined)?.tempo).toBeUndefined();
+  });
+
+  it("does not touch bend without the seed flag (genre engages, sliders stay neutral)", () => {
+    const map: SongMap = {
+      id: "t4",
+      name: "T4",
+      description: "",
+      defaults: { genre: "trap" },
+      slots: [{ role: "verse", label: "V", purpose: "" }],
+    };
+    const plain = applySongMap(makeSong([]), map);
+    expect(plain.genre).toBe("trap");
+    expect(plain.bend).toBeUndefined();
+    // An existing bend survives a genre-only apply untouched.
+    const bent = { ...makeSong([]), bend: { energy: 0.9 } };
+    expect(applySongMap(bent, map).bend).toEqual({ energy: 0.9 });
   });
 });

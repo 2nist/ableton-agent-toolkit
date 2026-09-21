@@ -6,7 +6,8 @@
     "bpm": 142,
     "key": "C",
     "scale": "ionian",
-    "concept": "Angular math rock in 7/8 — clean finger-tapped guitars, interlocking parts, tight conversational pocket, one deceptive pivot to straight time."
+    "concept": "Angular math rock in 7/8 — clean finger-tapped guitars, interlocking parts, tight conversational pocket, one deceptive pivot to straight time.",
+    "genre": "math-rock"
   },
   "slots": [
     {

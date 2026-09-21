@@ -33,8 +33,8 @@ export interface MapSlot {
    *  signals triad quality (uppercase = major, lowercase = minor) and a
    *  leading "b"/"#" signals the root's distance from the parallel major
    *  scale, matching how the exemplar prompts already describe chords in
-   *  free text (e.g. blues.json's "HARMONIC BLUEPRINT" or neo-soul's
-   *  "bIII7 to bII7"). Chord quality/extension suffixes can be appended
+   *  free text (e.g. blues-12bar.json's "HARMONIC BLUEPRINT" or
+   *  neo-soul-modal.json's "bIII7 to bII7"). Chord quality/extension suffixes can be appended
    *  directly (e.g. "V7", "ii7b5", "IVmaj7"); a chord that's
    *  intentionally borrowed/chromatic relative to the stated scale
    *  (e.g. a jazz backdoor "iv7" in a major key) is written in its
@@ -87,15 +87,26 @@ export interface MapSlot {
   syncopationOffset?: number;
 }
 
-/** Song-level defaults a map may establish. `concept` doubles as the
- *  drum engine's style signal — its keyword scan is what routes a song
- *  acoustic vs. electronic — so genre maps should describe their sound
- *  here in plain language rather than via any genre enum. */
+/** Song-level defaults a map may establish. `concept` is the primary drum
+ *  engine signal — its keyword scan routes a song acoustic vs. electronic —
+ *  so genre maps describe their sound here in plain language. `genre` is
+ *  the newer, stronger channel for genres that ARE one of the drum engine's
+ *  eight families: it keys `GENRE_GROOVES`/`STYLE_RECIPES` directly,
+ *  `applySongMap` writes it to `song.genre` on apply, and the Structure
+ *  picker can optionally seed the Bend sliders from the matching style
+ *  recipe (never automatically — opt-in per apply). */
 export interface SongMapDefaults {
   bpm?: number;
   key?: NoteName;
   scale?: ScaleType;
   concept?: string;
+  /** Engine genre slug — one of `rock | pop | bossa | ballad | trap |
+   *  house | neo-soul | math-rock` (the `GENRE_GROOVES` family-lean and
+   *  `STYLE_RECIPES` key set; validated against `STYLE_RECIPES` in
+   *  genre-prompt.ts). Set it only when the genre unambiguously matches
+   *  an engine family — most catalog genres have no family and keep
+   *  their drum identity in `concept`/`groove` prose instead. */
+  genre?: string;
 }
 
 /** A fully alternate section structure for a map — same song identity
@@ -167,114 +178,12 @@ export const SONG_MAPS: SongMap[] = [
       { role: "outro", label: "Outro — Transformation", purpose: "Who they are now, having gone." },
     ],
   },
-  {
-    id: "math-rock-78",
-    name: "Math Rock (7/8)",
-    description: "Asymmetric-meter loop with a mid-song 4/4 deception. Exercises the odd-meter drum engine.",
-    defaults: {
-      bpm: 142,
-      key: "C",
-      scale: "ionian",
-      concept:
-        "Angular math rock in 7/8 — clean finger-tapped guitars, interlocking parts, tight conversational pocket, one deceptive pivot to straight time.",
-    },
-    slots: [
-      {
-        role: "intro",
-        label: "Bright Tapping Intro",
-        purpose:
-          "FEEL: Jittery, expectant, suspended. TRICK: keep the kit out for the first bars — let dry finger-tapping carry the metric ambiguity before the drums confirm the 7.",
-        bars: 8,
-        velocity: "mp",
-        beatsPerChord: 3.5,
-        timeSignatureNumerator: 7,
-        timeSignatureDenPower: 3,
-      },
-      {
-        role: "verse",
-        label: "Interlocking Poly-Verse",
-        purpose:
-          "FEEL: Intricate, tight, conversational. Ghost notes and rim-shots accentuate the missing final eighth of every bar.",
-        bars: 12,
-        velocity: "mf",
-        beatsPerChord: 4,
-        timeSignatureNumerator: 7,
-        timeSignatureDenPower: 3,
-      },
-      {
-        role: "bridge",
-        label: "The Metric Deception",
-        purpose:
-          "FEEL: Floating and wide. TRICK: sudden pivot to straight 4/4 while melodic phrases keep their 7-beat length, displacing the downbeat.",
-        bars: 4,
-        velocity: "p",
-        beatsPerChord: 2,
-        timeSignatureNumerator: 4,
-        timeSignatureDenPower: 2,
-      },
-      {
-        role: "chorus",
-        label: "Explosive Math Climax",
-        purpose:
-          "FEEL: Urgent, mathematically intense. Hats give way to open ride wash; everything lands harder without getting faster.",
-        bars: 16,
-        velocity: "f",
-        beatsPerChord: 3.5,
-        timeSignatureNumerator: 7,
-        timeSignatureDenPower: 3,
-      },
-    ],
-  },
-  {
-    id: "stoner-sludge",
-    name: "Stoner / Sludge",
-    description: "Slow, monolithic riff-rock arc: loom, drag, dissolve, crush.",
-    defaults: {
-      bpm: 74,
-      key: "C",
-      scale: "aeolian",
-      concept:
-        "Fuzz-saturated stoner rock — down-tuned monolithic riffs, drums dragging behind the beat, a psychedelic void in the middle, ending on a hard stop.",
-    },
-    slots: [
-      {
-        role: "intro",
-        label: "Fuzz-Saturated Intro",
-        purpose:
-          "FEEL: Looming and ancient. TRICK: one down-tuned riff alone; let the last bar ring with amp hum before the kit lands.",
-        bars: 4,
-        velocity: "mf",
-        beatsPerChord: 8,
-      },
-      {
-        role: "verse",
-        label: "The Monolithic Pocket",
-        purpose:
-          "FEEL: Deliberate, exhausting, behind the grid. The corpus grooves' laid-back push is the point — do not quantize.",
-        bars: 8,
-        velocity: "f",
-        beatsPerChord: 4,
-      },
-      {
-        role: "breakdown",
-        label: "The Psychedelic Void",
-        purpose:
-          "FEEL: Hallucinatory and spatial. Heavy rhythm cuts out; sparse cymbal scrapes and deep floor-tom strikes under bleeding vocal delays.",
-        bars: 8,
-        velocity: "mp",
-        beatsPerChord: 8,
-      },
-      {
-        role: "outro",
-        label: "The Wall of Riffs",
-        purpose:
-          "FEEL: Crushing, infinite momentum. TRICK: no fade — cut everything clean on beat one of an unresolved root chord.",
-        bars: 8,
-        velocity: "fff",
-        beatsPerChord: 4,
-      },
-    ],
-  },
+  // NOTE: the genre-flavored maps that used to live here (math-rock-78,
+  // stoner-sludge) were retired 2026-09 — the genre catalog superseded
+  // them with researched, richer versions (progressions/groove/
+  // harmonyRhythm), and keeping both made the Templates tab show
+  // near-identical duplicates. Genre maps live in data/genre-catalog;
+  // SONG_MAPS is narrative/mood only.
   {
     id: "minimal-loop",
     name: "Minimal / Ambient",

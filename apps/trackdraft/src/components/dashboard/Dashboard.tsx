@@ -209,6 +209,9 @@ export default function Dashboard() {
                   <Link to="/canvas" className="hover:text-ink">
                     Canvas
                   </Link>
+                  <Link to="/genre-workbench" className="hover:text-ink">
+                    Genre Maps
+                  </Link>
                 </div>
               </header>
 
@@ -336,6 +339,9 @@ export default function Dashboard() {
                   </Link>
                   <Link to="/canvas" className="hover:text-ink">
                     Canvas
+                  </Link>
+                  <Link to="/genre-workbench" className="hover:text-ink">
+                    Genre Maps
                   </Link>
                 </div>
               </header>

@@ -19,6 +19,7 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
   const [selected, setSelected] = useState(maps[0]?.id ?? "");
   const [variantName, setVariantName] = useState<string>(PRIMARY_FORM);
   const [excludeOptional, setExcludeOptional] = useState(false);
+  const [seedStyleRecipe, setSeedStyleRecipe] = useState(false);
 
   // Keep selected in sync with the current source
   const map = maps.find((m) => m.id === selected) ?? maps[0];
@@ -32,6 +33,7 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
   useEffect(() => {
     setVariantName(PRIMARY_FORM);
     setExcludeOptional(false);
+    setSeedStyleRecipe(false);
   }, [effectiveId]);
 
   const activeSlots = variantName ? (map?.variants?.find((v) => v.name === variantName)?.slots ?? map?.slots) : map?.slots;
@@ -119,6 +121,7 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
             onApply(effectiveId, {
               variantName: variantName || undefined,
               excludeOptional,
+              seedStyleRecipe,
             });
           }}
         >
@@ -126,6 +129,23 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
         </button>
       </div>
       {map && <p className="text-xs text-inkMuted">{map.description}</p>}
+      {/* Engine genre link (theory catch-up): a map whose genre is one of
+         the eight drum engine families drives Groove DNA via
+         `song.genre` on apply; this checkbox additionally seeds the Bend
+         sliders from that family's style recipe. Off by default —
+         applying a template sets structure + drum genre; full style
+         stays opt-in. */}
+      {map?.defaults?.genre && (
+        <label className="flex items-center gap-1.5 text-xs text-inkMuted">
+          <input
+            type="checkbox"
+            checked={seedStyleRecipe}
+            onChange={(e) => setSeedStyleRecipe(e.target.checked)}
+          />
+          Seed Bend sliders from the &quot;{map.defaults.genre}&quot; style recipe
+          <span className="text-inkMuted/50">· Groove DNA: {map.defaults.genre}</span>
+        </label>
+      )}
       {/* Variants are alternate full structures a genre map can offer
          (e.g. EBM's instrumental "club loop" vs. a vocal-hook form) —
          only shown when the selected map actually has any. */}
