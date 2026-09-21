@@ -15,7 +15,7 @@ import {
 import { TRANSITION_COLOR, TRANSITION_LABEL, TRANSITION_MODELS } from "./transitionStyle";
 import NecklaceRow from "./NecklaceRow";
 import TransitionPreview from "./TransitionPreview";
-import { VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
+import { VOICE_COLOR, VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
 import { SliderRow, EuclidSliders, StepView, EuclidStepView } from "./euclidEditor";
 import {
   buildEuclideanOutline,
@@ -48,9 +48,14 @@ function eighthNoteNumerator(sec: Pick<BlueprintSection, "timeSignatureNumerator
 }
 
 /** Per-cell downbeat voice — the kick/snare/hat a cell's "DA" plays.
- *  Colors match `voiceStyle`'s kick/snare/hat hues. */
+ *  Colors derive from `voiceStyle`'s kick/snare/hat hues (single source:
+ *  theme/palette.ts, D5). */
 const CELL_VOICE_LABEL: Record<DrumCellVoice, string> = { kick: "Kick", snare: "Snare", hat: "Hat" };
-const CELL_VOICE_COLOR: Record<DrumCellVoice, string> = { kick: "#E8B54A", snare: "#D96459", hat: "#8B94A1" };
+const CELL_VOICE_COLOR: Record<DrumCellVoice, string> = {
+  kick: VOICE_COLOR.kick!,
+  snare: VOICE_COLOR.snare!,
+  hat: VOICE_COLOR.closedHat!,
+};
 
 /** Which of the three mutually-exclusive drum-authoring modes a section is
  *  in — same priority the export uses: a Euclidean outline beats a named

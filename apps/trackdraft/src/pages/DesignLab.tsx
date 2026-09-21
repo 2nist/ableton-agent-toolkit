@@ -197,12 +197,12 @@ const TRACKDRAFT_TOKENS: Array<{ label: string; hex: string; sub: string }> = [
 ];
 
 const VOICE_COLORS: Array<{ voice: string; hex: string; note: string }> = [
-  { voice: "kick", hex: "#E8B54A", note: "primary voice" },
-  { voice: "snare", hex: "#D96459", note: "" },
-  { voice: "rim", hex: "#D9954A", note: "" },
-  { voice: "hat", hex: "#8B94A1", note: "" },
-  { voice: "cym", hex: "#4FA3A5", note: "" },
-  { voice: "tom", hex: "#9678C8", note: "" },
+  { voice: "kick", hex: "#D96459", note: "your D5 call" },
+  { voice: "snare", hex: "#8B94A1", note: "your D5 call" },
+  { voice: "rim", hex: "#4FA3A5", note: "your D5 call" },
+  { voice: "hat", hex: "#E8B54A", note: "your D5 call" },
+  { voice: "cym", hex: "#D9954A", note: "your D5 call" },
+  { voice: "tom", hex: "#9678C8", note: "unchanged" },
 ];
 
 type DecisionStatus = "PENDING" | "PROPOSED" | "DECIDED";
@@ -210,38 +210,38 @@ const DECISIONS: Array<{ id: string; item: string; status: DecisionStatus; note:
   {
     id: "D1",
     item: "One accent or two?",
-    status: "PENDING",
-    note: "Interactive orange (token) vs TrackDraft amber (untokenized) — see the two cards above.",
+    status: "DECIDED",
+    note: "Interactive accent = the #FFA500 token; amber keeps the instrument/graphic role. Both named.",
   },
   {
     id: "D2",
     item: "Button variants — which recipes survive?",
-    status: "PENDING",
-    note: "4 primary sizes exist in the wild; pick the survivors and this becomes Button v1.",
+    status: "DECIDED",
+    note: "Primary = dense 2xs; sm + roomy retired. Toggle-off/secondary = black chips; disabled = inkMuted on panelAlt. Danger unchanged (confirm if not).",
   },
   {
     id: "D3",
-    item: "Type scale + mono micro-label recipe",
+    item: "Type scale — 2px smaller?",
     status: "PROPOSED",
-    note: "3xs/2xs/xs/sm adopted; bracket sizes retired. React to the specimen below.",
+    note: "−2px candidate shown above (lg 16 · sm 12 · xs 10 · 2xs 8 · 3xs 7). React — we can tier the small end.",
   },
   {
     id: "D4",
-    item: "Radius scale (2/3/4/5px)",
+    item: "Tightened padding + radius",
     status: "PROPOSED",
-    note: "Tightened from Tailwind defaults; react to the ruler below.",
+    note: "Tightened-padding candidate above; radius scale unchanged in that demo (still 2/3/4/5px).",
   },
   {
     id: "D5",
-    item: "Voice palette becomes tokens",
-    status: "PENDING",
-    note: "The six drums voice colors get named tokens + one shared constant (they're literals today).",
+    item: "Voice palette assignments",
+    status: "DECIDED",
+    note: "Baked: theme/palette.ts → voiceStyle.ts + DrumPatternTools. Drums tab draws in the new hues.",
   },
   {
     id: "D6",
     item: "Density & component patterns",
     status: "PROPOSED",
-    note: "Compact rows, flat tabs, collapsed groups — react to the density preview below.",
+    note: "Compact rows, flat tabs, collapsed groups — the D3/D4 tightening takes a first step; react to the preview.",
   },
 ];
 
@@ -325,8 +325,9 @@ export default function DesignLab() {
           </TemplateCard>
         </div>
         <p className="text-[11px] text-inkMuted/70">
-          Options: (a) keep both, name the roles — interactive vs instrument · (b) unify on amber/gold ·
-          (c) unify on orange. Tell Copilot your pick.
+          ✓ Decided — the interactive accent stays the #FFA500 token; amber keeps its instrument/graphic role.
+          Both are named now, and amber gets a real home in the palette module (see D5 below — the kick has a new
+          color too).
         </p>
       </Section>
 
@@ -414,88 +415,130 @@ export default function DesignLab() {
         </TemplateCard>
       </Section>
 
+      {/* ================= D3/D4 candidate ================= */}
+      <Section
+        title="D3 + D4 candidate — everything −2px, padding tightened"
+        sub="You asked to see it — left is today, orange is the candidate: every size down 2px (lg 16 · sm 12 · xs 10 · 2xs 8 · 3xs 7) and paddings/gaps tightened ~1px a side. Nothing is committed; react and we can tier it (e.g. −2 large, −1 small) if the small end reads too small."
+      >
+        <TemplateCard>
+          <div className="space-y-1.5">
+            {[
+              { name: "lg", cur: 18, cand: 16, sample: "Design Lab" },
+              { name: "sm", cur: 14, cand: 12, sample: "Our shared design surface." },
+              { name: "xs", cur: 12, cand: 10, sample: "Pattern density · Backbeat · Apply template" },
+              { name: "2xs", cur: 10, cand: 8, sample: "Verse 2 · 29 bars · 141.2 BPM" },
+              { name: "3xs", cur: 9, cand: 7, sample: "kick · 3.4/bar · share 8.1%" },
+            ].map((row) => (
+              <div key={row.name} className="flex items-baseline gap-4">
+                <span className="w-10 shrink-0 text-3xs font-mono text-inkMuted">{row.name}</span>
+                <span className="flex-1 truncate" style={{ fontSize: row.cur }}>
+                  {row.sample}
+                </span>
+                <span className="flex-1 truncate text-accent" style={{ fontSize: row.cand }}>
+                  {row.sample}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 pt-3 border-t border-edge/60 grid sm:grid-cols-2 gap-4">
+            <div>
+              <p className="text-2xs text-inkMuted/70 mb-1.5">Today</p>
+              <div className="flex items-center gap-2">
+                <button className="bg-accent text-black text-xs font-medium px-2.5 py-1 rounded">Apply</button>
+                <span className="text-xs px-2 py-1 rounded bg-accent text-black">ON</span>
+                <span className="text-xs px-2 py-1 rounded bg-black text-inkMuted">OFF</span>
+              </div>
+            </div>
+            <div>
+              <p className="text-2xs text-inkMuted/70 mb-1.5">Tightened candidate</p>
+              <div className="flex items-center gap-1.5">
+                <button className="bg-accent text-black text-[10px] font-medium px-1.5 py-0.5 rounded">Apply</button>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent text-black">ON</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-black text-inkMuted">OFF</span>
+              </div>
+            </div>
+          </div>
+        </TemplateCard>
+      </Section>
+
       {/* ================= Buttons ================= */}
       <Section
-        title="D2 · Button specimens — the real recipes from the app"
-        sub="Every button below is a verbatim recipe from a shipped file (hover them). Pick the survivors — that set becomes Button v1 (variants + sizes) in the primitives layer."
+        title="D2 · Buttons — your call, applied"
+        sub="Decided: the dense 2xs primary is the survivor (sm + roomy retired; the common xs folds into dense as the app migrates). Toggle-off and secondary become black chips; disabled is muted text on panelAlt. This set becomes Button v1 in the primitives layer."
       >
         <TemplateCard>
           <div className="space-y-3">
             {[
               {
-                label: "Primary · xs (most common)",
-                cls: "bg-accent text-black text-xs font-medium px-2.5 py-1 rounded",
-                text: "Apply",
-                src: "StudioView · ExportMenu · LyricsView",
-              },
-              {
-                label: "Primary · 2xs (dense)",
+                label: "Primary — dense 2xs (canonical)",
                 cls: "bg-accent text-black text-[10px] font-medium px-2 py-0.5 rounded",
                 text: "Add Section",
-                src: "LyricDocumentView",
+                src: "your D2 call",
               },
               {
-                label: "Primary · sm",
-                cls: "bg-accent text-black text-sm font-medium px-3 py-1 rounded",
-                text: "Rename",
-                src: "SectionMarker · LyricDocumentView",
+                label: "Primary — xs (folds into dense)",
+                cls: "bg-accent text-black text-xs font-medium px-2.5 py-1 rounded",
+                text: "Apply",
+                src: "still in the wild; migrating",
               },
               {
-                label: "Primary · roomy",
-                cls: "bg-accent text-black text-sm font-medium px-4 py-1.5 rounded",
-                text: "Generate prompt",
-                src: "ActionBar · GenreWorkbench",
-              },
-              {
-                label: "Toggle pair (on / off)",
+                label: "Toggle pair — ON",
                 cls: "bg-accent text-black text-xs px-2 py-1 rounded",
                 text: "Per-section",
-                alt: { cls: "text-inkMuted hover:text-ink text-xs px-2 py-1 rounded", text: "Song text" },
-                src: "LyricsView · MelodyView",
+                src: "accent = active",
               },
               {
-                label: "Secondary (bordered)",
-                cls: "border border-edge text-inkMuted hover:text-ink rounded px-3 py-1.5 text-xs",
+                label: "Toggle pair — OFF (black bg)",
+                cls: "bg-black text-inkMuted hover:text-ink text-xs px-2 py-1 rounded",
+                text: "Song text",
+                src: "your D2 call",
+              },
+              {
+                label: "Secondary — black border + bg",
+                cls: "bg-black border border-black text-inkMuted hover:text-ink rounded px-2 py-0.5 text-2xs",
                 text: "Not found your device?",
-                src: "MidiSetupPanel",
+                src: "your D2 call",
               },
               {
-                label: "Ghost (mono, dense)",
+                label: "Ghost (kept)",
                 cls: "border border-edge text-inkMuted hover:text-ink rounded px-2 py-0.5 text-2xs font-mono",
                 text: "Test",
-                src: "MidiSetupPanel · SelectionDisplays",
+                src: "kept as-is",
               },
               {
-                label: "Danger",
-                cls: "bg-red-600 text-white text-xs font-medium px-2.5 py-1 rounded",
+                label: "Danger (kept — red stays)",
+                cls: "bg-red-600 text-white text-[10px] font-medium px-2 py-0.5 rounded",
                 text: "● Record",
-                src: "MelodyView",
+                src: "flag if this should change",
               },
               {
-                label: "Disabled (opacity pattern)",
-                cls: "bg-accent text-black text-xs font-medium px-2.5 py-1 rounded disabled:opacity-40",
+                label: "Disabled — inkMuted on panelAlt",
+                cls: "bg-panelAlt text-inkMuted text-[10px] font-medium px-2 py-0.5 rounded cursor-not-allowed",
                 text: "Sync",
                 disabled: true,
-                src: "everywhere via disabled:opacity-40/50",
+                src: "your D2 call",
               },
             ].map((b) => (
               <div key={b.label} className="flex items-center gap-3">
-                <span className="w-44 shrink-0 text-2xs text-inkMuted">{b.label}</span>
+                <span className="w-52 shrink-0 text-2xs text-inkMuted">{b.label}</span>
                 <button className={b.cls} disabled={b.disabled}>
                   {b.text}
                 </button>
-                {b.alt && <button className={b.alt.cls}>{b.alt.text}</button>}
                 <span className="text-3xs font-mono text-inkMuted/50 ml-auto truncate">{b.src}</span>
               </div>
             ))}
           </div>
         </TemplateCard>
+        <p className="text-[11px] text-inkMuted/70">
+          Retired: Primary · sm, Primary · roomy. Black chips use #000 against the #4E4E4E panels — if that reads
+          too hard we soften to the deep fill (#0B0D11).
+        </p>
       </Section>
 
       {/* ================= Voice palette ================= */}
       <Section
-        title="D5 · Drums voice palette — candidates for named tokens"
-        sub="Six semantic instrument colors, currently raw literals duplicated across voiceStyle.ts / transitionStyle.ts / sectionRoleStyle.ts / CELL_VOICE_COLOR (originally from the Drum Blocks prototype)."
+        title="D5 · Drums voice palette — decided & baked"
+        sub="Your call, live in the app: kick red · snare slate · rim teal · hat amber · cym orange · tom purple. Single-sourced in src/theme/palette.ts and consumed by voiceStyle.ts + DrumPatternTools — open the Drums tab and the cells/necklaces already draw in these."
       >
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
           {VOICE_COLORS.map((v) => (
