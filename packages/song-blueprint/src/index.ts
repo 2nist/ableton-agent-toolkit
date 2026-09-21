@@ -239,8 +239,9 @@ export interface Chord {
  *  behavior: one sustained root per chord, octave 3, velocity 100. */
 export interface BassProfile {
   /** Register as a MIDI octave number (octave*12 + pitch class): 3 = the
-   *  standard bass octave (MIDI 36 = C2), 4 = an octave up. Default 3. */
-  octave?: 3 | 4;
+   *  standard bass octave (MIDI 36 = C2), 2 = an octave down, 4 = an
+   *  octave up. Default 3; the Bend Bass register axis maps onto 2..4. */
+  octave?: 2 | 3 | 4;
   /** How the bass moves between/within chord changes. `"root"` = the
    *  chord root (the only option before this existed); `"root_fifth"` =
    *  roots alternating with the fifth across the subdivision;
@@ -257,13 +258,16 @@ export interface BassProfile {
   velocity?: number;
 }
 
-/** The seven macro "Bend" style axes a user can tint the whole song or
- *  one section with. Structurally identical to `@drum/library`'s
- *  `StyleProfile`; declared here independently for the same
- *  schema-decoupling reason `BassProfile`/`MeterOutline` are. All values
- *  0..1 except `tempo` (absolute bpm); 0.5 is the neutral point on every
- *  0..1 axis (a neutral profile is a no-op — the engine's current
- *  behavior). */
+/** The macro "Bend" axes a user can tint the whole song or one section
+ *  with — the six the groove engine reads (drums + harmony voicing) plus
+ *  the per-layer axes for the Mix/Bend station (Bass, Tension,
+ *  Articulation, Melody contour). Structurally identical to
+ *  `@drum/library`'s `StyleProfile`; declared here independently for the
+ *  same schema-decoupling reason `BassProfile`/`MeterOutline` are. All
+ *  values 0..1 except `tempo` (absolute bpm); 0.5 is the neutral point on
+ *  every 0..1 axis (a neutral profile is a no-op — the engine's current
+ *  behavior). Per-layer axes are optional: absent = not set (an untouched
+ *  slider never shadows an authored per-section value). */
 export interface StyleProfile {
   /** 0 = delicate … 1 = driving (the generated drums' peak velocity). */
   energy: number;
@@ -277,6 +281,23 @@ export interface StyleProfile {
   kit: number;
   /** 0 = triads/simple … 1 = extended/lush (7/9/11 + color intensity). */
   harmony: number;
+  /** 0 = consonant (aug/dim/m7b5 restored) … 1 = dissonant lean. The
+   *  0.25..0.75 band is a no-op. */
+  tension?: number;
+  /** 0..0.5 = block/legato (neutral at 0.5) · >0.5 strumming · >0.75
+   *  staccato arpeggiation. */
+  articulation?: number;
+  /** 0 = conjunct (leaps smoothed) … 1 = disjunct (reserved). 0.5 = the
+   *  captured line, untouched. */
+  melodyContour?: number;
+  /** 0 = low (octave 2) · 0.5 = standard (3) · 1 = up (4). */
+  bassRegister?: number;
+  /** 0 = root · 0.5 = root/fifth · 1 = walking. */
+  bassMotion?: number;
+  /** 0 = locked · 0.5 = half · 1 = eighth. */
+  bassRhythm?: number;
+  /** 0 = soft (≈70) · 0.5 = standard (≈100) · 1 = hard (127). */
+  bassVelocity?: number;
   /** Tempo in bpm (absolute — not normalized). */
   tempo: number;
 }

@@ -17,16 +17,55 @@ import type { BlueprintSection } from "../../types/blueprint";
  * the engine's current behavior — nothing is bent until you move something.
  */
 
-type AxisKey = "energy" | "density" | "backbeat" | "feel" | "kit" | "harmony";
+type AxisKey = "energy" | "density" | "backbeat" | "feel" | "kit" | "harmony"
+  | "tension" | "articulation" | "melodyContour"
+  | "bassRegister" | "bassMotion" | "bassRhythm" | "bassVelocity";
 
-const STYLE_AXES: { key: AxisKey; label: string; lo: string; hi: string }[] = [
-  { key: "energy", label: "Energy", lo: "delicate", hi: "driving" },
-  { key: "density", label: "Density", lo: "sparse", hi: "busy" },
-  { key: "backbeat", label: "Backbeat", lo: "soft", hi: "locked 2&4" },
-  { key: "feel", label: "Feel", lo: "straight", hi: "swung" },
-  { key: "kit", label: "Kit", lo: "acoustic", hi: "machine" },
-  { key: "harmony", label: "Harmony", lo: "triads", hi: "lush" },
+interface AxisDef { key: AxisKey; label: string; lo: string; hi: string };
+interface LayerDef { id: string; title: string; hint: string; axes: AxisDef[] };
+
+/** The Mix/Bend layers — each writes the same axis on the song master (or
+ *  a section override). Drums feeds the groove engine's style transforms;
+ *  Bass maps to the shared bass profile; Harmony is Color (extensions) +
+ *  Tension (dissonance lean) + Articulation (block → strum → arp); Melody
+ *  shapes the captured line's contour. */
+const LAYERS: LayerDef[] = [
+  {
+    id: "drums", title: "Drums", hint: "groove engine",
+    axes: [
+      { key: "energy", label: "Energy", lo: "delicate", hi: "driving" },
+      { key: "density", label: "Pattern density", lo: "sparse", hi: "busy" },
+      { key: "backbeat", label: "Backbeat", lo: "soft", hi: "locked 2&4" },
+      { key: "feel", label: "Feel", lo: "straight", hi: "swung" },
+      { key: "kit", label: "Kit", lo: "acoustic", hi: "machine" },
+    ],
+  },
+  {
+    id: "bass", title: "Bass", hint: "generated line",
+    axes: [
+      { key: "bassRegister", label: "Register", lo: "low", hi: "up the neck" },
+      { key: "bassMotion", label: "Motion", lo: "root", hi: "walking" },
+      { key: "bassRhythm", label: "Rhythm", lo: "locked", hi: "eighth" },
+      { key: "bassVelocity", label: "Velocity", lo: "soft", hi: "hard" },
+    ],
+  },
+  {
+    id: "harmony", title: "Harmony", hint: "voicing + feel",
+    axes: [
+      { key: "harmony", label: "Color", lo: "triads", hi: "lush" },
+      { key: "tension", label: "Tension", lo: "consonant", hi: "dissonant" },
+      { key: "articulation", label: "Articulation", lo: "block legato", hi: "staccato arp" },
+    ],
+  },
+  {
+    id: "melody", title: "Melody", hint: "contour of the line",
+    axes: [
+      { key: "melodyContour", label: "Contour", lo: "conjunct", hi: "disjunct" },
+    ],
+  },
 ];
+
+const ALL_AXES: AxisDef[] = LAYERS.flatMap((layer) => layer.axes);
 
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 
@@ -110,15 +149,12 @@ export default function BendPanel() {
   const setSectionOverride = (on: boolean) => {
     if (!activeSection) return;
     const resolved = resolveStyleProfile(activeSection, song);
+    const resolvedRecord = resolved as unknown as Record<string, number>;
     const bend = on
-      ? {
-          energy: resolved.energy,
-          density: resolved.density,
-          backbeat: resolved.backbeat,
-          feel: resolved.feel,
-          kit: resolved.kit,
-          harmony: resolved.harmony,
-        }
+      ? ALL_AXES.reduce<Record<string, number>>((acc, axis) => {
+          acc[axis.key] = resolvedRecord[axis.key] ?? 0.5;
+          return acc;
+        }, {})
       : undefined;
     updateCurrentSong((s) => ({
       ...s,
@@ -184,18 +220,6 @@ export default function BendPanel() {
             </button>
           </p>
         )}
-        <div className="space-y-2">
-          {STYLE_AXES.map((axis) => (
-            <AxisSlider
-              key={axis.key}
-              label={axis.label}
-              lo={axis.lo}
-              hi={axis.hi}
-              value={master[axis.key] ?? 0.5}
-              onChange={(v) => setMasterAxis(axis.key, v)}
-            />
-          ))}
-        </div>
         {/* Tempo is a song-level value (the transport reads song.bpm), not a
             per-section one — surfaced here so the recipe sets it too. */}
         <label className="block mt-2">
@@ -214,6 +238,26 @@ export default function BendPanel() {
           />
         </label>
       </Block>
+
+      {/* Per-layer bends — the Mix/Bend station's four layers. Each slider
+          writes the same axis on the song master; the section block below
+          overrides any layer per section. */}
+      {LAYERS.map((layer) => (
+        <Block key={layer.id} title={layer.title} hint={layer.hint}>
+          <div className="space-y-2">
+            {layer.axes.map((axis) => (
+              <AxisSlider
+                key={axis.key}
+                label={axis.label}
+                lo={axis.lo}
+                hi={axis.hi}
+                value={master[axis.key] ?? 0.5}
+                onChange={(v) => setMasterAxis(axis.key, v)}
+              />
+            ))}
+          </div>
+        </Block>
+      ))}
 
       {/* This section — per-section override */}
       <Block title="This section" hint={activeSection ? activeSection.name : "none selected"}>
@@ -234,15 +278,24 @@ export default function BendPanel() {
             </label>
             {sectionHasBend && resolved && (
               <div className="space-y-2">
-                {STYLE_AXES.map((axis) => (
-                  <AxisSlider
-                    key={axis.key}
-                    label={axis.label}
-                    lo={axis.lo}
-                    hi={axis.hi}
-                    value={activeSection.bend?.[axis.key] ?? resolved[axis.key]}
-                    onChange={(v) => setSectionAxis(axis.key, v)}
-                  />
+                {LAYERS.map((layer) => (
+                  <div key={layer.id} className="pt-1 first:pt-0">
+                    <div className="flex items-baseline justify-between mb-1">
+                      <span className="font-mono text-[9px] uppercase tracking-widest text-inkMuted/80">{layer.title}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {layer.axes.map((axis) => (
+                        <AxisSlider
+                          key={axis.key}
+                          label={axis.label}
+                          lo={axis.lo}
+                          hi={axis.hi}
+                          value={activeSection.bend?.[axis.key] ?? (resolved as unknown as Record<string, number>)[axis.key] ?? 0.5}
+                          onChange={(v) => setSectionAxis(axis.key, v)}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

@@ -1,5 +1,5 @@
 import { pitchClass } from "@music-theory/core";
-import { planSectionBass, resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
+import { planSectionBass, resolveBassProfile, resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
 import type { NoteDescription } from "@ableton-extensions/sdk";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
 
@@ -36,10 +36,13 @@ export function planBassLine(song: BlueprintSong, octave: number = DEFAULT_OCTAV
       startTime: occ.startTime,
       duration: occ.duration,
     }));
-    const notes: NoteDescription[] = planSectionBass(occurrences, {
-      octave,
-      ...section.bassProfile,
-    }).map((n) => ({ pitch: n.pitch, startTime: n.startTime, duration: n.duration, velocity: n.velocity }));
+    // Bend Bass layer: the octave param is the call-site default; the
+    // section's explicit profile sits under the bend axes — resolved by
+    // the SAME shared function the app's planBassStem uses (parity).
+    const notes: NoteDescription[] = planSectionBass(
+      occurrences,
+      resolveBassProfile({ octave, ...section.bassProfile }, profile),
+    ).map((n) => ({ pitch: n.pitch, startTime: n.startTime, duration: n.duration, velocity: n.velocity }));
     return { name: section.name, startBeat, durationBeats, notes };
   });
 }

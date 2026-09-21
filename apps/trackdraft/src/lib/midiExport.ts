@@ -15,11 +15,11 @@
  * the web app has no dependency on).
  */
 
-import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect } from "@music-theory/core";
+import { chordToMidiNotes, getChordIntervals, pitchClass, planChordNotes, type ChordQuality } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
 import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
-import { planSectionDrumNotes, planSectionBass, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, applyStyleToVariant, resolveStyleProfile, styleHarmonize, styleSpacing, styleVelocityTarget, type SectionDrumInput } from "@drum/library";
+import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, applyStyleToVariant, resolveStyleProfile, styleArticulation, styleQualityFor, styleSpacing, styleVelocityTarget, type SectionDrumInput } from "@drum/library";
 import { planColorStem } from "./colorStem";
 import { planMelodyStem } from "./melody/melodyStem";
 import { beatsPerBar, type BlueprintSong, type BlueprintSection } from "../types/blueprint";
@@ -80,27 +80,26 @@ export function planChordStem(spans: SectionSpan[], song?: BlueprintSong): MidiN
     const occurrences = resolveChordOccurrences(span.section, span.durationBeats, styleSpacing(profile.density));
     for (const occ of occurrences) {
       const rootPc = pitchClass(occ.chord.root);
-      const quality = styleHarmonize(occ.chord, profile.harmony);
-      const chordPitches = chordToMidiNotes(rootPc, quality as ChordQuality, CHORD_OCTAVE);
-      let chordNotes: MidiNote[] = chordPitches.map((pitch) => ({
-        pitch,
-        startTime: span.startBeat + occ.startTime,
-        duration: occ.duration,
-        velocity: CHORD_VELOCITY,
+      // Bend Harmony layer: Color (extensions) then Tension (dissonance
+      // lean); an authored extendedSuffix always wins untouched.
+      const quality = styleQualityFor(occ.chord, profile.harmony, profile.tension ?? 0.5);
+      // Shared planner (block + performance effect) — the same call the
+      // in-app preview and the Ableton bridge make, so export sounds like
+      // the audition. Plan section-relative, then offset to absolute.
+      const chordNotes: MidiNote[] = planChordNotes(
+        CHORD_OCTAVE * 12 + rootPc,
+        getChordIntervals(quality as ChordQuality),
+        occ.startTime,
+        occ.duration,
+        CHORD_VELOCITY,
+        // Bend Articulation layer (an authored performance wins).
+        occ.chord.performance ?? styleArticulation(profile.articulation ?? 0.5),
+      ).map((n) => ({
+        pitch: n.pitch,
+        startTime: n.startTime + span.startBeat,
+        duration: n.duration,
+        velocity: n.velocity,
       }));
-
-      if (occ.chord.performance) {
-        // Apply effect relative to the section, then offset back to absolute
-        const sectionRelative = chordNotes.map((n) => ({
-          ...n,
-          startTime: n.startTime - span.startBeat,
-        }));
-        const effected = applyPerformanceEffect(sectionRelative, occ.chord.performance);
-        chordNotes = effected.map((n) => ({
-          ...n,
-          startTime: n.startTime + span.startBeat,
-        }));
-      }
       notes.push(...chordNotes);
     }
   }
@@ -121,7 +120,9 @@ export function planBassStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
       startTime: span.startBeat + occ.startTime,
       duration: occ.duration,
     }));
-    notes.push(...planSectionBass(occurrences, span.section.bassProfile));
+    // Bend Bass layer: register/motion/rhythm/velocity tint the line (the
+    // section's explicit bassProfile underneath, defaults below that).
+    notes.push(...planSectionBass(occurrences, resolveBassProfile(span.section.bassProfile, profile)));
   }
   return notes;
 }
@@ -334,7 +335,7 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
   const bassNotes = planBassStem(spans, song);
   const drumNotes = planDrumStem(spans, song);
   const colorNotes = planColorStem(spans, song);
-  const melodyNotes = planMelodyStem(spans);
+  const melodyNotes = planMelodyStem(spans, song);
 
   // --- Conductor track (tempo + time sig + key sig) ---
   const conductorEvents: RawMidiEvent[] = [];

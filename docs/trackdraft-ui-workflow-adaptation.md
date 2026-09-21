@@ -47,6 +47,13 @@ Fixed: the open effect re-runs when the song exists, guarded so edits don't wipe
 history. Verified on two routes.
 
 ### P1 — "adopt detected" (wire profiles into existing controls)
+> **Shipped first (2026-09-21):** the Mix/Bend station is now **layered** —
+> Song master + Drums / Bass / Harmony / Melody, with the new axes wired
+> end-to-end through the shared engine (bass register/motion/rhythm/velocity →
+> `bassProfile`; Color/Tension/Articulation → chord quality + performance;
+> Melody contour → the captured line). Song master + per-section override per
+> layer. Remaining P1 work = **seeding these sliders FROM the profiles**
+> ("detected" badges + adopt) instead of starting neutral.
 1. **Section style + Bend sliders**: drum profile's per-section energy/share,
    density spread, and backbeat index → *suggested* style chip and slider
    positions, marked "detected", with manual override staying first-class.

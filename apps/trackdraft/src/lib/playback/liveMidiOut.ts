@@ -208,7 +208,7 @@ class LiveMidiScheduler {
       ...planBassStem(spans, song).map((note) => ({ note, channel: channelMap.bass })),
       ...planDrumStem(spans, song).map((note) => ({ note, channel: channelMap.drums })),
       ...planColorStem(spans, song).map((note) => ({ note, channel: channelMap.color })),
-      ...planMelodyStem(spans).map((note) => ({ note, channel: channelMap.melody })),
+      ...planMelodyStem(spans, song).map((note) => ({ note, channel: channelMap.melody })),
     ];
     scheduled.sort((a, b) => a.note.startTime - b.note.startTime);
     this.notes = scheduled;

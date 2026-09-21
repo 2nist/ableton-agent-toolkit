@@ -23,6 +23,7 @@ export * from "./grooves.js";
 export * from "./section.js";
 export * from "./blocks.js";
 export * from "./bass.js";
+export * from "./melody.js";
 export * from "./style.js";
 export * from "./match.js";
 

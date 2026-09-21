@@ -27,10 +27,14 @@ import type { PackedNote, PackedVariant } from "./presetData.js";
 // Types
 // ---------------------------------------------------------------------------
 
-/** The seven macro axes a user bends. All 0..1 except `tempo` (absolute
- *  bpm). 0.5 is the neutral point for every 0..1 axis — the mapper and
- *  transforms leave notes untouched there, so a profile at all-0.5 == the
- *  engine's current behavior. */
+/** The macro axes a user bends — the six the groove engine reads (drums +
+ *  harmony voicing) plus the per-layer axes for the Mix/Bend station (Bass
+ *  register/motion/rhythm/velocity, Harmony tension/articulation, Melody
+ *  contour). All 0..1 except `tempo` (absolute bpm). 0.5 is the neutral
+ *  point for every 0..1 axis — the mapper and transforms leave notes
+ *  untouched there, so a profile at all-0.5 == the engine's current
+ *  behavior. Per-layer axes are OPTIONAL: absent means \"not set\" (an
+ *  authored per-section value is never shadowed by an untouched slider). */
 export interface StyleProfile {
   /** 0 = delicate (ppp-ish) … 1 = driving (fff-ish). */
   energy: number;
@@ -44,6 +48,25 @@ export interface StyleProfile {
   kit: number;
   /** 0 = triads/simple voicings … 1 = extended/lush (7/9/11). */
   harmony: number;
+  /** 0 = consonant (aug/dim/m7b5 restored to plain triads) … 1 = dissonant
+   *  (maj→aug, min→dim, 7→m7b5…). Applied AFTER `styleHarmonize`; the
+   *  0.25..0.75 band is a no-op. */
+  tension?: number;
+  /** 0..0.5 = block/legato (today's default — neutral at exactly 0.5) … 1 =
+   *  staccato arpeggiation. Above 0.5 the chord strums (widening), above
+   *  ~0.75 it arpeggiates. */
+  articulation?: number;
+  /** 0 = conjunct (leaps smoothed toward steps) … 1 = disjunct (reserved
+   *  until a melody generator exists). 0.5 = untouched captured line. */
+  melodyContour?: number;
+  /** 0 = low (octave 2) · 0.5 = standard (3) · 1 = up (4). */
+  bassRegister?: number;
+  /** 0 = root · 0.5 = root/fifth · 1 = walking. */
+  bassMotion?: number;
+  /** 0 = locked (one note per chord) · 0.5 = half · 1 = eighth. */
+  bassRhythm?: number;
+  /** 0 = soft (≈70) · 0.5 = standard (≈100) · 1 = hard (127). */
+  bassVelocity?: number;
   /** Tempo in bpm (absolute — not normalized). */
   tempo: number;
 }
@@ -146,6 +169,81 @@ export function styleHarmonize(
   if (h > 0.5) return HARMONY_EXTEND[chord.quality] ?? chord.quality;
   if (h < 0.5) return HARMONY_REDUCE[chord.quality] ?? chord.quality;
   return chord.quality;
+}
+
+/** Dissonant siblings used by the Tension axis (high side). */
+const TENSION_DISSONANT: Record<string, string> = {
+  maj: "aug",
+  min: "dim",
+  maj7: "7",
+  min7: "m7b5",
+  "7": "m7b5",
+  sus2: "sus4",
+  sus4: "sus2",
+};
+/** The consonant restores used by the Tension axis (low side). */
+const TENSION_CONSONANT: Record<string, string> = {
+  aug: "maj",
+  dim: "min",
+  m7b5: "min7",
+};
+
+/** The effective quality under the Bend Tension axis — applied AFTER
+ *  `styleHarmonize` (Color). Three deterministic zones within the quality
+ *  vocabulary: below 0.25 restores consonant triads, above 0.75 leans to
+ *  the dissonant sibling, and the wide middle band is a no-op (so neutral
+ *  tension reproduces today's output exactly). */
+export function styleTension(quality: string, tension: number): string {
+  const t = clamp01(tension);
+  if (t < 0.25) return TENSION_CONSONANT[quality] ?? quality;
+  if (t > 0.75) return TENSION_DISSONANT[quality] ?? quality;
+  return quality;
+}
+
+/** The full Color+Tension quality resolution for an authored chord: an
+ *  authored `extendedSuffix` always wins untouched; otherwise harmonize
+ *  (Color) then tension. Shared by both export paths so app == bridge. */
+export function styleQualityFor(
+  chord: { quality: string; extendedSuffix?: string | null },
+  harmony: number,
+  tension: number,
+): string {
+  if (chord.extendedSuffix) return chord.quality;
+  return styleTension(styleHarmonize(chord, harmony), tension);
+}
+
+/** A structural twin of @music-theory/core's `ChordPerformanceEffect`
+ *  (this package stays dependency-free). */
+export interface BendArticulationEffect {
+  style: "strum" | "arp";
+  params?: Record<string, number>;
+}
+
+/** The Bend Articulation axis → a chord performance effect. At or below
+ *  0.5 stays a block chord (undefined = the engine's current behavior —
+ *  0.5 is the neutral point), above 0.5 spreads as a strum (wider + fading
+ *  as it bends), above 0.75 arpeggiates (finer subdivision as it bends).
+ *  An authored `chord.performance` wins at the call sites. */
+export function styleArticulation(articulation: number): BendArticulationEffect | undefined {
+  const a = clamp01(articulation);
+  if (a <= 0.5) return undefined;
+  if (a <= 0.75) {
+    const k = (a - 0.5) / 0.25;
+    return {
+      style: "strum",
+      params: { strumMs: Math.round(60 + 180 * k), velocityDecay: Math.round(15 * k) / 100 },
+    };
+  }
+  const k = (a - 0.75) / 0.25;
+  return {
+    style: "arp",
+    params: {
+      subdivision: Math.round(2 + 6 * k),
+      octaves: 1,
+      direction: 0,
+      rateOffset: Math.round(5 * k) / 100,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

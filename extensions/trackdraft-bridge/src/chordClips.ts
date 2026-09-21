@@ -1,7 +1,7 @@
 import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect } from "@music-theory/core";
 import type { NoteDescription } from "@ableton-extensions/sdk";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
-import { resolveChordOccurrences, resolveStyleProfile, styleHarmonize, styleSpacing } from "@drum/library";
+import { resolveChordOccurrences, resolveStyleProfile, styleArticulation, styleQualityFor, styleSpacing } from "@drum/library";
 
 export interface ChordClipPlan {
   name: string;
@@ -29,13 +29,18 @@ export function planChordClips(song: BlueprintSong, octave: number = DEFAULT_OCT
     const notes: NoteDescription[] = [];
     for (const occurrence of resolveChordOccurrences(section, durationBeats, styleSpacing(profile.density))) {
       const rootPc = pitchClass(occurrence.chord.root);
-      const quality = styleHarmonize(occurrence.chord, profile.harmony);
+      // Bend Harmony layer: Color + Tension (authored suffix wins).
+      const quality = styleQualityFor(occurrence.chord, profile.harmony, profile.tension ?? 0.5);
       let chordNotes: NoteDescription[] = [];
       for (const pitch of chordToMidiNotes(rootPc, quality as ChordQuality, octave)) {
         chordNotes.push({ pitch, startTime: occurrence.startTime, duration: occurrence.duration, velocity: DEFAULT_VELOCITY });
       }
 
-      chordNotes = applyPerformanceEffect(chordNotes, occurrence.chord.performance);
+      chordNotes = applyPerformanceEffect(
+        chordNotes,
+        // Bend Articulation layer (an authored performance wins).
+        occurrence.chord.performance ?? styleArticulation(profile.articulation ?? 0.5),
+      );
 
       notes.push(...chordNotes);
     }

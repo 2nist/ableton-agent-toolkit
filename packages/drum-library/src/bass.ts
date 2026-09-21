@@ -94,3 +94,46 @@ export function planSectionBass(occurrences: BassOccurrence[], profile: BassProf
   });
   return notes;
 }
+
+// ---------------------------------------------------------------------------
+// Bend → bass profile (the Bass layer of the Mix/Bend station)
+// ---------------------------------------------------------------------------
+
+import type { StyleProfile } from "./style.js";
+
+const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
+
+/** Map the Bend bass axes onto a partial `BassProfile`. Only axes the
+ *  bend actually sets are included (an absent axis leaves the field to
+ *  the explicit profile / defaults), so an untouched slider can never
+ *  shadow an authored value. */
+export function bassProfileFromBend(
+  style: Pick<StyleProfile, "bassRegister" | "bassMotion" | "bassRhythm" | "bassVelocity">,
+): Partial<BassProfile> {
+  const out: Partial<BassProfile> = {};
+  const zone = (v: number): 0 | 1 | 2 => (v < 1 / 3 ? 0 : v < 2 / 3 ? 1 : 2);
+
+  if (style.bassRegister != null) out.octave = [2, 3, 4][zone(clamp01(style.bassRegister))];
+  if (style.bassMotion != null)
+    out.motion = (["root", "root_fifth", "walking"] as const)[zone(clamp01(style.bassMotion))];
+  if (style.bassRhythm != null)
+    out.rhythm = (["locked", "half", "eighth"] as const)[zone(clamp01(style.bassRhythm))];
+  if (style.bassVelocity != null) out.velocity = Math.round(70 + clamp01(style.bassVelocity) * 57);
+  return out;
+}
+
+/** The EFFECTIVE bass profile for a section: defaults ← the section's
+ *  explicit `bassProfile` ← the Bend bass axes (macros tint on top — the
+ *  same direction the drum transforms use). Shared by the app's
+ *  `planBassStem` and the Ableton bridge's `planBassLine`, so both stay
+ *  note-for-note. */
+export function resolveBassProfile(
+  explicit: BassProfile | undefined | null,
+  style: StyleProfile | undefined,
+): Required<BassProfile> {
+  return {
+    ...DEFAULT_BASS_PROFILE,
+    ...(explicit ?? {}),
+    ...(style ? bassProfileFromBend(style) : {}),
+  };
+}
