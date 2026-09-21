@@ -26,7 +26,7 @@ import * as path from "node:path";
 // Canonical shared adapter — single source of truth, same as the browser
 // ActionBar uses via youtubeFullImport.ts.
 import {
-  chordMiniAppToBlueprintSong,
+  assembleBlueprint,
 } from "@music-theory/song-blueprint";
 import type {
   ChordMiniAppResult,
@@ -80,19 +80,25 @@ function parseArgs(): { audioPath: string; outputPath: string; lyricsPath?: stri
   return { audioPath, outputPath, lyricsPath };
 }
 
-async function loadLyricsFile(lyricsPath?: string): Promise<LrclibData | null> {
-  if (!lyricsPath) return null;
+async function loadLyricsFile(
+  lyricsPath?: string,
+): Promise<{ lrclibData: LrclibData | null; trackName?: string; artistName?: string }> {
+  if (!lyricsPath) return { lrclibData: null };
 
   try {
     const raw = fs.readFileSync(lyricsPath, "utf8");
     const data = JSON.parse(raw) as Record<string, unknown>;
     return {
-      syncedLyrics: typeof data.syncedLyrics === "string" ? data.syncedLyrics : undefined,
-      plainLyrics: typeof data.plainLyrics === "string" ? data.plainLyrics : undefined,
+      lrclibData: {
+        syncedLyrics: typeof data.syncedLyrics === "string" ? data.syncedLyrics : undefined,
+        plainLyrics: typeof data.plainLyrics === "string" ? data.plainLyrics : undefined,
+      },
+      trackName: typeof data.trackName === "string" ? data.trackName : undefined,
+      artistName: typeof data.artistName === "string" ? data.artistName : undefined,
     };
   } catch (err) {
     console.warn(`Warning: Could not load lyrics file "${lyricsPath}": ${err instanceof Error ? err.message : String(err)}`);
-    return null;
+    return { lrclibData: null };
   }
 }
 
@@ -144,11 +150,19 @@ async function main() {
       console.warn("Warning: ChordMiniApp returned 0 chords — the output will be a skeleton.");
     }
 
-    // Load optional LRCLIB lyrics data
-    const lrclibData = await loadLyricsFile(lyricsPath);
+    // Load optional LRCLIB lyrics data (+ its track/artist names for the blueprint)
+    const { lrclibData, trackName, artistName } = await loadLyricsFile(lyricsPath);
 
-    // Use the canonical shared adapter (same code path as the browser)
-    const song = chordMiniAppToBlueprintSong(json, title, undefined, lrclibData);
+    // Same assembly path AND options as the browser ActionBar flow
+    // (assembleBlueprint with the 16-section cap / 8s minimum) — the earlier
+    // plain-adapter call produced a single "Full Song" section, which is why
+    // CLI output never matched what the app showed for the same audio.
+    const song = assembleBlueprint(json, trackName ?? title, {
+      lrclibData,
+      maxSections: 16,
+      minSectionDuration: 8,
+    });
+    if (artistName) song.artist = artistName;
 
     fs.writeFileSync(outputPath, JSON.stringify(song, null, 2));
     console.log(`\n✅ Written: ${outputPath}`);

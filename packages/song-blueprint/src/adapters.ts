@@ -45,7 +45,15 @@ export interface ChordMiniAppResult {
   key_confidence?: number;
   time_signature?: { numerator: number; denominator: number };
   chords: Array<ChordMiniAppRawChord | ChordMiniAppParsedChord>;
-  segments?: Array<{ label: string; start_time: number; end_time: number; loudness?: number }>;
+  segments?: Array<{
+    label?: string;
+    start_time?: number;
+    end_time?: number;
+    /** ChordMiniApp also emits bare `start`/`end` without a label (YT import path). */
+    start?: number;
+    end?: number;
+    loudness?: number;
+  }>;
 }
 
 export interface LrclibData {
@@ -155,7 +163,13 @@ export function chordMiniAppToBlueprintSong(
   lrclibData?: LrclibData | null,
 ): BlueprintSong {
   const now = new Date().toISOString();
-  const scale = json.scale?.toLowerCase() === "minor" ? "aeolian" : "ionian";
+  // The ChordMiniApp server returns the mode as `mode` ("minor"/"major");
+  // older shapes used `scale`. Reading only `scale` made EVERY analyzed
+  // song come out ionian regardless of the real mode (found in the YT
+  // ingestion test, 2026-09-20 — the app had the same bug via this shared
+  // adapter).
+  const scaleTag = (json.scale ?? json.mode ?? "").toLowerCase();
+  const scale = scaleTag.includes("minor") || scaleTag.includes("aeolian") ? "aeolian" : "ionian";
   const key = (json.key ?? "C") as NoteName;
   const bpm = json.bpm && json.bpm > 0 ? json.bpm : 120;
   const timeSigNum = json.time_signature?.numerator ?? 4;
@@ -209,26 +223,32 @@ export function chordMiniAppToBlueprintSong(
     // Step 1: merge adjacent segments with the same label
     const merged: Array<{ label: string; startTime: number; endTime: number }> = [];
     for (const seg of rawSegments) {
-      // Skip segments with invalid time values — ChordMiniApp can emit
+      // The server sends bare `start`/`end` (no label) on loudness segments —
+      // accept both shapes. Skip invalid time values: ChordMiniApp can emit
       // NaN, Infinity, or missing start/end times in malformed output.
-      if (!isFinite(seg.start_time) || !isFinite(seg.end_time)) continue;
+      const segStart = seg.start_time ?? seg.start ?? NaN;
+      const segEnd = seg.end_time ?? seg.end ?? NaN;
+      if (!isFinite(segStart) || !isFinite(segEnd)) continue;
       const label = seg.label || "Section";
       const last = merged[merged.length - 1];
       if (last && last.label === label) {
-        last.endTime = seg.end_time;
+        last.endTime = segEnd;
       } else {
-        merged.push({ label, startTime: seg.start_time, endTime: seg.end_time });
+        merged.push({ label, startTime: segStart, endTime: segEnd });
       }
     }
 
     // Step 2: cap at MAX_SECTIONS, extending final end time
     const capped = merged.slice(0, MAX_SECTIONS);
     if (capped.length > 0 && merged.length > MAX_SECTIONS) {
-      capped[capped.length - 1].endTime = rawSegments[rawSegments.length - 1].end_time;
+      capped[capped.length - 1].endTime = merged[merged.length - 1].endTime;
     }
 
+    // Span from the first section's start to the last section's end. Also
+    // valid for a single merged section, which must still receive all chords
+    // (the old `length > 1` guard silently dropped every chord in that case).
     const totalBeats =
-      capped.length > 1 && secondsPerBeat > 0
+      capped.length > 0 && secondsPerBeat > 0
         ? (capped[capped.length - 1].endTime - capped[0].startTime) / secondsPerBeat
         : 0;
 
@@ -290,7 +310,8 @@ export function chordMiniAppToBlueprintSong(
   // ChordMiniApp output where every .chord field is null).
   if (sections.length === 0 && rawSegments.length > 0) {
     const lastSeg = rawSegments[rawSegments.length - 1];
-    const durationSeconds = lastSeg.end_time - rawSegments[0].start_time;
+    const durationSeconds =
+      (lastSeg.end_time ?? lastSeg.end ?? 0) - (rawSegments[0].start_time ?? rawSegments[0].start ?? 0);
     sections = [{
       id: crypto.randomUUID(),
       name: "Full Song",
@@ -334,7 +355,7 @@ export function chordMiniAppToBlueprintSong(
 
   const warnings = [
     "Chord detection by ChordMiniApp — review and adjust.",
-    `Key: ${key} ${json.scale ?? "major"}, BPM: ${bpm}`,
+    `Key: ${key} ${json.scale ?? json.mode ?? "major"}, BPM: ${bpm}`,
   ];
   if (lrclibData?.syncedLyrics) {
     warnings.push("Synced lyrics from LRCLIB — review section boundaries.");

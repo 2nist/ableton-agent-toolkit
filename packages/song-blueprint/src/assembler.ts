@@ -165,6 +165,7 @@ function deduplicateNames(candidates: SectionCandidate[]): SectionCandidate[] {
 
 function assignLyricsToSections(
   sections: BlueprintSection[],
+  spans: Array<{ startTime: number; endTime: number }>,
   lrclibData: LrclibData | undefined,
   bpm: number,
 ): void {
@@ -183,17 +184,23 @@ function assignLyricsToSections(
   }
   if (timeline.length === 0) return;
 
-  let cumBeats = 0;
-  for (const s of sections) {
-    const sb = s.bars * (s.timeSignatureNumerator || 4);
-    const ss = cumBeats * spb;
-    const se = (cumBeats + sb) * spb;
-    const hits = timeline.filter((l) => l.timeSec >= ss && l.timeSec < se);
+  // Window by REAL audio time: [boundary, next span.start). Lines in
+  // filtered-out gaps attach to the section before them; lines before the
+  // first span land in the first section and everything after the final
+  // span lands in the last, so no lyric is ever dropped.
+  for (let i = 0; i < sections.length; i++) {
+    const span = spans[i];
+    if (!span) continue;
+    const windowStart = i === 0 ? -Infinity : span.startTime;
+    const windowEnd = spans[i + 1]?.startTime ?? Infinity;
+    const hits = timeline.filter((l) => l.timeSec >= windowStart && l.timeSec < windowEnd);
     if (hits.length > 0) {
-      s.lyrics = hits.map((l) => l.text).join("\n");
-      s.lyricsTimeline = hits.map((l) => ({ text: l.text, startBeat: l.timeSec / spb }));
+      sections[i].lyrics = hits.map((l) => l.text).join("\n");
+      sections[i].lyricsTimeline = hits.map((l) => ({
+        text: l.text,
+        startBeat: Math.max(0, Math.round(((l.timeSec - span.startTime) / spb) * 1000) / 1000),
+      }));
     }
-    cumBeats += sb;
   }
 }
 
@@ -238,22 +245,29 @@ export function assembleBlueprint(
 
   if (usable.length === 0) return base;
 
-  // Step 4: build BlueprintSections
+  // Step 4: build BlueprintSections.
+  // Tile the chord progression across the usable sections proportionally to
+  // their real durations, using CUMULATIVE rounding so the slices exactly
+  // cover allChords in order — no gaps and no duplication.
   const bpm = base.bpm;
   const spb = 60 / bpm;
   const tsNum = base.timeSignatureNumerator;
   const allChords = base.sections[0]?.chords ?? [];
-  let chordIdx = 0;
 
-  const sections: BlueprintSection[] = usable.map((c) => {
+  const usableDur = usable.reduce((sum, c) => sum + (c.endTime - c.startTime), 0);
+  let cumDur = 0;
+  const endIdx = usable.map((c, i) => {
+    cumDur += c.endTime - c.startTime;
+    const frac = usableDur > 0 ? cumDur / usableDur : (i + 1) / usable.length;
+    return Math.round(allChords.length * frac);
+  });
+
+  const sections: BlueprintSection[] = usable.map((c, i) => {
     const durSec = c.endTime - c.startTime;
     const durBeats = durSec / spb;
     const bars = Math.max(4, Math.ceil(durBeats / tsNum));
-    const nChords = allChords.length > 0
-      ? Math.max(1, Math.round((allChords.length * durSec) / totalDuration))
-      : 0;
-    const sc = allChords.slice(chordIdx, chordIdx + nChords);
-    chordIdx += nChords;
+    const startIdx = i === 0 ? 0 : endIdx[i - 1];
+    const sc = allChords.slice(startIdx, endIdx[i]);
 
     return {
       id: crypto.randomUUID(),
@@ -268,13 +282,6 @@ export function assembleBlueprint(
     };
   });
 
-  // Overflow: extend last section to include remaining chords
-  if (chordIdx < allChords.length && sections.length > 0) {
-    const last = sections[sections.length - 1];
-    last.chords = allChords;
-    last.bars = Math.max(last.bars, Math.ceil(allChords.reduce((s, c) => s + c.beats, 0) / tsNum));
-  }
-
   // Clamp bars to chord totals
   for (const s of sections) {
     const cb = s.chords.reduce((sum, c) => sum + c.beats, 0);
@@ -283,8 +290,13 @@ export function assembleBlueprint(
     if (s.bars < 4) s.bars = 4;
   }
 
-  // Step 5: assign lyrics
-  assignLyricsToSections(sections, lrclibData ?? undefined, bpm);
+  // Step 5: assign lyrics (windowed by each section's real audio span)
+  assignLyricsToSections(
+    sections,
+    usable.map((c) => ({ startTime: c.startTime, endTime: c.endTime })),
+    lrclibData ?? undefined,
+    bpm,
+  );
 
   return {
     ...base,
