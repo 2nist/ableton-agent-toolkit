@@ -140,6 +140,11 @@ export function parseImportedSong(raw: unknown): BlueprintSong {
     bend: (obj.bend as BlueprintSong["bend"]) ?? undefined,
     detected: (obj.detected as BlueprintSong["detected"]) ?? undefined,
     provenance: (obj.provenance as BlueprintSong["provenance"]) ?? undefined,
+    // Suggestion acknowledgments (mode-inference / one-shot cards) must
+    // survive import too — same whitelist-drop class as bend/detected
+    // above; without this a re-import re-asks questions the user already
+    // answered. See exportImport.test.ts for the regression lock.
+    blueprintAcks: (obj.blueprintAcks as BlueprintSong["blueprintAcks"]) ?? undefined,
     createdAt: typeof obj.createdAt === "string" ? obj.createdAt : now,
     updatedAt: now,
   };
