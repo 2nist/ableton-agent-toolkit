@@ -22,3 +22,7 @@ apps/trackdraft/scripts/output/
 temp template Project/
 # E-GMD raw dataset (45k MIDI files, ~300MB) — local source material, never commit
 packages/drum-library/e-gmd-v1.0.0/
+
+# Python bytecode
+__pycache__/
+*.pyc
