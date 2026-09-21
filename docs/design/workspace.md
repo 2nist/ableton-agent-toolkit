@@ -78,7 +78,8 @@ until modal parity.)
   while playing (wheel scroll disengages, the toggle re-engages). All
   controls live in a **compact icon-only strip ABOVE the timeline** —
   transport (play · pause · stop · section loop) + undo/redo, then zoom
-  −/+ · fit · follow; nothing sits at the timeline's left or right ends.
+  −/+ · fit · zoom-to-section · follow; nothing sits at the timeline's
+  left or right ends.
   That strip is the seed of P2's collapsed header (the workbench already
   hides the legacy header transport so the two can't disagree). Blocks are
   true scale — a short song leaves an honest empty tail instead of

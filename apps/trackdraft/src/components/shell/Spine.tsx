@@ -36,9 +36,9 @@ function IconBtn({
       disabled={disabled}
       onClick={onClick}
       title={title}
-      className={`h-[18px] min-w-[22px] px-1 flex items-center justify-center rounded border text-[10px] leading-none font-mono ${
-        active ? "border-accent/60 text-accent" : "border-edge text-inkMuted"
-      } ${disabled ? "opacity-30" : "hover:text-ink"}`}
+      className={`h-[20px] min-w-[24px] px-1 flex items-center justify-center rounded border text-[12px] leading-none font-mono ${
+        active ? "border-accent/60 text-accent" : "border-edge text-ink/75"
+      } ${disabled ? "opacity-30" : "hover:text-ink hover:border-inkMuted/60 hover:bg-panelAlt/50"}`}
     >
       {children}
     </button>
@@ -53,7 +53,8 @@ function IconBtn({
  * top that doubles as the seek control, a pixel-exact playhead with
  * auto-follow while playing. Controls live ONLY in a compact icon-only
  * strip ABOVE the timeline (transport: play · pause · stop · section loop +
- * undo/redo, then zoom −/+ · fit · follow) — nothing sits at the timeline's
+ * undo/redo, then zoom −/+ · fit · zoom-to-section · follow) — nothing sits
+ * at the timeline's
  * left or right ends. Blocks are TRUE scale — a short song leaves an honest
  * empty tail, it is never stretched to fit.
  *
@@ -157,6 +158,25 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     setBarPx(Math.max(2, Math.floor(el.clientWidth / Math.max(1, total))));
   }
 
+  /** Zoom-to-section — the scale that makes the selected section (or the
+   *  live one) fill the viewport, then bring it into view. Goes beyond the
+   *  manual 6–20 steps on purpose: filling a 13-bar section needs ~55px/bar;
+   *  − / + step back through the presets from there. */
+  function zoomToSection() {
+    const el = scrollRef.current;
+    const span =
+      spans.find((s) => s.sectionId === selectedSectionId) ?? (liveIndex != null ? spans[liveIndex] : null) ?? spans[0];
+    if (!el || !span || span.bars <= 0) return;
+    const w = el.clientWidth;
+    const next = Math.max(2, Math.min(120, Math.floor(w / span.bars)));
+    setBarPx(next);
+    const left = span.startBar * next;
+    const width = span.bars * next;
+    requestAnimationFrame(() => {
+      el.scrollLeft = Math.max(0, width <= w ? left - (w - width) / 2 : left - 8);
+    });
+  }
+
   function toggleFollow() {
     setFollow((f) => {
       const next = !f;
@@ -217,7 +237,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           left, timeline view controls (zoom −/+, fit, follow) on the right.
           This row is the seed of P2's collapsed header — no controls sit at
           the timeline's left or right ends. */}
-      <div className="flex items-center gap-1 px-2 h-[26px] border-b border-edge/60">
+      <div className="flex items-center gap-1 px-2 h-7 border-b border-edge/60">
         <IconBtn title="Play" disabled={tick?.isPlaying === true} onClick={() => void togglePlay()}>
           ▶
         </IconBtn>
@@ -251,6 +271,9 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
         </IconBtn>
         <IconBtn title="Fit the whole song in view" onClick={fitZoom}>
           {"><"}
+        </IconBtn>
+        <IconBtn title="Zoom to the selected section — fills the view with it" onClick={zoomToSection}>
+          ↑↑
         </IconBtn>
         <IconBtn
           title={follow ? "Following the playhead — click to stop" : "Follow the playhead while playing"}
