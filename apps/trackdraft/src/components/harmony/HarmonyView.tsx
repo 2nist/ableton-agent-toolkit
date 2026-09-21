@@ -9,6 +9,7 @@ import { useDockStore } from "../../store/dockStore";
 import { updateSection } from "../../lib/sections";
 import HoneycombWheel from "./HoneycombWheel";
 import FitStatus from "./FitStatus";
+import ModeInferenceCard from "./ModeInferenceCard";
 import { HarmonyMainMenu, HarmonyTools, HarmonyLayers } from "./HarmonyDockTools";
 import { previewChord } from "../../lib/playback/previewMidi";
 
@@ -139,6 +140,23 @@ export default function HarmonyView() {
           </div>
         )}
       </div>
+
+      {/* Borrowed-vs-modulate teaching moment — derived from the section's
+          chords, anchored under the canvas, never blocks a chord add. */}
+      {activeSection && (
+        <ModeInferenceCard
+          song={song}
+          section={activeSection}
+          keyName={effectiveKey}
+          scale={effectiveScale}
+          onAdoptMode={(mode) =>
+            updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, scale: mode })))
+          }
+          onKeepBorrowed={(ackKey) =>
+            updateCurrentSong((s) => ({ ...s, blueprintAcks: { ...(s.blueprintAcks ?? {}), [ackKey]: true } }))
+          }
+        />
+      )}
     </div>
   );
 }

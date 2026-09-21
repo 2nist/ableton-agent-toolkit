@@ -700,6 +700,12 @@ export interface BlueprintSong {
    *  the drum/bass profile JSONs + the chord stream (any subset when only
    *  some analyses exist). Absent → no markers. */
   detected?: Partial<StyleProfile>;
+  /** Dismissed/acknowledged one-shot suggestion cards, keyed by a stable id
+   *  (e.g. a mode-inference candidate: `"<sectionId>:<candidateId>"`). When a
+   *  key is present and true, that suggestion is never shown again for the
+   *  song. Records intent ("keep this borrowed") so a teaching moment doesn't
+   *  nag. Absent → nothing has been acknowledged. */
+  blueprintAcks?: Record<string, boolean>;
   notes?: SongNotes;
   additionalIdeas?: string[];
   references?: string[];

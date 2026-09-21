@@ -12,6 +12,7 @@ import { pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { BlueprintSection, Chord, ChordPerformanceEffect } from "../../types/blueprint";
 import { chordDisplayName, chordFunction, functionColorHex } from "../../lib/harmony/chordBuilder";
+import { isChordDiatonic } from "../../lib/harmony/modeInference";
 
 const CELL_W = 78;
 
@@ -98,6 +99,9 @@ function SortableChordCell({
   const rootPc = pitchClass(chord.root);
   const func = chord.isSubstitution ? null : chordFunction(chord, scale);
   const stripe = chord.isSubstitution ? "#ffa500" : functionColorHex(func) ?? "#2e2e34";
+  // Residue marker: a borrowed (non-diatonic) chord keeps a subtle dot after
+  // the teaching card has died, so "why is this out of key?" is answered forever.
+  const borrowed = !chord.isSubstitution && !isChordDiatonic(chord, keyName, scale);
 
   return (
     <div
@@ -119,8 +123,15 @@ function SortableChordCell({
       <div className="font-mono text-[9.5px] leading-none" style={{ color: chord.isSubstitution ? "#ffa500" : "#8a8a92" }}>
         {chord.romanNumeral}
       </div>
-      <div className="text-[15px] font-semibold leading-tight mt-0.5" style={chord.isSubstitution ? { color: "#ffa500" } : undefined}>
+      <div className="text-[15px] font-semibold leading-tight mt-0.5 flex items-center gap-1" style={chord.isSubstitution ? { color: "#ffa500" } : undefined}>
         {chordDisplayName(rootPc, chord.quality, keyName)}
+        {borrowed && (
+          <span
+            className="inline-block h-[5px] w-[5px] rounded-full bg-accent/80"
+            title={`${chordDisplayName(rootPc, chord.quality, keyName)} is borrowed — outside ${keyName} ${scale}`}
+            aria-label="Borrowed chord (out of key)"
+          />
+        )}
       </div>
       <button
         className="absolute top-0.5 right-1 text-[11px] leading-none text-inkMuted hover:text-red-400 p-0.5"
