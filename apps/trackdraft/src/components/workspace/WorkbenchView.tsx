@@ -17,6 +17,7 @@ import { getSongTransport, type TransportTick } from "../../lib/playback/songTra
 import Spine from "../shell/Spine";
 import BendPanel from "../style/BendPanel";
 import SectionStructurePanel from "./SectionStructurePanel";
+import IconBtn from "../common/IconBtn";
 import HexReadout from "../harmony/HexReadout";
 import NecklaceRow from "../drums/NecklaceRow";
 import MelodyStaff from "../melody/MelodyStaff";
@@ -42,6 +43,7 @@ export default function WorkbenchView() {
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [railTab, setRailTab] = useState<RailTab>("structure");
   const [benchOpen, setBenchOpen] = useState(false);
   const [tick, setTick] = useState<TransportTick | null>(null);
 
@@ -117,13 +119,11 @@ export default function WorkbenchView() {
           )}
         </div>
 
-        <aside className="w-[216px] shrink-0 border-l border-edge bg-panel min-h-0 overflow-y-auto p-2 space-y-2" aria-label="Context rail — structure edits + mix / bend lens">
-          <CollapsibleCard title="Structure" defaultOpen>
-            <SectionStructurePanel />
-          </CollapsibleCard>
-          <CollapsibleCard title="Mix / Bend">
-            <BendPanel />
-          </CollapsibleCard>
+        <aside className="w-[216px] shrink-0 border-l border-edge bg-panel min-h-0 flex flex-col" aria-label="Context rail — focused-section panels">
+          <RailTabStrip tab={railTab} onSelect={setRailTab} />
+          <div className="flex-1 min-h-0 overflow-y-auto p-2">
+            {railTab === "structure" ? <SectionStructurePanel /> : <BendPanel />}
+          </div>
         </aside>
       </div>
 
@@ -325,33 +325,26 @@ function ElementRow({
   );
 }
 
-/** A collapsible rail group — header always visible, content in/out. Group
- *  headers are how the rail stays "the focused object's panel" without
- *  becoming a dumping ground (placement law §4). */
-function CollapsibleCard({
-  title,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
+type RailTab = "structure" | "mix";
+
+/** The rail's panels as small icon tabs — more will join (lyrics reference,
+ *  detected ◆, …), so the rail switches one panel at a time instead of
+ *  stacking headers. Glyph-only; names live in the tooltips. Glyphs are
+ *  placeholder text for now — first in line for the SVG icon pass. */
+const RAIL_TABS: { id: RailTab; glyph: string; label: string }[] = [
+  { id: "structure", glyph: "≣", label: "Structure — this section's form" },
+  { id: "mix", glyph: "◉", label: "Mix / Bend — the style lens" },
+];
+
+function RailTabStrip({ tab, onSelect }: { tab: RailTab; onSelect: (t: RailTab) => void }) {
   return (
-    <section className="border border-edge rounded-lg bg-panel overflow-hidden">
-      <button
-        type="button"
-        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left hover:bg-panelAlt/40"
-        onClick={() => setOpen((v) => !v)}
-        title={open ? `Collapse ${title}` : `Expand ${title}`}
-      >
-        <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">{title}</span>
-        <span className="flex-1" />
-        <span className="text-inkMuted/60 text-[10px]">{open ? "▾" : "▸"}</span>
-      </button>
-      {open && <div className="px-2.5 pb-2.5">{children}</div>}
-    </section>
+    <div className="flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-edge/60 shrink-0">
+      {RAIL_TABS.map((t) => (
+        <IconBtn key={t.id} title={t.label} active={tab === t.id} onClick={() => onSelect(t.id)}>
+          {t.glyph}
+        </IconBtn>
+      ))}
+    </div>
   );
 }
 

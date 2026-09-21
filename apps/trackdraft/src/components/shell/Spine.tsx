@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
 import { roleStyle } from "../../lib/roleColors";
+import IconBtn from "../common/IconBtn";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
 import { useSongStore } from "../../store/songStore";
@@ -15,36 +16,6 @@ import { beatsPerBar, type BlueprintSection, type BlueprintSong } from "../../ty
  *  blocks-view lesson applies: zoom must be able to GROW — the ladder runs
  *  4→80 with 10 the default; the mouse wheel and − / + walk it. */
 const BAR_PX_STEPS = [4, 6, 8, 10, 14, 20, 28, 40, 56, 80] as const;
-
-/** Icon button for the control strip — glyph only; meaning lives in the
- *  tooltip. Compact by design: the strip is 26px tall. */
-function IconBtn({
-  title,
-  onClick,
-  disabled = false,
-  active = false,
-  children,
-}: {
-  title: string;
-  onClick: () => void;
-  disabled?: boolean;
-  active?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      title={title}
-      className={`h-[20px] min-w-[24px] px-1 flex items-center justify-center rounded border text-[12px] leading-none font-mono ${
-        active ? "border-accent/60 text-accent" : "border-edge text-ink/75"
-      } ${disabled ? "opacity-30" : "hover:text-ink hover:border-inkMuted/60 hover:bg-panelAlt/50"}`}
-    >
-      {children}
-    </button>
-  );
-}
 
 /** Rows for the block context palette (placement law tier 3:
  *  selection-scoped floats — the drums selection control is the first
