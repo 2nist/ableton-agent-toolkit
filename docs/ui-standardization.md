@@ -1,0 +1,363 @@
+# TrackDraft UI standardization — the 10,000-ft view
+
+**Status:** concept & decision document — no code lives here. Companion to
+`docs/ui-audit.md` (the inventory; every counter referenced below comes from it).
+Audit = *what exists*. This = *how it should all be organized, standardized, and
+polished*. The phases at the end are executed against this document, one slice at a time.
+
+---
+
+## 0. Product posture
+
+**Identity:** a songwriting cockpit that behaves like one piece of studio hardware —
+**one instrument with six stations**, not six pages behind a menu.
+
+**Feel words** (already true in the best parts of the app — make them true everywhere):
+
+- **Cockpit, not dashboard.** Dense, mono micro-labels, everything reachable, nothing
+  decorative. The user is operating, not browsing.
+- **Suggestive, not bossy.** The app may know things the user doesn't (detected style,
+  borrowed chords). It shows them; it never applies them. ◆ is the mark.
+- **Derived, not stored.** The UI computes from the song wherever it can. What's stored
+  is authored (the song) or ephemeral (selection, drafts). Nothing in between.
+
+**Strengths to protect** (the overhaul must not sand these off — they're why the app
+already feels good in places):
+
+1. The dock grammar with auto-focus (`setTools` comes up with a selection).
+2. The ◆ suggest-don't-impose pattern (`BendPanel` ghosts, `ModeInferenceCard`).
+3. `font-mono` micro-labels + tight radius + `ABLETON_DARK` tokens.
+4. Derived-state discipline (chord function/color computed from numerals; suggestions
+   recomputed, evaporating when wrong).
+5. The test culture: bridge parity, `applySongMap`, import whitelist, generators — UI
+   work must keep those suites green (they've caught real bugs twice this month).
+
+**Strategic frame** (from the project direction): the React app is the *design spec* for
+any eventual native/JUCE build. Everything standardized here — taxonomy, tokens,
+interaction contracts — is exactly what would port. "Complete picture first" is the gate;
+this document defines what *complete* means (§8).
+
+---
+
+## 1. Principles (the constitution)
+
+**P1 — Tokens are the only color source.**
+Classes use token names; the only raw hex in the codebase lives in one palette module
+(which itself derives from `@platform/ui-kit`'s `ABLETON_DARK`). Canvas/SVG draw code
+imports literals *from that module*, never inlines them.
+*Test:* zero raw hex in class strings; the palette module is the only file with hex.
+
+**P2 — One type scale, one label recipe.**
+`text-2xs`/`text-3xs`/`text-xs/text-sm` + the mono micro-label recipe
+(mono · uppercase · tracking-wider · inkMuted) for panel titles, axis labels, metadata.
+Numbers use tabular-nums. Bracketed pixel sizes are retired.
+*Test:* zero `text-[Npx]`; every panel header matches the recipe.
+
+**P3 — Every song tab is a station; grammar or documented exception.**
+A station = canvas + dock relationship (bottom bar and/or right sidebar) with the four
+panel roles (info/primary/tools/layers). A tab that deviates carries a one-paragraph
+header comment explaining why.
+*Test:* each of the six tabs either registers dock content or has its exception note.
+
+**P4 — Primitives before patterns, patterns before pages. The two-consumer rule.**
+Nothing moves into the shared tier until a second consumer exists — but once it does,
+duplication is a bug. (This is the repo's own documented ethos: no speculative
+indirection, no premature abstraction.)
+*Test:* the audit's duplication list (§2 queue) drains; no new third copy of anything.
+
+**P5 — Suggest, don't impose. ◆**
+Features that derive knowledge show it as a ghost with an explicit **adopt**; nothing
+auto-applies; suggestions are recomputed from state and vanish when no longer true;
+dismissals persist deliberately (per-song acks), never accidentally.
+*Test:* any new "the app knows better" feature cites this pattern or argues why not.
+
+**P6 — Derived over stored. Song is authored-only. Selection is session-only.**
+UI state never enters `BlueprintSong`. Selection lives in `use<Domain>SelectionStore`.
+Drafts (staged edits, e.g. drums) live in `use<Domain>DraftStore`. Persistence is for
+durable config only (§5 table).
+*Test:* the persisted-keys table in §5 is the complete list; nothing else writes storage.
+
+**P7 — One confirm mechanism; undo beats confirmation.**
+Destructive flows (replace template, replace progression) confirm exactly once through
+the standard modal — never `window.confirm`. Everything reversible is undoable instead
+of confirmed.
+*Test:* zero native `confirm()`; every modal routes through the same shell.
+
+**P8 — Keyboard baseline, through one registry.**
+`Esc` closes the topmost overlay · `Space` toggles transport (when not typing) ·
+`Cmd/Ctrl+Z / Shift+Cmd/Ctrl+Z` undo/redo. One `useGlobalKeys` mechanism; stations don't
+each invent listeners. Beyond the baseline, keyboard is deliberately not first-class
+(nothing more until the baseline is universal).
+*Test:* the two ad-hoc global listeners become one; baseline works on every tab.
+
+**P9 — Design artifacts stay curated.**
+Prototypes, mockups, and design history live in `docs/design/` (or `archive/`), never in
+`src/`. `newview.html` is the founding example.
+
+---
+
+## 2. Component taxonomy — the org chart
+
+Four tiers + one shell. The rule between tiers is **P4's two-consumer promotion**.
+
+| Tier | Definition | Target contents | Home (v1) |
+|---|---|---|---|
+| **T0 — Tokens** | Color / type / space / radius / motion as CSS vars + TS constants | `ABLETON_DARK` mapping (exists) · voice palette · deep-canvas fills · accent/substitution/secondary semantics | `@platform/ui-kit` (exists) + app `theme.ts` |
+| **T1 — Primitives** | Dumb, stateless, zero domain vocabulary | Button (primary/secondary/ghost/danger) · IconButton · Input · NumberField · Select · Checkbox · Slider (row wrapper) · Chip · Modal shell (+Confirm) · Popover · Dropdown · Tooltip · MicroLabel · EmptyState · PanelHeader | `apps/trackdraft/src/components/common/` |
+| **T2 — Widgets** | Domain-flavored pieces with **≥2 consumers** | SliderRow (label/lo-hi/◆ ghost — BendPanel's `AxisSlider` is the mold) · Block (titled panel w/ hint) · StepGrid · NecklaceRow (already shared ✓) · ChordChip/Card · MeterOutline editor · ConfidenceDot · TransportButton · DockPanel section | `components/common/` when generic; stays in domain folder until second consumer |
+| **T3 — Stations** | The six tab views + dashboard + popout | Studio · Structure · Harmony · Drums · Lyrics · Melody · Dashboard · Popout | `components/<domain>/` (folders as today) |
+| **T4 — Shell** | The frame everything sits in | `SongEditorLayout` · dock host · routes · header transport | `components/layout/`, `components/dashboard/` |
+
+**T1 extraction queue** (from the audit's duplication list — each already has 3+ copies
+in the wild):
+`Button` (238 sites, ~6 ad-hoc recipes) → `Select` (12 files) → `Modal shell` (4 overlays)
+→ `Chip` (the drums "active chip" string ×4 files) → `Slider`/`SliderRow` → `Checkbox` →
+`MicroLabel` (34 files use the recipe; none shares the code) → `EmptyState` (every station
+improvises) → `Confirm` (3 `confirm()` calls) → `Dropdown` (ExportMenu) → `Popover`
+(ChordEditorPopover).
+
+**T2 extraction queue**: `SliderRow`+◆ghost (BendPanel → any detection-driven UI),
+`Block`, `StepGrid` (DrumPatternTools + DrumBlocksView + MelodyPianoRoll share the
+concept), `DockPanel` chrome (Harmony/Lyrics/Drum dock tools all hand-roll the same
+section header).
+
+---
+
+## 3. Layout grammar
+
+### The song shell
+
+```
+┌ header ───────────────────────────────────────────────┐
+│ back · title · key/bpm · transport · undo/redo · export │
+├ tabs ──────────────────────────────────────────────────┤
+│ Studio · Structure · Harmony · Drums · Lyrics · Melody  │
+├ station canvas ───────────────────────────┬ dock (opt)  │
+│                                           │ info        │
+│                                           │ primary     │
+│                                           │ tools       │
+│                                           │ layers      │
+└───────────────────────────────────────────┴─────────────┘
+```
+
+**Dock placement, made canonical:**
+
+- **Bottom bar** is the default home for every station's panels; **right sidebar** is
+  reserved for workflows where the canvas is a list or needs full width and the tools
+  sit beside it.
+- Current dispositions to keep (each with an expected header comment):
+  - **Structure** → right sidebar (canvas is a vertical list; side tools fit the
+    ergonomics) — documented exception to "bottom default".
+  - **Harmony** → bottom dock **and** right sidebar for Tools (two tool families, kept).
+  - **Studio** → no dock; the console/timeline occupy the lower band — documented
+    exception.
+  - **Drums / Lyrics / Melody** → bottom bar (Melody to *register* content or gain the
+    documented exception; today its bar is info-only).
+- **`info` is universal**: `SongInfoPanel` stays the info panel on every station it fits.
+
+### Dashboard
+
+Grammar: sidebar (mode switch + directories + import targets) · header (links, counts,
+legend) · action bar · filter bar · main (table or gallery). Keep it; add nothing new
+until stations are done.
+
+### Overlays
+
+One mechanism, four placement variants, all from the T1 Modal shell:
+**center dialog** (DirSetup, Confirm) · **large editor** (SelectionEditorModal) ·
+**side sheet** (MidiSetupPanel) · **floating** (Popover/Dropdown, non-modal).
+Focus trap + Esc + scrim-click rules defined once in the shell.
+
+### Popout
+
+Treat as a **read-only station variant**: it shares T2 widgets (ChordStrip, LyricsBlock)
+with the Lyrics/Harmony stations rather than re-implementing rendering.
+
+---
+
+## 4. Interaction conventions
+
+**The ◆ contract** (codify so future features inherit it):
+
+- *Ghost state*: derived value shown next to the live control (marker + value), never
+  touching it.
+- *Adopt*: explicit click → one undoable write. Adopted state is visually quieter.
+- *Dismissal*: "keep as-is" persists as a deliberate ack (per song / per section — the
+  `blueprintAcks` model), never re-asking the same question.
+- *Evaporation*: suggestions are recomputed from state; fixing the cause removes the
+  suggestion with no cleanup.
+
+**Selection drives tools.** The drums pattern ("the workbench comes up *with* a
+selection, goes away with it") generalizes: stations surface contextual tools on
+selection, not on a separate "edit mode".
+
+**Undo.** Song-level history stays the only global undo. Local staging uses **draft
+stores** (the drums pattern) — staged edits commit explicitly. No new undo stacks.
+
+**Destructive copy.** One voice: short, factual, names what changes
+("Replace all sections with the 'Math Rock (7/8)' template?"). Modal, not browser
+confirm; primary action is the destructive one only when genuinely expected.
+
+**Empty states.** Every station's empty state = one line of guidance + the exact action
+word from the UI that fixes it ("No melody yet — hum one in the Melody tab." is the
+model).
+
+---
+
+## 5. Naming & state conventions
+
+**Vocabulary** (words the docs and code should share):
+
+- **Station** = a tab-level view. **Panel** = a dock section. **Block** = a titled
+  canvas region. **Ghost** = the ◆ suggestion overlay. **Adopt** = committing a ghost.
+- File naming: stations keep `*View` (rename to `*Station` is *not* worth the churn —
+  vocabulary only). Shell = `*Layout`. Primitives = bare nouns (`Button.tsx`). Modals =
+  `*Modal.tsx`.
+
+**Stores**: `use<Domain>Store` · selection = `use<Domain>SelectionStore` · drafts =
+`use<Domain>DraftStore`. Persistence only via `store/storage.ts` helpers.
+
+**The persisted-keys table is the complete list of durable state** (keep it that way):
+
+| Key | Owner |
+|---|---|
+| `trackdraft-songs` | songStore |
+| `trackdraft-current-song-id` | songStore (raw) |
+| `trackdraft-clock-source` | songStore (raw) |
+| `trackdraft-directories` | directoryStore |
+| `trackdraft-midi-settings` | midiSettingsStore |
+| `trackdraft-lyrics-spark` | lyricsSparkStore |
+
+**New song-field checklist** (any schema addition, enforced by the existing test):
+schema (`song-blueprint`) → rebuild → `parseImportedSong` whitelist + `exportImport.test.ts`
+→ song-mcp schema if agent-facing → (if analysis-derived) `detect-bend`. This checklist
+exists because two fields have already been silently dropped on import.
+
+---
+
+## 6. The one architecture decision: where do shared components live?
+
+**Context.** `@platform/ui-kit` today = tokens + host bridge, deliberately
+framework-agnostic, because it serves two hosts: the React app (consumes tokens via
+Tailwind — already true) and vanilla webviews in extensions (drum-studio, etc. —
+consume tokens directly). The app has **no** component layer at all.
+
+**The options:**
+
+- **A. Web Components in ui-kit** — one kit for both hosts. Maximum reuse *if* the
+  webviews grow real UI; taxes every app component with WC interop, shadow-DOM styling,
+  and an unfamiliar DX in a React codebase.
+- **B. Tokens shared; idiomatic layers per host** — tokens stay the cross-host contract
+  (already are). React primitives live in the app (`components/common/`). Webview
+  controls get minimal vanilla twins *only when actually needed* (the two-consumer rule
+  applied across hosts).
+- **C. React everywhere** — webviews adopt React or keep bespoke UI; no cross-host
+  sharing ambition at all.
+
+**Recommendation: B.** Because: (1) React is where 95% of the UI lives and iterates
+fastest — the canonical layer should be there; (2) the webview modals are small and few:
+duplicating a button/select is cheaper than imposing a WC architecture app-wide;
+(3) the eventual native-port story is unchanged — the React component inventory is the
+spec, and it's the *inventory* that matters, not the runtime; (4) it matches the repo's
+"no speculative indirection" ethos.
+
+**Promotion trigger** (pre-committed, so it isn't relitigated): if a **second React
+consumer** needs the same primitives — `apps/devkit`, or a new app — promote T1 to
+`@platform/ui-react` *then*. If the **webview** UI ever needs more than a handful of
+matching controls, revisit option A *then*, with real requirements.
+
+---
+
+## 7. Phases — working our way down
+
+Concept-level; each phase names its exit test. One writer per area (two agents editing
+the same files has already cost us one swept-in commit — keep adds scoped).
+
+**Phase 0 — settle the constitution.** This doc + the audit live in `docs/`; the user
+decides §9. No code.
+
+**Phase 1 — T0 + T1 foundation + mechanical drift.**
+Palette module (accent, substitution orange, deep fills, six voice colors — single
+source); primitives v1 (Button, IconButton, Input/NumberField, Select, Checkbox, Chip,
+SliderRow, Modal + Confirm, MicroLabel, EmptyState); migrate the countable drift
+(4 accent bracket classes, ~15 active-chip strings, 11 `rounded-lg`, 159 bracket fonts,
+3 `confirm()` calls).
+*Exit:* audit counters for drift hit zero; no behavior change (parity suites green).
+
+**Phase 2 — T2 widgets + dock completion.**
+Extract the two-consumer widgets; canonical DockPanel chrome; Melody registers dock
+content (or documents its exception); Studio/Structure exception comments land.
+*Exit:* every station conforms or is annotated; dock chrome is one implementation.
+
+**Phase 3 — station-by-station polish, heaviest first.**
+**Drums** (split `DrumBlocksView` 1,574 / `DrumPatternTools` 1,091 / `DrumsView` 950
+into blocks + lanes + tools + workbench, behind the unchanged public behavior), then
+**Harmony**, then **Studio**; each station gets the same checklist: primitives adopted,
+keyboard baseline, empty states, destructive-copy voice, density pass.
+*Exit:* no component file above the agreed monolith threshold; drums share of UI LOC
+falls from 35%.
+
+**Phase 4 — finish the picture.**
+Remaining in-flight features land *inside* the new grammar: effect-lane polish,
+per-section modulation edit UX, hex tap semantics review, mode-inference placement, the
+popout's shared rendering. This phase ends when the feature set is frozen — the
+"complete picture" the native-port decision waits on.
+
+**Phase 5 — hardening + the gate.**
+A11y pass on the new primitives (focus, contrast, ARIA); performance on the drums
+canvas; visual/primitive tests; final audit re-run. **This is the gate:** when §8 is
+green, the React app IS the spec and the JUCE/Tracktion conversation can begin with
+something worth porting.
+
+---
+
+## 8. Definition of done (the counters)
+
+The overhaul is done when the audit's regeneration commands report:
+
+- **0** raw hex in class strings; hex exists only in the palette module (+ its ui-kit
+  source).
+- **0** `text-[Npx]`; **0** `rounded-lg` remnants.
+- Every station: dock-registered or exception-annotated.
+- All 4 overlays + popover/dropdown route through the T1 shell; **0** native `confirm()`.
+- **1** keyboard registry; Esc/Space/Undo baseline works on every tab.
+- No component file above the agreed threshold (proposed: **~800 LOC**); no domain above
+  ~25% of UI LOC.
+- Audit re-run is green; all parity/behavior suites unchanged and passing.
+- `newview.html` relocated from `src/`; design artifacts have a home.
+
+And the qualitative finish: a new feature can be described as *"a Block with a SliderRow
+and a ◆ ghost in the Drums station"* — and that sentence builds itself.
+
+---
+
+## 9. Open decisions (user's call)
+
+1. **ui-kit direction** — recommend **B** (§6); this unlocks Phase 1.
+2. **Monolith threshold** — proposed ~800 LOC; and appetite for the drums split in
+   Phase 3 (recommend: yes, it's 35% of the UI).
+3. **Keyboard posture** — minimal global baseline via one registry (recommend), or
+   explicit "keyboard is not first-class" (also defensible; the app is mouse-first by
+   design today).
+4. **`*View` → `*Station` rename** — recommend keep names, vocabulary only.
+5. **`newview.html` destination** — `docs/design/` (recommend — it's the v3 design
+   record) vs `archive/`.
+
+---
+
+## Appendix — audit findings → disposition
+
+| Audit §7 finding | Disposition |
+|---|---|
+| 1. Token drift countable (accent/fonts/radius) | P1, P2 — Phase 1 mechanical pass |
+| 2. Draw code needs shared constants | P1 — palette module (§7 P1) |
+| 3. Voice palette duplicated 4+×; source is a prototype HTML | T0 palette module; P9 relocation |
+| 4. Drums = 35% of UI | Phase 3 (first), §9.2 threshold |
+| 5. No primitives layer | §2 T1 extraction queue; §6 decision |
+| 6. Dock grammar varies | P3 — §3 canonical + exceptions |
+| 7. ◆ pattern uncodified | P5 — §4 contract |
+| 8. No shortcut layer | P8 — §4 baseline |
+| 9. Inline styles 76 (mostly deserved) | P1 — static ones to tokens; dynamic ones keep + document |
+| 10. font-mono de-facto standard | P2 — promote to explicit recipe |
+| 11. Selection-store pattern consistent | P6 — §5 conventions |
+| 12. Prototype artifacts in src | P9 — §3/§9.5 |
