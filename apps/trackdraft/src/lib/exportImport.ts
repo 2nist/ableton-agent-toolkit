@@ -131,6 +131,15 @@ export function parseImportedSong(raw: unknown): BlueprintSong {
     alternates: Array.isArray(obj.alternates) ? (obj.alternates as BlueprintSong["alternates"]) : undefined,
     status: (obj.status as BlueprintSong["status"]) ?? undefined,
     outputOffsetBeats: typeof obj.outputOffsetBeats === "number" ? obj.outputOffsetBeats : undefined,
+    beatOffset: typeof obj.beatOffset === "number" ? obj.beatOffset : undefined,
+    genre: typeof obj.genre === "string" ? obj.genre : undefined,
+    // Style fields must survive import — the whitelist used to drop `bend`
+    // silently, so an imported song arrived neutral even when the JSON was
+    // clearly bent (caught live when `detected` ratings didn't show up
+    // after re-import; same rebuild path dropped both).
+    bend: (obj.bend as BlueprintSong["bend"]) ?? undefined,
+    detected: (obj.detected as BlueprintSong["detected"]) ?? undefined,
+    provenance: (obj.provenance as BlueprintSong["provenance"]) ?? undefined,
     createdAt: typeof obj.createdAt === "string" ? obj.createdAt : now,
     updatedAt: now,
   };
