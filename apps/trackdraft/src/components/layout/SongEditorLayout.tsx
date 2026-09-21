@@ -11,6 +11,7 @@ import SongInfoPanel from "../details/SongInfoPanel";
 import type { BlueprintSong } from "../../types/blueprint";
 
 const TABS = [
+  { to: "workbench", label: "Workbench β" },
   { to: "studio", label: "Studio" },
   { to: "structure", label: "Structure" },
   { to: "harmony", label: "Harmony" },
@@ -349,8 +350,9 @@ export default function SongEditorLayout() {
       {/* Studio is the "taste + arc" hub now — its arrangement blocks carry
           per-section harmony/drums/melody readouts and the Mix/Bend panel
           sits to the right, so the bottom Info dock (the only content Studio
-          ever registered) is dropped there. Every other tab keeps it. */}
-      {!isStructure && activeTab !== "studio" && (
+          ever registered) is dropped there. Every other tab keeps it.
+          Workbench (β) brings its own bands — no legacy dock either. */}
+      {!isStructure && activeTab !== "studio" && activeTab !== "workbench" && (
         <footer className="shrink-0 border-t border-edge bg-panel flex flex-col max-h-[45vh]">
           {bottomTabs.length > 1 && (
             <DockTabStrip tabs={bottomTabs} activePanel={activePanel} onSelect={setActivePanel} />
