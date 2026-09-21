@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEven
 import { useNavigate, useParams } from "react-router-dom";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
 import { roleStyle } from "../../lib/roleColors";
+import { addSection, reorderSections, updateSection } from "../../lib/sections";
+import { NOTE_TO_PC, pitchClass } from "@music-theory/core";
+import type { NoteName } from "@music-theory/core";
+import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import IconBtn from "../common/IconBtn";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
@@ -59,6 +63,18 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   const [regionDraft, setRegionDraft] = useState<{ a: number; b: number } | null>(null);
   /** Right-click context palette on a block. */
   const [menu, setMenu] = useState<{ x: number; y: number; span: SectionSpan } | null>(null);
+  /** Live resize drag — a DRAFT (not store writes), so the whole timeline
+   *  reflows per frame and a whole gesture costs ONE undo step on release.
+   *  `resizeRef` mirrors it for the window-level mouseup closure (Knob
+   *  `latest` lesson); Esc clears the draft, which makes the release a
+   *  no-op — the cancel path. */
+  const [resizeDraft, setResizeDraftState] = useState<{ sectionId: string; bars: number } | null>(null);
+  const resizeRef = useRef(resizeDraft);
+  resizeRef.current = resizeDraft;
+  function setResizeDraft(v: { sectionId: string; bars: number } | null) {
+    resizeRef.current = v;
+    setResizeDraftState(v);
+  }
   const menuRef = useRef<HTMLDivElement | null>(null);
   const rulerDrag = useRef<{ startBar: number; startX: number; moved: boolean } | null>(null);
   /** Hotkey targets — read through a ref so the once-mounted key listener
@@ -75,6 +91,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   const canRedo = useSongStore((s) => s.canRedo());
   const undo = useSongStore((s) => s.undo);
   const redo = useSongStore((s) => s.redo);
+  const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -90,7 +107,15 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     });
   }, []);
 
-  const spans = useMemo(() => sectionSpans(song), [song]);
+  // The timeline renders the DRAFT-resized song while a resize gesture is
+  // live — a pure recompute per frame, no store writes, no undo spam.
+  const spans = useMemo(
+    () =>
+      sectionSpans(
+        resizeDraft ? updateSection(song, resizeDraft.sectionId, (s) => ({ ...s, bars: resizeDraft.bars })) : song,
+      ),
+    [song, resizeDraft],
+  );
   const total = useMemo(() => totalBars(spans), [spans]);
   const liveIndex =
     tick?.isPlaying && tick.sectionIndex >= 0 && tick.sectionIndex < spans.length ? tick.sectionIndex : null;
@@ -404,7 +429,46 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     });
   }
 
+  /** Edge-drag resize: the right edge resizes this section, the left edge
+   *  the previous one (a boundary belongs to both). Window listeners
+   *  survive the per-frame re-renders; the draft reflows the timeline live
+   *  and commits ONCE on release. Right edge lands at the END of the
+   *  pointed bar (+1); left edge at its START. */
+  function onResizeStart(e: ReactMouseEvent, span: SectionSpan, side: "left" | "right") {
+    e.preventDefault();
+    e.stopPropagation();
+    const sc = scrollRef.current;
+    if (!sc) return;
+    let target: SectionSpan;
+    if (side === "left") {
+      const i = spans.findIndex((s) => s.sectionId === span.sectionId && s.startBar === span.startBar);
+      const prev = i > 0 ? spans[i - 1] : null;
+      if (!prev || prev.sectionId === span.sectionId) return;
+      target = prev;
+    } else {
+      target = span;
+    }
+    const t = target;
+    function moveResize(ev: MouseEvent) {
+      if (!sc) return;
+      const bar = barFromClientX(ev.clientX, sc);
+      const bars = side === "right" ? Math.max(1, bar - t.startBar + 1) : Math.max(1, bar - t.startBar);
+      setResizeDraft({ sectionId: t.sectionId, bars });
+    }
+    function upResize() {
+      window.removeEventListener("mousemove", moveResize);
+      window.removeEventListener("mouseup", upResize);
+      const draft = resizeRef.current;
+      setResizeDraft(null);
+      if (!draft || draft.sectionId !== t.sectionId) return;
+      updateCurrentSong((s) => updateSection(s, draft.sectionId, (sec) => ({ ...sec, bars: draft.bars })));
+    }
+    window.addEventListener("mousemove", moveResize);
+    window.addEventListener("mouseup", upResize);
+  }
+
   const shownRegion = regionDraft ?? region;
+  const menuIdx = menu ? song.sections.findIndex((x) => x.id === menu.span.sectionId) : -1;
 
   // Latest closures for the once-mounted hotkey listener.
   actionsRef.current = {
@@ -418,6 +482,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     zoom: stepZoom,
     escape: () => {
       setMenu(null);
+      setResizeDraft(null);
       if (region != null) {
         setRegion(null);
         // Also release the transport's region loop — continue play normally.
@@ -492,7 +557,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           height. (`scrollbar-gutter: stable` does not cover horizontal
           scrollbars in Chrome.) */}
       <div ref={scrollRef} className="daw-scroll overflow-x-scroll overflow-y-hidden">
-        <div className="relative h-[52px]" style={{ width: contentW }}>
+          <div className="relative h-[68px]" style={{ width: contentW }}>
             {/* Bar ruler — the coordinate system and the seek target. */}
             <div
               className="relative h-[18px] border-b border-edge/60 cursor-pointer select-none"
@@ -542,18 +607,63 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
                 border-separated. Labels and coverage dots only render when
                 the block is wide enough to read them. */}
             <div className="relative flex h-[34px]">
-              {spans.map((span, i) => (
-                <SpineBlock
-                  key={`${span.sectionId}-${span.occurrenceIndex}-${i}`}
-                  span={span}
-                  song={song}
-                  barPx={barPx}
-                  selected={selectedSectionId === span.sectionId}
-                  live={liveIndex === i}
-                  onSelect={() => setSelectedSectionId(span.sectionId)}
-                  onMenu={(e) => openMenu(e, span)}
-                />
-              ))}
+              {spans.map((span, i) => {
+                const prev = i > 0 ? spans[i - 1] : null;
+                return (
+                  <SpineBlock
+                    key={`${span.sectionId}-${span.occurrenceIndex}-${i}`}
+                    span={span}
+                    song={song}
+                    barPx={barPx}
+                    selected={selectedSectionId === span.sectionId}
+                    live={liveIndex === i}
+                    onSelect={() => setSelectedSectionId(span.sectionId)}
+                    onMenu={(e) => openMenu(e, span)}
+                    onResize={(e, side) => onResizeStart(e, span, side)}
+                    canResizeLeft={!!prev && prev.sectionId !== span.sectionId}
+                    canResizeRight
+                  />
+                );
+              })}
+            </div>
+
+            {/* Chords lane — the harmony element's ARRANGEMENT face (the
+                two-faces law): chord changes at their default rhythm,
+                aligned to the same bar axis. Width-aware: cells render
+                only when they can be read. */}
+            <div className="relative h-[16px] border-t border-edge/50 overflow-hidden">
+              {spans.map((span, i) => {
+                const chords = span.section.chords;
+                if (chords.length === 0) return null;
+                const bpb = beatsPerBar(span.section);
+                const bpc = Math.max(0.25, span.section.beatsPerChord || bpb);
+                const cellBarW = (bpc / bpb) * barPx;
+                if (cellBarW < 1.5) return null; // beyond even ticks — zoom in
+                const showText = cellBarW >= 11;
+                const rawKey = span.section.key ?? song.key;
+                const effKey: NoteName = rawKey in NOTE_TO_PC ? (rawKey as NoteName) : "C";
+                return chords.map((c, ci) => {
+                  const x = (span.startBar + (ci * bpc) / bpb) * barPx;
+                  const w = Math.min(cellBarW, (span.startBar + span.bars) * barPx - x);
+                  if (w < 1.5) return null;
+                  return (
+                    <button
+                      key={`${span.sectionId}-${span.occurrenceIndex}-${i}-${ci}`}
+                      type="button"
+                      className={`absolute top-0 bottom-0 truncate border-l border-edge/40 hover:bg-panelAlt/40 ${
+                        showText
+                          ? "px-0.5 text-left text-[8px] font-mono leading-[16px] text-inkMuted/80 hover:text-ink"
+                          : "bg-inkMuted/30"
+                      }`}
+                      style={{ left: x, width: showText ? w : Math.max(1.5, Math.min(2.5, w)) }}
+                      title={`${c.romanNumeral} — ${chordDisplayName(pitchClass(c.root), c.quality, effKey)}`}
+                      onClick={() => setSelectedSectionId(span.sectionId)}
+                    >
+                      {showText ? c.romanNumeral : ""}
+                    </button>
+                  );
+                });
+              })}
             </div>
 
             {/* Playhead — spans the ruler and the blocks. */}
@@ -606,6 +716,43 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           <button
             className={MENU_ITEM}
             onClick={() => {
+              const span = menu.span;
+              setMenu(null);
+              const withNew = addSection(song, "verse");
+              const fresh = withNew.sections[withNew.sections.length - 1];
+              const at = song.sections.findIndex((x) => x.id === span.sectionId);
+              updateCurrentSong(() => (at >= 0 ? reorderSections(withNew, withNew.sections.length - 1, at + 1) : withNew));
+              setSelectedSectionId(fresh.id);
+            }}
+          >
+            ＋ Insert section after
+          </button>
+          <button
+            className={`${MENU_ITEM} disabled:opacity-30`}
+            disabled={menuIdx <= 0}
+            onClick={() => {
+              const i = menuIdx;
+              setMenu(null);
+              updateCurrentSong((s) => reorderSections(s, i, i - 1));
+            }}
+          >
+            ← Move left
+          </button>
+          <button
+            className={`${MENU_ITEM} disabled:opacity-30`}
+            disabled={menuIdx < 0 || menuIdx >= song.sections.length - 1}
+            onClick={() => {
+              const i = menuIdx;
+              setMenu(null);
+              updateCurrentSong((s) => reorderSections(s, i, i + 1));
+            }}
+          >
+            → Move right
+          </button>
+          <div className="my-1 border-t border-edge/60" />
+          <button
+            className={MENU_ITEM}
+            onClick={() => {
               setMenu(null);
               navigate(`/song/${id}/structure`);
             }}
@@ -632,6 +779,9 @@ function SpineBlock({
   live,
   onSelect,
   onMenu,
+  onResize,
+  canResizeLeft = false,
+  canResizeRight = false,
 }: {
   span: SectionSpan;
   song: BlueprintSong;
@@ -640,6 +790,9 @@ function SpineBlock({
   live: boolean;
   onSelect: () => void;
   onMenu: (e: ReactMouseEvent<HTMLButtonElement>) => void;
+  onResize?: (e: ReactMouseEvent, side: "left" | "right") => void;
+  canResizeLeft?: boolean;
+  canResizeRight?: boolean;
 }) {
   const style = roleStyle(span.section.role);
   const dots = coverageDots(span.section);
@@ -659,6 +812,25 @@ function SpineBlock({
       onContextMenu={onMenu}
       title={`${span.section.name} — ${Math.round(span.bars)} bars${missing.length ? ` · missing: ${missing.join(", ")}` : " · all elements sketched"}`}
     >
+      {/* Edge zones — drag to resize (window-level gesture, see Spine) */}
+      {onResize && (
+        <>
+          {canResizeLeft && (
+            <span
+              className="absolute left-0 top-0 bottom-0 w-[5px] cursor-ew-resize z-20 hover:bg-accent/30"
+              onMouseDown={(e) => onResize(e, "left")}
+              title="Drag to resize the previous section"
+            />
+          )}
+          {canResizeRight && (
+            <span
+              className="absolute right-0 top-0 bottom-0 w-[5px] cursor-ew-resize z-20 hover:bg-accent/30"
+              onMouseDown={(e) => onResize(e, "right")}
+              title="Drag to resize this section"
+            />
+          )}
+        </>
+      )}
       <span className="w-full truncate px-1.5 text-[10px] leading-tight font-medium">
         {showName ? span.section.name : ""}
         {showName && span.variation ? <span className="opacity-60"> ({span.variation})</span> : null}

@@ -99,6 +99,13 @@ until modal parity.)
   Structure), the second citizen of the placement law's palette tier;
   **hotkeys**: `space` play/pause · `Z` zoom-to-section · `F` fit ·
   `L` section loop · `[` `]` zoom ladder · `Esc` close/release.
+- **Arrangement gestures (v2 of structure editing):** a **chords lane**
+  sits under the blocks (harmony's arrangement face — chord changes at
+  their default rhythm on the same bar axis, width-aware); block **edges
+  drag to resize** (right edge = this section, left edge = the previous;
+  a pure draft recomputes the timeline per frame, ONE undo step on
+  release, Esc cancels); the context palette gains **Insert section
+  after · Move left · Move right**.
 
 ## 4. The placement law
 
