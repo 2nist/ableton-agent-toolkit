@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEven
 import { useNavigate, useParams } from "react-router-dom";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
 import { roleStyle } from "../../lib/roleColors";
-import { addSection, removeSection, reorderSections, updateSection } from "../../lib/sections";
+import { addSection, removeSection, reorderSections, repeatsFor, updateSection } from "../../lib/sections";
 import { NOTE_TO_PC, pitchClass } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { resolveChordOccurrences } from "@drum/library";
@@ -855,8 +855,16 @@ function SpineBlock({
   const missing = dots.filter((d) => !d.present).map((d) => d.label);
   const w = Math.max(1, span.bars * barPx);
   const showName = w >= 40;
-  const showBars = w >= 24;
-  const showDots = w >= 56;
+  const repeats = repeatsFor(song, span.sectionId);
+  // The block's glance facts, disclosed as it widens: bars, then the
+  // harmonic rhythm × plays, then the meter — "12b · 4×3 · 4/4"
+  // (user's format, 2026-09-21 — this replaced the coverage dots row;
+  // the coverage map lives on as the top-edge gauge instead).
+  const barsLabel = `${Math.round(span.bars)}b`;
+  const rhythmLabel = `${span.section.beatsPerChord}×${repeats}`;
+  const tsLabel = `${span.section.timeSignatureNumerator}/${2 ** span.section.timeSignatureDenPower}`;
+  const facts =
+    w >= 96 ? `${barsLabel} · ${rhythmLabel} · ${tsLabel}` : w >= 64 ? `${barsLabel} · ${rhythmLabel}` : w >= 26 ? barsLabel : "";
   // Edge zones narrow with the block (30% per side, 1..5px): a fixed 5px
   // pair fully covered a 1-bar block at the default zoom — every click
   // landed on a resize zone, so the section could not be SELECTED (and
@@ -895,21 +903,26 @@ function SpineBlock({
           )}
         </>
       )}
+      {/* Coverage gauge — the authored-material map as a cue IN the block:
+          four segments along the top edge, one per element in
+          coverageDots order (chords · drums · melody · lyrics), lit when
+          authored. 2px of edge instead of a text row (user, 2026-09-21);
+          the block's own tooltip still names what's missing. */}
+      <span className="absolute top-0 inset-x-0 h-[2px] flex pointer-events-none">
+        {dots.map((d) => (
+          <span key={d.label} className={`flex-1 ${d.present ? "bg-current opacity-60" : "bg-current opacity-15"}`} />
+        ))}
+      </span>
       <span className="w-full truncate px-1.5 text-[10px] leading-tight font-medium">
         {showName ? span.section.name : ""}
         {showName && span.variation ? <span className="opacity-60"> ({span.variation})</span> : null}
       </span>
-      {(showBars || showDots) && (
-        <span className="flex items-center gap-1 px-1.5 mt-0.5">
-          {showBars && <span className="text-[9px] font-mono opacity-70 tabular-nums">{Math.round(span.bars)}b</span>}
-          {showDots &&
-            dots.map((d) => (
-              <span
-                key={d.label}
-                className={`w-1.5 h-1.5 rounded-full ${d.present ? "bg-current opacity-70" : "border border-current opacity-40"}`}
-                title={`${d.label}: ${d.present ? "authored" : "not yet"}`}
-              />
-            ))}
+      {facts && (
+        <span
+          className="px-1.5 mt-0.5 text-[9px] font-mono opacity-70 tabular-nums truncate"
+          title={`${span.section.beatsPerChord} beats per chord · plays ×${repeats} · ${tsLabel} meter`}
+        >
+          {facts}
         </span>
       )}
       {live && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-accent opacity-80" title="Now playing" />}
@@ -917,9 +930,10 @@ function SpineBlock({
   );
 }
 
-/** Authored-material presence for a section — the spine's coverage map.
- *  "Authored" is deliberately literal: an inferred/auto groove doesn't
- *  count as drums you've placed, a genre recipe doesn't count as chords. */
+/** Authored-material presence for a section — the spine's coverage map,
+ *  rendered as the block's top-edge gauge. "Authored" is deliberately
+ *  literal: an inferred/auto groove doesn't count as drums you've placed,
+ *  a genre recipe doesn't count as chords. */
 function coverageDots(section: BlueprintSection): { label: string; present: boolean }[] {
   const drums =
     section.drumPattern != null && section.drumPattern !== "none"

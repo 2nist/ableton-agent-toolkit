@@ -66,9 +66,11 @@ until modal parity.)
   **ribbon** (section/element). Clicking a card during the descent animates
   it growing into the section workspace — continuity is the make-or-break vs
   "six tabs again".
-- Cards carry **material badges** = coverage map *and* doorways: chords /
-  drums / melody / lyrics presence dots today; clicking a badge jumps to that
-  element's section face for that section (P3).
+- Cards carry **material badges** = coverage map *and* doorways: the
+  coverage map is the four-segment **top-edge gauge** (chords / drums /
+  melody / lyrics, lit = authored — user-specified 2026-09-21, replacing
+  the presence-dots text row); clicking a badge jumps to that element's
+  section face for that section (P3).
 - Carries the playhead + loop; `←→` steps sections when it has focus.
 - **Timeline v2 (user-specified 2026-09-21, shipped P1.5):** fixed
   **bar-linear** scale — 10px/bar default, wheel/−/+ zoom ladder 4→80
@@ -90,8 +92,13 @@ until modal parity.)
   That strip is the seed of P2's collapsed header (the workbench already
   hides the legacy header transport so the two can't disagree). Blocks are
   true scale — a short song leaves an honest empty tail instead of
-  stretching; labels and coverage dots render only when a block is wide
-  enough to read them.
+  stretching; labels and the facts line / coverage gauge render only when
+  a block is wide enough to read them.
+- **Block glance facts (user-specified 2026-09-21):** each block reads
+  `12b · 4×3 · 4/4` — bars · beats-per-chord × repeats · meter — disclosed
+  progressively as the block widens. The text row carries facts you plan
+  against (how long, how the harmony sits, how many passes, the meter),
+  not status you scan; the coverage map moved to the 2px top-edge gauge.
 - **Interaction shelf (shipped with v2):** ruler **drag = loop region**
   (bar-snapped bracket; Esc / stop / a plain play or seek clears it —
   release without dragging = the classic seek); **right-click a block =
