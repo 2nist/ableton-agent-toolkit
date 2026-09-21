@@ -92,6 +92,13 @@ until modal parity.)
   true scale — a short song leaves an honest empty tail instead of
   stretching; labels and coverage dots render only when a block is wide
   enough to read them.
+- **Interaction shelf (shipped with v2):** ruler **drag = loop region**
+  (bar-snapped bracket; Esc / stop / a plain play or seek clears it —
+  release without dragging = the classic seek); **right-click a block =
+  context palette** (Loop this section · Zoom to section · Open in
+  Structure), the second citizen of the placement law's palette tier;
+  **hotkeys**: `space` play/pause · `Z` zoom-to-section · `F` fit ·
+  `L` section loop · `[` `]` zoom ladder · `Esc` close/release.
 
 ## 4. The placement law
 

@@ -216,6 +216,28 @@ export async function resumeUnlooped(song: BlueprintSong): Promise<void> {
   getLiveMidiScheduler().start(song, output, channels, { startBeat: beat });
 }
 
+/**
+ * Loop an arbitrary bar range of `song` — seek to `startBeat` and wrap
+ * [startBeat, endBeat) forever until `resumeUnlooped`/Stop. This is the
+ * ruler-drag gesture: draw a region on the bar ruler, hear it. Internal
+ * clock only (callers guard against the Ableton clock — Live owns its own
+ * transport).
+ */
+export async function playLoopRegion(song: BlueprintSong, startBeat: number, endBeat: number): Promise<void> {
+  const transport = getSongTransport();
+  transport.clockSource = "internal";
+  clearStagedRefresh();
+  const from = Math.max(0, startBeat);
+  const to = Math.max(from + 0.25, endBeat);
+  const opts = { startBeat: from, loopStart: from, loopEnd: to };
+  transport.play(song, { ...opts, forceLoop: true });
+  const { midiOutputId, channels } = useMidiSettingsStore.getState();
+  if (!midiOutputId) return;
+  const output = await getMidiOutput(midiOutputId);
+  if (!output) return;
+  getLiveMidiScheduler().start(song, output, channels, opts);
+}
+
 /** Overlay the drums editor's live draft (if one exists) onto the song, so
  *  a drum pattern being shaped in the Pattern tab is auditioned in the mix
  *  in real time — before Apply commits it to the blueprint. */
