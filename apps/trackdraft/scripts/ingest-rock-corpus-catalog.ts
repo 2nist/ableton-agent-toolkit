@@ -23,7 +23,7 @@ import { catalogSongToBlueprintSong } from "./catalog/toBlueprintSong.js";
 const ROCK_ROOT = process.env.ROCK_CORPUS_ROOT ?? "/Users/Matthew/Rock Corpus-TDC";
 const LYRICS_DIR = path.join(ROCK_ROOT, "lyrics_from_lrclib");
 const OUTPUT_DIR =
-  process.env.CATALOG_OUTPUT_DIR ?? path.join(import.meta.dirname, "output", "catalog");
+  process.env.CATALOG_OUTPUT_DIR ?? path.join(import.meta.dirname, "output", "rock-catalog");
 
 interface Args {
   only: string[] | null;

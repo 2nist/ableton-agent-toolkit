@@ -1,15 +1,15 @@
 /**
- * Catalog triage — curates ingested corpus songs (default: mcgill-*) for
- * the front-page catalog directory. Songs that meet the "fully
- * instrumented" bar stay in scripts/output/catalog/; everything else is
- * MOVED to scripts/output/catalog-triage/<same filename> with a report
- * explaining every call. Nothing is deleted — promotion back into the
- * catalog is one command:
+ * Catalog triage — curates ingested corpus songs for the front-page
+ * catalog. Each corpus has its own directory pair (`<name>-catalog` +
+ * `<name>-triage`); --dir picks the pair (the Beatles dir "scripts/output/
+ * catalog" pairs with "catalog-triage", keeping historical defaults).
+ * Songs that meet the "fully instrumented" bar stay in the catalog dir;
+ * everything else is MOVED to the triage dir with a report explaining
+ * every call. Nothing is deleted — promotion back is one command:
  *
- *   npx tsx scripts/triage-catalog.ts                 # dry run + report
- *   npx tsx scripts/triage-catalog.ts --apply         # move triaged files out
- *   npx tsx scripts/triage-catalog.ts --promote mcgill-fever-peggy-lee
- *   npx tsx scripts/triage-catalog.ts --min-cpb 0.25 --reclaim --apply
+ *   npx tsx scripts/triage-catalog.ts --dir scripts/output/mcgill-catalog --apply
+ *   npx tsx scripts/triage-catalog.ts --dir scripts/output/rock-catalog --require-synced --min-cpb 0.25 --reclaim --apply
+ *   npx tsx scripts/triage-catalog.ts --dir scripts/output/mcgill-catalog --promote mcgill-fever-peggy-lee
  *
  * --reclaim is the mirror of --apply: it scans the TRIAGE directory and
  * moves songs that PASS the current criteria back into the catalog (dry
@@ -40,8 +40,15 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-const CATALOG_DIR = path.join(import.meta.dirname, "output", "catalog");
-const TRIAGE_DIR = path.join(import.meta.dirname, "output", "catalog-triage");
+const DEFAULT_CATALOG_DIR = path.join(import.meta.dirname, "output", "catalog");
+
+/** Per-corpus layout: a `<name>-catalog` dir pairs with `<name>-triage`;
+ *  the bare "catalog" (Beatles) pairs with "catalog-triage". */
+function deriveTriageDir(catalogDir: string): string {
+  const base = path.basename(catalogDir);
+  const triageBase = base === "catalog" ? "catalog-triage" : base.replace(/-catalog$/, "-triage");
+  return path.join(path.dirname(catalogDir), triageBase);
+}
 
 /** Fully-instrumented bar (kept songs must pass all). */
 const MIN_CHORDS = 24;
@@ -50,6 +57,7 @@ const MAX_CHORDLESS = 0;
 
 interface Args {
   source: string;
+  dir: string | null;
   apply: boolean;
   report: string | null;
   requireSynced: boolean;
@@ -64,6 +72,7 @@ interface Args {
 function parseArgs(argv: string[]): Args {
   const args: Args = {
     source: "mcgill-",
+    dir: null,
     apply: false,
     report: null,
     requireSynced: false,
@@ -76,6 +85,7 @@ function parseArgs(argv: string[]): Args {
   };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--source") args.source = argv[++i];
+    else if (argv[i] === "--dir") args.dir = argv[++i];
     else if (argv[i] === "--apply") args.apply = true;
     else if (argv[i] === "--report") args.report = argv[++i];
     else if (argv[i] === "--require-synced") args.requireSynced = true;
@@ -178,16 +188,18 @@ interface Row {
 
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
+  const catalogDir = path.resolve(args.dir ?? DEFAULT_CATALOG_DIR);
+  const triageDir = deriveTriageDir(catalogDir);
 
   // ——— promote mode ———
   if (args.promote) {
     const fname = args.promote.endsWith(".trackdraft.json") ? args.promote : `${args.promote}.trackdraft.json`;
-    const src = path.join(TRIAGE_DIR, fname);
+    const src = path.join(triageDir, fname);
     if (!fs.existsSync(src)) {
       console.error(`✗ not in triage: ${src}`);
       process.exit(1);
     }
-    const dest = path.join(CATALOG_DIR, fname);
+    const dest = path.join(catalogDir, fname);
     if (fs.existsSync(dest)) {
       console.error(`✗ already in catalog: ${dest}`);
       process.exit(1);
@@ -199,17 +211,17 @@ function main(): void {
 
   // ——— reclaim mode: triage dir → catalog for songs that now pass ———
   if (args.reclaim) {
-    if (!fs.existsSync(TRIAGE_DIR)) {
-      console.error(`✗ triage dir not found: ${TRIAGE_DIR}`);
+    if (!fs.existsSync(triageDir)) {
+      console.error(`✗ triage dir not found: ${triageDir}`);
       process.exit(1);
     }
     const files = fs
-      .readdirSync(TRIAGE_DIR)
+      .readdirSync(triageDir)
       .filter((f) => f.startsWith(args.source) && f.endsWith(".trackdraft.json"))
       .sort();
     const rows: Row[] = [];
     for (const file of files) {
-      const song = JSON.parse(fs.readFileSync(path.join(TRIAGE_DIR, file), "utf8")) as CatalogSongFile;
+      const song = JSON.parse(fs.readFileSync(path.join(triageDir, file), "utf8")) as CatalogSongFile;
       const m = metrics(song);
       const verdict = classify(m, args);
       rows.push({
@@ -272,8 +284,8 @@ function main(): void {
     if (args.apply) {
       let moved = 0;
       for (const r of reclaimed) {
-        const src = path.join(TRIAGE_DIR, r.file);
-        const dest = path.join(CATALOG_DIR, r.file);
+        const src = path.join(triageDir, r.file);
+        const dest = path.join(catalogDir, r.file);
         if (fs.existsSync(dest)) {
           console.warn(`  ! skipped (already in catalog): ${r.file}`);
           continue;
@@ -281,21 +293,21 @@ function main(): void {
         fs.renameSync(src, dest);
         moved++;
       }
-      console.log(`moved ${moved} files → ${path.relative(import.meta.dirname, CATALOG_DIR)}/`);
+      console.log(`moved ${moved} files → ${path.relative(import.meta.dirname, catalogDir)}/`);
     } else {
       console.log("(dry run — pass --apply to move the reclaimed files back)");
     }
     return;
   }
 
-  if (!fs.existsSync(CATALOG_DIR)) {
-    console.error(`✗ catalog dir not found: ${CATALOG_DIR}`);
+  if (!fs.existsSync(catalogDir)) {
+    console.error(`✗ catalog dir not found: ${catalogDir}`);
     process.exit(1);
   }
 
   const exempt = new Set(args.exempt);
   const files = fs
-    .readdirSync(CATALOG_DIR)
+    .readdirSync(catalogDir)
     .filter((f) => f.startsWith(args.source) && f.endsWith(".trackdraft.json"))
     .filter((f) => !exempt.has(f) && !exempt.has(f.replace(/\.trackdraft\.json$/, "")))
     .sort();
@@ -303,7 +315,7 @@ function main(): void {
 
   const rows: Row[] = [];
   for (const file of files) {
-    const song = JSON.parse(fs.readFileSync(path.join(CATALOG_DIR, file), "utf8")) as CatalogSongFile;
+    const song = JSON.parse(fs.readFileSync(path.join(catalogDir, file), "utf8")) as CatalogSongFile;
     const m = metrics(song);
     const verdict = classify(m, args);
     rows.push({
@@ -331,7 +343,7 @@ function main(): void {
 
   console.log(`${rows.length} ${args.source}* songs reviewed${args.apply ? "" : " (dry run)"}`);
   console.log(`  KEPT    ${kept.length}  fully instrumented — stays in the front page catalog`);
-  console.log(`  TRIAGED ${triaged.length}  → ${path.relative(import.meta.dirname, TRIAGE_DIR)}/`);
+  console.log(`  TRIAGED ${triaged.length}  → ${path.relative(import.meta.dirname, triageDir)}/`);
   console.log();
   console.log("triage reasons:");
   for (const [reason, n] of [...reasonHistogram].sort((a, b) => b[1] - a[1])) {
@@ -366,11 +378,11 @@ function main(): void {
   console.log(`\nreport → ${reportPath}`);
 
   if (args.apply) {
-    fs.mkdirSync(TRIAGE_DIR, { recursive: true });
+    fs.mkdirSync(triageDir, { recursive: true });
     let moved = 0;
     for (const r of triaged) {
-      const src = path.join(CATALOG_DIR, r.file);
-      const dest = path.join(TRIAGE_DIR, r.file);
+      const src = path.join(catalogDir, r.file);
+      const dest = path.join(triageDir, r.file);
       if (fs.existsSync(dest)) {
         console.warn(`  ! skipped (already triaged): ${r.file}`);
         continue;
@@ -378,8 +390,8 @@ function main(): void {
       fs.renameSync(src, dest);
       moved++;
     }
-    console.log(`moved ${moved} files → ${path.relative(import.meta.dirname, TRIAGE_DIR)}/`);
-    console.log(`promote later with: npx tsx scripts/triage-catalog.ts --promote <id>`);
+    console.log(`moved ${moved} files → ${path.relative(import.meta.dirname, triageDir)}/`);
+    console.log(`promote later with: npx tsx scripts/triage-catalog.ts --dir ${path.relative(import.meta.dirname, catalogDir)} --promote <id>`);
   } else {
     console.log("(dry run — pass --apply to move the triaged files out of the catalog)");
   }

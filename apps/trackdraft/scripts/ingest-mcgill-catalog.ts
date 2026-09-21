@@ -27,7 +27,7 @@ import { catalogSongToBlueprintSong } from "./catalog/toBlueprintSong.js";
 const MCGILL_ROOT = process.env.MCGILL_ROOT ?? "/Users/Matthew/mcgill_jcrd_salami_Billboard";
 const LYRICS_DIR = path.join(MCGILL_ROOT, "lyrics_from_lrclib");
 const OUTPUT_DIR =
-  process.env.CATALOG_OUTPUT_DIR ?? path.join(import.meta.dirname, "output", "catalog");
+  process.env.CATALOG_OUTPUT_DIR ?? path.join(import.meta.dirname, "output", "mcgill-catalog");
 
 /** Non-song files that also live in the corpus root. */
 const SIDECARS = new Set([

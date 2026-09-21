@@ -42,26 +42,23 @@ export default function Dashboard() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [importingBulk, setImportingBulk] = useState(false);
 
-  // Auto-load built-in dirs if none configured
+  // Ensure the built-in directories exist (idempotent). Each corpus
+  // catalog lives in its own folder so the front page stays organized per
+  // source; the store's addDirectory auto-marks the first entry as default
+  // when the list has none.
   useEffect(() => {
-    if (dirs.length === 0) {
-      const store = useDirectoryStore.getState();
-      store.addDirectory({
-        path: "scripts/output/catalog",
-        label: "Beatles Catalog",
-        isDefault: true,
-      });
-      store.addDirectory({
-        path: "scripts/output",
-        label: "Lalo Chezia",
-        isDefault: false,
-      });
-      // Add your own local directories via the DirSetupModal (gear icon in sidebar)
-      // or by adding entries below following the same pattern as the Beatles/Lalo dirs.
-      // Example:
-      // store.addDirectory({ path: "/Users/you/corpus", label: "My Corpus", isDefault: false });
+    const store = useDirectoryStore.getState();
+    const builtIns = [
+      { path: "scripts/output/catalog", label: "Beatles Catalog", isDefault: false },
+      { path: "scripts/output/mcgill-catalog", label: "McGill Billboard", isDefault: false },
+      { path: "scripts/output/rock-catalog", label: "Rock Corpus", isDefault: false },
+      { path: "scripts/output", label: "Lalo Chezia", isDefault: false },
+    ];
+    for (const dir of builtIns) {
+      if (!dirs.some((d) => d.path === dir.path)) store.addDirectory(dir);
     }
-  }, [dirs.length]);
+    // Add your own local directories via the DirSetupModal (gear icon in sidebar).
+  }, [dirs]);
 
   // When a directory is selected, load its listing
   useEffect(() => {
