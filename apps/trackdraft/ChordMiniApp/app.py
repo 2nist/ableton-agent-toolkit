@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import struct
 import subprocess
 import uuid
@@ -123,59 +124,167 @@ def _decode_wav(raw: bytes) -> tuple[np.ndarray, int]:
 # Analysis
 # ---------------------------------------------------------------------------
 
-def detect_bpm(samples: np.ndarray, sr: int) -> float:
-    """Simple onset-energy BPM detection using autocorrelation."""
-    hop = sr // 100
-    if len(samples) < hop * 2:
-        return 120.0
+NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+MAJOR_SCALE = (0, 2, 4, 5, 7, 9, 11)
+NATURAL_MINOR_SCALE = (0, 2, 3, 5, 7, 8, 10)
 
+# Chord templates (semitones from root). Order = tie-break preference.
+CHORD_TEMPLATES = {
+    "maj": (0, 4, 7),
+    "min": (0, 3, 7),
+    "7": (0, 4, 7, 10),
+    "min7": (0, 3, 7, 10),
+    "maj7": (0, 4, 7, 11),
+    "dim": (0, 3, 6),
+    "sus4": (0, 5, 7),
+    "aug": (0, 4, 8),
+}
+
+def _build_chord_vectors():
+    labels, vecs = [], []
+    for root in range(12):
+        for quality, intervals in CHORD_TEMPLATES.items():
+            v = np.zeros(12, dtype=np.float32)
+            for i in intervals:
+                v[(root + i) % 12] = 1.0
+            labels.append((root, quality))
+            vecs.append(v / np.linalg.norm(v))
+    return labels, np.stack(vecs)
+
+_CHORD_LABELS, _CHORD_VECTORS = _build_chord_vectors()
+_CHORD_VECTOR_BY_LABEL = {label: _CHORD_VECTORS[i] for i, label in enumerate(_CHORD_LABELS)}
+
+def _energy_envelope(samples: np.ndarray, sr: int) -> np.ndarray:
+    """RMS energy envelope at 100 frames/second."""
+    hop = sr // 100
     n_frames = len(samples) // hop
-    energy = np.array([
-        float(np.sqrt(np.mean(samples[i * hop:(i + 1) * hop] ** 2)))
-        for i in range(n_frames)
-    ])
+    if n_frames < 2:
+        return np.zeros(0, dtype=np.float64)
+    frames = samples[: n_frames * hop].reshape(n_frames, hop).astype(np.float64)
+    return np.sqrt(np.mean(frames ** 2, axis=1))
+
+def detect_bpm(samples: np.ndarray, sr: int) -> float:
+    """
+    Onset-energy BPM detection via autocorrelation of the RMS envelope.
+
+    Fixed 2026-09-20: the old lag math (sr//hop//200 … sr//hop//60) collapsed
+    to [0, 1] at 100 fps, so every track hit the fallback and returned a
+    hardcoded 120.0. Lags now span a real 50–200 BPM search range, with
+    parabolic peak refinement and half/double-time folding into 70–160.
+    """
+    FPS = 100
+    energy = _energy_envelope(samples, sr)
+    if len(energy) < FPS * 4:
+        return 120.0
 
     energy = energy - np.mean(energy)
     energy = np.maximum(energy, 0)
-
-    n = len(energy)
-    autocorr = np.correlate(energy, energy, mode="full")[n - 1:]
-
-    min_period = sr // hop // 200
-    max_period = sr // hop // 60
-    if min_period < 1:
-        min_period = 1
-    if max_period >= len(autocorr):
-        max_period = len(autocorr) - 1
-
-    if min_period >= max_period:
+    if float(np.max(energy)) <= 0.0:
         return 120.0
 
-    peak_period = int(np.argmax(autocorr[min_period:max_period]) + min_period)
-    bpm = 60.0 * sr / hop / peak_period
+    n = len(energy)
+    min_lag = max(1, int(FPS * 60 / 200))       # 200 BPM ceiling
+    max_lag = min(n - 1, int(FPS * 60 / 50))    # 50 BPM floor
+    if min_lag >= max_lag:
+        return 120.0
+
+    autocorr = np.empty(max_lag + 1, dtype=np.float64)
+    for lag in range(max_lag + 1):
+        autocorr[lag] = float(np.dot(energy[: n - lag], energy[lag:]) / max(1, n - lag))
+
+    peak = int(np.argmax(autocorr[min_lag:max_lag + 1])) + min_lag
+    if min_lag < peak < max_lag:
+        y0, y1, y2 = autocorr[peak - 1], autocorr[peak], autocorr[peak + 1]
+        denom = y0 - 2 * y1 + y2
+        if denom != 0:
+            peak = peak + 0.5 * (y0 - y2) / denom
+
+    bpm = 60.0 * FPS / peak
+    while bpm < 70.0:
+        bpm *= 2.0
+    while bpm > 160.0:
+        bpm /= 2.0
     return round(bpm, 1)
 
-def detect_key(samples: np.ndarray, sr: int) -> dict:
-    """Simple key detection via chromagram + Krumhansl-Kessler profiles."""
-    n_fft = 2048
-    hop = n_fft // 4
+def compute_chroma_frames(samples: np.ndarray, sr: int) -> np.ndarray:
+    """
+    Per-frame 12-d chroma (L2-normalized), 4096-sample Hann window / 4096 hop.
+    One batched FFT per 512-frame chunk keeps memory bounded for long tracks.
+    """
+    n_fft = 4096
+    hop = 4096
+    if len(samples) < n_fft:
+        return np.zeros((0, 12), dtype=np.float32)
+
+    freqs = np.fft.rfftfreq(n_fft, 1 / sr)
+    valid = (freqs >= 75.0) & (freqs <= 4500.0)
+    midi = np.round(69 + 12 * np.log2(np.maximum(freqs, 1e-9) / 440.0)).astype(np.int64)
+    bin_pc = midi % 12
+
     n_frames = (len(samples) - n_fft) // hop + 1
-    if n_frames < 1:
+    view = np.lib.stride_tricks.sliding_window_view(samples, n_fft)[::hop][:n_frames]
+    hann = np.hanning(n_fft).astype(np.float32)
+
+    chroma = np.zeros((n_frames, 12), dtype=np.float32)
+    CHUNK = 512
+    for start in range(0, n_frames, CHUNK):
+        end = min(start + CHUNK, n_frames)
+        block = np.asarray(view[start:end], dtype=np.float32) * hann
+        spec = np.abs(np.fft.rfft(block, axis=1))
+        spec[:, ~valid] = 0.0
+        for pc in range(12):
+            cols = bin_pc == pc
+            if np.any(cols):
+                chroma[start:end, pc] = spec[:, cols].sum(axis=1)
+
+    norms = np.linalg.norm(chroma, axis=1, keepdims=True)
+    norms[norms == 0.0] = 1.0
+    return chroma / norms
+
+def match_chord(chroma_vec: np.ndarray) -> tuple:
+    """Best (score, root_pc, quality) for a 12-d chroma vector (cosine-style)."""
+    norm = float(np.linalg.norm(chroma_vec))
+    if norm <= 0.0:
+        return 0.0, 0, "maj"
+    scores = _CHORD_VECTORS @ (chroma_vec / norm)
+    idx = int(np.argmax(scores))
+    root, quality = _CHORD_LABELS[idx]
+    return float(scores[idx]), root, quality
+
+def roman_numeral_for(root_pc: int, quality: str, key_pc: int, mode: str) -> str:
+    """Roman numeral relative to the song key (flats/sharps for chromatic roots)."""
+    scale = NATURAL_MINOR_SCALE if mode == "minor" else MAJOR_SCALE
+    names = ["I", "II", "III", "IV", "V", "VI", "VII"]
+    rel = (root_pc - key_pc) % 12
+    prefix = ""
+    if rel in scale:
+        numeral = names[scale.index(rel)]
+    else:
+        numeral = NOTE_NAMES[root_pc]
+        for idx, semi in enumerate(scale):
+            if (rel - semi) % 12 == 1:
+                prefix, numeral = "b", names[idx]
+                break
+            if (semi - rel) % 12 == 1:
+                prefix, numeral = "#", names[idx]
+                break
+    if quality in ("min", "min7", "dim"):
+        numeral = numeral.lower()
+    if quality == "dim":
+        numeral += "°"
+    elif quality in ("7", "min7", "maj7"):
+        numeral += "7"
+    return prefix + numeral
+
+def detect_key(chroma_frames: np.ndarray) -> dict:
+    """Key detection via average chroma + Krumhansl-Kessler profiles."""
+    if len(chroma_frames) == 0:
         return {"key": "C", "mode": "major", "confidence": 0.0}
 
-    chroma = np.zeros(12, dtype=np.float64)
-    hann = np.hanning(n_fft)
-
-    for i in range(min(n_frames, 200)):  # cap at 200 frames for speed
-        frame = samples[i * hop:i * hop + n_fft] * hann
-        spec = np.abs(np.fft.rfft(frame))
-        freqs = np.fft.rfftfreq(n_fft, 1 / sr)
-        for j, f in enumerate(freqs):
-            if f < 80 or f > 4000:
-                continue
-            midi = 69 + 12 * math.log2(f / 440.0)
-            chroma_idx = int(round(midi)) % 12
-            chroma[chroma_idx] += spec[j]
+    # Sample frames across the WHOLE track (the old code only looked at the
+    # first ~2.3 s, which let intros dominate the result).
+    stride = max(1, len(chroma_frames) // 3000)
+    chroma = chroma_frames[::stride].mean(axis=0).astype(np.float64)
 
     total = chroma.sum()
     if total > 0:
@@ -184,26 +293,23 @@ def detect_key(samples: np.ndarray, sr: int) -> dict:
     major_profile = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
     minor_profile = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
 
-    note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-
-    best_key = "C"
-    best_mode = "major"
-    best_score = -1.0
-
+    candidates = []
     for root in range(12):
         rotated = np.roll(chroma, -root)
-        major_score = float(np.dot(rotated, major_profile))
-        minor_score = float(np.dot(rotated, minor_profile))
-        if major_score > best_score:
-            best_score = major_score
-            best_key = note_names[root]
-            best_mode = "major"
-        if minor_score > best_score:
-            best_score = minor_score
-            best_key = note_names[root]
-            best_mode = "minor"
+        candidates.append((
+            float(np.dot(rotated, major_profile) / major_profile.sum()),
+            NOTE_NAMES[root], "major",
+        ))
+        candidates.append((
+            float(np.dot(rotated, minor_profile) / minor_profile.sum()),
+            NOTE_NAMES[root], "minor",
+        ))
+    candidates.sort(key=lambda c: c[0], reverse=True)
 
-    confidence = min(round(best_score / 100, 3), 1.0)
+    best_score, best_key, best_mode = candidates[0]
+    runner_up = candidates[1][0] if len(candidates) > 1 else 0.0
+    # Relative gap between winner and runner-up, scaled to a 0–1 confidence.
+    confidence = round(min(1.0, max(0.0, (best_score - runner_up) * 20.0)), 3)
     return {"key": best_key, "mode": best_mode, "confidence": confidence}
 
 def analyze_audio(samples: np.ndarray, sr: int) -> dict:
@@ -211,25 +317,26 @@ def analyze_audio(samples: np.ndarray, sr: int) -> dict:
     Full analysis: BPM, key, segments, chords.
     Chord objects match TrackDraft's expected shape:
       {id, romanNumeral, root: NoteName, quality, beats}
+
+    Chords are REAL chroma-template matches per segment. (The previous build
+    emitted a canned I-V-vi-IV pattern transposed to the detected key —
+    discovered during the 2026-09-20 ingestion audit.)
     """
     bpm = detect_bpm(samples, sr)
-    key_info = detect_key(samples, sr)
-
-    note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-    roman_numerals = ["I", "ii", "iii", "IV", "V", "vi", "vii"]
-    chord_qualities = ["maj", "min", "min", "maj", "maj", "min", "dim"]
-    # Common pop progression (I-V-vi-IV)
-    progression_degrees = [0, 4, 5, 3, 0, 4, 5, 3, 0, 4, 1, 5, 0, 4, 5, 3]
+    chroma_frames = compute_chroma_frames(samples, sr)
+    key_info = detect_key(chroma_frames)
 
     beat_duration = 60.0 / bpm if bpm > 0 else 0.5
-    segment_duration = beat_duration * 2
+    segment_duration = beat_duration * 2.0
     total_duration = len(samples) / sr
-    num_segments = max(1, int(total_duration / segment_duration))
+    num_segments = max(1, int(math.ceil(total_duration / segment_duration)))
+
+    frames_per_sec = sr / 4096.0
+    key_pc = NOTE_NAMES.index(key_info["key"])
 
     segments = []
     chords = []
-
-    key_pc = note_names.index(key_info["key"])
+    prev_label = None
 
     for i in range(num_segments):
         start_time = i * segment_duration
@@ -239,29 +346,39 @@ def analyze_audio(samples: np.ndarray, sr: int) -> dict:
         if seg_end <= seg_start:
             continue
 
-        seg = {
+        segments.append({
             "start": round(start_time, 3),
             "end": round(end_time, 3),
-            "loudness": round(float(np.sqrt(np.mean(
-                samples[seg_start:seg_end] ** 2
-            ))), 4),
-        }
-        segments.append(seg)
+            "loudness": round(float(np.sqrt(np.mean(samples[seg_start:seg_end] ** 2))), 4),
+        })
 
-        # Build a proper Chord object matching TrackDraft's expected shape:
-        # {id, romanNumeral, root: NoteName, quality, beats}
-        degree = progression_degrees[i % len(progression_degrees)]
-        chord_root_pc = (key_pc + degree) % 12
-        chord_root_name = note_names[chord_root_pc]
+        if len(chroma_frames) > 0:
+            f0 = min(int(start_time * frames_per_sec), len(chroma_frames) - 1)
+            f1 = min(max(f0 + 1, int(end_time * frames_per_sec)), len(chroma_frames))
+            vec = chroma_frames[f0:f1].mean(axis=0)
+        else:
+            vec = np.zeros(12, dtype=np.float32)
 
-        chord = {
+        vnorm = float(np.linalg.norm(vec))
+        unit = vec / vnorm if vnorm > 0.0 else vec
+        score, root, quality = match_chord(unit)
+
+        # Hysteresis: hold the previous chord unless this segment's best
+        # candidate clearly outscores the previous chord on this segment's
+        # own chroma (kills single-segment chord flicker).
+        if prev_label is not None and (root, quality) != prev_label:
+            keep_score = float(np.dot(unit, _CHORD_VECTOR_BY_LABEL[prev_label]))
+            if score < keep_score * 1.04:
+                root, quality = prev_label
+
+        prev_label = (root, quality)
+        chords.append({
             "id": str(uuid.uuid4()),
-            "romanNumeral": roman_numerals[degree],
-            "root": chord_root_name,
-            "quality": chord_qualities[degree],
+            "romanNumeral": roman_numeral_for(root, quality, key_pc, key_info["mode"]),
+            "root": NOTE_NAMES[root],
+            "quality": quality,
             "beats": round(segment_duration * bpm / 60.0, 1),
-        }
-        chords.append(chord)
+        })
 
     return {
         "bpm": bpm,
@@ -277,6 +394,41 @@ def analyze_audio(samples: np.ndarray, sr: int) -> dict:
 # HTTP handler
 # ---------------------------------------------------------------------------
 
+def extract_multipart_file(body: bytes, content_type: str) -> bytes | None:
+    """
+    Extract the audio file part from a multipart/form-data body.
+    Prefers a part named "audio"; falls back to the first non-empty part.
+    (The CLI bridge sends multipart; the browser flow sends raw bytes.)
+    """
+    marker = "boundary="
+    idx = content_type.find(marker)
+    if idx < 0:
+        return None
+    boundary = content_type[idx + len(marker):].split(";")[0].strip().strip('"')
+    if not boundary:
+        return None
+
+    delimiter = b"--" + boundary.encode()
+    cursor = body.find(delimiter)
+    first_part = None
+    while cursor != -1:
+        header_end = body.find(b"\r\n\r\n", cursor)
+        if header_end == -1:
+            break
+        part_start = header_end + 4
+        next_delim = body.find(b"\r\n" + delimiter, part_start)
+        part_end = next_delim if next_delim != -1 else len(body)
+        headers = body[cursor:header_end]
+        part = body[part_start:part_end]
+        if b'name="audio"' in headers:
+            return part
+        if first_part is None and part:
+            first_part = part
+        if next_delim == -1:
+            break
+        cursor = next_delim + 2
+    return first_part
+
 class ChordMiniHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path != "/analyze":
@@ -291,6 +443,17 @@ class ChordMiniHandler(BaseHTTPRequestHandler):
             return
 
         raw = self.rfile.read(content_length)
+
+        # Accept both transports: raw audio bytes (browser flow) and
+        # multipart/form-data with an "audio" field (CLI bridge). Decoding the
+        # multipart wrapper as audio previously skewed BPM detection.
+        content_type = self.headers.get("Content-Type", "") or ""
+        if content_type.lower().startswith("multipart/form-data"):
+            extracted = extract_multipart_file(raw, content_type)
+            if not extracted:
+                self._json_resp(400, {"error": "Malformed multipart body — no audio part found"})
+                return
+            raw = extracted
 
         try:
             samples, sr = decode_audio(raw)
@@ -335,7 +498,7 @@ class ChordMiniHandler(BaseHTTPRequestHandler):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    port = 5000
+    port = int(os.environ.get("PORT", "5000"))
     server = HTTPServer(("0.0.0.0", port), ChordMiniHandler)
     print(f"🎵 ChordMiniApp starting on http://localhost:{port}")
     print(f"   Endpoints: POST /analyze  GET /health")

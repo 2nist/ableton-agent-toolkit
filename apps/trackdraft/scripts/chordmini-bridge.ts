@@ -128,15 +128,14 @@ async function main() {
   console.log(`Sending ${audioPath} to ChordMiniApp at ${CHORDMINI_URL}...`);
 
   try {
-    // Read audio file as FormData
+    // Send the raw audio bytes — the server reads the request body directly.
+    // (Multipart FormData previously made the server decode the wrapper as
+    // audio, which shifted BPM detection vs the browser flow; found 2026-09-20.)
     const audioBuffer = fs.readFileSync(audioPath);
-    const blob = new Blob([audioBuffer]);
-    const formData = new FormData();
-    formData.append("audio", blob, path.basename(audioPath));
-
     const res = await fetch(CHORDMINI_URL, {
       method: "POST",
-      body: formData,
+      headers: { "Content-Type": "application/octet-stream" },
+      body: audioBuffer,
     });
 
     if (!res.ok) {
@@ -178,7 +177,7 @@ async function main() {
   } catch (err) {
     console.error(`\nError: ${err instanceof Error ? err.message : String(err)}`);
     console.error("\nMake sure the ChordMiniApp Python server is running.");
-    console.error("Expected API: POST /analyze with multipart form field 'audio'.");
+    console.error("Expected API: POST /analyze with the audio file as the raw request body.");
     process.exit(1);
   }
 }
