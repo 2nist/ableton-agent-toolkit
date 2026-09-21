@@ -39,6 +39,7 @@ interface Args {
   root: string;
   lyricsDir: string;
   triageReport: string;
+  triageDir: string | null;
   reportOut: string;
 }
 
@@ -50,6 +51,7 @@ function parseArgs(argv: string[]): Args {
     root: MCGILL_ROOT,
     lyricsDir: LYRICS_DIR,
     triageReport: TRIAGE_REPORT,
+    triageDir: null,
     reportOut: REPORT_PATH,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -60,6 +62,7 @@ function parseArgs(argv: string[]): Args {
     else if (argv[i] === "--root") args.root = argv[++i];
     else if (argv[i] === "--lyrics-dir") args.lyricsDir = argv[++i];
     else if (argv[i] === "--triage-report") args.triageReport = argv[++i];
+    else if (argv[i] === "--triage-dir") args.triageDir = argv[++i];
     else if (argv[i] === "--report") args.reportOut = argv[++i];
   }
   return args;
@@ -83,6 +86,32 @@ interface TriageRow {
   artist?: string;
   verdict: string;
   reasons: string[];
+}
+
+/** Triage REPORT mode is a footgun: the report only ever describes the
+ *  last scan (normally the kept set), so pointing this tool at it after
+ *  a triage apply finds zero targets. `--triage-dir` scans the triaged
+ *  blueprint files themselves and re-derives the lyric reasons from
+ *  their provenance — always the real current triage pile. */
+function scanTriageDir(dir: string): TriageRow[] {
+  const rows: TriageRow[] = [];
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith(".trackdraft.json")) continue;
+    const song = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")) as {
+      id: string;
+      title?: string;
+      artist?: string;
+      sections?: Array<{ lyricsTimeline?: unknown[] }>;
+      provenance?: { warnings?: string[] };
+    };
+    const w = (song.provenance?.warnings ?? []).join("\n");
+    const lines = (song.sections ?? []).reduce((n, s) => n + (s.lyricsTimeline ?? []).length, 0);
+    const reasons: string[] = [];
+    if (w.includes("No LRCLIB match found") || lines === 0) reasons.push("no lyric data");
+    else if (w.includes("plain lyrics only")) reasons.push("lyrics not line-timed");
+    rows.push({ file: f, id: song.id, title: song.title ?? "", artist: song.artist, verdict: "triaged", reasons });
+  }
+  return rows;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -210,7 +239,9 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const backupDir = path.join(args.lyricsDir, "_refresh_backup");
 
-  const triage = JSON.parse(fs.readFileSync(args.triageReport, "utf8")) as { rows: TriageRow[] };
+  const triage = args.triageDir
+    ? { rows: scanTriageDir(args.triageDir) }
+    : (JSON.parse(fs.readFileSync(args.triageReport, "utf8")) as { rows: TriageRow[] });
   let targets = triage.rows.filter(
     (r) =>
       r.verdict === "triaged" &&
