@@ -154,57 +154,93 @@ def _build_chord_vectors():
 _CHORD_LABELS, _CHORD_VECTORS = _build_chord_vectors()
 _CHORD_VECTOR_BY_LABEL = {label: _CHORD_VECTORS[i] for i, label in enumerate(_CHORD_LABELS)}
 
-def _energy_envelope(samples: np.ndarray, sr: int) -> np.ndarray:
-    """RMS energy envelope at 100 frames/second."""
-    hop = sr // 100
-    n_frames = len(samples) // hop
-    if n_frames < 2:
-        return np.zeros(0, dtype=np.float64)
-    frames = samples[: n_frames * hop].reshape(n_frames, hop).astype(np.float64)
-    return np.sqrt(np.mean(frames ** 2, axis=1))
+def compute_flux_envelope(samples: np.ndarray, sr: int) -> tuple:
+    """
+    Spectral-flux onset envelope (sum of positive magnitude changes),
+    1024-sample window at 512 hop (~86 fps at 44.1 kHz). Flux emphasises
+    sharp onsets (kick/snare hits) far better than RMS energy, which is
+    what tempo estimation needs.
+    """
+    n_fft = 1024
+    hop = 512
+    if len(samples) < n_fft * 2:
+        return np.zeros(0, dtype=np.float64), float(sr) / hop
+
+    n_frames = (len(samples) - n_fft) // hop + 1
+    view = np.lib.stride_tricks.sliding_window_view(samples, n_fft)[::hop][:n_frames]
+    hann = np.hanning(n_fft).astype(np.float32)
+
+    flux = np.zeros(n_frames, dtype=np.float64)
+    CHUNK = 512
+    prev = None
+    for start in range(0, n_frames, CHUNK):
+        end = min(start + CHUNK, n_frames)
+        block = np.abs(np.fft.rfft(
+            np.asarray(view[start:end], dtype=np.float32) * hann, axis=1
+        )).astype(np.float64)
+        if prev is None:
+            flux[start] = 0.0
+        else:
+            flux[start] = float(np.maximum(block[0] - prev, 0.0).sum())
+        if end - start > 1:
+            flux[start + 1:end] = np.maximum(np.diff(block, axis=0), 0.0).sum(axis=1)
+        prev = block[-1]
+    return flux, float(sr) / hop
 
 def detect_bpm(samples: np.ndarray, sr: int) -> float:
     """
-    Onset-energy BPM detection via autocorrelation of the RMS envelope.
+    BPM detection from the spectral-flux onset envelope:
+      1. autocorrelation of the envelope (normalized per lag)
+      2. comb scoring: S(lag) = ac(lag) + 0.5·ac(2·lag) + 0.5·ac(lag/2) —
+         rewards lags whose own subdivisions and multiples are also
+         periodic, which resolves 2/3-speed false beats
+      3. mild log-Gaussian tempo prior centered at 120 BPM (σ = 0.85 octave)
+      4. parabolic refinement on the comb score
 
-    Fixed 2026-09-20: the old lag math (sr//hop//200 … sr//hop//60) collapsed
-    to [0, 1] at 100 fps, so every track hit the fallback and returned a
-    hardcoded 120.0. Lags now span a real 50–200 BPM search range, with
-    parabolic peak refinement and half/double-time folding into 70–160.
+    History: the original lag math collapsed and returned 120.0 for every
+    track. A first fix (RMS envelope) then picked the wrong metrical level
+    (consistently 3:2 vs reference BPMs); this version is verified against
+    reference BPMs (Deezer/iTunes metadata) for the FL/Ween/Shellac test set.
     """
-    FPS = 100
-    energy = _energy_envelope(samples, sr)
-    if len(energy) < FPS * 4:
+    flux, fps = compute_flux_envelope(samples, sr)
+    if len(flux) < fps * 4 or float(np.max(flux)) <= 0.0:
         return 120.0
 
-    energy = energy - np.mean(energy)
-    energy = np.maximum(energy, 0)
-    if float(np.max(energy)) <= 0.0:
-        return 120.0
+    env = flux - float(np.mean(flux))
+    env = np.maximum(env, 0.0)
+    n = len(env)
 
-    n = len(energy)
-    min_lag = max(1, int(FPS * 60 / 200))       # 200 BPM ceiling
-    max_lag = min(n - 1, int(FPS * 60 / 50))    # 50 BPM floor
-    if min_lag >= max_lag:
+    min_lag = max(2, int(fps * 60 / 200))      # 200 BPM ceiling
+    max_lag = min(n - 1, int(fps * 60 / 50))   # 50 BPM floor
+    if max_lag - min_lag < 48:
         return 120.0
 
     autocorr = np.empty(max_lag + 1, dtype=np.float64)
+    norms = np.maximum(n - np.arange(max_lag + 1), 1)
     for lag in range(max_lag + 1):
-        autocorr[lag] = float(np.dot(energy[: n - lag], energy[lag:]) / max(1, n - lag))
+        autocorr[lag] = float(np.dot(env[: n - lag], env[lag:]) / norms[lag])
+    ac = autocorr / max(float(np.max(autocorr[2:])), 1e-12)
 
-    peak = int(np.argmax(autocorr[min_lag:max_lag + 1])) + min_lag
-    if min_lag < peak < max_lag:
-        y0, y1, y2 = autocorr[peak - 1], autocorr[peak], autocorr[peak + 1]
+    lags = np.arange(min_lag, max_lag + 1)
+    sub = ac[np.maximum(lags // 2, 1)]
+    dbl = np.zeros_like(lags, dtype=np.float64)
+    valid2 = (lags * 2) <= max_lag
+    dbl[valid2] = ac[lags[valid2] * 2]
+    score = ac[lags] + 0.5 * dbl + 0.5 * sub
+
+    bpms = 60.0 * fps / lags
+    prior = np.exp(-0.5 * (np.log(bpms / 120.0) / 0.85) ** 2)
+    score = score * prior
+
+    idx = int(np.argmax(score))
+    peak_lag = float(lags[idx])
+    if 0 < idx < len(score) - 1:
+        y0, y1, y2 = score[idx - 1], score[idx], score[idx + 1]
         denom = y0 - 2 * y1 + y2
         if denom != 0:
-            peak = peak + 0.5 * (y0 - y2) / denom
+            peak_lag += float(np.clip(0.5 * (y0 - y2) / denom, -1.0, 1.0))
 
-    bpm = 60.0 * FPS / peak
-    while bpm < 70.0:
-        bpm *= 2.0
-    while bpm > 160.0:
-        bpm /= 2.0
-    return round(bpm, 1)
+    return round(60.0 * fps / peak_lag, 1)
 
 def compute_chroma_frames(samples: np.ndarray, sr: int) -> np.ndarray:
     """
