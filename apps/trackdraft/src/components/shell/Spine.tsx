@@ -326,8 +326,12 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
       </div>
 
       {/* The timeline — fixed scale, scrolls inside the full-bleed band.
-          A song shorter than the viewport leaves an honest empty tail. */}
-      <div ref={scrollRef} className="daw-scroll overflow-x-auto overflow-y-hidden">
+          A song shorter than the viewport leaves an honest empty tail.
+          overflow-x: SCROLL (not auto): the scrollbar strip's space stays
+          reserved even when the song fits, so nothing jumps up/down by its
+          height. (`scrollbar-gutter: stable` does not cover horizontal
+          scrollbars in Chrome.) */}
+      <div ref={scrollRef} className="daw-scroll overflow-x-scroll overflow-y-hidden">
         <div className="relative h-[52px]" style={{ width: contentW }}>
             {/* Bar ruler — the coordinate system and the seek target. */}
             <div

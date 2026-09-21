@@ -71,16 +71,18 @@ until modal parity.)
   element's section face for that section (P3).
 - Carries the playhead + loop; `←→` steps sections when it has focus.
 - **Timeline v2 (user-specified 2026-09-21, shipped P1.5):** fixed
-  **bar-linear** scale — 10px/bar default, zoom 6/10/14/20 + fit — scrolls
-  inside the full-bleed band; a **bar ruler** with adaptive labels doubles
-  as **seek** (click a bar = jump playback there; paused/stopped starts
-  from there); the playhead is pixel-exact per span with **auto-follow**
-  while playing (manual pan — shift+wheel, a trackpad swipe, or dragging
-  the scroll rail — disengages; the toggle re-engages). The **mouse wheel
-  zooms**, anchored on the bar under the cursor; the scrollbar is a slim
-  translucent **drag rail** (`.daw-scroll` — transparent track, subtle
-  thumb; styling it also forces it visible on macOS instead of overlay-
-  hiding). All
+  **bar-linear** scale — 10px/bar default, wheel/−/+ zoom ladder 4→80
+  px/bar + fit + zoom-to-section — scrolls inside the full-bleed band; a
+  **bar ruler** with adaptive labels doubles as **seek** (click a bar =
+  jump playback there; paused/stopped starts from there); the playhead is
+  pixel-exact per span with **auto-follow** while playing (manual pan —
+  shift+wheel, a trackpad swipe, or dragging the scroll rail — disengages;
+  the toggle re-engages). The **mouse wheel zooms**, anchored on the bar
+  under the cursor; scrollbars are slim translucent drag rails app-wide
+  (transparent track, subtle thumb — styled globally, which also forces
+  them visible on macOS instead of overlay-hiding), and the timeline
+  **reserves its strip's space** (`overflow-x: scroll`) so the workspace
+  never jumps when a song fits or stops fitting. All
   controls live in a **compact icon-only strip ABOVE the timeline** —
   transport (play · pause · stop · section loop) + undo/redo, then zoom
   −/+ · fit · zoom-to-section · follow; nothing sits at the timeline's

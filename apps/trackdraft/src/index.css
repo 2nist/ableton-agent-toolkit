@@ -8,29 +8,36 @@
   color-scheme: dark;
 }
 
-/* DAW-style scrollbars for the timeline: transparent track, slim translucent
-   thumb that keeps the "click and drag to pan" affordance without the chunky
-   OS chrome. Styling ::-webkit-scrollbar also forces the scrollbar to be
-   always visible (macOS overlay mode otherwise hides it entirely — you'd
-   never know the timeline can scroll). Firefox gets the standard props. */
-.daw-scroll {
+/* All scrollbars, app-wide: transparent track, slim translucent thumb.
+   Applied globally because panels on coloured backgrounds (the Mix/Bend
+   rail, the section column) were rendering the default dark scrollbar
+   track as a muddy strip. Styling ::-webkit-scrollbar also forces the
+   scrollbar to be always-visible (macOS overlay mode otherwise hides it
+   entirely). Firefox gets the standard props. */
+* {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
 }
-.daw-scroll::-webkit-scrollbar {
+*::-webkit-scrollbar {
+  width: 7px;
   height: 7px;
   background: transparent;
 }
-.daw-scroll::-webkit-scrollbar-track {
+*::-webkit-scrollbar-track {
   background: transparent;
 }
-.daw-scroll::-webkit-scrollbar-thumb {
+*::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
   border-radius: 999px;
 }
-.daw-scroll::-webkit-scrollbar-thumb:hover {
+*::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.28);
 }
-.daw-scroll::-webkit-scrollbar-corner {
+*::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* The timeline scroll container forces overflow-x: scroll (in the
+   component) rather than auto — the styles below/above then apply to an
+   always-present strip, so the workspace never shifts when a song starts
+   or stops needing a scrollbar. */
