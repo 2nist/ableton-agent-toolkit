@@ -97,9 +97,10 @@ describe("parseRockCorpusTdc", () => {
       }),
     );
     const shown = raw.sections[0].chords.map((c) => `${c.root}:${c.quality}@${c.startSec}-${c.endSec}`);
-    // I at 0 extends through the "." cell (to 2) then repeats ×2 more cells (to 4);
-    // the rest cell is skipped; IV follows untouched.
-    expect(shown).toEqual(["C:maj@0-4", "F:maj@6-7"]);
+    // I at 0 extends through the "." cell (to 2) and through the "*2"
+    // marker cell (to 3) — the marker's count denotes repeats, but the
+    // cells themselves tile the time; the rest cell is skipped; IV follows.
+    expect(shown).toEqual(["C:maj@0-3", "F:maj@6-7"]);
   });
 
   it("follows inline key changes for subsequent numerals", () => {
@@ -153,6 +154,25 @@ describe("parseRockCorpusTdc", () => {
     );
     expect(raw.key).toBe("A");
     expect(raw.mode).toBe("aeolian");
+  });
+
+  it("absorbs sub-50ms cell-boundary drift so chords don't leak across sections", () => {
+    const raw = parseRockCorpusTdc(
+      rockSong({
+        chords: [
+          { time: 0, duration: 5.204, chord: "I" },
+          { time: 5.201, duration: 5.204, chord: "IV" }, // 3 ms early
+        ],
+        sections: [
+          { time: 0, duration: 5.204, label: "Vr" },
+          { time: 5.201, duration: 5.204, label: "Vr" },
+        ],
+      }),
+    );
+    // both chord end and section end unify on the shared boundary
+    expect(raw.sections[0].chords[0].endSec).toBe(5.201);
+    expect(raw.sections[0].endSec).toBe(5.201);
+    expect(raw.sections[1].chords[0].startSec).toBe(5.201);
   });
 
   it("skips unknown tokens with an honest warning", () => {

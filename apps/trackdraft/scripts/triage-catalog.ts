@@ -9,6 +9,12 @@
  *   npx tsx scripts/triage-catalog.ts                 # dry run + report
  *   npx tsx scripts/triage-catalog.ts --apply         # move triaged files out
  *   npx tsx scripts/triage-catalog.ts --promote mcgill-fever-peggy-lee
+ *   npx tsx scripts/triage-catalog.ts --min-cpb 0.25 --reclaim --apply
+ *
+ * --reclaim is the mirror of --apply: it scans the TRIAGE directory and
+ * moves songs that PASS the current criteria back into the catalog (dry
+ * unless --apply) — the bulk form of --promote, for deliberate criteria
+ * relaxations (e.g. --min-cpb for slow-harmonic-rhythm corpora).
  *
  * --exempt id[,id...] skips songs by id/filename — for entries deliberately
  * kept in the catalog outside the standard criteria (e.g. instrumentals,
@@ -51,6 +57,7 @@ interface Args {
   maxChordless: number;
   minCpb: number;
   promote: string | null;
+  reclaim: boolean;
   exempt: string[];
 }
 
@@ -64,6 +71,7 @@ function parseArgs(argv: string[]): Args {
     maxChordless: MAX_CHORDLESS,
     minCpb: MIN_CPB,
     promote: null,
+    reclaim: false,
     exempt: [],
   };
   for (let i = 0; i < argv.length; i++) {
@@ -75,6 +83,7 @@ function parseArgs(argv: string[]): Args {
     else if (argv[i] === "--max-chordless") args.maxChordless = Number.parseInt(argv[++i], 10);
     else if (argv[i] === "--min-cpb") args.minCpb = Number.parseFloat(argv[++i]);
     else if (argv[i] === "--promote") args.promote = argv[++i];
+    else if (argv[i] === "--reclaim") args.reclaim = true;
     else if (argv[i] === "--exempt") {
       args.exempt = argv[++i]
         .split(",")
@@ -185,6 +194,97 @@ function main(): void {
     }
     fs.renameSync(src, dest);
     console.log(`✓ promoted ${fname} → catalog`);
+    return;
+  }
+
+  // ——— reclaim mode: triage dir → catalog for songs that now pass ———
+  if (args.reclaim) {
+    if (!fs.existsSync(TRIAGE_DIR)) {
+      console.error(`✗ triage dir not found: ${TRIAGE_DIR}`);
+      process.exit(1);
+    }
+    const files = fs
+      .readdirSync(TRIAGE_DIR)
+      .filter((f) => f.startsWith(args.source) && f.endsWith(".trackdraft.json"))
+      .sort();
+    const rows: Row[] = [];
+    for (const file of files) {
+      const song = JSON.parse(fs.readFileSync(path.join(TRIAGE_DIR, file), "utf8")) as CatalogSongFile;
+      const m = metrics(song);
+      const verdict = classify(m, args);
+      rows.push({
+        file,
+        id: song.id,
+        title: song.title ?? "(untitled)",
+        artist: song.artist,
+        verdict: verdict.keep ? "kept" : "triaged",
+        reasons: verdict.reasons,
+        flags: verdict.flags,
+        metrics: m,
+      });
+    }
+    const reclaimed = rows.filter((r) => r.verdict === "kept");
+    const remaining = rows.filter((r) => r.verdict === "triaged");
+    const remainingReasons = new Map<string, number>();
+    for (const r of remaining) {
+      for (const reason of r.reasons) {
+        const key = reason.replace(/\d+/g, "N");
+        remainingReasons.set(key, (remainingReasons.get(key) ?? 0) + 1);
+      }
+    }
+
+    console.log(`${rows.length} ${args.source}* songs in triage${args.apply ? "" : " (dry run)"}`);
+    console.log(`  RECLAIMED    ${reclaimed.length}  pass the current criteria → back to catalog`);
+    console.log(`  STILL TRIAGED ${remaining.length}`);
+    console.log("\nremaining reasons:");
+    for (const [reason, n] of [...remainingReasons].sort((a, b) => b[1] - a[1])) {
+      console.log(`  ${String(n).padStart(4)}  ${reason}`);
+    }
+    console.log("\nreclaim examples:");
+    for (const r of reclaimed.slice(0, 10)) {
+      console.log(`  ${r.title.slice(0, 40).padEnd(42)} ${(r.artist ?? "").slice(0, 18).padEnd(20)} cpb=${r.metrics.cpb.toFixed(2)}`);
+    }
+
+    const reportPath =
+      args.report ?? path.join(import.meta.dirname, "output", `${args.source.replace(/[^a-z0-9]+/gi, "")}-reclaim-report.json`);
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify(
+        {
+          generatedAt: new Date().toISOString(),
+          mode: "reclaim",
+          criteria: {
+            minChords: MIN_CHORDS,
+            minCpb: args.minCpb,
+            maxChordless: args.maxChordless,
+            requireSynced: args.requireSynced,
+            requireCleanKey: args.requireCleanKey,
+          },
+          totals: { scanned: rows.length, reclaimed: reclaimed.length, stillTriaged: remaining.length },
+          rows,
+        },
+        null,
+        2,
+      ),
+    );
+    console.log(`\nreport → ${reportPath}`);
+
+    if (args.apply) {
+      let moved = 0;
+      for (const r of reclaimed) {
+        const src = path.join(TRIAGE_DIR, r.file);
+        const dest = path.join(CATALOG_DIR, r.file);
+        if (fs.existsSync(dest)) {
+          console.warn(`  ! skipped (already in catalog): ${r.file}`);
+          continue;
+        }
+        fs.renameSync(src, dest);
+        moved++;
+      }
+      console.log(`moved ${moved} files → ${path.relative(import.meta.dirname, CATALOG_DIR)}/`);
+    } else {
+      console.log("(dry run — pass --apply to move the reclaimed files back)");
+    }
     return;
   }
 

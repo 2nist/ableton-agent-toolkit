@@ -213,8 +213,16 @@ export function parseRockCorpusTdc(raw: unknown): RawCatalogSong {
     }
     const star = token.match(/^\*(\d+)$/);
     if (star) {
+      // "*n" cells are repeat markers for the previous chord (n = the
+      // repeat count they denote). The cells themselves tile the section
+      // spans exactly (verified against section boundaries and known
+      // songs: I Saw Her Standing There's Id7 + *4 fills its 4.5 s intro
+      // precisely), so the timing-correct reading is the same as ".":
+      // the chord continues through the marker cell. The earlier
+      // n×cell-duration reading inflated bar counts ~5× on vamp songs
+      // (Who Do You Love reached 992 bars for a 147 s track).
       stars++;
-      if (lastEvent) lastEvent.endSec += Number(star[1]) * (c.duration ?? 0);
+      extendPrev(cellEnd);
       continue;
     }
 
@@ -232,6 +240,17 @@ export function parseRockCorpusTdc(raw: unknown): RawCatalogSong {
     };
     events.push(event);
     lastEvent = event;
+  }
+
+  // Source cell times are rounded to 2-3 decimals, so adjacent cells can
+  // overlap or gap by a few milliseconds. Left alone, such drift lets a
+  // chord leak across a section boundary (the merge bins by exact time),
+  // double-claiming the last chord of one section into the next and
+  // inflating bar counts on the vamp songs. Unify boundaries that are
+  // within 50 ms (real cell gaps/crossings are >= 0.5 s).
+  for (let i = 0; i + 1 < events.length; i++) {
+    const gap = events[i + 1].startSec - events[i].endSec;
+    if (gap > -0.05 && gap < 0.05) events[i].endSec = events[i + 1].startSec;
   }
 
   // ——— sections: expand labels, merge junk into the previous span ——
@@ -254,6 +273,11 @@ export function parseRockCorpusTdc(raw: unknown): RawCatalogSong {
     const base = rawLabel.replace(/\*\d+$/, "").replace(/\d+$/, "").trim();
     const name = SECTION_EXPANSION[base.toLowerCase()] ?? base ?? "Section";
     spans.push({ name: name || "Section", startSec: start, endSec: Math.max(end, start + 0.5) });
+  }
+  // Same boundary smoothing as the events above, for section spans.
+  for (let i = 0; i + 1 < spans.length; i++) {
+    const gap = spans[i + 1].startSec - spans[i].endSec;
+    if (gap > -0.05 && gap < 0.05) spans[i].endSec = spans[i + 1].startSec;
   }
 
   const sections: RawSection[] = spans.map((sp) => ({
