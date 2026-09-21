@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEven
 import { useNavigate, useParams } from "react-router-dom";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
 import { roleStyle } from "../../lib/roleColors";
-import { addSection, reorderSections, updateSection } from "../../lib/sections";
+import { addSection, removeSection, reorderSections, updateSection } from "../../lib/sections";
 import { NOTE_TO_PC, pitchClass } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { resolveChordOccurrences } from "@drum/library";
@@ -72,6 +72,12 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   const [resizeDraft, setResizeDraftState] = useState<{ sectionId: string; bars: number } | null>(null);
   const resizeRef = useRef(resizeDraft);
   resizeRef.current = resizeDraft;
+  /** Fresh values for the window-level gesture listeners — they hold the
+   *  closure from when the drag BEGAN, so they must read these refs rather
+   *  than the state captured in that closure (barPx and total both change
+   *  mid-gesture: a resize draft reflows the timeline). */
+  const barPxRef = useRef(barPx);
+  barPxRef.current = barPx;
   function setResizeDraft(v: { sectionId: string; bars: number } | null) {
     resizeRef.current = v;
     setResizeDraftState(v);
@@ -118,6 +124,8 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     [song, resizeDraft],
   );
   const total = useMemo(() => totalBars(spans), [spans]);
+  const totalRef = useRef(total);
+  totalRef.current = total;
   const liveIndex =
     tick?.isPlaying && tick.sectionIndex >= 0 && tick.sectionIndex < spans.length ? tick.sectionIndex : null;
   const playingSectionId =
@@ -357,10 +365,25 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     if (ok) setLoopOn(true);
   }
 
-  /** Bar index for a client X position, clamped to the song. */
-  function barFromClientX(clientX: number, el: HTMLElement): number {
+  /** Bar index for a client X position, clamped to the song — CONTENT-space
+   *  math: the scroll container's own rect (its left edge is fixed on
+   *  screen) plus its live `scrollLeft`. The original version read
+   *  `clientX - rect.left` on the SCROLL CONTAINER, which only equals
+   *  content x at scroll 0 — any resize drag taken while the timeline was
+   *  scrolled mapped the pointer to the wrong bar, collapsing far-right
+   *  sections to their 1-bar floor while the drag seemed to do nothing.
+   *  (The ruler gesture passed its own element, which scrolls WITH the
+   *  content and so self-compensated — two callers, one correct by
+   *  accident. Now both share this single correct implementation.)
+   *  `maxBar` defaults to the song end, but the right-edge resize passes
+   *  no ceiling: that edge DEFINES the end for the last section, so
+   *  clamping to the pre-drag total would cap growth at +1 bar per drag. */
+  function barFromClientX(clientX: number, maxBar: number = totalRef.current): number {
+    const el = scrollRef.current;
+    if (!el) return 0;
     const rect = el.getBoundingClientRect();
-    return Math.max(0, Math.min(total, Math.floor((clientX - rect.left) / barPx)));
+    const bar = Math.floor((clientX - rect.left + el.scrollLeft) / barPxRef.current);
+    return Math.max(0, Math.min(maxBar, bar));
   }
 
   /** Seek to a bar (bar-quantized) — the ruler's plain-click gesture.
@@ -391,16 +414,15 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
    *  listeners so the gesture survives re-renders (the Knob lesson). */
   function onRulerMouseDown(e: ReactMouseEvent<HTMLDivElement>) {
     if (e.button !== 0 || clockSource === "ableton") return;
-    const el = e.currentTarget;
     const startX = e.clientX;
-    const startBar = barFromClientX(startX, el);
+    const startBar = barFromClientX(startX);
     rulerDrag.current = { startBar, startX, moved: false };
     function move(ev: MouseEvent) {
       const d = rulerDrag.current;
       if (!d) return;
       if (!d.moved && Math.abs(ev.clientX - d.startX) > 4) d.moved = true;
       if (d.moved) {
-        const bar = barFromClientX(ev.clientX, el);
+        const bar = barFromClientX(ev.clientX);
         setRegionDraft({ a: Math.min(d.startBar, bar), b: Math.max(d.startBar, bar) });
       }
     }
@@ -411,7 +433,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
       rulerDrag.current = null;
       setRegionDraft(null);
       if (!d) return;
-      const bar = barFromClientX(ev.clientX, el);
+      const bar = barFromClientX(ev.clientX);
       if (d.moved && bar !== d.startBar) applyRegion(Math.min(d.startBar, bar), Math.max(d.startBar, bar));
       else seekBar(d.startBar);
     }
@@ -451,8 +473,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     }
     const t = target;
     function moveResize(ev: MouseEvent) {
-      if (!sc) return;
-      const bar = barFromClientX(ev.clientX, sc);
+      const bar = barFromClientX(ev.clientX, side === "right" ? Number.MAX_SAFE_INTEGER : undefined);
       const bars = side === "right" ? Math.max(1, bar - t.startBar + 1) : Math.max(1, bar - t.startBar);
       setResizeDraft({ sectionId: t.sectionId, bars });
     }
@@ -772,6 +793,18 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           >
             → Move right
           </button>
+          <button
+            className="w-full text-left px-2.5 py-1 font-mono text-[11px] text-inkMuted/70 hover:text-red-400 hover:bg-panelAlt/60"
+            onClick={() => {
+              const span = menu.span;
+              setMenu(null);
+              if (!window.confirm(`Delete "${span.section.name}"?`)) return;
+              updateCurrentSong((s) => removeSection(s, span.sectionId));
+              if (selectedSectionId === span.sectionId) setSelectedSectionId(null);
+            }}
+          >
+            ✕ Delete section
+          </button>
           <div className="my-1 border-t border-edge/60" />
           <button
             className={MENU_ITEM}
@@ -824,6 +857,12 @@ function SpineBlock({
   const showName = w >= 40;
   const showBars = w >= 24;
   const showDots = w >= 56;
+  // Edge zones narrow with the block (30% per side, 1..5px): a fixed 5px
+  // pair fully covered a 1-bar block at the default zoom — every click
+  // landed on a resize zone, so the section could not be SELECTED (and
+  // could not be deleted), and any grab near its middle hit an edge you
+  // didn't mean. 30% keeps a centre window on even the smallest blocks.
+  const edgeW = Math.min(5, Math.max(1, w * 0.3));
   return (
     <button
       type="button"
@@ -840,14 +879,16 @@ function SpineBlock({
         <>
           {canResizeLeft && (
             <span
-              className="absolute left-0 top-0 bottom-0 w-[5px] cursor-ew-resize z-20 hover:bg-accent/30"
+              className="absolute left-0 top-0 bottom-0 cursor-ew-resize z-20 hover:bg-accent/30"
+              style={{ width: edgeW }}
               onMouseDown={(e) => onResize(e, "left")}
-              title="Drag to resize the previous section"
+              title="Drag to move this boundary — the previous section grows/shrinks"
             />
           )}
           {canResizeRight && (
             <span
-              className="absolute right-0 top-0 bottom-0 w-[5px] cursor-ew-resize z-20 hover:bg-accent/30"
+              className="absolute right-0 top-0 bottom-0 cursor-ew-resize z-20 hover:bg-accent/30"
+              style={{ width: edgeW }}
               onMouseDown={(e) => onResize(e, "right")}
               title="Drag to resize this section"
             />
