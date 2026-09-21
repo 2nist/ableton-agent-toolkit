@@ -1,5 +1,6 @@
 import { twoThreeCellCounts, euclidOnsetSteps, numerator as outlineNumerator } from "@drum/library";
 import type { MeterOutline } from "../../types/blueprint";
+import Knob from "../common/Knob";
 
 /** Shared Euclidean rhythm primitives — the same Length/Density/Offset
  *  sliders + step strips used by the Drums editor's outline authoring, so
@@ -10,22 +11,24 @@ import type { MeterOutline } from "../../types/blueprint";
 export function SliderRow({ label, min, max, value, display, onChange }: {
   label: string; min: number; max: number; value: number; display?: number; onChange: (v: number) => void;
 }) {
+  const hi = Math.max(min, max);
   return (
-    <label className="block">
-      <span className="flex items-center justify-between font-mono text-2xs uppercase tracking-wider text-inkMuted mb-0.5">
-        <span>{label}</span>
-        <span className="text-ink tabular-nums">{display ?? value}</span>
-      </span>
-      <input
-        type="range"
+    <div className="flex items-center gap-2" title={label}>
+      <Knob
+        value={Math.min(value, hi)}
         min={min}
-        max={Math.max(min, max)}
+        max={hi}
         step={1}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-1.5 accent-[#E8B54A] cursor-pointer"
+        size={28}
+        defaultValue={min}
+        onChange={onChange}
+        className="text-accent"
       />
-    </label>
+      <div className="min-w-0 flex-1">
+        <span className="block font-mono text-2xs uppercase tracking-wider text-inkMuted truncate">{label}</span>
+        <span className="block text-ink tabular-nums font-mono text-xs leading-tight">{display ?? value}</span>
+      </div>
+    </div>
   );
 }
 

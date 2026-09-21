@@ -13,6 +13,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ABLETON_DARK, PRESETS, generateFromHue, type PaletteRoles } from "@platform/ui-kit";
+import Knob from "../components/common/Knob";
 
 const ROLE_ORDER: (keyof PaletteRoles)[] = [
   "background",
@@ -243,11 +244,18 @@ const DECISIONS: Array<{ id: string; item: string; status: DecisionStatus; note:
     status: "PROPOSED",
     note: "Compact rows, flat tabs, collapsed groups — the D3/D4 tightening takes a first step; react to the preview.",
   },
+  {
+    id: "D7",
+    item: "Sliders → knobs (Live-style)",
+    status: "DECIDED",
+    note: "Knob primitive built (common/Knob.tsx, ghost tick included). Mix/Bend converted; Euclidean sliders in Drums/Harmony next.",
+  },
 ];
 
 export default function DesignLab() {
   const [hue, setHue] = useState(28);
   const [copied, setCopied] = useState(false);
+  const [drive, setDrive] = useState<number[]>([0.62, 0.4, 0.31, 0.5]);
   const generated = useMemo(() => generateFromHue(hue), [hue]);
 
   async function copyPalette() {
@@ -533,6 +541,69 @@ export default function DesignLab() {
           Retired: Primary · sm, Primary · roomy. Black chips use #000 against the #4E4E4E panels — if that reads
           too hard we soften to the deep fill (#0B0D11).
         </p>
+      </Section>
+
+      {/* ================= Knob primitive ================= */}
+      <Section
+        title="New · Knob — the Live-style rotary control (first real primitive)"
+        sub="Vertical drag turns · shift for fine · double-click resets · arrow keys when focused. The amber tick sitting on the arc is the ◆ detected ghost — the same suggest-don't-impose rule, now on a knob. Lives in components/common/Knob.tsx."
+      >
+        <TemplateCard>
+          <div className="flex items-start gap-8 flex-wrap">
+            <div>
+              <p className="text-2xs text-inkMuted/70 mb-2">A device panel, like your reference:</p>
+              <div className="border border-edge rounded-lg bg-[#14161c] px-4 py-3 grid grid-cols-4 gap-4 w-[360px]">
+                {[
+                  { label: "Drive Amount", fmt: (t: number) => `${(t * 14 - 2).toFixed(1)} dB` },
+                  { label: "Drive Color", fmt: (t: number) => `${Math.round(t * 100)} %` },
+                  { label: "Drive Output", fmt: (t: number) => `${(t * 14 - 2).toFixed(1)} dB` },
+                  { label: "Dry / Wet", fmt: (t: number) => `${Math.round(t * 100)} %` },
+                ].map((k, i) => (
+                  <div key={k.label} className="flex flex-col items-center gap-1">
+                    <span className="text-3xs text-inkMuted text-center leading-tight">{k.label}</span>
+                    <span className="font-mono text-2xs text-ink tabular-nums">{k.fmt(drive[i])}</span>
+                    <Knob
+                      value={drive[i]}
+                      onChange={(v) => setDrive((d) => d.map((x, j) => (j === i ? v : x)))}
+                      size={40}
+                      defaultValue={0.5}
+                      className="text-accent"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-2xs text-inkMuted/70 mb-2">Sizes — 28 / 34 / 40 / 48</p>
+                <div className="flex items-center gap-3">
+                  {[28, 34, 40, 48].map((s) => (
+                    <Knob
+                      key={s}
+                      value={drive[0]}
+                      onChange={(v) => setDrive((d) => [v, ...d.slice(1)])}
+                      size={s}
+                      className="text-accent"
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-2xs text-inkMuted/70 mb-2">Colors (voice tokens) — and a ◆ ghost tick</p>
+                <div className="flex items-center gap-3">
+                  <Knob value={drive[0]} onChange={(v) => setDrive((d) => [v, ...d.slice(1)])} size={34} className="text-[#D96459]" />
+                  <Knob value={drive[1]} onChange={(v) => setDrive((d) => [d[0], v, ...d.slice(2)])} size={34} className="text-[#4FA3A5]" />
+                  <Knob value={drive[2]} onChange={(v) => setDrive((d) => [d[0], d[1], v, d[3]])} size={34} className="text-[#E8B54A]" />
+                  <Knob value={drive[3]} onChange={(v) => setDrive((d) => [d[0], d[1], d[2], v])} size={34} ghost={0.72} className="text-accent" />
+                  <span className="text-2xs font-mono text-[#E8B54A]">◆ 72%</span>
+                </div>
+              </div>
+              <p className="text-2xs text-inkMuted/70">
+                Rollout: Mix/Bend converted now (14 axis knobs + tempo); the Euclidean-ish sliders in Drums/Harmony next.
+              </p>
+            </div>
+          </div>
+        </TemplateCard>
       </Section>
 
       {/* ================= Voice palette ================= */}

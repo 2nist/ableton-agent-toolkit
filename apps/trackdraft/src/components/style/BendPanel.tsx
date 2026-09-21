@@ -2,6 +2,7 @@ import { useSongStore } from "../../store/songStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { STYLE_RECIPES, resolveStyleProfile } from "../../lib/style/bend";
 import type { BlueprintSection } from "../../types/blueprint";
+import Knob from "../common/Knob";
 
 /**
  * Mix/Bend — the whole-song style station (Phase D).
@@ -69,55 +70,34 @@ const ALL_AXES: AxisDef[] = LAYERS.flatMap((layer) => layer.axes);
 
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 
-function AxisSlider({ label, lo, hi, value, onChange, detected, onAdopt }: {
+function AxisKnob({ label, lo, hi, value, onChange, detected, onAdopt }: {
   label: string; lo: string; hi: string; value: number; onChange: (v: number) => void;
-  /** Analysis-derived value — renders a ◆ adopt affordance + a ghost tick
-   *  under the track. Non-destructive until the user adopts it. */
+  /** Analysis-derived value — drawn as the amber ghost tick on the knob
+   *  arc + a ◆ adopt affordance. Non-destructive until the user adopts it. */
   detected?: number;
   onAdopt?: () => void;
 }) {
   const adopted = detected != null && Math.abs(detected - value) < 0.02;
   return (
-    <label className="block" title={`${lo} → ${hi}`}>
-      <span className="flex items-center justify-between font-mono text-2xs uppercase tracking-wider text-inkMuted mb-0.5">
-        <span>{label}</span>
-        <span className="flex items-center gap-1.5">
-          {detected != null && (
-            <button
-              type="button"
-              onClick={(e) => { e.preventDefault(); onAdopt?.(); }}
-              className={`text-[9px] font-mono leading-none ${adopted ? "text-inkMuted/40" : "text-accent/80 hover:text-accent"}`}
-              title={adopted ? `detected ${pct(detected)} (adopted)` : `detected ${pct(detected)} — click to adopt`}
-            >
-              ◆{adopted ? "" : ` ${pct(detected)}`}
-            </button>
-          )}
-          <span className="text-ink tabular-nums">{pct(value)}</span>
-        </span>
+    <div className="flex flex-col items-center gap-0.5 min-w-0" title={`${label} — ${lo} → ${hi}`}>
+      <Knob value={value} onChange={onChange} ghost={detected} defaultValue={0.5} size={34} className="text-accent" />
+      <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted leading-tight text-center">
+        {label}
       </span>
-      <div className="relative">
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.01}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full h-1.5 accent-[#E8B54A] cursor-pointer"
-        />
+      <span className="flex items-center gap-1 font-mono text-3xs leading-none">
         {detected != null && (
-          <span
-            aria-hidden
-            className={`pointer-events-none absolute -top-0.5 h-2.5 w-px ${adopted ? "bg-inkMuted/30" : "bg-accent/60"}`}
-            style={{ left: `${(detected * 100).toFixed(1)}%` }}
-          />
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); onAdopt?.(); }}
+            className={`${adopted ? "text-inkMuted/40" : "text-accent/80 hover:text-accent"}`}
+            title={adopted ? `detected ${pct(detected)} (adopted)` : `detected ${pct(detected)} — click to adopt`}
+          >
+            ◆{adopted ? "" : ` ${pct(detected)}`}
+          </button>
         )}
-      </div>
-      <span className="flex justify-between text-[9px] text-inkMuted/50 font-mono leading-none mt-px select-none">
-        <span>{lo}</span>
-        <span>{hi}</span>
+        <span className="text-ink tabular-nums">{pct(value)}</span>
       </span>
-    </label>
+    </div>
   );
 }
 
@@ -260,21 +240,23 @@ export default function BendPanel() {
         )}
         {/* Tempo is a song-level value (the transport reads song.bpm), not a
             per-section one — surfaced here so the recipe sets it too. */}
-        <label className="block mt-2">
-          <span className="flex items-center justify-between font-mono text-2xs uppercase tracking-wider text-inkMuted mb-0.5">
-            <span>Tempo</span>
-            <span className="text-ink tabular-nums">{song.bpm} bpm</span>
-          </span>
-          <input
-            type="range"
+        <div className="flex items-center gap-2.5 mt-2">
+          <Knob
+            value={song.bpm}
             min={40}
             max={220}
             step={1}
-            value={song.bpm}
-            onChange={(e) => updateCurrentSong((s) => ({ ...s, bpm: Number(e.target.value) }))}
-            className="w-full h-1.5 accent-[#E8B54A] cursor-pointer"
+            size={34}
+            defaultValue={120}
+            onChange={(v) => updateCurrentSong((s) => ({ ...s, bpm: v }))}
+            className="text-accent"
+            title="Tempo — drag, shift for fine, double-click resets to 120"
           />
-        </label>
+          <div className="min-w-0">
+            <p className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Tempo</p>
+            <p className="text-ink tabular-nums font-mono text-xs">{song.bpm} bpm</p>
+          </div>
+        </div>
       </Block>
 
       {/* Per-layer bends — the Mix/Bend station's four layers. Each slider
@@ -293,9 +275,9 @@ export default function BendPanel() {
                 ◆ adopt detected
               </button>
             )}
-            <div className="space-y-2">
+            <div className="grid grid-cols-3 gap-x-1.5 gap-y-2.5 pt-0.5">
               {layer.axes.map((axis) => (
-                <AxisSlider
+                <AxisKnob
                   key={axis.key}
                   label={axis.label}
                   lo={axis.lo}
@@ -338,9 +320,9 @@ export default function BendPanel() {
                     <div className="flex items-baseline justify-between mb-1">
                       <span className="font-mono text-[9px] uppercase tracking-widest text-inkMuted/80">{layer.title}</span>
                     </div>
-                    <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-x-1.5 gap-y-2.5">
                       {layer.axes.map((axis) => (
-                        <AxisSlider
+                        <AxisKnob
                           key={axis.key}
                           label={axis.label}
                           lo={axis.lo}
