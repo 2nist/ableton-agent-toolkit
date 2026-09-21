@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
 import { roleStyle } from "../../lib/roleColors";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
-import { seekTo } from "../../lib/playback/transportControl";
+import { pauseSong, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
 import { useSongStore } from "../../store/songStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { beatsPerBar, type BlueprintSection, type BlueprintSong } from "../../types/blueprint";
@@ -15,8 +15,35 @@ import { beatsPerBar, type BlueprintSection, type BlueprintSong } from "../../ty
  *  step and 10 the default. */
 const BAR_PX_STEPS = [6, 10, 14, 20] as const;
 
-/** The controls-gutter button style — tiny, mono, quiet. */
-const GUTTER_BTN = "text-[9px] font-mono text-inkMuted hover:text-ink border border-edge rounded px-1 py-0.5 leading-none";
+/** Icon button for the control strip — glyph only; meaning lives in the
+ *  tooltip. Compact by design: the strip is 26px tall. */
+function IconBtn({
+  title,
+  onClick,
+  disabled = false,
+  active = false,
+  children,
+}: {
+  title: string;
+  onClick: () => void;
+  disabled?: boolean;
+  active?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      title={title}
+      className={`h-[18px] min-w-[22px] px-1 flex items-center justify-center rounded border text-[10px] leading-none font-mono ${
+        active ? "border-accent/60 text-accent" : "border-edge text-inkMuted"
+      } ${disabled ? "opacity-30" : "hover:text-ink"}`}
+    >
+      {children}
+    </button>
+  );
+}
 
 /**
  * The Spine — the workspace's full-width top band (docs/design/workspace.md §2).
@@ -24,9 +51,11 @@ const GUTTER_BTN = "text-[9px] font-mono text-inkMuted hover:text-ink border bor
  * Timeline v2 (user-specified 2026-09-21): fixed scale (px per BAR, default
  * 10), horizontally scrollable inside the full-bleed band, a bar ruler on
  * top that doubles as the seek control, a pixel-exact playhead with
- * auto-follow while playing, and zoom (6/10/14/20 + fit) in a left gutter
- * that never scrolls or covers the ruler. Blocks are TRUE scale — a short
- * song leaves an honest empty tail, it is never stretched to fit.
+ * auto-follow while playing. Controls live ONLY in a compact icon-only
+ * strip ABOVE the timeline (transport: play · pause · stop · section loop +
+ * undo/redo, then zoom −/+ · fit · follow) — nothing sits at the timeline's
+ * left or right ends. Blocks are TRUE scale — a short song leaves an honest
+ * empty tail, it is never stretched to fit.
  *
  * Selection is the same `studioSelectionStore.selectedSectionId` the
  * arrangement timeline and the Mix/Bend panel already share, so the spine
@@ -40,14 +69,32 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   const [barPx, setBarPx] = useState<number>(10);
   /** Auto-follow the playhead while playing; drops off on manual scroll. */
   const [follow, setFollow] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
+  const [loopOn, setLoopOn] = useState(false);
+  const canUndo = useSongStore((s) => s.canUndo());
+  const canRedo = useSongStore((s) => s.canRedo());
+  const undo = useSongStore((s) => s.undo);
+  const redo = useSongStore((s) => s.redo);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => getSongTransport().onTick(setTick), []);
+  useEffect(() => {
+    const transport = getSongTransport();
+    return transport.onTick((t) => {
+      setTick(t);
+      setIsPaused(transport.isPaused());
+      // A hard stop (not a pause) also drops the section loop.
+      if (!t.isPlaying && !transport.isPaused()) setLoopOn(false);
+    });
+  }, []);
 
   const spans = useMemo(() => sectionSpans(song), [song]);
   const total = useMemo(() => totalBars(spans), [spans]);
   const liveIndex =
     tick?.isPlaying && tick.sectionIndex >= 0 && tick.sectionIndex < spans.length ? tick.sectionIndex : null;
+  const playingSectionId =
+    tick?.isPlaying && tick.sectionIndex >= 0 && tick.sectionIndex < spans.length
+      ? spans[tick.sectionIndex].sectionId
+      : null;
 
   // Playhead position — pixel-exact in bar space. Within a span, progress
   // maps to its BARS (bar-linear), so a 7/8 bar still spans `barPx`.
@@ -121,6 +168,32 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     });
   }
 
+  /** Transport — the same shared control paths the layout header uses, so
+   *  the two can't drift. This strip replaces the header's cluster on the
+   *  workbench and is the seed of P2's collapsed header. */
+  async function togglePlay() {
+    if (!tick?.isPlaying) await playSong(song, clockSource);
+  }
+  function pausePlayback() {
+    pauseSong();
+  }
+  function stopPlayback() {
+    stopSong();
+  }
+  /** Section loop — loops the section that's playing, or the one selected
+   *  on the spine (so a section can be auditioned without playing first). */
+  async function toggleLoop() {
+    if (loopOn) {
+      setLoopOn(false);
+      await resumeUnlooped(song);
+      return;
+    }
+    const sectionId = playingSectionId ?? selectedSectionId ?? spans[0]?.sectionId;
+    if (!sectionId) return;
+    const ok = await playSectionLoop(song, sectionId);
+    if (ok) setLoopOn(true);
+  }
+
   /** Ruler click = seek to that bar (bar-quantized). Playing keeps playing
    *  from there; paused/stopped starts from there — an audition gesture.
    *  No-op under the Ableton clock (Live is the master). */
@@ -139,40 +212,59 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
       aria-label="Song spine"
       title={hint ?? "The Spine — click a section to target it, the ruler to seek; ←→ walks sections"}
     >
-      <div className="flex items-stretch h-[52px]">
-        {/* Controls gutter — zoom · fit · follow. Outside the scroll area:
-            it never covers the ruler and never scrolls away. */}
-        <div className="shrink-0 w-[84px] border-r border-edge flex flex-col items-center justify-center gap-1">
-          <div className="flex items-center gap-0.5">
-            <button type="button" className={GUTTER_BTN} onClick={() => stepZoom(-1)} title="Zoom out — fewer pixels per bar">
-              −
-            </button>
-            <span className="w-9 text-center text-[9px] font-mono text-inkMuted tabular-nums" title="Scale — pixels per bar">
-              {barPx}px
-            </span>
-            <button type="button" className={GUTTER_BTN} onClick={() => stepZoom(1)} title="Zoom in — more pixels per bar">
-              +
-            </button>
-          </div>
-          <div className="flex items-center gap-1">
-            <button type="button" className={GUTTER_BTN} onClick={fitZoom} title="Fit the whole song in view">
-              fit
-            </button>
-            <button
-              type="button"
-              className={`${GUTTER_BTN} ${follow ? "border-accent/60 text-accent" : ""}`}
-              onClick={toggleFollow}
-              title={follow ? "Following the playhead — click to stop following" : "Follow the playhead while playing"}
-            >
-              follow
-            </button>
-          </div>
-        </div>
+      {/* Compact control strip — icons only, meaning in the tooltips:
+          transport (play · pause · stop · section loop) + undo/redo on the
+          left, timeline view controls (zoom −/+, fit, follow) on the right.
+          This row is the seed of P2's collapsed header — no controls sit at
+          the timeline's left or right ends. */}
+      <div className="flex items-center gap-1 px-2 h-[26px] border-b border-edge/60">
+        <IconBtn title="Play" disabled={tick?.isPlaying === true} onClick={() => void togglePlay()}>
+          ▶
+        </IconBtn>
+        <IconBtn title="Pause" disabled={tick?.isPlaying !== true} onClick={pausePlayback}>
+          ❚❚
+        </IconBtn>
+        <IconBtn title="Stop — reset to the top" disabled={tick?.isPlaying !== true && !isPaused} onClick={stopPlayback}>
+          ■
+        </IconBtn>
+        <IconBtn
+          title={loopOn ? "Looping this section — click to stop" : "Loop a section — the one playing, or the one selected on the spine"}
+          disabled={clockSource === "ableton"}
+          active={loopOn}
+          onClick={() => void toggleLoop()}
+        >
+          ⟳
+        </IconBtn>
+        <span className="w-px h-3.5 bg-edge/80 mx-1" />
+        <IconBtn title="Undo" disabled={!canUndo} onClick={() => undo()}>
+          ↶
+        </IconBtn>
+        <IconBtn title="Redo" disabled={!canRedo} onClick={() => redo()}>
+          ↷
+        </IconBtn>
+        <span className="flex-1" />
+        <IconBtn title={`Zoom out — fewer pixels per bar (now ${barPx}px)`} onClick={() => stepZoom(-1)}>
+          −
+        </IconBtn>
+        <IconBtn title={`Zoom in — more pixels per bar (now ${barPx}px)`} onClick={() => stepZoom(1)}>
+          +
+        </IconBtn>
+        <IconBtn title="Fit the whole song in view" onClick={fitZoom}>
+          {"><"}
+        </IconBtn>
+        <IconBtn
+          title={follow ? "Following the playhead — click to stop" : "Follow the playhead while playing"}
+          active={follow}
+          onClick={toggleFollow}
+        >
+          |→
+        </IconBtn>
+      </div>
 
-        {/* The timeline — fixed scale, scrolls inside the full-bleed band.
-            A song shorter than the viewport leaves an honest empty tail. */}
-        <div ref={scrollRef} className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden" onWheel={() => setFollow(false)}>
-          <div className="relative h-full" style={{ width: contentW }}>
+      {/* The timeline — fixed scale, scrolls inside the full-bleed band.
+          A song shorter than the viewport leaves an honest empty tail. */}
+      <div ref={scrollRef} className="overflow-x-auto overflow-y-hidden" onWheel={() => setFollow(false)}>
+        <div className="relative h-[52px]" style={{ width: contentW }}>
             {/* Bar ruler — the coordinate system and the seek target. */}
             <div
               className="relative h-[18px] border-b border-edge/60 cursor-pointer select-none"
@@ -223,7 +315,6 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
             )}
           </div>
         </div>
-      </div>
     </section>
   );
 }

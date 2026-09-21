@@ -71,14 +71,19 @@ until modal parity.)
   element's section face for that section (P3).
 - Carries the playhead + loop; `←→` steps sections when it has focus.
 - **Timeline v2 (user-specified 2026-09-21, shipped P1.5):** fixed
-  **bar-linear** scale — 10px/bar default, zoom 6/10/14/20 + fit in a left
-  gutter — scrolls inside the full-bleed band; a **bar ruler** with adaptive
-  labels doubles as **seek** (click a bar = jump playback there;
-  paused/stopped starts from there); the playhead is pixel-exact per span
-  with **auto-follow** while playing (wheel scroll disengages, the toggle
-  re-engages). Blocks are true scale — a short song leaves an honest empty
-  tail instead of stretching; labels and coverage dots render only when a
-  block is wide enough to read them.
+  **bar-linear** scale — 10px/bar default, zoom 6/10/14/20 + fit — scrolls
+  inside the full-bleed band; a **bar ruler** with adaptive labels doubles
+  as **seek** (click a bar = jump playback there; paused/stopped starts
+  from there); the playhead is pixel-exact per span with **auto-follow**
+  while playing (wheel scroll disengages, the toggle re-engages). All
+  controls live in a **compact icon-only strip ABOVE the timeline** —
+  transport (play · pause · stop · section loop) + undo/redo, then zoom
+  −/+ · fit · follow; nothing sits at the timeline's left or right ends.
+  That strip is the seed of P2's collapsed header (the workbench already
+  hides the legacy header transport so the two can't disagree). Blocks are
+  true scale — a short song leaves an honest empty tail instead of
+  stretching; labels and coverage dots render only when a block is wide
+  enough to read them.
 
 ## 4. The placement law
 

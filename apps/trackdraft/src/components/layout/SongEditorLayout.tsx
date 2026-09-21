@@ -238,6 +238,11 @@ export default function SongEditorLayout() {
             {song.sections.length > 0 && <> · {classifySong(song).label}</>}
           </span>
         </div>
+        {/* On the workbench the spine's own control strip owns the
+            transport — hide the legacy cluster there so the two can't
+            disagree (P2 will collapse this header into the spine
+            everywhere). */}
+        {activeTab !== "workbench" && (
         <div className="flex items-center gap-1.5 text-sm">
           <button
             className={`text-xs font-medium px-2.5 py-1 rounded disabled:opacity-40 ${
@@ -300,6 +305,7 @@ export default function SongEditorLayout() {
             Redo
           </button>
         </div>
+        )}
       </header>
 
       <nav className="flex gap-0.5 border-b border-edge px-3 shrink-0">
