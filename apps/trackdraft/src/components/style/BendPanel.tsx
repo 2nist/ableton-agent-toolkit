@@ -69,24 +69,50 @@ const ALL_AXES: AxisDef[] = LAYERS.flatMap((layer) => layer.axes);
 
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 
-function AxisSlider({ label, lo, hi, value, onChange }: {
+function AxisSlider({ label, lo, hi, value, onChange, detected, onAdopt }: {
   label: string; lo: string; hi: string; value: number; onChange: (v: number) => void;
+  /** Analysis-derived value — renders a ◆ adopt affordance + a ghost tick
+   *  under the track. Non-destructive until the user adopts it. */
+  detected?: number;
+  onAdopt?: () => void;
 }) {
+  const adopted = detected != null && Math.abs(detected - value) < 0.02;
   return (
     <label className="block" title={`${lo} → ${hi}`}>
       <span className="flex items-center justify-between font-mono text-2xs uppercase tracking-wider text-inkMuted mb-0.5">
         <span>{label}</span>
-        <span className="text-ink tabular-nums">{pct(value)}</span>
+        <span className="flex items-center gap-1.5">
+          {detected != null && (
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); onAdopt?.(); }}
+              className={`text-[9px] font-mono leading-none ${adopted ? "text-inkMuted/40" : "text-accent/80 hover:text-accent"}`}
+              title={adopted ? `detected ${pct(detected)} (adopted)` : `detected ${pct(detected)} — click to adopt`}
+            >
+              ◆{adopted ? "" : ` ${pct(detected)}`}
+            </button>
+          )}
+          <span className="text-ink tabular-nums">{pct(value)}</span>
+        </span>
       </span>
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-1.5 accent-[#E8B54A] cursor-pointer"
-      />
+      <div className="relative">
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="w-full h-1.5 accent-[#E8B54A] cursor-pointer"
+        />
+        {detected != null && (
+          <span
+            aria-hidden
+            className={`pointer-events-none absolute -top-0.5 h-2.5 w-px ${adopted ? "bg-inkMuted/30" : "bg-accent/60"}`}
+            style={{ left: `${(detected * 100).toFixed(1)}%` }}
+          />
+        )}
+      </div>
       <span className="flex justify-between text-[9px] text-inkMuted/50 font-mono leading-none mt-px select-none">
         <span>{lo}</span>
         <span>{hi}</span>
@@ -115,6 +141,17 @@ export default function BendPanel() {
   if (!currentSong) return null;
   const song = currentSong;
   const master = song.bend ?? {};
+  const detected = song.detected;
+
+  const adoptLayer = (layer: LayerDef) => {
+    const patch: Partial<Record<AxisKey, number>> = {};
+    for (const axis of layer.axes) {
+      const v = song.detected?.[axis.key];
+      if (v != null) patch[axis.key] = v;
+    }
+    if (Object.keys(patch).length === 0) return;
+    updateCurrentSong((s) => ({ ...s, bend: { ...s.bend, ...patch } }));
+  };
 
   const activeSection: BlueprintSection | null =
     song.sections.find((s) => s.id === selectedSectionId) ?? null;
@@ -180,6 +217,7 @@ export default function BendPanel() {
         <p className="text-[11px] text-inkMuted uppercase tracking-wide">Mix / Bend</p>
         <span className="font-mono text-[9px] text-inkMuted/60">
           {song.bend ? "bent" : "neutral"}
+          {song.detected ? " · ◆ detected" : ""}
         </span>
       </div>
 
@@ -242,22 +280,39 @@ export default function BendPanel() {
       {/* Per-layer bends — the Mix/Bend station's four layers. Each slider
           writes the same axis on the song master; the section block below
           overrides any layer per section. */}
-      {LAYERS.map((layer) => (
-        <Block key={layer.id} title={layer.title} hint={layer.hint}>
-          <div className="space-y-2">
-            {layer.axes.map((axis) => (
-              <AxisSlider
-                key={axis.key}
-                label={axis.label}
-                lo={axis.lo}
-                hi={axis.hi}
-                value={master[axis.key] ?? 0.5}
-                onChange={(v) => setMasterAxis(axis.key, v)}
-              />
-            ))}
-          </div>
-        </Block>
-      ))}
+      {LAYERS.map((layer) => {
+        const hasDetected = layer.axes.some((a) => detected?.[a.key] != null);
+        return (
+          <Block key={layer.id} title={layer.title} hint={layer.hint}>
+            {hasDetected && (
+              <button
+                className="text-[9px] font-mono text-accent/80 hover:text-accent mb-1"
+                onClick={() => adoptLayer(layer)}
+                title="Set this layer's sliders to what the analysis detected"
+              >
+                ◆ adopt detected
+              </button>
+            )}
+            <div className="space-y-2">
+              {layer.axes.map((axis) => (
+                <AxisSlider
+                  key={axis.key}
+                  label={axis.label}
+                  lo={axis.lo}
+                  hi={axis.hi}
+                  value={master[axis.key] ?? 0.5}
+                  onChange={(v) => setMasterAxis(axis.key, v)}
+                  detected={detected?.[axis.key]}
+                  onAdopt={() => {
+                    const dv = detected?.[axis.key];
+                    if (dv != null) setMasterAxis(axis.key, dv);
+                  }}
+                />
+              ))}
+            </div>
+          </Block>
+        );
+      })}
 
       {/* This section — per-section override */}
       <Block title="This section" hint={activeSection ? activeSection.name : "none selected"}>

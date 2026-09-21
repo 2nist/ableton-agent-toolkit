@@ -243,3 +243,47 @@ export function applyPerformanceEffect<T extends ChordPerformanceNote>(
       return notes;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Whole-chord note planning (block → effect)
+// ---------------------------------------------------------------------------
+
+/** A resolved, effect-applied note for one chord — the single shape every
+ *  consumer (MIDI export, Ableton clip planner, in-app preview) maps onto
+ *  its own timeline/units. */
+export interface PlannedChordNote {
+  pitch: number;
+  startTime: number; // beats
+  duration: number; // beats
+  velocity: number; // 0-127
+}
+
+/**
+ * Build the actual note list for a chord: the block voicing at `startBeat`
+ * for `durationBeats`, with `performance` applied so a strummed/arpeggiated
+ * chord *plans* (and therefore previews and exports) the way it sounds.
+ *
+ * This is the canonical "what notes does this chord make" function — the
+ * app's MIDI export and the Ableton bridge's clip planner both build the
+ * block then call `applyPerformanceEffect`; this folds those two steps into
+ * one so the in-app preview can share the exact same result instead of
+ * re-implementing a block-chord-only path. `intervals` are semitone offsets
+ * from the root (e.g. `[0, 4, 7]` for major); callers resolve them from the
+ * chord's quality via `getChordIntervals`.
+ */
+export function planChordNotes(
+  rootMidi: number,
+  intervals: number[],
+  startBeat: number,
+  durationBeats: number,
+  velocity = 96,
+  performance?: ChordPerformanceEffect,
+): PlannedChordNote[] {
+  const block: PlannedChordNote[] = intervals.map((i) => ({
+    pitch: rootMidi + i,
+    startTime: startBeat,
+    duration: durationBeats,
+    velocity,
+  }));
+  return applyPerformanceEffect(block, performance);
+}

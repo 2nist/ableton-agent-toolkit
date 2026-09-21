@@ -78,6 +78,29 @@ def groove_periodicity(env, fps, bpm):
         out[tag] = round(float(ac[lag]) if lag < len(ac) else 0.0, 2)
     return out
 
+def onset_rate_per_bar(env, fps, bpm):
+    """Rough hits-per-bar: adaptive-peak onset counting on a band envelope.
+    The RATE is reliable even on stems where per-cell grids smear."""
+    if len(env) < 8:
+        return 0.0
+    sm = np.convolve(env, np.ones(3) / 3.0, mode="same")
+    w = max(3, int(round(fps)))
+    padded = np.pad(sm, (w // 2, w - w // 2), mode="edge")
+    view = np.lib.stride_tricks.sliding_window_view(padded, w)[: len(sm)]
+    loc_mean = view.mean(axis=1)
+    loc_max = view.max(axis=1)
+    thr = loc_mean + 0.45 * (loc_max - loc_mean)
+    count, last = 0, -999
+    for i in range(2, len(sm) - 2):
+        v = sm[i]
+        if v < thr[i] or i - last < 4:
+            continue
+        if v >= sm[i - 2] and v >= sm[i + 2] and v > sm[i - 1] and v > sm[i + 1]:
+            count += 1
+            last = i
+    bars = (len(env) / fps) / ((60.0 / bpm) * 4.0)
+    return count / max(bars, 0.25)
+
 BANDS = {
     "kick":  [(35, 110)],
     "snare": [(140, 400), (1800, 5200)],
@@ -295,6 +318,7 @@ def main():
             "energy16": [round(float(q / vmax), 3) for q in v],
             "share_pct": round(100 * float(np.sum(env)) / max(float(np.sum(spec)), 1e-9), 1),
             "periodicity": groove_periodicity(env, fps, bpm),
+            "hits_per_bar": round(onset_rate_per_bar(env, fps, bpm), 2),
         }
         if band in ("kick", "snare"):
             m, k, r = fit_euclid((v > 0.5 * vmax).astype(int))
@@ -310,7 +334,7 @@ def main():
     print("\nGLOBAL PATTERNS (16th grid, 4/4 — 0-9 = energy level vs busiest cell):")
     for band in ("kick", "snare", "hat"):
         e = report["global"][band]
-        extra = f"   share {e['share_pct']}%"
+        extra = f"   {e['hits_per_bar']:.1f}/bar · share {e['share_pct']}%"
         if "euclid" in e:
             extra += f"   {e['euclid']} match {e['euclid_match']}%"
         if band == "snare":

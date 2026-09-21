@@ -693,6 +693,13 @@ export interface BlueprintSong {
    *  resolver merges with the defaults). Absent → the engine's current
    *  behavior. */
   bend?: Partial<StyleProfile>;
+  /** Analysis-derived Bend ratings — what the SONG suggests on the same
+   *  axes ("detected" ghosts in the Mix/Bend station). Non-destructive:
+   *  nothing applies these automatically; the panel shows markers with an
+   *  adopt affordance. Produced offline by `scripts/detect-bend.ts` from
+   *  the drum/bass profile JSONs + the chord stream (any subset when only
+   *  some analyses exist). Absent → no markers. */
+  detected?: Partial<StyleProfile>;
   notes?: SongNotes;
   additionalIdeas?: string[];
   references?: string[];

@@ -10,7 +10,15 @@
  *  transport machinery it doesn't own.
  */
 
-import { chordToMidiNotes, pitchClass, type ChordQuality } from "@music-theory/core";
+import {
+  chordToMidiNotes,
+  getChordIntervals,
+  pitchClass,
+  planChordNotes,
+  type ChordPerformanceEffect,
+  type ChordQuality,
+  type PlannedChordNote,
+} from "@music-theory/core";
 import { generateBiTonal, BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR, type BiTonalChord } from "@platform/progression-engine";
 import { getMidiOutput } from "./liveMidiOut";
 import { useMidiSettingsStore } from "../../store/midiSettingsStore";
@@ -50,16 +58,58 @@ function chordPitches(chord: { root: string; quality: string }): number[] {
   return chordToMidiNotes(pitchClass(chord.root), chord.quality as ChordQuality, CHORD_OCTAVE);
 }
 
-/** Audition a single chord on the chords channel. */
-export async function previewChord(chord: { root: string; quality: string }, durationMs = 1200): Promise<void> {
+/** The shape a chord carries through the app — enough to plan its notes and
+ *  (when present) apply its performance effect so auditioning sounds like
+ *  the export. `performance` is optional so plain {root, quality} callers
+ *  (e.g. the honeycomb's hover-preview) keep working unchanged. */
+export interface PreviewChord {
+  root: string;
+  quality: string;
+  beats?: number;
+  performance?: ChordPerformanceEffect;
+}
+
+/** Plan a chord's effect-applied notes in beat-space (startBeat-relative),
+ *  via the shared `planChordNotes` so the preview matches MIDI export and
+ *  the Ableton bridge exactly. */
+function planPreviewChord(
+  chord: PreviewChord,
+  startBeat: number,
+  durationBeats: number,
+): PlannedChordNote[] {
+  const rootMidi = CHORD_OCTAVE * 12 + pitchClass(chord.root);
+  const intervals = getChordIntervals(chord.quality as ChordQuality);
+  return planChordNotes(rootMidi, intervals, startBeat, durationBeats, PREVIEW_VELOCITY, chord.performance);
+}
+
+/** Send a planned note as note-on/note-off at the given beat-domain times. */
+function sendPlannedNote(
+  ctx: { output: MIDIOutput; ch: number },
+  note: PlannedChordNote,
+  startMs: number,
+  beatMs: number,
+): void {
+  const on = startMs + note.startTime * beatMs;
+  const off = on + Math.min(note.duration * beatMs, MAX_SUSTAIN_MS);
+  const vel = Math.max(1, Math.min(127, note.velocity));
+  ctx.output.send([0x90 | ctx.ch, note.pitch & 0x7f, vel], on);
+  ctx.output.send([0x80 | ctx.ch, note.pitch & 0x7f, 0], off);
+}
+
+/** Audition a single chord on the chords channel. When the chord carries a
+ *  performance effect (strum/pulse/arp), the preview is effect-applied so a
+ *  strummed chord actually sounds strummed. */
+export async function previewChord(chord: PreviewChord, durationMs = 1200): Promise<void> {
   const ctx = await previewOutput();
   if (!ctx) return;
-  const pitches = chordPitches(chord);
-  if (pitches.length === 0) return;
+  // 120 bpm reference: 500 ms/beat, so the effect's beat-domain offsets map
+  // to the wall-clock window the same way the export's beat math intends.
+  const beatMs = 500;
+  const durationBeats = durationMs / beatMs;
+  const notes = planPreviewChord(chord, 0, durationBeats);
+  if (notes.length === 0) return;
   const now = performance.now() + 20;
-  for (const p of pitches) ctx.output.send([0x90 | ctx.ch, p & 0x7f, PREVIEW_VELOCITY], now);
-  const off = now + durationMs;
-  for (const p of pitches) ctx.output.send([0x80 | ctx.ch, p & 0x7f, 0], off);
+  for (const n of notes) sendPlannedNote(ctx, n, now, beatMs);
 }
 
 /** Which extra layers a progression preview should send. Each layer goes to
@@ -113,7 +163,7 @@ function colorNotesFor(
  *  `layers.color` streams the bi-tonal color layer on the color channel.
  *  Restarting cancels any preview already in flight. */
 export async function previewProgression(
-  chords: { root: string; quality: string; beats?: number }[],
+  chords: PreviewChord[],
   bpm: number,
   beatsPerChord = 4,
   layers: ProgressionPreviewLayers = {},
@@ -129,18 +179,24 @@ export async function previewProgression(
 
   const beatMs = 60000 / Math.max(1, bpm);
   const colorNotes = colorCtx ? colorNotesFor(chords, colorFlavor) : [];
-  let cursorMs = 0;
+  const startMs = performance.now() + 20;
+  let cursorBeats = 0;
 
   for (const chord of chords) {
     const beats = chord.beats ?? beatsPerChord;
-    const durMs = Math.max(250, beats * beatMs);
 
-    scheduleBlock(chordsCtx, chordPitches(chord), cursorMs, durMs);
+    // Effect-applied via the same planner the export uses, so an arpeggiated
+    // or strummed step auditions the way it will land in Ableton.
+    const notes = planPreviewChord(chord, cursorBeats, Math.max(0.5, beats));
+    for (const n of notes) {
+      activeTimers.push(setTimeout(() => sendPlannedNote(chordsCtx, n, startMs, beatMs), 0));
+    }
+
     if (bassCtx) {
       const bassPitch = BASS_OCTAVE * 12 + pitchClass(chord.root);
-      scheduleBlock(bassCtx, [bassPitch], cursorMs, durMs, 100);
+      scheduleBlock(bassCtx, [bassPitch], cursorBeats * beatMs, beats * beatMs, 100);
     }
-    cursorMs += durMs;
+    cursorBeats += beats;
   }
 
   // Color notes are beat-relative to the chord cycle, so they map onto the

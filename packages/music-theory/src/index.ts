@@ -15,6 +15,8 @@ export {
   applyStrum,
   applyPulse,
   applyArp,
+  planChordNotes,
   type ChordPerformanceNote,
   type ChordPerformanceEffect,
+  type PlannedChordNote,
 } from "./performance";
