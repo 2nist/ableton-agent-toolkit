@@ -72,6 +72,27 @@ export async function playSong(song: BlueprintSong, clockSource: ClockSource): P
   return true;
 }
 
+/**
+ * Seek — jump the internal clock's playback position to `beat`: playing
+ * continues from there; paused/stopped starts from there (a ruler click is
+ * an audition gesture). No-op under the Ableton clock — Live is the master,
+ * seek it there. The live MIDI scheduler re-starts from the same beat when
+ * a port is available (silent playhead if the port is stale — the seek
+ * itself still lands).
+ */
+export async function seekTo(song: BlueprintSong, clockSource: ClockSource, beat: number): Promise<void> {
+  if (clockSource === "ableton") return;
+  const transport = getSongTransport();
+  clearStagedRefresh();
+  const target = Math.max(0, beat);
+  transport.play(song, { startBeat: target });
+  const { midiOutputId, channels } = useMidiSettingsStore.getState();
+  if (!midiOutputId) return;
+  const output = await getMidiOutput(midiOutputId);
+  if (!output) return;
+  getLiveMidiScheduler().start(song, output, channels, { startBeat: target });
+}
+
 /** Pause playback — freeze the playhead (and silence the live MIDI out);
  *  `playSong` will resume from the held beat. */
 export function pauseSong(): void {
