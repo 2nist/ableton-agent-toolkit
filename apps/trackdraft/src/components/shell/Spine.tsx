@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
+import { sectionSpans, type SectionSpan } from "../../lib/arrangement";
 import { roleStyle } from "../../lib/roleColors";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
@@ -69,19 +69,6 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
               onSelect={() => setSelectedSectionId(span.sectionId)}
             />
           ))}
-        </div>
-
-        {/* Right end — position readout / totals */}
-        <div className="shrink-0 flex items-center gap-2 px-3 border-l border-edge">
-          {tick && (tick.isPlaying || tick.beat > 0) ? (
-            <span className="text-3xs font-mono text-accent tabular-nums" title="Playhead position (beats)">
-              ● {tick.beat.toFixed(1)}
-            </span>
-          ) : (
-            <span className="text-3xs font-mono text-inkMuted/60 tabular-nums">
-              {Math.round(totalBars(spans))} bars · {spans.length} blocks
-            </span>
-          )}
         </div>
       </div>
     </section>
