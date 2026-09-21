@@ -162,9 +162,17 @@ export default function SongEditorLayout() {
   const song = songs.find((s) => s.id === songId);
   songRef.current = song ?? songRef.current;
 
+  // Make the route's song the store's current song. This must also re-run
+  // when hydration populates `songs` (child effects fire BEFORE App's
+  // loadFromStorage pass, so the first attempt can hit an empty list and
+  // silently no-op — deep links then rendered the LAST persisted song's
+  // content under the route's title; found 2026-09-20). Guarded by the id
+  // comparison so ordinary edits (which replace `songs` every keystroke)
+  // don't re-open the song and wipe the undo history.
+  const currentSongId = useSongStore((s) => s.currentSongId);
   useEffect(() => {
-    if (songId) openSong(songId);
-  }, [songId, openSong]);
+    if (song && songId && currentSongId !== songId) openSong(songId);
+  }, [song?.id, songId, currentSongId, openSong]);
 
   // Song Info is registered once per song-editor mount and never cleared —
   // it's available on every tab, unlike `tools` which each tab owns.
