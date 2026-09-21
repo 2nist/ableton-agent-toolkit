@@ -200,8 +200,8 @@ export default function Dashboard() {
                   >
                     {importingBulk ? "Importing…" : "Import All"}
                   </button>
-                  <Link to="/ui-kit-sandbox" className="hover:text-ink">
-                    UI Kit
+                  <Link to="/design-lab" className="hover:text-ink">
+                    Design Lab
                   </Link>
                   <Link to="/sandbox" className="hover:text-ink">
                     Sandbox
@@ -331,8 +331,8 @@ export default function Dashboard() {
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-500" />
                     {confidenceStats.empty}
                   </span>
-                  <Link to="/ui-kit-sandbox" className="hover:text-ink">
-                    UI Kit
+                  <Link to="/design-lab" className="hover:text-ink">
+                    Design Lab
                   </Link>
                   <Link to="/sandbox" className="hover:text-ink">
                     Sandbox

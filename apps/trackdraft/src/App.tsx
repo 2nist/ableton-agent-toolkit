@@ -12,7 +12,7 @@ import LyricsView from "./components/lyrics/LyricsView";
 import MelodyView from "./components/melody/MelodyView";
 import LivePreviewSandbox from "./pages/LivePreviewSandbox";
 import GenreWorkbench from "./pages/GenreWorkbench";
-import UiKitSandbox from "./pages/UiKitSandbox";
+import DesignLab from "./pages/DesignLab";
 import RenderCanvasLayout from "./components/RenderCanvasLayout";
 import LyricChordPopout from "./components/popout/LyricChordPopout";
 
@@ -50,7 +50,8 @@ function App() {
           <Route path="/sandbox" element={<LivePreviewSandbox />} />
           <Route path="/canvas" element={<RenderCanvasLayout />} />
           <Route path="/genre-workbench" element={<GenreWorkbench />} />
-          <Route path="/ui-kit-sandbox" element={<UiKitSandbox />} />
+          <Route path="/design-lab" element={<DesignLab />} />
+          <Route path="/ui-kit-sandbox" element={<Navigate to="/design-lab" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

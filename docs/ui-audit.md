@@ -24,8 +24,8 @@ propose changes (those go in the standardization doc, drawn from §7).
 | Native `confirm()` sites | **3** |
 | Global `keydown` listeners | **2** |
 | Raw `#RRGGBB` literals in `.tsx` components | ~**193** across 22 files |
-| Accent-gold `#E8B54A` total occurrences | **115** (57 in `.tsx`; 50 in an unreferenced prototype HTML) |
-| Accent **token** uses (`text/bg/border-accent…`) | **163** |
+| TrackDraft amber `#E8B54A` occurrences (**untokenized**) | **115** (57 in `.tsx`; 50 in an unreferenced prototype HTML) |
+| Interactive accent token (`#FFA500` orange) | **172** total — 163 class uses + 9 raw draw-code literals |
 | Font-size tokens (`text-2xs/3xs`) vs bracket sizes (`text-[9–11px]`) | **187 vs 159** |
 | `font-mono` micro-label adoption | **34 of 65** files |
 | Inline `style={}` | **76** |
@@ -51,7 +51,7 @@ propose changes (those go in the standardization doc, drawn from §7).
 | `/sandbox` | Puck live-preview sandbox |
 | `/canvas` | Render canvas layout test |
 | `/genre-workbench` | Genre-map authoring (prompt → paste → validate → copy to catalog) |
-| `/ui-kit-sandbox` | `@platform/ui-kit` token/system evaluation page |
+| `/design-lab` (old `/ui-kit-sandbox` redirects) | Design Lab — hands-on design surface: accent fork, hue playground, type/button specimens, decisions log |
 
 ### Song workspace shell (`SongEditorLayout.tsx`)
 
@@ -275,15 +275,19 @@ persistence only for durable config, never for selection/preview state.
 
 ### Adoption numbers (drift is measurable and small)
 
-- **Accent**: **163 token uses** vs **57 raw `#E8B54A` in `.tsx`** —
-  - 4 are arbitrary class values (`accent-[#E8B54A]` in BendPanel sliders),
-  - ~15 are the "active chip" class strings in drums
-    (`border-[#E8B54A] text-[#E8B54A] bg-[#E8B54A]/10` across 4 files) — textbook
-    token drift, trivially replaceable,
-  - the rest are SVG `fill=`/`stroke=` attributes, `style={{…}}` shadows, and local
-    `const AMBER = "#E8B54A"` (3 drums files). Draw code needs literal values — the fix
-    is one shared TS constant, not a class.
-  - plus **50 more in `components/drums/newview.html`** (see stray artifact below).
+- **Two accent families are in play — only one is tokenized:**
+  - **Interactive accent** = Tailwind `accent` token = `ABLETON_DARK.accent` =
+    **`#FFA500` (orange)**: 163 class uses (`text/bg/border-accent…`) + 9 raw `#FFA500`
+    draw-code literals (SelectionPad strokes) — the class uses are healthy; the literals
+    become one shared constant.
+  - **TrackDraft amber `#E8B54A` (gold) is NOT in the token system** — 57 tsx occurrences:
+    4 arbitrary class values (`accent-[#E8B54A]` on BendPanel sliders — deliberate: the
+    range-input accent-color), ~15 "active chip" class strings in drums
+    (`border-[#E8B54A] text-[#E8B54A] bg-[#E8B54A]/10` across 4 files), and the rest SVG
+    `fill=`/`stroke=` attributes, `style={{…}}` shadows, and local `const AMBER = "#E8B54A"`
+    (3 drums files) — plus **50 more in `components/drums/newview.html`**.
+  - The design question this surfaces (one accent or two — interactive vs instrument) is
+    now presented hands-on at **`/design-lab`** (decision D1).
 - **Fonts**: token **187** vs bracket **159** — the migration is about half done.
 - **Radius**: only **11** `rounded-lg` stragglers vs 259 bare `rounded`.
 - **Inline `style={}`**: 76 total; hotspots `HoneycombWheel` 12, `DrumPatternTools` 8,
@@ -362,10 +366,13 @@ Export menu: **Export MIDI** · **Send to Ableton**.
 
 ## 7. Findings — inputs for the standardization pass
 
-1. **Token drift is small and countable.** Accent: 163 token vs 57 raw in tsx, of which
-   ~15 are pure class-string drift (`border-[#E8B54A] …` active chips) and 4 arbitrary
-   class values — a mechanical pass. Fonts: 187 vs 159 — the other half of a deliberate
-   migration the config already anticipated. `rounded-lg`: 11 stragglers.
+1. **Token drift is small and countable — plus one design decision.** Two accent families
+   exist: the tokenized interactive orange (`accent` = `#FFA500`; 163 class + 9 raw draw
+   uses) and the untokenized TrackDraft amber (`#E8B54A`; 57 tsx + 50 prototype uses) —
+   ~15 chip strings + 4 arbitrary classes are mechanical drift; whether both colors
+   *should* exist is a design call, now staged at `/design-lab` (D1). Fonts: 187 vs 159 —
+   the other half of a deliberate migration the config already anticipated.
+   `rounded-lg`: 11 stragglers.
 2. **Draw code needs a shared palette constant, not classes.** SVG `fill=`/`stroke=` and
    canvas drawing can't use Tailwind tokens; three drums files already use
    `const AMBER`. Generalize into one theme module (sourced from `ABLETON_DARK`) covering
