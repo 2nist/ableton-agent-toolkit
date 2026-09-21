@@ -5,11 +5,18 @@
  *  normalize punctuation/case so the two independently-named sources can
  *  be joined by title text. Confirmed against real files: without the
  *  CD-prefix strip, every White Album track silently failed to match
- *  its real, present LRCLIB entry. */
+ *  its real, present LRCLIB entry.
+ *
+ *  NUMERIC-TITLE GUARD (2026-09): plain "starts with digits" stripping
+ *  destroyed numeric song titles — "1999" became "", "50 Ways To Leave
+ *  Your Lover" became "Ways...", "20-75" became "75". Only strip forms
+ *  that are unambiguously track numbers: a leading-zero number ("01 "),
+ *  or digits with a separator AND a letter following ("02 - Misery"). */
 export function normalizeTitle(title: string): string {
   return title
     .replace(/^CD\s*\d+\s*[-_]*\s*/i, "")
-    .replace(/^\d+\s*[-_]*\s*/, "")
+    .replace(/^0\d+[\s\-_]+(?=[A-Za-z])/, "")
+    .replace(/^\d+[\s\-_]*[\-_][\s\-_]*(?=[A-Za-z])/, "")
     .replace(/[_-]/g, " ")
     // LRCLIB track names routinely use Unicode smart-quote / acute-accent
     // characters for apostrophes (U+00B4, U+0060 backtick, U+2018/U+2019
@@ -23,13 +30,15 @@ export function normalizeTitle(title: string): string {
     .trim();
 }
 
-/** Strips the same CD-disc/track-number prefixes as normalizeTitle, but
- *  keeps case and turns underscores into spaces for a real display
- *  title instead of a match key — "CD1 - 03 - Glass_Onion" -> "Glass Onion". */
+/** Strips the same CD-disc/track-number prefixes as normalizeTitle (with
+ *  the same numeric-title guard), but keeps case and turns underscores
+ *  into spaces for a real display title — "CD1 - 03 - Glass_Onion" ->
+ *  "Glass Onion", while "1999" and "20-75" stay intact. */
 export function cleanDisplayTitle(title: string): string {
   return title
     .replace(/^CD\s*\d+\s*[-_]*\s*/i, "")
-    .replace(/^\d+\s*[-_]*\s*/, "")
+    .replace(/^0\d+[\s\-_]+(?=[A-Za-z])/, "")
+    .replace(/^\d+[\s\-_]*[\-_][\s\-_]*(?=[A-Za-z])/, "")
     .replace(/_/g, " ")
     .replace(/\s+/g, " ")
     .trim();

@@ -49,6 +49,7 @@ interface Args {
   requireSynced: boolean;
   requireCleanKey: boolean;
   maxChordless: number;
+  minCpb: number;
   promote: string | null;
   exempt: string[];
 }
@@ -61,6 +62,7 @@ function parseArgs(argv: string[]): Args {
     requireSynced: false,
     requireCleanKey: false,
     maxChordless: MAX_CHORDLESS,
+    minCpb: MIN_CPB,
     promote: null,
     exempt: [],
   };
@@ -71,6 +73,7 @@ function parseArgs(argv: string[]): Args {
     else if (argv[i] === "--require-synced") args.requireSynced = true;
     else if (argv[i] === "--require-clean-key") args.requireCleanKey = true;
     else if (argv[i] === "--max-chordless") args.maxChordless = Number.parseInt(argv[++i], 10);
+    else if (argv[i] === "--min-cpb") args.minCpb = Number.parseFloat(argv[++i]);
     else if (argv[i] === "--promote") args.promote = argv[++i];
     else if (argv[i] === "--exempt") {
       args.exempt = argv[++i]
@@ -144,7 +147,7 @@ function classify(m: Metrics, args: Args): Verdict {
     reasons.push(`${m.chordless} section${m.chordless === 1 ? "" : "s"} without chords`);
   }
   if (m.chords < MIN_CHORDS) reasons.push(`only ${m.chords} chords total`);
-  if (m.cpb < MIN_CPB) reasons.push(`sparse harmony (${m.cpb.toFixed(2)} chords/bar)`);
+  if (m.cpb < args.minCpb) reasons.push(`sparse harmony (${m.cpb.toFixed(2)} chords/bar)`);
   if (args.requireSynced && m.lyricStatus === "plain") reasons.push("lyrics not line-timed");
   if (args.requireCleanKey && m.lowKey) reasons.push("low-confidence key estimate");
 
@@ -251,7 +254,7 @@ function main(): void {
     generatedAt: new Date().toISOString(),
     criteria: {
       minChords: MIN_CHORDS,
-      minCpb: MIN_CPB,
+      minCpb: args.minCpb,
       maxChordless: args.maxChordless,
       requireSynced: args.requireSynced,
       requireCleanKey: args.requireCleanKey,
