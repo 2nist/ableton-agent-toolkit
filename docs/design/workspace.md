@@ -75,7 +75,12 @@ until modal parity.)
   inside the full-bleed band; a **bar ruler** with adaptive labels doubles
   as **seek** (click a bar = jump playback there; paused/stopped starts
   from there); the playhead is pixel-exact per span with **auto-follow**
-  while playing (wheel scroll disengages, the toggle re-engages). All
+  while playing (manual pan — shift+wheel, a trackpad swipe, or dragging
+  the scroll rail — disengages; the toggle re-engages). The **mouse wheel
+  zooms**, anchored on the bar under the cursor; the scrollbar is a slim
+  translucent **drag rail** (`.daw-scroll` — transparent track, subtle
+  thumb; styling it also forces it visible on macOS instead of overlay-
+  hiding). All
   controls live in a **compact icon-only strip ABOVE the timeline** —
   transport (play · pause · stop · section loop) + undo/redo, then zoom
   −/+ · fit · zoom-to-section · follow; nothing sits at the timeline's

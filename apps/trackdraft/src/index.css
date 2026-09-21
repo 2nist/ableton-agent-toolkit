@@ -1,3 +1,36 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Native controls (scrollbars, form widgets) render dark — kills the stark
+   white default scrollbars Chrome draws on dark panels. */
+:root {
+  color-scheme: dark;
+}
+
+/* DAW-style scrollbars for the timeline: transparent track, slim translucent
+   thumb that keeps the "click and drag to pan" affordance without the chunky
+   OS chrome. Styling ::-webkit-scrollbar also forces the scrollbar to be
+   always visible (macOS overlay mode otherwise hides it entirely — you'd
+   never know the timeline can scroll). Firefox gets the standard props. */
+.daw-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.daw-scroll::-webkit-scrollbar {
+  height: 7px;
+  background: transparent;
+}
+.daw-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.daw-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+.daw-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.daw-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}

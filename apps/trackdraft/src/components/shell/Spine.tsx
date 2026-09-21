@@ -11,9 +11,9 @@ import { beatsPerBar, type BlueprintSection, type BlueprintSong } from "../../ty
  *  same width — 7/8 bars included — because the bars are the axis (a
  *  time-linear scale would make odd-meter bars narrower than their
  *  neighbours and break "this section is an 8, that one's a 16"). The
- *  blocks-view lesson applies: zoom must be able to GROW, so 20 is the top
- *  step and 10 the default. */
-const BAR_PX_STEPS = [6, 10, 14, 20] as const;
+ *  blocks-view lesson applies: zoom must be able to GROW — the ladder runs
+ *  4→80 with 10 the default; the mouse wheel and − / + walk it. */
+const BAR_PX_STEPS = [4, 6, 8, 10, 14, 20, 28, 40, 56, 80] as const;
 
 /** Icon button for the control strip — glyph only; meaning lives in the
  *  tooltip. Compact by design: the strip is 26px tall. */
@@ -49,14 +49,15 @@ function IconBtn({
  * The Spine — the workspace's full-width top band (docs/design/workspace.md §2).
  *
  * Timeline v2 (user-specified 2026-09-21): fixed scale (px per BAR, default
- * 10), horizontally scrollable inside the full-bleed band, a bar ruler on
- * top that doubles as the seek control, a pixel-exact playhead with
- * auto-follow while playing. Controls live ONLY in a compact icon-only
- * strip ABOVE the timeline (transport: play · pause · stop · section loop +
- * undo/redo, then zoom −/+ · fit · zoom-to-section · follow) — nothing sits
- * at the timeline's
- * left or right ends. Blocks are TRUE scale — a short song leaves an honest
- * empty tail, it is never stretched to fit.
+ * 10), horizontally scrollable inside the full-bleed band — the mouse wheel
+ * ZOOMS, anchored on the bar under the cursor; shift+wheel / trackpad swipe
+ * / the slim `.daw-scroll` rail pans. A bar ruler on top doubles as the seek
+ * control; a pixel-exact playhead auto-follows while playing. Controls live
+ * ONLY in a compact icon-only strip ABOVE the timeline (transport: play ·
+ * pause · stop · section loop + undo/redo, then zoom −/+ · fit ·
+ * zoom-to-section · follow) — nothing sits at the timeline's left or right
+ * ends. Blocks are TRUE scale — a short song leaves an honest empty tail,
+ * it is never stretched to fit.
  *
  * Selection is the same `studioSelectionStore.selectedSectionId` the
  * arrangement timeline and the Mix/Bend panel already share, so the spine
@@ -136,6 +137,46 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
       el.scrollLeft = Math.max(0, leftPx - 24);
     }
   }, [selectedSectionId, barPx, spans]);
+
+  // Mouse wheel over the timeline = zoom, anchored on the bar under the
+  // cursor (the musical position you're pointing at stays put). Shift+wheel
+  // and trackpad horizontal swipes keep the native pan and drop follow, like
+  // any manual scroll; Ctrl+wheel is left alone (browser zoom). Native
+  // listener because React's synthetic wheel is passive and can't
+  // preventDefault. The tiny accumulator turns trackpad dribble into one
+  // clean step per gesture "notch".
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let acc = 0;
+    function onWheel(e: WheelEvent) {
+      if (!el) return;
+      if (e.ctrlKey) return;
+      if (e.shiftKey || e.deltaX !== 0) {
+        setFollow(false);
+        return; // native horizontal pan
+      }
+      e.preventDefault();
+      acc += e.deltaY;
+      if (Math.abs(acc) < 40) return;
+      const dir: 1 | -1 = acc < 0 ? 1 : -1; // wheel up = zoom in
+      acc = 0;
+      const next =
+        dir > 0
+          ? BAR_PX_STEPS.find((v) => v > barPx + 0.01)
+          : [...BAR_PX_STEPS].reverse().find((v) => v < barPx - 0.01);
+      if (next == null) return;
+      const rect = el.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const barAtCursor = (el.scrollLeft + px) / barPx;
+      setBarPx(next);
+      requestAnimationFrame(() => {
+        el.scrollLeft = Math.max(0, barAtCursor * next - px);
+      });
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [barPx]);
 
   if (spans.length === 0) return null;
 
@@ -286,7 +327,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
 
       {/* The timeline — fixed scale, scrolls inside the full-bleed band.
           A song shorter than the viewport leaves an honest empty tail. */}
-      <div ref={scrollRef} className="overflow-x-auto overflow-y-hidden" onWheel={() => setFollow(false)}>
+      <div ref={scrollRef} className="daw-scroll overflow-x-auto overflow-y-hidden">
         <div className="relative h-[52px]" style={{ width: contentW }}>
             {/* Bar ruler — the coordinate system and the seek target. */}
             <div
