@@ -1,21 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
+import { NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import { resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
 import { useSongStore } from "../../store/songStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { sectionSpans, type SectionSpan } from "../../lib/arrangement";
+import { updateSection } from "../../lib/sections";
 import { roleStyle } from "../../lib/roleColors";
-import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playback/drumPreview";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import DrumLineEmbed from "./DrumLineEmbed";
 import { useInspectorStore } from "../../store/inspectorStore";
+import ProgressionTrack from "../harmony/ProgressionTrack";
 import HexReadout from "../harmony/HexReadout";
 import NecklaceRow from "../drums/NecklaceRow";
 import MelodyStaff from "../melody/MelodyStaff";
-import type { BlueprintSection, BlueprintSong } from "../../types/blueprint";
+import type { BlueprintSection, BlueprintSong, Chord } from "../../types/blueprint";
 
 /**
  * The Workbench — first slice of the new workspace (docs/design/workspace.md).
@@ -173,6 +175,25 @@ function SectionWorkspace({
   const effKey: NoteName = rawKey in NOTE_TO_PC ? (rawKey as NoteName) : "C";
   const effScale: ScaleType = section.scale ?? song.scale;
   const jump = (tab: string) => navigate(`/song/${id}/${tab}?section=${section.id}`);
+  const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
+  const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
+  const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
+
+  /** Chord writes from the embedded progression strip — the same
+   *  updateSection path the harmony editor uses, so the spine's chords
+   *  lane, playback and the rail's Fit readout all follow immediately. */
+  function updateChords(chords: Chord[]) {
+    updateCurrentSong((s) => updateSection(s, section.id, (sec) => ({ ...sec, chords })));
+  }
+
+  function updateSingleChord(chordId: string, update: Partial<Chord>) {
+    updateCurrentSong((s) =>
+      updateSection(s, section.id, (sec) => ({
+        ...sec,
+        chords: sec.chords.map((c) => (c.id === chordId ? { ...c, ...update } : c)),
+      })),
+    );
+  }
 
   const activeChordId = useMemo(() => {
     if (beatInSection == null) return null;
@@ -254,7 +275,13 @@ function SectionWorkspace({
         </p>
       </ElementRow>
 
-      {/* Chords */}
+      {/* Chords — the wheel readout plus the REAL progression strip, live
+          and editable in place (the drums-row template: embed the actual
+          canvas, never a preview). Cell edits write the same updateSection
+          path the harmony editor uses, so the spine lane and playback
+          follow immediately; clicking a chord selects it and engages the
+          ♪ facet — the thing you touched becomes the thing you edit. The
+          header's open → still dives to the wheel. */}
       <ElementRow
         title="Chords"
         hint={section.chords.length ? `${section.chords.length} chords · ${effKey}` : "no chords yet"}
@@ -263,15 +290,21 @@ function SectionWorkspace({
         {section.chords.length > 0 ? (
           <div className="w-full">
             <HexReadout chords={section.chords} keyName={effKey} activeChordId={activeChordId} />
-            <p className="mt-1.5 text-center font-mono text-[10px] text-inkMuted truncate">
-              {section.chords.map((c, i) => (
-                <span key={c.id} className={activeChordId === c.id ? "text-accent font-semibold" : i > 0 ? "text-inkMuted/70" : ""}>
-                  {i > 0 && <span className="mx-1 text-inkMuted/40">·</span>}
-                  {c.romanNumeral}
-                  <span className="text-inkMuted/50"> {chordDisplayName(pitchClass(c.root), c.quality, effKey)}</span>
-                </span>
-              ))}
-            </p>
+            <div className="mt-2 rounded border border-edge/60 bg-[#0a0d12] px-2 py-1.5 overflow-x-auto">
+              <ProgressionTrack
+                key={section.id}
+                section={section}
+                keyName={effKey}
+                scale={effScale}
+                selectedChordId={selectedChordId}
+                onSelectChord={(cid) => {
+                  setSelectedChordId(cid);
+                  useInspectorStore.getState().engage("harmony");
+                }}
+                onChangeChords={updateChords}
+                onUpdateChord={updateSingleChord}
+              />
+            </div>
           </div>
         ) : (
           <p className="text-2xs text-inkMuted/60 italic font-mono text-center px-2">No chords yet — add a progression in the harmony editor.</p>

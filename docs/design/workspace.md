@@ -285,8 +285,15 @@ jump-open included); the karaoke popout is untouched.
   InspectorRail became shell chrome on every route and the bottom dock was
   deleted app-wide (details in §4). Remaining for P2: nav tabs fold into
   the strip (P4 retires them), ribbon at element depth.
-- **P3**: interactive section rows (loop, ◆ adopt, open); element embedding
-  in place (editors mount under the persistent ribbon); spine grow animation.
+- **P3 (started 2026-09-21)**: in-place element editing at section depth —
+  the Chords row embeds the REAL `ProgressionTrack` (drag-reorder,
+  per-chord remove, effects lane — all writing through the shared
+  `updateSection` path with single-step undo; clicking a chord selects it
+  in the shared harmony store and engages the ♪ facet, so the thing you
+  touched is the thing you edit). The Drums row already embeds the classic
+  Line view (click dives to Blocks with the range staged — 26cf4f2).
+  Remaining: bass/color faces, melody/lyrics in-place pads; interactive
+  section rows (loop, ◆ adopt, open); spine grow animation.
 - **P4**: tabs retired to focus presets; arrangement lanes (chord /
   melody contour / groove / bend — **no lyric lane, vetoed 2026-09-21**);
   maps · recipes · templates live in the Library; library drag-ins.
