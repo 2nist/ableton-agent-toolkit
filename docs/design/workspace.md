@@ -316,7 +316,14 @@ jump-open included); the karaoke popout is untouched.
   same template):** the Lyrics row embeds the real pad (textarea +
   syllable gutter), the Bass and Color rows embed their full controls
   (BassSettings / ColorSettings), and the section header carries a loop
-  action (the same `playSectionLoop` the spine's ⟳ uses).
+  action (the same `playSectionLoop` the spine's ⟳ uses). **Depth pass
+  (2026-09-22):** the header edits its basics in place (click-to-rename ·
+  bars −/+ · role menu on the dot), rows collapse (remembered in
+  `trackdraft-workbench-rows`), the melody staff draws a live playhead
+  (`activeBeat`) and the progression strip tints the sounding chord
+  (`activeChordId`).** Also fixed en route: **undo/redo now persist** —
+  an undone edit used to resurrect on reload (songStore regression test
+  added).
 - **P4 (partly done 2026-09-21)**: the top tabs + identity header retired
   — views live in the left rail, the Library became a view, the spine
   chip carries identity. **SVG icon pass shipped the same day**

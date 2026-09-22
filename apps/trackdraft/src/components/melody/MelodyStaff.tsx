@@ -45,11 +45,15 @@ interface Props {
   songKey: NoteName;
   scale: ScaleType;
   height?: number;
+  /** Beats into the section, while this section is the one playing —
+   *  draws the moving playhead over the staff (same time axis as the
+   *  notes). Null/undefined hides it. */
+  activeBeat?: number | null;
 }
 
 /** The melody as notation, sized to its container. Redraws only when the
  *  notes/timing/key/scale change (not on every parent re-render). */
-export default function MelodyStaff({ notes, sectionBeats, songKey, scale, height = 120 }: Props) {
+export default function MelodyStaff({ notes, sectionBeats, songKey, scale, height = 120, activeBeat = null }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const notesRef = useRef(notes);
@@ -89,8 +93,19 @@ export default function MelodyStaff({ notes, sectionBeats, songKey, scale, heigh
   }, []);
 
   return (
-    <div ref={wrapRef} className="w-full">
+    <div ref={wrapRef} className="relative w-full">
       <canvas ref={canvasRef} className="block rounded border border-edge" />
+      {/* Live playhead — same time axis as the notes: the staff draws time
+          from leftX = CLEF_X + 12 = 34 to width − 8, so the overlay maps
+          beats onto the same span in CSS. */}
+      {activeBeat != null && sectionBeats > 0 && (
+        <div
+          className="absolute inset-y-0 w-px bg-accent pointer-events-none"
+          style={{
+            left: `calc(34px + (100% - 42px) * ${Math.max(0, Math.min(1, activeBeat / sectionBeats))})`,
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -30,7 +30,8 @@ export type IconName =
   | "frame"
   | "follow"
   | "chevron-left"
-  | "chevron-right";
+  | "chevron-right"
+  | "chevron-down";
 
 const PATHS: Record<IconName, ReactElement> = {
   // Layout: a panel with a left column — the section workspace.
@@ -152,6 +153,7 @@ const PATHS: Record<IconName, ReactElement> = {
   ),
   "chevron-left": <path d="M9.8 3.6 5.4 8l4.4 4.4" />,
   "chevron-right": <path d="M6.2 3.6 10.6 8l-4.4 4.4" />,
+  "chevron-down": <path d="M3.6 6.2 8 10.6l4.4-4.4" />,
 };
 
 export default function Icon({

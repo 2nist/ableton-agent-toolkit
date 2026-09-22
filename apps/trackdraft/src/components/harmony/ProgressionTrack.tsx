@@ -78,6 +78,9 @@ interface ProgressionTrackProps {
   /** Update a single chord in-place — used by the effect lane so a
    *  quick effect toggle doesn't force a full array replacement. */
   onUpdateChord: (id: string, update: Partial<Chord>) => void;
+  /** The chord sounding right now (playback) — the strip tints that cell,
+   *  matching the hex readout's highlight. Null hides it. */
+  activeChordId?: string | null;
 }
 
 function SortableChordCell({
@@ -85,6 +88,7 @@ function SortableChordCell({
   keyName,
   scale,
   isSelected,
+  isActive,
   onSelect,
   onRemove,
 }: {
@@ -92,6 +96,7 @@ function SortableChordCell({
   keyName: NoteName;
   scale: ScaleType;
   isSelected: boolean;
+  isActive: boolean;
   onSelect: () => void;
   onRemove: () => void;
 }) {
@@ -115,7 +120,11 @@ function SortableChordCell({
         width: CELL_W,
       }}
       className={`relative h-[40px] shrink-0 rounded-[5px] border bg-panelAlt cursor-pointer overflow-hidden pt-1 px-2 ${
-        isSelected ? "border-accent ring-2 ring-accent" : "border-edge hover:border-inkMuted"
+        isSelected
+          ? "border-accent ring-2 ring-accent"
+          : isActive
+            ? "border-accent/50 ring-1 ring-accent/30"
+            : "border-edge hover:border-inkMuted"
       }`}
       onClick={() => onSelect()}
     >
@@ -160,6 +169,7 @@ export default function ProgressionTrack({
   onSelectChord,
   onChangeChords,
   onUpdateChord,
+  activeChordId = null,
 }: ProgressionTrackProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -198,6 +208,7 @@ export default function ProgressionTrack({
                       keyName={keyName}
                       scale={scale}
                       isSelected={selectedChordId === chord.id}
+                      isActive={activeChordId === chord.id}
                       onSelect={() => onSelectChord(chord.id)}
                       onRemove={() => onChangeChords(section.chords.filter((c) => c.id !== chord.id))}
                     />

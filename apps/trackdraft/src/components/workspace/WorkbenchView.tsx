@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
@@ -15,6 +15,7 @@ import DrumLineEmbed from "./DrumLineEmbed";
 import { useInspectorStore } from "../../store/inspectorStore";
 import { playSectionLoop } from "../../lib/playback/transportControl";
 import IconBtn from "../common/IconBtn";
+import Icon from "../common/Icon";
 import ProgressionTrack from "../harmony/ProgressionTrack";
 import HexReadout from "../harmony/HexReadout";
 import BassSettings from "../harmony/BassSettings";
@@ -22,7 +23,10 @@ import ColorSettings from "../harmony/ColorSettings";
 import LyricsEditor from "../lyrics/LyricsEditor";
 import NecklaceRow from "../drums/NecklaceRow";
 import MelodyStaff from "../melody/MelodyStaff";
-import type { BlueprintSection, BlueprintSong, Chord } from "../../types/blueprint";
+import type { BlueprintSection, BlueprintSong, Chord, SectionRole } from "../../types/blueprint";
+
+/** Canonical role order for the header's role menu (same list everywhere). */
+const ROLE_OPTIONS: SectionRole[] = ["intro", "verse", "pre_chorus", "chorus", "bridge", "solo", "breakdown", "outro", "custom"];
 
 /**
  * The Workbench — first slice of the new workspace (docs/design/workspace.md).
@@ -116,23 +120,39 @@ export default function WorkbenchView() {
   );
 }
 
-/** One element row — title, hint, jump-open, centered content. Module
- *  scope so the transport-tick re-renders don't remount the content
- *  (same lesson as StudioConsole's Pane). */
+/** One element row — title, hint, jump-open, collapsible body (state is
+ *  owned by the workspace and persisted), centered content. Module scope
+ *  so the transport-tick re-renders don't remount the content (same
+ *  lesson as StudioConsole's Pane). */
 function ElementRow({
   title,
   hint,
   onOpen,
+  collapsed = false,
+  onToggle,
   children,
 }: {
   title: string;
   hint: string;
   onOpen: () => void;
+  collapsed?: boolean;
+  onToggle?: () => void;
   children: React.ReactNode;
 }) {
   return (
     <section className="border border-edge rounded-lg bg-panel overflow-hidden">
       <header className="flex items-center gap-2 px-2.5 py-1.5 border-b border-edge/70">
+        {onToggle && (
+          <button
+            type="button"
+            className="w-4 h-4 shrink-0 flex items-center justify-center text-inkMuted hover:text-ink"
+            onClick={onToggle}
+            title={collapsed ? "Expand this element" : "Collapse this element"}
+            aria-expanded={!collapsed}
+          >
+            <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={12} />
+          </button>
+        )}
         <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">{title}</span>
         <span className="text-[9px] font-mono text-inkMuted/50 truncate flex-1" title={hint}>
           {hint}
@@ -145,7 +165,7 @@ function ElementRow({
           open →
         </button>
       </header>
-      <div className="p-2.5 flex items-center justify-center min-h-[64px]">{children}</div>
+      {!collapsed && <div className="p-2.5 flex items-center justify-center min-h-[64px]">{children}</div>}
     </section>
   );
 }
@@ -184,6 +204,36 @@ function SectionWorkspace({
   const clockSource = useSongStore((s) => s.clockSource);
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
+  const [renaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [roleMenu, setRoleMenu] = useState<{ x: number; y: number } | null>(null);
+  const roleMenuRef = useRef<HTMLDivElement>(null);
+  const [collapsedRows, setCollapsedRows] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("trackdraft-workbench-rows") || "{}") as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  });
+
+  // Dismiss the role menu on outside click / Esc (same pattern as the
+  // spine's context palette).
+  useEffect(() => {
+    if (!roleMenu) return;
+    const onDown = (e: MouseEvent) => {
+      if (roleMenuRef.current && roleMenuRef.current.contains(e.target as Node)) return;
+      setRoleMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setRoleMenu(null);
+    };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [roleMenu]);
 
   /** Chord writes from the embedded progression strip — the same
    *  updateSection path the harmony editor uses, so the spine's chords
@@ -199,6 +249,39 @@ function SectionWorkspace({
         chords: sec.chords.map((c) => (c.id === chordId ? { ...c, ...update } : c)),
       })),
     );
+  }
+
+  /** In-place header basics (the P3 depth pass): rename · bars · role —
+   *  each a single undo step, no trip to the inspector for the obvious. */
+  function commitName() {
+    setRenaming(false);
+    const next = nameDraft.trim();
+    if (!next || next === section.name) return;
+    updateCurrentSong((s) => updateSection(s, section.id, (sec) => ({ ...sec, name: next })));
+  }
+
+  function bumpBars(delta: number) {
+    const next = Math.max(1, Math.round(span.bars) + delta);
+    if (next === Math.round(span.bars)) return;
+    updateCurrentSong((s) => updateSection(s, section.id, (sec) => ({ ...sec, bars: next })));
+  }
+
+  function setRole(next: SectionRole) {
+    setRoleMenu(null);
+    if (next === section.role) return;
+    updateCurrentSong((s) => updateSection(s, section.id, (sec) => ({ ...sec, role: next })));
+  }
+
+  function toggleRow(rowId: string) {
+    setCollapsedRows((c) => {
+      const next = { ...c, [rowId]: !c[rowId] };
+      try {
+        localStorage.setItem("trackdraft-workbench-rows", JSON.stringify(next));
+      } catch {
+        /* collapse state is a nicety, not data — storage full/blocked is fine to ignore */
+      }
+      return next;
+    });
   }
 
   const activeChordId = useMemo(() => {
@@ -233,15 +316,64 @@ function SectionWorkspace({
 
   return (
     <div className="space-y-2 w-full">
-      {/* Section header — you are HERE */}
+      {/* Section header — you are HERE, and since the depth pass the basics
+          live right here: rename (click the name), bars (−/+), role (the
+          dot) — single undo steps each; the ≣ facet is for detail. */}
       <div className="flex items-center gap-2 px-1">
-        <span
-          className="w-2.5 h-2.5 rounded-[2px] shrink-0"
+        <button
+          type="button"
+          className="w-3.5 h-3.5 rounded-[3px] shrink-0 border border-transparent hover:border-inkMuted/60"
           style={{ background: role.bg, boxShadow: `0 0 0 1px ${role.text}55` }}
-          title={role.label}
+          title={`${role.label} — click to change the role`}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setRoleMenu({ x: r.left, y: r.bottom + 4 });
+          }}
         />
-        <h2 className="text-sm font-medium text-ink truncate">{section.name}</h2>
-        <span className="text-[10px] font-mono text-inkMuted/70 tabular-nums">{Math.round(span.bars)} bars</span>
+        {renaming ? (
+          <input
+            autoFocus
+            className="text-sm font-medium bg-panelAlt border border-edge rounded px-1.5 py-0.5 w-56 text-ink"
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitName();
+              else if (e.key === "Escape") setRenaming(false);
+            }}
+            onBlur={commitName}
+            aria-label="Section name"
+          />
+        ) : (
+          <h2
+            className="text-sm font-medium text-ink truncate cursor-text hover:text-accent/90"
+            title="Click to rename"
+            onClick={() => {
+              setNameDraft(section.name);
+              setRenaming(true);
+            }}
+          >
+            {section.name}
+          </h2>
+        )}
+        <div className="flex items-center gap-0.5 shrink-0" title="Section length — one undo step per click">
+          <button
+            type="button"
+            className="w-4 h-4 flex items-center justify-center rounded border border-edge/70 text-inkMuted hover:text-ink text-[10px] leading-none"
+            onClick={() => bumpBars(-1)}
+            title="One bar shorter"
+          >
+            −
+          </button>
+          <span className="text-[10px] font-mono text-inkMuted/70 tabular-nums w-[46px] text-center">{Math.round(span.bars)} bars</span>
+          <button
+            type="button"
+            className="w-4 h-4 flex items-center justify-center rounded border border-edge/70 text-inkMuted hover:text-ink text-[10px] leading-none"
+            onClick={() => bumpBars(1)}
+            title="One bar longer"
+          >
+            +
+          </button>
+        </div>
         <span className="text-[10px] font-mono text-inkMuted/40 tabular-nums">block {index + 1}/{count}</span>
         {isLive && (
           <span className="text-[9px] font-mono text-accent animate-pulse" title="Following the playhead">
@@ -264,11 +396,36 @@ function SectionWorkspace({
         </span>
       </div>
 
+      {/* Role menu — the dot opens the same role list every other picker
+          uses, each chip a miniature section block (role colour + label). */}
+      {roleMenu && (
+        <div
+          ref={roleMenuRef}
+          className="fixed z-50 rounded border border-edge bg-panel shadow-lg p-1.5 flex flex-wrap gap-1 max-w-[230px]"
+          style={{ left: roleMenu.x, top: roleMenu.y }}
+        >
+          {ROLE_OPTIONS.map((r) => (
+            <button
+              key={r}
+              type="button"
+              className={`h-[22px] px-2 rounded-sm text-[10px] font-mono tracking-wide hover:brightness-125 ${
+                r === section.role ? "ring-1 ring-accent" : ""
+              }`}
+              style={{ background: roleStyle(r).bg, color: roleStyle(r).text }}
+              onClick={() => setRole(r)}
+              title={`Make this section a ${roleStyle(r).label}`}
+            >
+              {roleStyle(r).label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Drums — the clock, with the classic line view as the broad face:
           the whole arrangement cropped to this section + context, so its
           transitions in/out and detours are in view; clicks dive to the
           beat-by-beat Blocks editor on the clicked range. */}
-      <ElementRow title="Drums" hint={drumFamilyLabel(section, song)} onOpen={() => jump("drums")}>
+      <ElementRow title="Drums" hint={drumFamilyLabel(section, song)} onOpen={() => jump("drums")} collapsed={collapsedRows.drums} onToggle={() => toggleRow("drums")}>
         <div className="w-full space-y-2">
           <DrumLineEmbed song={song} span={span} onEngage={onEngageDrums} />
           {necklaces ? (
@@ -286,7 +443,7 @@ function SectionWorkspace({
       {/* Bass — the real controls inline (P3 slice 3): register · motion ·
           rhythm · velocity, writing the same per-section `bassProfile`
           that the MIDI export and Send to Ableton plan from. */}
-      <ElementRow title="Bass" hint={bassBits ?? "auto — follows the chords"} onOpen={() => jump("harmony")}>
+      <ElementRow title="Bass" hint={bassBits ?? "auto — follows the chords"} onOpen={() => jump("harmony")} collapsed={collapsedRows.bass} onToggle={() => toggleRow("bass")}>
         <div className="w-full">
           <BassSettings
             section={section}
@@ -306,6 +463,8 @@ function SectionWorkspace({
         title="Chords"
         hint={section.chords.length ? `${section.chords.length} chords · ${effKey}` : "no chords yet"}
         onOpen={() => jump("harmony")}
+        collapsed={collapsedRows.chords}
+        onToggle={() => toggleRow("chords")}
       >
         {section.chords.length > 0 ? (
           <div className="w-full">
@@ -317,6 +476,7 @@ function SectionWorkspace({
                 keyName={effKey}
                 scale={effScale}
                 selectedChordId={selectedChordId}
+                activeChordId={activeChordId}
                 onSelectChord={(cid) => {
                   setSelectedChordId(cid);
                   useInspectorStore.getState().engage("harmony");
@@ -333,7 +493,7 @@ function SectionWorkspace({
 
       {/* Color — flavor chips + register, inline (the same settings the ♪
           Layers facet hosts); writes `colorFlavor` / `colorOctave`. */}
-      <ElementRow title="Color" hint={`register oct ${section.colorOctave ?? 6}`} onOpen={() => jump("harmony")}>
+      <ElementRow title="Color" hint={`register oct ${section.colorOctave ?? 6}`} onOpen={() => jump("harmony")} collapsed={collapsedRows.color} onToggle={() => toggleRow("color")}>
         <div className="w-full">
           <ColorSettings
             section={section}
@@ -343,10 +503,17 @@ function SectionWorkspace({
       </ElementRow>
 
       {/* Melody */}
-      <ElementRow title="Melody" hint={melody ? `${melody.length} note${melody.length === 1 ? "" : "s"}` : "not recorded"} onOpen={() => jump("melody")}>
+      <ElementRow title="Melody" hint={melody ? `${melody.length} note${melody.length === 1 ? "" : "s"}` : "not recorded"} onOpen={() => jump("melody")} collapsed={collapsedRows.melody} onToggle={() => toggleRow("melody")}>
         {melody ? (
           <div className="w-full">
-            <MelodyStaff notes={melody} sectionBeats={span.durationBeats} songKey={effKey} scale={effScale} height={128} />
+            <MelodyStaff
+              notes={melody}
+              sectionBeats={span.durationBeats}
+              songKey={effKey}
+              scale={effScale}
+              height={128}
+              activeBeat={beatInSection}
+            />
           </div>
         ) : (
           <p className="text-2xs text-inkMuted/60 italic font-mono text-center px-2">No melody yet — hum one in the melody workspace.</p>
@@ -360,7 +527,7 @@ function SectionWorkspace({
           gutter, the song-text view and the coverage gauge all follow
           immediately; the header's open → still dives to the view for
           the metrical/rhyme tools. */}
-      <ElementRow title="Lyrics" hint={lyricLines.length ? `${lyricLines.length} line${lyricLines.length === 1 ? "" : "s"}` : "not written"} onOpen={() => jump("lyrics")}>
+      <ElementRow title="Lyrics" hint={lyricLines.length ? `${lyricLines.length} line${lyricLines.length === 1 ? "" : "s"}` : "not written"} onOpen={() => jump("lyrics")} collapsed={collapsedRows.lyrics} onToggle={() => toggleRow("lyrics")}>
         <div className="w-full">
           <LyricsEditor
             value={section.lyrics ?? ""}
