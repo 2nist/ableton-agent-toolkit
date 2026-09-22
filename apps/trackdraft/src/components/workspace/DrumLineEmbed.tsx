@@ -4,6 +4,7 @@ import type { BlueprintSong } from "../../types/blueprint";
 import { beatsPerBar } from "../../types/blueprint";
 import type { SectionSpan } from "../../lib/arrangement";
 import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
+import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import DrumsView, { CLASSIC_BAR_PX } from "../drums/DrumsView";
 
 /** The six lane families a picked range covers — the same ids the Blocks
@@ -25,11 +26,21 @@ const ALL_LANES = ["kick", "snare", "rim", "hat", "cym", "tom"];
  * selection and the Blocks editor opens on it. Zero rendering is
  * duplicated: the canvas IS DrumsView, so the two views can't drift.
  */
-export default function DrumLineEmbed({ song, span }: { song: BlueprintSong; span: SectionSpan }) {
+export default function DrumLineEmbed({
+  song,
+  span,
+  onEngage,
+}: {
+  song: BlueprintSong;
+  span: SectionSpan;
+  /** Called whenever the user clicks the canvas — the workbench flips the
+   *  rail to the Drums tools so the thing you just touched is editable. */
+  onEngage?: () => void;
+}) {
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
   const id = songId ?? song.id;
-  const setDrumsSection = useDrumsSelectionStore((s) => s.setSelectedSectionId);
+  const setSharedSection = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const setRange = useDrumsSelectionStore((s) => s.setRange);
 
   // Measure the crop box so the fitted zoom keeps the whole focused
@@ -46,11 +57,13 @@ export default function DrumLineEmbed({ song, span }: { song: BlueprintSong; spa
   }, []);
   const zoom = boxW > 0 ? Math.min(1.6, Math.max(0.4, boxW / ((span.bars + 8) * CLASSIC_BAR_PX))) : 1;
 
-  /** A click landed on (span, beatInSection) — resolve it to a RANGE and
-   *  open beat-by-beat on it. Priority: the detour's own span → the
-   *  transition tail (manual bars, or the 1-bar auto-fill zone) → the bar
-   *  under the cursor. */
-  function pick(pickedSpan: SectionSpan, beat: number) {
+  /** A click landed on (span, beatInSection, dive) — resolve it to a RANGE
+   *  and STAGE it (section + range become the drum tools' target; the
+   *  canvas renders drafts, so tool edits preview right here on the
+   *  line). A DOUBLE click additionally dives to the Blocks editor.
+   *  Range priority: the detour's own span → the transition tail (manual
+   *  bars, or the 1-bar auto-fill zone) → the bar under the cursor. */
+  function pick(pickedSpan: SectionSpan, beat: number, dive: boolean) {
     const sec = pickedSpan.section;
     const bpb = beatsPerBar(sec);
     const duration = pickedSpan.durationBeats;
@@ -78,9 +91,13 @@ export default function DrumLineEmbed({ song, span }: { song: BlueprintSong; spa
     }
 
     // Section first, then the range — the store drops a range when the
-    // section changes, so order matters here.
-    setDrumsSection(pickedSpan.sectionId);
+    // section changes, so order matters here. Staging makes this section
+    // + range the target of the drums tools (rail tab), WITHOUT leaving
+    // the workbench; the double-click dives to the Blocks editor.
+    setSharedSection(pickedSpan.sectionId);
     setRange({ startBeat: a, endBeat: b, laneKeys: ALL_LANES });
+    onEngage?.();
+    if (!dive) return;
     try {
       localStorage.setItem("trackdraft-drums-view", "blocks");
     } catch {
@@ -94,8 +111,8 @@ export default function DrumLineEmbed({ song, span }: { song: BlueprintSong; spa
       {/* Caption row — what this is, and what a click does */}
       <div className="flex items-center gap-2 mb-1 px-0.5">
         <span className="text-[9px] font-mono text-inkMuted/50 truncate">
-          classic line view — the whole arrangement, cropped to this section + context · click any bar, detour or transition →
-          beat-by-beat on that range
+          classic line view — click a bar, detour or transition to edit it with the drum tools (▦ in the rail) · double-click to
+          open beat-by-beat on that range
         </span>
         <span className="flex-1" />
         <span className="shrink-0 text-[9px] font-mono text-inkMuted/40 tabular-nums" title="Timeline zoom (fitted so this section + 4 bars of context fit)">

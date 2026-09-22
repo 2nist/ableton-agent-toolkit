@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSongStore } from "../../store/songStore";
-import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
+import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { updateSection } from "../../lib/sections";
 import { sectionSpans } from "../../lib/arrangement";
@@ -127,7 +127,7 @@ function FreeSliders({ n, k, rotation, onChange }: {
 export default function DrumPatternTools() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const selectedSectionId = useDrumsSelectionStore((s) => s.selectedSectionId);
+  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const draftSectionId = useDrumsDraftStore((s) => s.sectionId);
   const draftSection = useDrumsDraftStore((s) => s.section);
   const setDraft = useDrumsDraftStore((s) => s.setDraft);

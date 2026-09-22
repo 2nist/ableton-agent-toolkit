@@ -13,6 +13,7 @@ import {
 } from "@drum/library";
 import { useSongStore } from "../../../store/songStore";
 import { useDrumsSelectionStore } from "../../../store/drumsSelectionStore";
+import { useStudioSelectionStore } from "../../../store/studioSelectionStore";
 import { useDrumsDraftStore } from "../../../store/drumsDraftStore";
 import { updateSection } from "../../../lib/sections";
 import { sectionSpans, totalBars, type SectionSpan } from "../../../lib/arrangement";
@@ -164,8 +165,8 @@ interface PadDragState {
 export default function DrumBlocksView() {
   const song = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const selectedSectionId = useDrumsSelectionStore((s) => s.selectedSectionId);
-  const setSelectedSectionId = useDrumsSelectionStore((s) => s.setSelectedSectionId);
+  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const range = useDrumsSelectionStore((s) => s.range);
   const setRange = useDrumsSelectionStore((s) => s.setRange);
   const clearRange = useDrumsSelectionStore((s) => s.clearRange);

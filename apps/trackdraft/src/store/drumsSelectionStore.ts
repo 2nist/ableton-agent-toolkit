@@ -21,19 +21,23 @@ export interface DrumsRangeSelection {
 }
 
 interface DrumsSelectionState {
-  selectedSectionId: string | null;
-  setSelectedSectionId: (id: string | null) => void;
   range: DrumsRangeSelection | null;
   setRange: (range: DrumsRangeSelection) => void;
   clearRange: () => void;
 }
 
+/**
+ * The drums RANGE selection — the Drum Blocks view's editing interface
+ * (the marquee / the workbench line view's picked range). SECTION selection
+ * is no longer drums-local: it belongs to the shared
+ * `useStudioSelectionStore` (the spine writes it on every route, the line
+ * view stages it, the drum tools read it) — so selecting a section
+ * anywhere now retargets the drums tools exactly like it retargets
+ * Harmony. This store keeps only what is genuinely drums-specific; the
+ * range still clears whenever the selected section changes (that's
+ * enforced by the shared store's consumers, see DrumLineEmbed ordering).
+ */
 export const useDrumsSelectionStore = create<DrumsSelectionState>((set) => ({
-  selectedSectionId: null,
-  // Switching sections drops any range selection — a range is meaningless
-  // on a different section's timeline.
-  setSelectedSectionId: (id) =>
-    set((s) => (s.selectedSectionId === id ? { selectedSectionId: id } : { selectedSectionId: id, range: null })),
   range: null,
   setRange: (range) => set({ range }),
   clearRange: () => set({ range: null }),

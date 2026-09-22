@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useSongStore } from "../../store/songStore";
-import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
+import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useDockStore } from "../../store/dockStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
@@ -274,16 +274,18 @@ export default function DrumsView({
   /** Which section to highlight in an embed (the workbench's focus) — the
    *  Drums tab itself uses its own selection store instead. */
   highlightSectionId?: string;
-  /** Embed click routing: (span, section-relative beat) → the host decides
-   *  what a click means (the workbench opens the Blocks editor on that
-   *  range). Absent → the classic tab's own behavior (select the section /
-   *  set the detour dot). */
-  onPickRange?: (span: SectionSpan, beatInSection: number) => void;
+  /** Embed click routing: (span, section-relative beat, isDoubleClick) →
+   *  the host decides what a click means — the workbench STAGES single
+   *  clicks (section + range become the drum tools' target, previewed on
+   *  the line) and DIVES to the Blocks editor on double clicks. Absent →
+   *  the classic tab's own behavior (select the section / set the detour
+   *  dot). */
+  onPickRange?: (span: SectionSpan, beatInSection: number, dive: boolean) => void;
 } = {}) {
   const song = useSongStore((s) => s.currentSong());
-  const storedSelection = useDrumsSelectionStore((s) => s.selectedSectionId);
+  const storedSelection = useStudioSelectionStore((s) => s.selectedSectionId);
   const selectedSectionId = highlightSectionId ?? storedSelection;
-  const setSelectedSectionId = useDrumsSelectionStore((s) => s.setSelectedSectionId);
+  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const setTools = useDockStore((s) => s.setTools);
 
   // Horizontal zoom — stretches/shrinks the bar width so the whole song
@@ -561,15 +563,20 @@ export default function DrumsView({
   });
 
   /** Click routing shared by every hit surface: in an embed, report the
-   *  span + the clicked section-relative beat to the host (the workbench
-   *  opens beat-by-beat on it); in the tab, keep the classic behavior —
-   *  select the section. `fallbackBeat` is for surfaces that know their
+   *  span + the clicked section-relative beat + whether this was a
+   *  DOUBLE-click (the host stages single clicks for editing and dives to
+   *  beat-by-beat on double clicks); in the tab, keep the classic behavior
+   *  — select the section. `fallbackBeat` is for surfaces that know their
    *  exact beat (the detour dots). */
   function pickOrSelect(e: ReactMouseEvent, span: SectionSpan, fallbackBeat?: number) {
     if (onPickRange) {
       const rect = (e.currentTarget as Element).getBoundingClientRect();
       const frac = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
-      onPickRange(span, fallbackBeat ?? Math.max(0, Math.min(span.durationBeats - 1e-6, frac * span.durationBeats)));
+      onPickRange(
+        span,
+        fallbackBeat ?? Math.max(0, Math.min(span.durationBeats - 1e-6, frac * span.durationBeats)),
+        e.detail >= 2,
+      );
       return;
     }
     setSelectedSectionId(span.section.id);

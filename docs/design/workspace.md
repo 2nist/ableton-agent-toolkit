@@ -150,6 +150,20 @@ until modal parity.)
 | Melody | workspace controls strip only — no rail, no dock |
 | Drums | no rail — correct today |
 
+**Default tool spot at the broad (level-2) rung — answered 2026-09-21:** the
+rail's **instrument tab**. The center stays the *canvas* (the drum line
+view); tool chrome never pollutes it. The rail's icon strip is the
+instrument tool host: **▦ Drums** hosts the same `DrumPatternTools`
+(Pattern · Detour · Transition) the `/drums` dock hosts — one
+implementation, two hosts — and clicking the line view stages the clicked
+section + range as the tools' target and flips the rail to the tab, so the
+thing you touched is the thing you edit. Because the embedded canvas
+renders the drums DRAFT, tool edits preview live on the line (add a detour
+→ the arc appears; Revert → gone). Single click stages; **double-click
+dives** to beat-by-beat on the picked range. Section selection is shared
+(like Harmony since P2): selecting anywhere — spine, canvas — retargets the
+drum tools. More instruments join the strip as their broad faces land.
+
 ## 5. Two faces per element
 
 | Element | Arrangement face | Section face |

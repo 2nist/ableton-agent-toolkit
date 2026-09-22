@@ -17,6 +17,7 @@ import { getSongTransport, type TransportTick } from "../../lib/playback/songTra
 import BendPanel from "../style/BendPanel";
 import SectionStructurePanel from "./SectionStructurePanel";
 import DrumLineEmbed from "./DrumLineEmbed";
+import DrumPatternTools from "../drums/DrumPatternTools";
 import IconBtn from "../common/IconBtn";
 import HexReadout from "../harmony/HexReadout";
 import NecklaceRow from "../drums/NecklaceRow";
@@ -112,6 +113,7 @@ export default function WorkbenchView() {
               count={spans.length}
               isLive={isLive}
               beatInSection={beatInSection}
+              onEngageDrums={() => setRailTab("drums")}
             />
           ) : (
             <div className="h-full flex items-center justify-center">
@@ -123,7 +125,7 @@ export default function WorkbenchView() {
         <aside className="w-[216px] shrink-0 border-l border-edge bg-panel min-h-0 flex flex-col" aria-label="Context rail — focused-section panels">
           <RailTabStrip tab={railTab} onSelect={setRailTab} />
           <div className="flex-1 min-h-0 overflow-y-auto p-2">
-            {railTab === "structure" ? <SectionStructurePanel /> : <BendPanel />}
+            {railTab === "structure" ? <SectionStructurePanel /> : railTab === "drums" ? <DrumPatternTools /> : <BendPanel />}
           </div>
         </aside>
       </div>
@@ -326,7 +328,7 @@ function ElementRow({
   );
 }
 
-type RailTab = "structure" | "mix";
+type RailTab = "structure" | "mix" | "drums";
 
 /** The rail's panels as small icon tabs — more will join (lyrics reference,
  *  detected ◆, …), so the rail switches one panel at a time instead of
@@ -334,6 +336,7 @@ type RailTab = "structure" | "mix";
  *  placeholder text for now — first in line for the SVG icon pass. */
 const RAIL_TABS: { id: RailTab; glyph: string; label: string }[] = [
   { id: "structure", glyph: "≣", label: "Structure — this section's form" },
+  { id: "drums", glyph: "▦", label: "Drums — pattern · detour · transition for this section" },
   { id: "mix", glyph: "◉", label: "Mix / Bend — the style lens" },
 ];
 
@@ -360,6 +363,7 @@ function SectionWorkspace({
   count,
   isLive,
   beatInSection,
+  onEngageDrums,
 }: {
   song: BlueprintSong;
   span: SectionSpan;
@@ -367,6 +371,9 @@ function SectionWorkspace({
   count: number;
   isLive: boolean;
   beatInSection: number | null;
+  /** Clicking the drum line view asks the workbench to flip the rail to
+   *  the Drums tools (the thing you touched becomes the thing you edit). */
+  onEngageDrums?: () => void;
 }) {
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
@@ -437,7 +444,7 @@ function SectionWorkspace({
           beat-by-beat Blocks editor on the clicked range. */}
       <ElementRow title="Drums" hint={drumFamilyLabel(section, song)} onOpen={() => jump("drums")}>
         <div className="w-full space-y-2">
-          <DrumLineEmbed song={song} span={span} />
+          <DrumLineEmbed song={song} span={span} onEngage={onEngageDrums} />
           {necklaces ? (
             <NecklaceRow necklaces={necklaces} />
           ) : (
