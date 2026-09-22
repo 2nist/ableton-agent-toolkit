@@ -311,8 +311,12 @@ jump-open included); the karaoke popout is untouched.
   in the shared harmony store and engages the ♪ facet, so the thing you
   touched is the thing you edit). The Drums row already embeds the classic
   Line view (click dives to Blocks with the range staged — 26cf4f2).
-  Remaining: bass/color faces, melody/lyrics in-place pads; interactive
-  section rows (loop, ◆ adopt, open); spine grow animation.
+  Remaining: melody in-place editing (needs the record/piano-roll
+  plumbing); ◆ adopt; spine grow animation. **Done since (2026-09-21,
+  same template):** the Lyrics row embeds the real pad (textarea +
+  syllable gutter), the Bass and Color rows embed their full controls
+  (BassSettings / ColorSettings), and the section header carries a loop
+  action (the same `playSectionLoop` the spine's ⟳ uses).
 - **P4 (partly done 2026-09-21)**: the top tabs + identity header retired
   — views live in the left rail, the Library became a view, the spine
   chip carries identity. **SVG icon pass shipped the same day**
