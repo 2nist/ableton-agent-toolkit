@@ -27,12 +27,13 @@ import type { BlueprintSection, BlueprintSong } from "../../types/blueprint";
 /**
  * The Workbench — first slice of the new workspace (docs/design/workspace.md).
  *
- * Bands: zones row (library rail · section workspace · bend rail) →
- * workbench stub band. The spine is shell chrome now (mounted by
- * SongEditorLayout above every song route — P2). This is "section work"
- * v0: the selected section's materials as preview rows in the ladder's
- * order (drums first as the clock), with the bend lens pinned right and
- * the song list in a collapsible Ableton-style browser on the left.
+ * Bands: zones row (library rail · section workspace · inspector rail).
+ * The spine is shell chrome now (mounted by SongEditorLayout above every
+ * song route — P2). Layout grammar (user decision, 2026-09-21): LEFT =
+ * Library (the sources) · CENTER = the canvas · RIGHT = the contextual
+ * INSPECTOR (the focused object's facets; it slides open on engagement
+ * and collapses to a strip) · NO BOTTOM band (the old stub/dock role is
+ * retired; wide surfaces belong to the canvas itself).
  *
  * Deliberately transitional: element rows jump to the existing editor tabs
  * (?section=) until P3 embeds them in place; the legacy nav tabs live
@@ -47,8 +48,16 @@ export default function WorkbenchView() {
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [railTab, setRailTab] = useState<RailTab>("structure");
-  const [benchOpen, setBenchOpen] = useState(false);
+  const [railOpen, setRailOpen] = useState(true);
   const [tick, setTick] = useState<TransportTick | null>(null);
+
+  // The inspector slides open on engagement (layout grammar, user decision
+  // 2026-09-21): selecting anything with controls — a spine block, a
+  // canvas element, the ←→ arrows — opens the rail. A manual collapse
+  // still wins until the NEXT selection change.
+  useEffect(() => {
+    if (selectedSectionId) setRailOpen(true);
+  }, [selectedSectionId]);
 
   useEffect(() => getSongTransport().onTick(setTick), []);
 
@@ -113,7 +122,10 @@ export default function WorkbenchView() {
               count={spans.length}
               isLive={isLive}
               beatInSection={beatInSection}
-              onEngageDrums={() => setRailTab("drums")}
+              onEngageDrums={() => {
+                setRailTab("drums");
+                setRailOpen(true);
+              }}
             />
           ) : (
             <div className="h-full flex items-center justify-center">
@@ -122,36 +134,31 @@ export default function WorkbenchView() {
           )}
         </div>
 
-        <aside className="w-[216px] shrink-0 border-l border-edge bg-panel min-h-0 flex flex-col" aria-label="Context rail — focused-section panels">
-          <RailTabStrip tab={railTab} onSelect={setRailTab} />
-          <div className="flex-1 min-h-0 overflow-y-auto p-2">
-            {railTab === "structure" ? <SectionStructurePanel /> : railTab === "drums" ? <DrumPatternTools /> : <BendPanel />}
-          </div>
+        <aside
+          className={`shrink-0 border-l border-edge bg-panel min-h-0 flex flex-col ${
+            railOpen ? "w-64" : "w-9"
+          }`}
+          aria-label="Context rail — focused-section panels"
+        >
+          {railOpen ? (
+            <>
+              <RailTabStrip tab={railTab} onSelect={setRailTab} onCollapse={() => setRailOpen(false)} />
+              <div className="flex-1 min-h-0 overflow-y-auto p-2">
+                {railTab === "structure" ? <SectionStructurePanel /> : railTab === "drums" ? <DrumPatternTools /> : <BendPanel />}
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="h-9 shrink-0 flex items-center justify-center text-inkMuted hover:text-ink text-xs"
+              onClick={() => setRailOpen(true)}
+              title="Open the inspector — the focused object's tools (≣ form · ▦ drums · ◉ mix)"
+            >
+              ◂
+            </button>
+          )}
         </aside>
       </div>
-
-      {/* Band 3 — the workbench (stub): maps · recipes · templates */}
-      <footer className="shrink-0 border-t border-edge bg-panel/80">
-        <button
-          type="button"
-          className="w-full flex items-center gap-2 px-3 h-8 text-left hover:bg-panelAlt/40"
-          onClick={() => setBenchOpen((v) => !v)}
-          title="The arrangement workbench band — song maps, genre recipes and templates land here (phase 4)"
-        >
-          <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">Workbench</span>
-          <span className="text-[10px] font-mono text-inkMuted/50">song maps · genre recipes · templates</span>
-          <span className="flex-1" />
-          <span className="text-3xs font-mono text-inkMuted/40 border border-edge/70 rounded px-1.5 py-0.5">next phase</span>
-          <span className="text-inkMuted/60 text-[10px]">{benchOpen ? "▾" : "▴"}</span>
-        </button>
-        {benchOpen && (
-          <p className="px-3 pb-2 text-[11px] font-mono text-inkMuted/70">
-            This band becomes the arrangement workbench: genre maps and narrative templates as horizontal cards, genre
-            recipes as one-click tints — hovering a template ghosts the sections it would mint onto the spine above
-            before you commit. The band itself is the demonstration for now.
-          </p>
-        )}
-      </footer>
     </div>
   );
 }
@@ -340,7 +347,7 @@ const RAIL_TABS: { id: RailTab; glyph: string; label: string }[] = [
   { id: "mix", glyph: "◉", label: "Mix / Bend — the style lens" },
 ];
 
-function RailTabStrip({ tab, onSelect }: { tab: RailTab; onSelect: (t: RailTab) => void }) {
+function RailTabStrip({ tab, onSelect, onCollapse }: { tab: RailTab; onSelect: (t: RailTab) => void; onCollapse: () => void }) {
   return (
     <div className="flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-edge/60 shrink-0">
       {RAIL_TABS.map((t) => (
@@ -348,6 +355,10 @@ function RailTabStrip({ tab, onSelect }: { tab: RailTab; onSelect: (t: RailTab) 
           {t.glyph}
         </IconBtn>
       ))}
+      <span className="flex-1" />
+      <IconBtn title="Collapse the inspector — more room for the canvas (clicks reopen it)" onClick={onCollapse}>
+        ▸
+      </IconBtn>
     </div>
   );
 }

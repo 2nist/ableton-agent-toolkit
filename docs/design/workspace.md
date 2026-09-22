@@ -37,16 +37,26 @@ until modal parity.)
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  THE SPINE — edge to edge, never squeezed                   │
-│  ⌘ SONG · key · bpm   [Intro][Verse 1][Verse 2][Chorus]…  ▶ ⟳ ⇄│
+│  THE SPINE — edge to edge, never squeezed, EVERY view       │
+│  [Intro][Verse 1][Verse 2][Chorus]…   [▶ ⟳ undo · zoom · fit]│
 ├────┬────────────────────────────────────────────┬────────────┤
-│ ▸  │                                            │  CONTEXT   │
-│ lib│        SECTION rows / ELEMENT workspace     │   RAIL     │
-│    │                                            │            │
-├────┴────────────────────────────────────────────┴────────────┤
-│  WORKBENCH — song maps · genre recipes · templates   (⇕)     │
-└──────────────────────────────────────────────────────────────┘
+│ ▸  │                                            │ INSPECTOR  │
+│ LI-│              THE CANVAS                    │ (slides    │
+│ BR-│  line view · hex wheel · blocks grid · …   │  open on   │
+│ ARY│                                            │  engage)   │
+└────┴────────────────────────────────────────────┴────────────┘
+   sources            the work             the focused object's tools
 ```
+
+**The three menus, decided 2026-09-21** (user: "logically figure out where
+those controls go and then I will stick with it"):
+
+| Zone | Role | Contents |
+|---|---|---|
+| **LEFT** | **Library — the sources** | songs · maps · recipes (kits, presets later). A browser you pull FROM. Same on every view. |
+| **CENTER** | **The canvas** | the view's visual: the drum line view, hex wheel + progression strip, structure cards, blocks grid, lyric pad. Tool chrome never lives here. |
+| **RIGHT** | **Inspector — the focused object's tools** | facet tabs (≣ form · ▦ drums · ◉ mix, growing per instrument); **slides open on engagement** — selecting a section or clicking a canvas element opens it (manual collapse wins until the next selection change); collapses to a thin strip for canvas room. |
+| **BOTTOM** | **retired** | the dock duplicated the rail's job and existed on some views but not others; the workbench's stub band duplicated the left library. Wide surfaces that want the bottom edge (harmony's progression strip) belong to the CANVAS, not a third menu. |
 
 - The spine spans the **entire width, above the zones row** (user rule,
   2026-09-21: the left browser and right rail must never cut it off). The
@@ -56,9 +66,10 @@ until modal parity.)
   into it (P2; v0 keeps the legacy header above while the tabs still exist).
 - The playhead sweeps the full width; descended, it can drop a vertical
   beat line through the workspace so every row stays time-anchored.
-- The bottom workbench band is *freed* by the Library change (maps/recipes
-  moved left, 2026-09-21) — reserved for the future arrangement expansion
-  (lanes + structure gestures) rather than retiring it outright.
+- The bottom workbench band is **retired** (2026-09-21): its maps/recipes
+  copy duplicated the left library, and its future "arrangement lanes"
+  belong to the canvas/spine rather than a third menu. The workbench's
+  stub band was deleted the same day.
 - **The element ladder inside the section view (user-specified
   2026-09-21):** the spine above is the *broadest* rung (the song's
   arrangement — tempo / signature / feel / groove lanes land here later);
