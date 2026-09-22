@@ -530,14 +530,25 @@ export default function DrumPatternTools() {
         )}
       </div>
 
-      <div className="flex items-center gap-1.5">
-        <div className="flex gap-1 flex-1 min-w-0">
+      <div className="space-y-1.5">
+        <div className="flex gap-1">
           {(["pattern", "variation", "transition"] as ToolTab[]).map((t) => (
-            <button key={t} className={tab === t ? TAB_ON : TAB} onClick={() => setTab(t)}>
+            <button
+              key={t}
+              className={tab === t ? TAB_ON : TAB}
+              /* Rail-width tab row fits at 6px side padding (inline wins over
+                 the CHIP-scale padding in TAB/TAB_ON — 4px of slack). */
+              style={{ paddingLeft: 6, paddingRight: 6 }}
+              onClick={() => setTab(t)}
+            >
               {t === "variation" ? "Detour" : t === "pattern" ? "Pattern" : "Transition"}
             </button>
           ))}
         </div>
+        {/* Controls — wraps in the narrow inspector rail (vertical layout,
+            user request 2026-09-21): Auto · Euclid · Preset · variant ·
+            Match · Apply/Revert each fall to the next line as needed. */}
+        <div className="flex flex-wrap items-center gap-1.5">
         <button
           className={mode === "auto" ? CHIP_ON : CHIP}
           onClick={toggleAuto}
@@ -610,6 +621,7 @@ export default function DrumPatternTools() {
             </button>
           </div>
         )}
+        </div>
       </div>
 
       {matches !== null && (
@@ -637,42 +649,29 @@ export default function DrumPatternTools() {
 
       {tab === "pattern" && (
         <div className="space-y-2.5">
-          {/* Voice by voice — the primary shape editor, always on. All voice
-              chips on the left in two columns (7 / 6), the Euclidean pattern
-              in the middle, the Length/Density/Offset sliders on the right. */}
-          <div className="flex items-start gap-3">
-            {/* Left — all 13 voice chips, two columns (7 / 6). */}
-            <div className="flex gap-1.5 shrink-0">
-              <div className="flex flex-col items-stretch gap-0.5">
-                {voiceChoices.slice(0, 7).map((v) => (
-                  <button
-                    key={v}
-                    className={v === activeVoice ? CHIP_ON : CHIP}
-                    onClick={() => setVoice(v)}
-                    title={eff.drumVoicePatterns?.[v] ? "has its own pattern" : undefined}
-                  >
-                    {VOICE_LABEL[v] ?? v}
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-col items-stretch gap-0.5">
-                {voiceChoices.slice(7).map((v) => (
-                  <button
-                    key={v}
-                    className={v === activeVoice ? CHIP_ON : CHIP}
-                    onClick={() => setVoice(v)}
-                    title={eff.drumVoicePatterns?.[v] ? "has its own pattern" : undefined}
-                  >
-                    {VOICE_LABEL[v] ?? v}
-                  </button>
-                ))}
-              </div>
+          {/* Voice by voice — the primary shape editor, always on. VERTICAL
+              layout for the inspector rail (user, 2026-09-21): the voice
+              chips wrap across the top, the Euclidean pattern sits centered
+              below them, the Length/Density/Offset sliders take the full
+              width underneath. */}
+          <div className="space-y-2">
+            {/* All 13 voice chips — a wrapping grid (3 per row at rail width). */}
+            <div className="flex flex-wrap gap-1">
+              {voiceChoices.map((v) => (
+                <button
+                  key={v}
+                  className={`${v === activeVoice ? CHIP_ON : CHIP} flex-1 min-w-[68px]`}
+                  onClick={() => setVoice(v)}
+                  title={eff.drumVoicePatterns?.[v] ? "has its own pattern" : undefined}
+                >
+                  {VOICE_LABEL[v] ?? v}
+                </button>
+              ))}
             </div>
 
-            {/* Middle — large Euclidean pattern display, centered in the
-                space between the chip columns and the sliders. */}
+            {/* The selected voice's pattern display, centered. */}
             {activeVoice && (
-              <div className="flex-1 min-w-0 flex flex-col items-center gap-1.5">
+              <div className="flex flex-col items-center gap-1.5 rounded border border-edge/60 bg-panelAlt/40 px-2 py-2">
                 <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted">
                   {VOICE_LABEL[activeVoice]} · pattern
                 </span>
@@ -691,9 +690,9 @@ export default function DrumPatternTools() {
               </div>
             )}
 
-            {/* Right — sliders. */}
+            {/* Sliders — full width under the display. */}
             {activeVoice && (
-              <div className="w-44 shrink-0">
+              <div className="border-t border-edge/40 pt-2">
                 <FreeSliders
                   n={voiceN}
                   k={voiceK}
@@ -723,15 +722,15 @@ export default function DrumPatternTools() {
               <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block">
                 Euclidean · whole section
               </span>
-              <div className="flex items-start gap-3">
-                <div className="flex-1 min-w-0 space-y-1.5">
+              <div className="space-y-2">
+                <div className="space-y-1.5">
                   <NecklaceRow necklaces={outlineNecklaces} />
                   <StepView outline={outline} color="#E8B54A" />
                   <p className="font-mono text-2xs text-inkMuted">
                     {k} / {n} · rot {rotation} · {outline.label}
                   </p>
                 </div>
-                <div className="w-44 shrink-0 space-y-2.5">
+                <div className="border-t border-edge/40 pt-2 space-y-2.5">
                   <EuclidSliders n={n} denom={baseDenom} k={k} rotation={rotation} onChange={setOutline} />
                   {/* Grid — /8 (eighths) vs /16 (sixteenths), the one
                       meter knob the Euclid sliders don't cover. */}
@@ -854,13 +853,13 @@ export default function DrumPatternTools() {
             </span>
             {variation ? (
               <div className="space-y-2">
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <NecklaceRow necklaces={resolveOutlineVoiceNecklaces(variation)} />
                     <StepView outline={variation} color="#D9954A" />
                     <p className="font-mono text-2xs text-inkMuted">{vK} / {vN} · rot {vRot} · {variation.label}</p>
                   </div>
-                  <div className="w-44 shrink-0 space-y-2.5">
+                  <div className="border-t border-edge/40 pt-2 space-y-2.5">
                     <EuclidSliders n={vN} denom={vDenom} k={vK} rotation={vRot} onChange={setVariation} />
                     {/* Grid — /8 (eighths) vs /16 (sixteenths), same knob as the
                         whole-section outline editor. */}
