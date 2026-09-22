@@ -49,11 +49,15 @@ interface Props {
    *  draws the moving playhead over the staff (same time axis as the
    *  notes). Null/undefined hides it. */
   activeBeat?: number | null;
+  /** When provided, clicking the staff seeks there — the click x is
+   *  mapped with the SAME time axis the notes use (beat = frac ×
+   *  sectionBeats, leftX 34 → width−8). */
+  onSeekBeat?: (beatInSection: number) => void;
 }
 
 /** The melody as notation, sized to its container. Redraws only when the
  *  notes/timing/key/scale change (not on every parent re-render). */
-export default function MelodyStaff({ notes, sectionBeats, songKey, scale, height = 120, activeBeat = null }: Props) {
+export default function MelodyStaff({ notes, sectionBeats, songKey, scale, height = 120, activeBeat = null, onSeekBeat }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const notesRef = useRef(notes);
@@ -93,7 +97,22 @@ export default function MelodyStaff({ notes, sectionBeats, songKey, scale, heigh
   }, []);
 
   return (
-    <div ref={wrapRef} className="relative w-full">
+    <div
+      ref={wrapRef}
+      className={`relative w-full ${onSeekBeat ? "cursor-pointer" : ""}`}
+      onClick={
+        onSeekBeat
+          ? (e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const usable = rect.width - 42;
+              if (usable <= 0) return;
+              const frac = Math.max(0, Math.min(1, (e.clientX - rect.left - 34) / usable));
+              onSeekBeat(frac * sectionBeats);
+            }
+          : undefined
+      }
+      title={onSeekBeat ? "Click to jump playback to that point in the section" : undefined}
+    >
       <canvas ref={canvasRef} className="block rounded border border-edge" />
       {/* Live playhead — same time axis as the notes: the staff draws time
           from leftX = CLEF_X + 12 = 34 to width − 8, so the overlay maps

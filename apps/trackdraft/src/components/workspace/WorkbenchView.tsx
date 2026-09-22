@@ -13,7 +13,7 @@ import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playbac
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import DrumLineEmbed from "./DrumLineEmbed";
 import { useInspectorStore } from "../../store/inspectorStore";
-import { playSectionLoop } from "../../lib/playback/transportControl";
+import { playSectionLoop, seekTo } from "../../lib/playback/transportControl";
 import IconBtn from "../common/IconBtn";
 import Icon from "../common/Icon";
 import ProgressionTrack from "../harmony/ProgressionTrack";
@@ -513,10 +513,21 @@ function SectionWorkspace({
               scale={effScale}
               height={128}
               activeBeat={beatInSection}
+              onSeekBeat={(beat) => void seekTo(song, clockSource, span.startBeat + beat)}
             />
           </div>
         ) : (
-          <p className="text-2xs text-inkMuted/60 italic font-mono text-center px-2">No melody yet — hum one in the melody workspace.</p>
+          <div className="text-center px-2 space-y-1.5">
+            <p className="text-2xs text-inkMuted/60 italic font-mono">No melody yet — the recorder lives in the melody workspace.</p>
+            <button
+              type="button"
+              className="text-[10px] font-mono text-accent/80 hover:text-accent border border-edge/70 rounded px-2 py-0.5"
+              onClick={() => jump("melody")}
+              title={`Open the melody workspace on "${section.name}" — press ● Record there to hum this section`}
+            >
+              ● Record…
+            </button>
+          </div>
         )}
       </ElementRow>
 

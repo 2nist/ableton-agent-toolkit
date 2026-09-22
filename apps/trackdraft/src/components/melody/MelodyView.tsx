@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useSongStore } from "../../store/songStore";
 import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 import { getSongTransport } from "../../lib/playback/songTransport";
@@ -41,7 +42,11 @@ export default function MelodyView() {
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  // ?section= deep links (the workbench's melody row jumps here with the
+  // section it was focused on — before this, the param was silently
+  // ignored and every dive landed on the first section).
+  const [searchParams] = useSearchParams();
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(searchParams.get("section"));
   const [micError, setMicError] = useState<string | null>(null);
   const [rawCapture, setRawCapture] = useState<MelodyNote[] | null>(null);
   const [liveNote, setLiveNote] = useState<string | null>(null);
@@ -64,6 +69,13 @@ export default function MelodyView() {
   /** Set while recording in loop mode — the section span the transport is
    *  looping, used to fold later passes back onto the section window. */
   const loopRef = useRef<{ start: number; end: number } | null>(null);
+
+  // Re-target when the SAME view is re-navigated with a new section
+  // (clicking another row's open → while already on /melody).
+  useEffect(() => {
+    const s = searchParams.get("section");
+    if (s) setSelectedSectionId(s);
+  }, [searchParams]);
 
   if (!currentSong) return null;
   const song = currentSong;
