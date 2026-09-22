@@ -1,0 +1,168 @@
+import { useState } from "react";
+import { useSongStore } from "../../store/songStore";
+import MidiSetupPanel from "../studio/MidiSetupPanel";
+import MidiTemplateGuide from "../studio/MidiTemplateGuide";
+import ExportMenu from "../studio/ExportMenu";
+import DirSetupModal from "../dashboard/DirSetupModal";
+
+/**
+ * Settings — the song-adjacent controls that used to hide behind one-off
+ * buttons, gathered in one place (user request 2026-09-21: "likely a
+ * settings menu should be developed"). Grouped by job:
+ *
+ *   MIDI & sync      — the playback clock, the live MIDI-out setup
+ *                      (embedded, no longer only a modal), and the Live
+ *                      template guide
+ *   Export & windows — the song outputs (JSON · MIDI · Ableton) and the
+ *                      lyrics/chords popout window
+ *   Files            — local directories (the same store the dashboard's
+ *                      gear manages)
+ *   Labs & tools     — Genre Workbench · Design Lab · the Puck sandbox —
+ *                      opened in their own tab (they leave the song
+ *                      editor, which stops playback, so a new tab keeps
+ *                      the music running)
+ */
+export default function SettingsView() {
+  const currentSong = useSongStore((s) => s.currentSong());
+  const clockSource = useSongStore((s) => s.clockSource);
+  const setClockSource = useSongStore((s) => s.setClockSource);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [dirsOpen, setDirsOpen] = useState(false);
+
+  function openPopout() {
+    if (!currentSong) return;
+    window.open(
+      `/song/${currentSong.id}/popout`,
+      "trackdraft-popout",
+      "width=900,height=560,menubar=no,toolbar=no,location=no,status=no",
+    );
+  }
+
+  const clockBtn = (mode: "internal" | "ableton", label: string, title: string) => (
+    <button
+      type="button"
+      className={`px-2 py-0.5 rounded border text-[10px] font-mono ${
+        clockSource === mode ? "border-accent/50 bg-panelAlt text-ink" : "border-edge/70 text-inkMuted hover:text-ink"
+      }`}
+      onClick={() => setClockSource(mode)}
+      title={title}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="p-4 max-w-3xl space-y-3">
+      <h1 className="text-sm font-medium text-ink">Settings</h1>
+
+      {/* MIDI & sync */}
+      <section className="border border-edge rounded-lg bg-panel overflow-hidden">
+        <header className="flex items-center gap-2 px-3 py-2 border-b border-edge/70">
+          <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">MIDI &amp; sync</span>
+          <span className="flex-1" />
+          <button
+            type="button"
+            className="text-[10px] font-mono text-accent/80 hover:text-accent border border-edge/70 rounded px-1.5 py-0.5"
+            onClick={() => setGuideOpen(true)}
+            title="One-time Live-side setup: the IAC port pick and the per-track MIDI From repoint"
+          >
+            Live template guide
+          </button>
+        </header>
+        <div className="p-3 space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-mono text-inkMuted">Playback clock</span>
+            <div className="flex gap-0.5">
+              {clockBtn("internal", "App", "Playback position comes from the app's own player")}
+              {clockBtn("ableton", "Ableton", "Follow Ableton's transport over the osc-bridge (seek/loop defer to Live)")}
+            </div>
+            <span className="text-[10px] text-inkMuted/60">
+              {clockSource === "ableton" ? "Live drives position; seek waits for Live." : "The app's player drives position."}
+            </span>
+          </div>
+          <MidiSetupPanel inline onClose={() => {}} />
+        </div>
+      </section>
+
+      {/* Export & windows */}
+      <section className="border border-edge rounded-lg bg-panel overflow-hidden">
+        <header className="flex items-center gap-2 px-3 py-2 border-b border-edge/70">
+          <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">Export &amp; windows</span>
+          <span className="text-[9px] font-mono text-inkMuted/40 truncate flex-1" title="These act on the open song">
+            acts on {currentSong?.title ?? "—"}
+          </span>
+        </header>
+        <div className="p-3 space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-ink">Song outputs</span>
+            <span className="text-[10px] text-inkMuted/60">JSON blueprint · multi-track MIDI · straight to Ableton</span>
+            <span className="flex-1" />
+            {currentSong && <ExportMenu song={currentSong} />}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap border-t border-edge/60 pt-2">
+            <span className="text-xs text-ink">Lyrics / chords popout</span>
+            <span className="text-[10px] text-inkMuted/60">a separate window for playing along — keep it visible while you edit</span>
+            <span className="flex-1" />
+            <button
+              type="button"
+              className="border border-edge/70 rounded px-2 py-0.5 text-[10px] font-mono text-accent/80 hover:text-accent"
+              onClick={openPopout}
+              title="Open the popout window (allow pop-ups for this tab)"
+            >
+              Open popout
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Files */}
+      <section className="border border-edge rounded-lg bg-panel overflow-hidden">
+        <header className="flex items-center gap-2 px-3 py-2 border-b border-edge/70">
+          <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">Files</span>
+        </header>
+        <div className="p-3 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-ink">Local directories</span>
+          <span className="text-[10px] text-inkMuted/60">sample & kit folders — the same store the dashboard's gear manages</span>
+          <span className="flex-1" />
+          <button
+            type="button"
+            className="border border-edge/70 rounded px-2 py-0.5 text-[10px] font-mono text-accent/80 hover:text-accent"
+            onClick={() => setDirsOpen(true)}
+          >
+            Manage directories…
+          </button>
+        </div>
+      </section>
+
+      {/* Labs & tools — developed surfaces outside the song editor */}
+      <section className="border border-edge rounded-lg bg-panel overflow-hidden">
+        <header className="flex items-center gap-2 px-3 py-2 border-b border-edge/70">
+          <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">Labs &amp; tools</span>
+          <span className="text-[9px] font-mono text-inkMuted/40 flex-1">open in a new tab — playback keeps running here</span>
+        </header>
+        <div className="p-3 space-y-1.5">
+          {[
+            ["/genre-workbench", "Genre Workbench", "the 119-genre map builder — research a genre, validate, save the map"],
+            ["/design-lab", "Design Lab", "tokens, primitives and the component playground"],
+            ["/sandbox", "Puck sandbox", "the visual-arrangement experiment (drag-and-drop layout editor)"],
+          ].map(([href, name, desc]) => (
+            <a
+              key={href}
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-baseline gap-2 px-1.5 py-1 rounded hover:bg-panelAlt/60"
+              title={desc}
+            >
+              <span className="text-xs text-accent/90">{name}</span>
+              <span className="text-[10px] text-inkMuted/60 truncate">{desc}</span>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      {guideOpen && <MidiTemplateGuide onClose={() => setGuideOpen(false)} />}
+      <DirSetupModal open={dirsOpen} onClose={() => setDirsOpen(false)} />
+    </div>
+  );
+}

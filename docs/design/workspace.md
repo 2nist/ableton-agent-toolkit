@@ -50,6 +50,14 @@ dissolved); the names below stay the same wherever the doors move:
 | Melody | **Melody editor** — staff | L3 |
 | Structure | **Section form** — today's full-page home of the ≣ facet | L2 preset |
 | Library | **Library view** — the browser (songs · maps · recipes) as a center view | — (acts on the open song) |
+| Settings | **Settings view** — MIDI & sync · export & popout · files · labs | — |
+
+In-view modes are deliberately NOT doors: the Drums view's **Line view
+↔ Blocks** toggle, Lyrics' **per-section ↔ song text** toggle, and the
+Harmony wheel's Linear/Loop timing modes all switch *within* their view.
+The lyrics/chords **popout** is a window (opened from Settings or
+Studio), not a view. **Labs** — Genre Workbench · Design Lab · the Puck
+sandbox — live outside the song editor and are linked from Settings.
 
 The drum pair keeps the names it earned: **Line view** = the classic
 timeline (the drums' arrangement face, shown at Section depth with

@@ -29,7 +29,7 @@ const CHANNEL_OPTIONS = Array.from({ length: 16 }, (_, i) => i + 1);
  *  persists (so it can match however your Live template actually listens),
  *  and a per-track Test button that fires a note so you can verify the
  *  port + channel reach Live before pressing Play. */
-export default function MidiSetupPanel({ onClose }: { onClose: () => void }) {
+export default function MidiSetupPanel({ onClose, inline = false }: { onClose: () => void; inline?: boolean }) {
   const midiOutputId = useMidiSettingsStore((s) => s.midiOutputId);
   const setMidiOutputId = useMidiSettingsStore((s) => s.setMidiOutputId);
   const channels = useMidiSettingsStore((s) => s.channels);
@@ -69,17 +69,22 @@ export default function MidiSetupPanel({ onClose }: { onClose: () => void }) {
     if (output) sendTestNote(output, channels[stem]);
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div
-        className="w-[30rem] max-w-full max-h-[85vh] overflow-y-auto rounded border border-edge bg-panel p-4 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
+  const card = (
+    <div
+      className={
+        inline
+          ? "rounded border border-edge bg-panel p-4"
+          : "w-[30rem] max-w-full max-h-[85vh] overflow-y-auto rounded border border-edge bg-panel p-4 shadow-lg"
+      }
+      onClick={(e) => e.stopPropagation()}
+    >
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-medium text-sm">MIDI Out — Live setup</h3>
-          <button className="text-inkMuted hover:text-ink leading-none text-sm" onClick={onClose} title="Close">
-            &times;
-          </button>
+          {!inline && (
+            <button className="text-inkMuted hover:text-ink leading-none text-sm" onClick={onClose} title="Close">
+              &times;
+            </button>
+          )}
         </div>
 
         {!supported ? (
@@ -170,13 +175,21 @@ export default function MidiSetupPanel({ onClose }: { onClose: () => void }) {
           </>
         )}
 
-        <button
-          className="mt-4 w-full border border-edge text-inkMuted hover:text-ink rounded px-3 py-1.5 text-xs"
-          onClick={onClose}
-        >
-          Done
-        </button>
-      </div>
+        {!inline && (
+          <button
+            className="mt-4 w-full border border-edge text-inkMuted hover:text-ink rounded px-3 py-1.5 text-xs"
+            onClick={onClose}
+          >
+            Done
+          </button>
+        )}
+    </div>
+  );
+
+  if (inline) return card;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      {card}
     </div>
   );
 }
