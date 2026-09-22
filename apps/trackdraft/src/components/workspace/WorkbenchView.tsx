@@ -15,6 +15,9 @@ import DrumLineEmbed from "./DrumLineEmbed";
 import { useInspectorStore } from "../../store/inspectorStore";
 import ProgressionTrack from "../harmony/ProgressionTrack";
 import HexReadout from "../harmony/HexReadout";
+import BassSettings from "../harmony/BassSettings";
+import ColorSettings from "../harmony/ColorSettings";
+import LyricsEditor from "../lyrics/LyricsEditor";
 import NecklaceRow from "../drums/NecklaceRow";
 import MelodyStaff from "../melody/MelodyStaff";
 import type { BlueprintSection, BlueprintSong, Chord } from "../../types/blueprint";
@@ -267,12 +270,16 @@ function SectionWorkspace({
         </div>
       </ElementRow>
 
-      {/* Bass */}
+      {/* Bass — the real controls inline (P3 slice 3): register · motion ·
+          rhythm · velocity, writing the same per-section `bassProfile`
+          that the MIDI export and Send to Ableton plan from. */}
       <ElementRow title="Bass" hint={bassBits ?? "auto — follows the chords"} onOpen={() => jump("harmony")}>
-        <p className="text-2xs font-mono text-inkMuted/70 text-center px-2">
-          {bassBits ? `profile: ${bassBits}` : "root · locked · default register"}
-          <span className="block text-[9px] text-inkMuted/40 mt-1">controls live in Harmony → Layers; a bass line view comes with the element visualizations</span>
-        </p>
+        <div className="w-full">
+          <BassSettings
+            section={section}
+            onChange={(updater) => updateCurrentSong((s) => updateSection(s, section.id, updater))}
+          />
+        </div>
       </ElementRow>
 
       {/* Chords — the wheel readout plus the REAL progression strip, live
@@ -311,12 +318,15 @@ function SectionWorkspace({
         )}
       </ElementRow>
 
-      {/* Color */}
+      {/* Color — flavor chips + register, inline (the same settings the ♪
+          Layers facet hosts); writes `colorFlavor` / `colorOctave`. */}
       <ElementRow title="Color" hint={`register oct ${section.colorOctave ?? 6}`} onOpen={() => jump("harmony")}>
-        <p className="text-2xs font-mono text-inkMuted/70 text-center px-2">
-          extensions sit at octave {section.colorOctave ?? 6}
-          <span className="block text-[9px] text-inkMuted/40 mt-1">flavor + register controls live in Harmony → Layers; the color visualization comes with the element visualizations</span>
-        </p>
+        <div className="w-full">
+          <ColorSettings
+            section={section}
+            onChange={(updater) => updateCurrentSong((s) => updateSection(s, section.id, updater))}
+          />
+        </div>
       </ElementRow>
 
       {/* Melody */}
@@ -330,13 +340,22 @@ function SectionWorkspace({
         )}
       </ElementRow>
 
-      {/* Lyrics — pinned last: the annotation layer */}
+      {/* Lyrics — pinned last: the annotation layer, and since P3 slice 2
+          the pad itself, live and editable in place (the chords-row
+          template — the real editor, not a preview). Writes the same
+          updateSection path the Lyrics view uses, so the syllable
+          gutter, the song-text view and the coverage gauge all follow
+          immediately; the header's open → still dives to the view for
+          the metrical/rhyme tools. */}
       <ElementRow title="Lyrics" hint={lyricLines.length ? `${lyricLines.length} line${lyricLines.length === 1 ? "" : "s"}` : "not written"} onOpen={() => jump("lyrics")}>
-        {lyricLines.length > 0 ? (
-          <p className="text-xs text-ink/80 text-center leading-relaxed px-2 whitespace-pre-line">{lyricLines.slice(0, 3).join("\n")}</p>
-        ) : (
-          <p className="text-2xs text-inkMuted/60 italic font-mono text-center px-2">No lyrics yet — the pad is in the lyrics tab.</p>
-        )}
+        <div className="w-full">
+          <LyricsEditor
+            value={section.lyrics ?? ""}
+            onChange={(lyrics) =>
+              updateCurrentSong((s) => updateSection(s, section.id, (sec) => ({ ...sec, lyrics })))
+            }
+          />
+        </div>
       </ElementRow>
     </div>
   );
