@@ -311,8 +311,10 @@ jump-open included); the karaoke popout is untouched.
   in the shared harmony store and engages the ♪ facet, so the thing you
   touched is the thing you edit). The Drums row already embeds the classic
   Line view (click dives to Blocks with the range staged — 26cf4f2).
-  Remaining: melody in-place editing (needs the record/piano-roll
-  plumbing); ◆ adopt; spine grow animation. **Done since (2026-09-21,
+  Remaining: melody note editing — none exists anywhere (the workspace is
+  record-first; the piano roll is a view) — so the row dives armed
+  instead, and the staff click-seeks; ◆ adopt (still undefined).
+  **Done since (2026-09-21,
   same template):** the Lyrics row embeds the real pad (textarea +
   syllable gutter), the Bass and Color rows embed their full controls
   (BassSettings / ColorSettings), and the section header carries a loop
@@ -321,9 +323,13 @@ jump-open included); the karaoke popout is untouched.
   bars −/+ · role menu on the dot), rows collapse (remembered in
   `trackdraft-workbench-rows`), the melody staff draws a live playhead
   (`activeBeat`) and the progression strip tints the sounding chord
-  (`activeChordId`).** Also fixed en route: **undo/redo now persist** —
-  an undone edit used to resurrect on reload (songStore regression test
-  added).
+  (`activeChordId`).** **Transition (2026-09-22):** the spine's **grow
+  animation** shipped — clicking a block flies a translucent clone of it
+  into the workspace header (`data-section-header`), the "clicked card
+  grows into the Section workspace" beat; reduced-motion and views
+  without the header no-op.** Also fixed en route: **undo/redo now
+  persist** — an undone edit used to resurrect on reload (songStore
+  regression test added).
 - **P4 (partly done 2026-09-21)**: the top tabs + identity header retired
   — views live in the left rail, the Library became a view, the spine
   chip carries identity. **SVG icon pass shipped the same day**

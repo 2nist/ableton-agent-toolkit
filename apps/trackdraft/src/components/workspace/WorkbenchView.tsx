@@ -318,8 +318,10 @@ function SectionWorkspace({
     <div className="space-y-2 w-full">
       {/* Section header — you are HERE, and since the depth pass the basics
           live right here: rename (click the name), bars (−/+), role (the
-          dot) — single undo steps each; the ≣ facet is for detail. */}
-      <div className="flex items-center gap-2 px-1">
+          dot) — single undo steps each; the ≣ facet is for detail. Tagged
+          data-section-header: the spine's grow animation flies the clicked
+          block's clone into this rect. */}
+      <div className="flex items-center gap-2 px-1" data-section-header>
         <button
           type="button"
           className="w-3.5 h-3.5 rounded-[3px] shrink-0 border border-transparent hover:border-inkMuted/60"

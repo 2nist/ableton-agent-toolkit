@@ -688,7 +688,10 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
                     barPx={barPx}
                     selected={selectedSectionId === span.sectionId}
                     live={liveIndex === i}
-                    onSelect={() => setSelectedSectionId(span.sectionId)}
+                    onSelect={(e) => {
+                      setSelectedSectionId(span.sectionId);
+                      playGrow(e.currentTarget as HTMLElement, roleStyle(span.section.role).bg);
+                    }}
                     onMenu={(e) => openMenu(e, span)}
                     onResize={(e, side) => onResizeStart(e, span, side)}
                     canResizeLeft={!!prev && prev.sectionId !== span.sectionId}
@@ -875,6 +878,50 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   );
 }
 
+/** The ladder's transition flourish (original brainstorm: "the clicked
+ *  card grows into the Section workspace"): a translucent clone of the
+ *  clicked block flies to the section workspace's header
+ *  (`data-section-header`) — the sheet of paper leaving the arrangement
+ *  and landing on the desk. Pure DOM, no state, self-cleaning; a no-op
+ *  when the header isn't on the page (every view except the workbench,
+ *  where the dive happens in place anyway) and under
+ *  prefers-reduced-motion. */
+function playGrow(fromEl: HTMLElement, bg: string) {
+  try {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const target = document.querySelector("[data-section-header]") as HTMLElement | null;
+    if (!target) return;
+    const from = fromEl.getBoundingClientRect();
+    const to = target.getBoundingClientRect();
+    if (to.width <= 0 || to.height <= 0 || from.width <= 0) return;
+    const clone = document.createElement("div");
+    clone.style.cssText = [
+      "position:fixed",
+      `left:${from.left}px`,
+      `top:${from.top}px`,
+      `width:${from.width}px`,
+      `height:${from.height}px`,
+      "border-radius:4px",
+      `background:${bg}`,
+      "opacity:0.85",
+      "pointer-events:none",
+      "z-index:60",
+      "transition:left .22s ease,top .22s ease,width .22s ease,height .22s ease,opacity .22s ease",
+    ].join(";");
+    document.body.appendChild(clone);
+    requestAnimationFrame(() => {
+      clone.style.left = `${to.left}px`;
+      clone.style.top = `${to.top}px`;
+      clone.style.width = `${to.width}px`;
+      clone.style.height = `${to.height}px`;
+      clone.style.opacity = "0";
+    });
+    setTimeout(() => clone.remove(), 280);
+  } catch {
+    /* flourish only — never let it break selection */
+  }
+}
+
 /** One section block. True-scale width (bars × barPx — no min-width floor,
  *  which would drift every later bar out of ruler alignment; zoom in for
  *  tiny sections instead). Role-colored like the arrangement timeline; the
@@ -898,7 +945,7 @@ function SpineBlock({
   barPx: number;
   selected: boolean;
   live: boolean;
-  onSelect: () => void;
+  onSelect: (e: ReactMouseEvent<HTMLButtonElement>) => void;
   onMenu: (e: ReactMouseEvent<HTMLButtonElement>) => void;
   onResize?: (e: ReactMouseEvent, side: "left" | "right") => void;
   canResizeLeft?: boolean;
