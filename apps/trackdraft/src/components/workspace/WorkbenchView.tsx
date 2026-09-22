@@ -16,7 +16,7 @@ import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playbac
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import BendPanel from "../style/BendPanel";
 import SectionStructurePanel from "./SectionStructurePanel";
-import DrumShapeStrip from "./DrumShapeStrip";
+import DrumLineEmbed from "./DrumLineEmbed";
 import IconBtn from "../common/IconBtn";
 import HexReadout from "../harmony/HexReadout";
 import NecklaceRow from "../drums/NecklaceRow";
@@ -431,12 +431,13 @@ function SectionWorkspace({
         </span>
       </div>
 
-      {/* Drums — the clock, with the broad shape face: the whole section
-          edge to edge (transition tail and detours always in view), the
-          level-2 editing surface per the ladder. */}
+      {/* Drums — the clock, with the classic line view as the broad face:
+          the whole arrangement cropped to this section + context, so its
+          transitions in/out and detours are in view; clicks dive to the
+          beat-by-beat Blocks editor on the clicked range. */}
       <ElementRow title="Drums" hint={drumFamilyLabel(section, song)} onOpen={() => jump("drums")}>
         <div className="w-full space-y-2">
-          <DrumShapeStrip song={song} span={span} />
+          <DrumLineEmbed song={song} span={span} />
           {necklaces ? (
             <NecklaceRow necklaces={necklaces} />
           ) : (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
 import { useDockStore } from "../../store/dockStore";
@@ -83,6 +83,9 @@ function defaultDetourFor(sec: BlueprintSection): MeterOutline {
 // track has room for its internal beat/bar grid.
 const X0 = 104;
 const BAR_PX = 40;
+/** Exported for the workbench's line-view embed — it fits the zoom so the
+ *  focused section + context fills its crop box. */
+export const CLASSIC_BAR_PX = BAR_PX;
 const TRACK_H = 36;
 const TOP_PAD = 40;
 const BOTTOM_PAD = 34;
@@ -249,16 +252,47 @@ function outlineMeterLabel(outline: MeterOutline): string {
  *  section, a necklace, a variation detour, or a handoff — just selects
  *  the owning section, which loads its Pattern / Variation / Transition
  *  editors into the dock. */
-export default function DrumsView() {
+/** The Drums view, embeddable. Mounted bare by the /drums route (all
+ *  chrome + dock tools). The WORKBENCH mounts it `embedded`: no chrome,
+ *  no dock registration, a host-fitted `zoom`, the focused section
+ *  highlighted from the shared selection, and every click routed through
+ *  `onPickRange` — the host opens beat-by-beat on that range. The classic
+ *  canvas itself is literally the same renderer in both places, so the
+ *  two views cannot drift. */
+export default function DrumsView({
+  embedded = false,
+  zoom: zoomOverride,
+  highlightSectionId,
+  onPickRange,
+}: {
+  /** Render as a canvas-only embed (the workbench's line view): no toggle
+   *  row, no import button, no dock registration, no zoom buttons. */
+  embedded?: boolean;
+  /** Host-fitted zoom (px-per-bar = CLASSIC_BAR_PX × zoom); the tab's ±
+   *  buttons drive internal state instead. */
+  zoom?: number;
+  /** Which section to highlight in an embed (the workbench's focus) — the
+   *  Drums tab itself uses its own selection store instead. */
+  highlightSectionId?: string;
+  /** Embed click routing: (span, section-relative beat) → the host decides
+   *  what a click means (the workbench opens the Blocks editor on that
+   *  range). Absent → the classic tab's own behavior (select the section /
+   *  set the detour dot). */
+  onPickRange?: (span: SectionSpan, beatInSection: number) => void;
+} = {}) {
   const song = useSongStore((s) => s.currentSong());
-  const selectedSectionId = useDrumsSelectionStore((s) => s.selectedSectionId);
+  const storedSelection = useDrumsSelectionStore((s) => s.selectedSectionId);
+  const selectedSectionId = highlightSectionId ?? storedSelection;
   const setSelectedSectionId = useDrumsSelectionStore((s) => s.setSelectedSectionId);
   const setTools = useDockStore((s) => s.setTools);
 
   // Horizontal zoom — stretches/shrinks the bar width so the whole song
   // fits on screen or a few bars get detail. Local to the view, not
   // persisted (a song's drum view is a working surface, not song data).
-  const [zoom, setZoom] = useState(1);
+  const [zoomState, setZoom] = useState(1);
+  /** Effective zoom — the embed passes a fitted value; the tab's own ±
+   *  buttons drive the local state. */
+  const zoom = zoomOverride ?? zoomState;
   const clampZoom = (z: number) => Math.min(2.5, Math.max(0.4, z));
   const barW = BAR_PX * zoom;
   const barX = (bar: number): number => X0 + bar * barW;
@@ -328,6 +362,20 @@ export default function DrumsView() {
     }
   };
 
+  // Embed affordance: the workbench crops the full-song canvas to a window
+  // around the focused section. Keep its opening bars in view (4 bars of
+  // context before it) whenever the focus or the fitted zoom changes.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const focusSpans = useMemo(() => (song ? sectionSpans(song) : []), [song]);
+  useEffect(() => {
+    if (!embedded || !highlightSectionId) return;
+    const el = scrollRef.current;
+    const focus = focusSpans.find((s) => s.section.id === highlightSectionId);
+    if (!el || !focus) return;
+    const bw = BAR_PX * (zoomOverride ?? 1);
+    el.scrollLeft = Math.max(0, X0 + focus.startBar * bw - 4 * bw);
+  }, [embedded, highlightSectionId, focusSpans, zoomOverride]);
+
   // A working draft from the Pattern editor — when one exists for a
   // section, the timeline renders it instead of the committed section so
   // slider edits preview live on the lines/necklaces before Apply/Revert.
@@ -337,10 +385,13 @@ export default function DrumsView() {
   // Register the dock editor once (Harmony's pattern) — it reads the
   // shared selection store directly, so clicking the timeline updates it
   // without this view re-pushing fresh JSX into the dock on every click.
+  // Dock registration is a tab-only concern — an embedded canvas (the
+  // workbench row) must not touch the shared dock.
   useEffect(() => {
+    if (embedded) return;
     setTools(<DrumPatternTools />);
     return () => setTools(null);
-  }, [setTools]);
+  }, [setTools, embedded]);
 
   if (!song) return null;
   const spans = sectionSpans(song);
@@ -509,8 +560,19 @@ export default function DrumsView() {
     }
   });
 
-  function selectSection(sectionId: string) {
-    setSelectedSectionId(sectionId);
+  /** Click routing shared by every hit surface: in an embed, report the
+   *  span + the clicked section-relative beat to the host (the workbench
+   *  opens beat-by-beat on it); in the tab, keep the classic behavior —
+   *  select the section. `fallbackBeat` is for surfaces that know their
+   *  exact beat (the detour dots). */
+  function pickOrSelect(e: ReactMouseEvent, span: SectionSpan, fallbackBeat?: number) {
+    if (onPickRange) {
+      const rect = (e.currentTarget as Element).getBoundingClientRect();
+      const frac = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
+      onPickRange(span, fallbackBeat ?? Math.max(0, Math.min(span.durationBeats - 1e-6, frac * span.durationBeats)));
+      return;
+    }
+    setSelectedSectionId(span.section.id);
   }
 
   /** Drop/move/remove a detour at a section-relative beat — the beat-dot
@@ -542,8 +604,9 @@ export default function DrumsView() {
   }
 
   return (
-    <div className="px-2 pt-1.5 pb-3">
-      {!anyLaneHits && <p className="text-inkMuted text-xs mb-2">No drum voices resolve for this song yet.</p>}
+    <div className={embedded ? "" : "px-2 pt-1.5 pb-3"}>
+      {!embedded && !anyLaneHits && <p className="text-inkMuted text-xs mb-2">No drum voices resolve for this song yet.</p>}
+      {!embedded && (
       <div className="flex items-center gap-1.5 mb-1.5">
         {VIEW_MODES.map((m) => (
           <button
@@ -583,19 +646,29 @@ export default function DrumsView() {
           ⤓ Import analysis…
         </button>
       </div>
-      {importStatus && (
+      )}
+      {!embedded && importStatus && (
         <div className={`font-mono text-2xs mb-1.5 ${importStatus.ok ? "text-[#E8B54A]" : "text-red-400"}`}>
           {importStatus.text}
         </div>
       )}
-      {viewMode === "blocks" ? (
+      {!embedded && viewMode === "blocks" ? (
         <DrumBlocksView />
       ) : (
-      <div className="relative overflow-x-auto border border-edge rounded bg-black">
+      <div
+        ref={scrollRef}
+        className={
+          embedded
+            ? "relative overflow-hidden"
+            : "relative overflow-x-auto border border-edge rounded bg-black"
+        }
+      >
         {/* Zoom controls live on the timeline's top row — floating at the
             top-left corner of the viewport (the empty corner above the lane
             labels) so they stay put while the timeline scrolls horizontally,
-            no dedicated row above. */}
+            no dedicated row above. (Tab only — the embed gets a fitted zoom
+            from its host.) */}
+        {!embedded && (
         <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-0.5 border border-edge rounded bg-black/90 px-1 py-0.5 select-none">
           <button
             className="w-5 h-5 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
@@ -615,6 +688,7 @@ export default function DrumsView() {
             +
           </button>
         </div>
+        )}
         <svg width={width} height={height} className="block">
           <defs>
             <filter id="drums-glow" x="-60%" y="-60%" width="220%" height="220%">
@@ -784,7 +858,7 @@ export default function DrumsView() {
                   {/* pattern change → necklace at the node where it starts;
                       exact repeat → the line just continues, tiny node */}
                   {!sameAsPrev ? (
-                    <g style={{ cursor: "pointer" }} onClick={() => selectSection(r.span.section.id)}>
+                    <g style={{ cursor: "pointer" }} onClick={(e) => pickOrSelect(e, r.span)}>
                       <NecklaceGlyph
                         cx={cx} cy={y} radius={NECK_R}
                         hits={n.hits} steps={n.steps}
@@ -841,7 +915,8 @@ export default function DrumsView() {
             });
           })}
 
-          {/* ---- section hit rects: click anywhere in a section to select it ---- */}
+          {/* ---- section hit rects: click anywhere in a section → select it
+              (the tab) / pick that range for the host (an embed) ---- */}
           {resolved.map((r, i) => (
             <rect
               key={`hit-${i}`}
@@ -851,7 +926,7 @@ export default function DrumsView() {
               height={STACK_BOTTOM - STACK_TOP - TRACK_H}
               fill="transparent"
               style={{ cursor: "pointer" }}
-              onClick={() => selectSection(r.span.section.id)}
+              onClick={(e) => pickOrSelect(e, r.span)}
             />
           ))}
 
@@ -865,7 +940,7 @@ export default function DrumsView() {
               height={STACK_BOTTOM - STACK_TOP - TRACK_H}
               fill="transparent"
               style={{ cursor: "pointer" }}
-              onClick={() => selectSection(r.span.section.id)}
+              onClick={(e) => pickOrSelect(e, r.span)}
             />
           ))}
 
@@ -906,7 +981,9 @@ export default function DrumsView() {
                         stroke={active ? "#E8B54A" : "#9a9aa2"}
                         strokeWidth={active ? 0 : 1.2}
                         style={{ cursor: "pointer" }}
-                        onClick={() => setDetourAt(r.span.section.id, beat)}
+                        onClick={(e) =>
+                          onPickRange ? pickOrSelect(e, r.span, beat) : setDetourAt(r.span.section.id, beat)
+                        }
                       >
                         <title>{active ? "Detour starts here — click to remove" : `Insert a detour at beat ${beat}`}</title>
                       </circle>
@@ -937,7 +1014,7 @@ export default function DrumsView() {
                   cx={cx} cy={y} r={NECK_R + 8}
                   fill="transparent"
                   style={{ cursor: "pointer" }}
-                  onClick={() => selectSection(r.span.section.id)}
+                  onClick={(e) => pickOrSelect(e, r.span)}
                 />
               );
             });

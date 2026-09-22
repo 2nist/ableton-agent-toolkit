@@ -62,23 +62,23 @@ until modal parity.)
 - **The element ladder inside the section view (user-specified
   2026-09-21):** the spine above is the *broadest* rung (the song's
   arrangement — tempo / signature / feel / groove lanes land here later);
-  the section workspace is the *broad shape* rung — the featured element's
-  whole span edge to edge, never cut short of its transition tail or
-  internal detours/fills; the element's own editor (e.g. the drums Blocks
-  grid) is the *beat-by-beat* rung, one click down.
-- **Drum Shape Strip (first featured face, 2026-09-21):** the Drums row
-  draws the focused section's entire span as a hit-count × velocity shape
-  (humps = busy loud bars, valleys = sparse) using export-parity hit
-  resolution (`resolveSectionLaneHits`) — it shows what will play, not a
-  mock. Level-2 editing lives on the shape: click a bar → place/move a
-  detour (meter-default outline; click its zone → remove); click the tail
-  zone → transition palette (Auto fill / Build up / Break down / Cut /
-  Drop out + tail length) writing `drumTransitionModel`/`Bars` — every
-  write one undoable `updateSection`. Hover = hits + avg velocity per bar.
-  "beat-by-beat →" stages the section into the drums selection and opens
-  the Blocks editor in one click. The planned auto fill is marked by the
-  tail chip, not yet drawn as ghost hits (the hit resolver deliberately
-  mirrors the classic view's simplification).
+  the section workspace is the *broad* rung — the featured element's
+  whole face WITH enough context around it (never cut short of its
+  transitions in/out or internal detours/fills); the element's own editor
+  (e.g. the drums Blocks grid) is the *beat-by-beat* rung, one click down.
+- **Drum line view (first featured face, 2026-09-21; revised same day):**
+  the Drums row embeds THE classic Drums canvas (`DrumsView embedded`) —
+  the actual renderer, so the two views cannot drift — cropped to a
+  window around the focused section (4 bars of context each side, zoom
+  fitted to the crop box and automatically scrolled to the section), so
+  the transition into/out of it and any internal detours are all in
+  view. Every click routes to the beat-by-beat rung: the clicked bar —
+  or the detour's whole span, or the transition tail (manual bars, else
+  the 1-bar auto-fill zone), when the click lands on one — is staged
+  into the drums selection and the Blocks editor opens on that range.
+  (An earlier same-day attempt drew a per-bar density bar chart instead:
+  user vetoed — "the classic view is my vision for the second level.
+  So just the line view." — and it was deleted. Lesson recorded.)
 
 ## 3. The spine
 
