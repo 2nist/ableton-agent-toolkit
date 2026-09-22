@@ -128,6 +128,11 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
       songs: songs.map((s) => (s.id === prevSong.id ? prevSong : s)),
       historyIndex: prevIndex,
     });
+    // Persist the reverted state — without this, the last edit's debounced
+    // save would land AFTER the undo and the undone edit resurrected on
+    // reload (found 2026-09-22 while testing the workbench bars stepper:
+    // +1 bar → undo → reload showed +1 again).
+    get().autoSave();
   },
 
   redo: () => {
@@ -139,6 +144,7 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
       songs: songs.map((s) => (s.id === nextSong.id ? nextSong : s)),
       historyIndex: nextIndex,
     });
+    get().autoSave();
   },
 
   canUndo: () => get().historyIndex > 0,

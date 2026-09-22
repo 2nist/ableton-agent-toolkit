@@ -151,4 +151,31 @@ describe("songStore — real repaired catalog song survives undo/redo/save/reloa
     const match = classifyNarrative(fromBlueprintSong(reloaded!), NARRATIVE_FORMS);
     expect(match.formId).not.toBeNull();
   });
+
+  it("persists undo/redo — an undone edit does not resurrect on reload", async () => {
+    // This deliberately does NOT call autoSave() by hand: each mutator
+    // must persist on its own. Regression for the 2026-09-22 find — undo
+    // changed memory only, so the edit's debounced save landed afterwards
+    // and a reload brought the undone edit back.
+    const song = makeSong([{ id: "a", role: "verse", name: "Verse 1" }]);
+    const store1 = await freshStore();
+    store1.getState().importSong(song);
+
+    store1.getState().updateCurrentSong((s) => ({ ...s, bpm: 140 }));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(JSON.parse(backingStorage.getItem("trackdraft-songs")!)[0].bpm).toBe(140);
+
+    store1.getState().undo();
+    expect(store1.getState().currentSong()!.bpm).toBe(120);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(JSON.parse(backingStorage.getItem("trackdraft-songs")!)[0].bpm).toBe(120);
+
+    const store2 = await freshStore();
+    store2.getState().loadFromStorage();
+    expect(store2.getState().currentSong()!.bpm).toBe(120);
+
+    store1.getState().redo();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(JSON.parse(backingStorage.getItem("trackdraft-songs")!)[0].bpm).toBe(140);
+  });
 });
