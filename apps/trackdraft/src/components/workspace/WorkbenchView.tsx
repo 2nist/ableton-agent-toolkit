@@ -16,6 +16,7 @@ import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playbac
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import BendPanel from "../style/BendPanel";
 import SectionStructurePanel from "./SectionStructurePanel";
+import DrumShapeStrip from "./DrumShapeStrip";
 import IconBtn from "../common/IconBtn";
 import HexReadout from "../harmony/HexReadout";
 import NecklaceRow from "../drums/NecklaceRow";
@@ -408,7 +409,7 @@ function SectionWorkspace({
   const lyricLines = (section.lyrics ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
 
   return (
-    <div className="space-y-2 max-w-5xl">
+    <div className="space-y-2 w-full">
       {/* Section header — you are HERE */}
       <div className="flex items-center gap-2 px-1">
         <span
@@ -430,17 +431,22 @@ function SectionWorkspace({
         </span>
       </div>
 
-      {/* Drums — the clock */}
+      {/* Drums — the clock, with the broad shape face: the whole section
+          edge to edge (transition tail and detours always in view), the
+          level-2 editing surface per the ladder. */}
       <ElementRow title="Drums" hint={drumFamilyLabel(section, song)} onOpen={() => jump("drums")}>
-        {necklaces ? (
-          <NecklaceRow necklaces={necklaces} />
-        ) : (
-          <p className="text-2xs text-inkMuted/60 italic font-mono text-center px-2">
-            {section.drumPattern === "none"
-              ? "Muted — no kit on this section."
-              : "No resolvable groove yet — author one in the drums editor."}
-          </p>
-        )}
+        <div className="w-full space-y-2">
+          <DrumShapeStrip song={song} span={span} />
+          {necklaces ? (
+            <NecklaceRow necklaces={necklaces} />
+          ) : (
+            <p className="text-2xs text-inkMuted/60 italic font-mono text-center px-2">
+              {section.drumPattern === "none"
+                ? "Muted — no kit on this section."
+                : "No resolvable groove yet — author one in the drums editor."}
+            </p>
+          )}
+        </div>
       </ElementRow>
 
       {/* Bass */}
