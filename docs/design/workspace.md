@@ -11,6 +11,49 @@ depths** — the tabs dissolve into *places you can be* in one song.
 
 ---
 
+## 0. The names (shared vocabulary — frozen 2026-09-21)
+
+Use these words, in this meaning, in every conversation about the workspace.
+
+**Depths** — where you are in the ladder:
+
+| Depth | Meaning | Home today |
+|---|---|---|
+| **Arrangement** (L1) | the whole song on the time axis — section sculpting, the arc, maps/templates | the spine at full size + the **Studio** tab (its page) |
+| **Section** (L2) | one section stretched out, all its material visible | **Workbench β** (`/workbench`) |
+| **Element** (L3) | one element's full editor | the tab pages — **Drums · Harmony · Lyrics · Melody** |
+
+**Faces** — every element has two:
+
+- **arrangement face**: the element across the song (drums = the classic
+  **Line view**; harmony = the progression strip generalized later;
+  melody = contour lane later).
+- **section face**: the element itself, authored in place (drums =
+  **Blocks**; harmony = the hex wheel; lyrics = the pad; melody = the
+  staff).
+
+**Zones** — the shell bands (§2): **Spine** (top) · **Library** (left) ·
+**Canvas** (center) · **Inspector** (right — facets ≣ Section form ·
+▦ Drums · ♪ Harmony · ✎ Lyrics · ◉ Mix/Bend · ⓘ Song).
+
+**View names ↔ semantic roles** — the six tabs are legacy doors to these
+places; when they dissolve (P4) the names remain:
+
+| Tab today | Semantic name | Depth |
+|---|---|---|
+| Studio | **Arrangement board** (timeline + console) | L1 |
+| Workbench β | **Section workspace** | L2 |
+| Drums | **Drums editor** — Line view (classic) + Blocks | L3 |
+| Harmony | **Harmony editor** — wheel + progression strip | L3 |
+| Lyrics | **Lyrics editor** — pad + rhyme/meter tools | L3 |
+| Melody | **Melody editor** — staff | L3 |
+| Structure | **Section form** — today's full-page home of the ≣ facet | L2 preset |
+
+The drum pair keeps the names it earned: **Line view** = the classic
+timeline (the drums' arrangement face, shown at Section depth with
+context around the focused section); **Blocks** = the beat-by-beat editor
+(the section face, one click down).
+
 ## 1. The ladder
 
 ```
@@ -55,7 +98,7 @@ those controls go and then I will stick with it"):
 |---|---|---|
 | **LEFT** | **Library — the sources** | songs · maps · recipes (kits, presets later). A browser you pull FROM. Same on every view. |
 | **CENTER** | **The canvas** | the view's visual: the drum line view, hex wheel + progression strip, structure cards, blocks grid, lyric pad. Tool chrome never lives here. |
-| **RIGHT** | **Inspector — the focused object's tools** | facet tabs (≣ form · ▦ drums · ◉ mix, growing per instrument); **slides open on engagement** — selecting a section or clicking a canvas element opens it (manual collapse wins until the next selection change); collapses to a thin strip for canvas room. |
+| **RIGHT** | **Inspector — the focused object's tools** | facet tabs (≣ Section form · ▦ Drums · ♪ Harmony · ✎ Lyrics · ◉ Mix/Bend · ⓘ Song — §0); **slides open on engagement** — selecting a section or clicking a canvas element opens it (manual collapse wins until the next selection change); collapses to a thin strip for canvas room. |
 | **BOTTOM** | **retired** | the dock duplicated the rail's job and existed on some views but not others; the workbench's stub band duplicated the left library. Wide surfaces that want the bottom edge (harmony's progression strip) belong to the CANVAS, not a third menu. |
 
 - The spine spans the **entire width, above the zones row** (user rule,
@@ -193,7 +236,7 @@ drum tools. More instruments join the strip as their broad faces land.
 | Drums | classic lane timeline (fills, detours, transitions across the song) | Blocks editor |
 | Harmony | cross-song progression lane (ProgressionTrack generalized) | hex wheel + chord editor |
 | Melody | contour lane | staff / piano roll + record |
-| Lyrics | lyric lane under the cards | lyric pad |
+| Lyrics | **no lane — vetoed (user, 2026-09-21)**: words don't time-snap like notes; a lane would read as noise. Presence at L1 = the coverage gauge's lyrics segment + the block tooltip; the real surfaces are the section row and the pad | lyric pad + rhyme/meter tools |
 | Bass / Color | register/density strips (later) | controls exist; visuals TBD |
 
 ## 6. Navigation grammar (every depth)
@@ -222,9 +265,9 @@ jump-open included); the karaoke popout is untouched.
   the strip (P4 retires them), ribbon at element depth.
 - **P3**: interactive section rows (loop, ◆ adopt, open); element embedding
   in place (editors mount under the persistent ribbon); spine grow animation.
-- **P4**: tabs retired to focus presets; arrangement lanes (lyric / chord /
-  groove / bend); maps · recipes · templates in the workbench band; library
-  drag-ins.
+- **P4**: tabs retired to focus presets; arrangement lanes (chord /
+  melody contour / groove / bend — **no lyric lane, vetoed 2026-09-21**);
+  maps · recipes · templates live in the Library; library drag-ins.
 
 ## 8. Defaults chosen (veto-able)
 
