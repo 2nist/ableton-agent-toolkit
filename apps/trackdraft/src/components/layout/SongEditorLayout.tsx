@@ -6,6 +6,7 @@ import { getSongTransport } from "../../lib/playback/songTransport";
 import { stopSong, liveRefresh } from "../../lib/playback/transportControl";
 import { classifySong } from "../../lib/classification";
 import Spine from "../shell/Spine";
+import LibraryRail from "../shell/LibraryRail";
 import InspectorRail from "../shell/InspectorRail";
 
 const TABS = [
@@ -121,12 +122,13 @@ export default function SongEditorLayout() {
           every tab, so navigating never loses the song's shape. */}
       <Spine song={song} />
 
-      {/* Main area: the canvas + the inspector (layout grammar, user
+      {/* Main area: library + canvas + inspector (layout grammar, user
           decision 2026-09-21 — LEFT library · CENTER canvas · RIGHT
-          contextual inspector · no bottom). The old dock's roles are
-          retired: its tools are inspector facets, and wide surfaces (the
-          harmony progression strip) live in their canvases. */}
+          contextual inspector · no bottom). Slice C: the Library is shell
+          chrome now, same as the spine and the inspector — every song
+          route carries the same three zones. */}
       <div className="flex-1 flex min-h-0">
+        <LibraryRail />
         <main className="flex-1 overflow-y-auto min-w-0">
           <Outlet />
         </main>

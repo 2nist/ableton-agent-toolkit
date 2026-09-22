@@ -101,6 +101,16 @@ those controls go and then I will stick with it"):
 | **RIGHT** | **Inspector — the focused object's tools** | facet tabs (≣ Section form · ▦ Drums · ♪ Harmony · ✎ Lyrics · ◉ Mix/Bend · ⓘ Song — §0); **slides open on engagement** — selecting a section or clicking a canvas element opens it (manual collapse wins until the next selection change); collapses to a thin strip for canvas room. |
 | **BOTTOM** | **retired** | the dock duplicated the rail's job and existed on some views but not others; the workbench's stub band duplicated the left library. Wide surfaces that want the bottom edge (harmony's progression strip) belong to the CANVAS, not a third menu. |
 
+- **Slice C shipped (2026-09-21):** the Library is shell chrome —
+  `SongEditorLayout` mounts it on every song route, next to the spine and
+  the inspector (the workbench's private copy is gone). It collapses to a
+  w-9 strip ↔ w-56 browser and keeps its open state across tab changes
+  (the layout never unmounts on navigation); picking a song KEEPS the
+  current tab (`/song/X/harmony` → `/song/Y/harmony`); maps and recipes
+  act on the open song from anywhere. With slice B (inspector) this
+  completes the zones: **LEFT library · CENTER canvas · RIGHT inspector ·
+  BOTTOM retired, on every view.**
+
 - The spine spans the **entire width, above the zones row** (user rule,
   2026-09-21: the left browser and right rail must never cut it off). The
   browser and rail live *below* it and can open/close freely.
