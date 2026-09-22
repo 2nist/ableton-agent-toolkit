@@ -1,30 +1,17 @@
-import { useEffect, useState } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useLyricsSelectionStore } from "../../store/lyricsSelectionStore";
-import { useDockStore } from "../../store/dockStore";
+import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { updateSection } from "../../lib/sections";
 import LyricsEditor from "./LyricsEditor";
 import LyricDocumentView from "./LyricDocumentView";
-import LyricsDockTools from "./LyricsDockTools";
-
-type ViewMode = "per-section" | "song-text";
 
 export default function LyricsView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const selectedSectionId = useLyricsSelectionStore((s) => s.selectedSectionId);
-  const setSelectedSectionId = useLyricsSelectionStore((s) => s.setSelectedSectionId);
-  const setTools = useDockStore((s) => s.setTools);
-  const [mode, setMode] = useState<ViewMode>("per-section");
-
-  // MetricalTable/WritingContext/RhymeSuggestions (formerly a fixed 280px
-  // sidebar) are scoped to one section, so they only make sense in
-  // per-section mode — song-text mode has no single active section, and
-  // simply doesn't register dock content, falling back to Info.
-  useEffect(() => {
-    setTools(mode === "per-section" ? <LyricsDockTools /> : null);
-    return () => setTools(null);
-  }, [mode, setTools]);
+  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  const mode = useLyricsSelectionStore((s) => s.mode);
+  const setMode = useLyricsSelectionStore((s) => s.setMode);
 
   if (!currentSong) return null;
   const song = currentSong;

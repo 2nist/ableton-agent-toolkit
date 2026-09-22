@@ -1,5 +1,5 @@
 import { useSongStore } from "../../store/songStore";
-import { useLyricsSelectionStore } from "../../store/lyricsSelectionStore";
+import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { updateSection } from "../../lib/sections";
 import LyricsBriefPanel from "./LyricsBriefPanel";
 import MetricalTable from "./MetricalTable";
@@ -19,7 +19,7 @@ import WritingContext from "./WritingContext";
 export default function LyricsDockTools() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const selectedSectionId = useLyricsSelectionStore((s) => s.selectedSectionId);
+  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
 
   if (!currentSong) return null;
   const song = currentSong;

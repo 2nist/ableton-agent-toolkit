@@ -11,7 +11,6 @@ import { updateSection } from "../../lib/sections";
 import { downloadSongMidi } from "../../lib/midiExport";
 import { previewProgression } from "../../lib/playback/previewMidi";
 import PresetPicker from "./PresetPicker";
-import ProgressionTrack from "./ProgressionTrack";
 import ChordEditorPopover from "./ChordEditorPopover";
 import BassSettings from "./BassSettings";
 import ColorSettings from "./ColorSettings";
@@ -51,53 +50,6 @@ function useHarmonyDockSection() {
   }
 
   return { song, updateCurrentSong, activeSection, effectiveKey, effectiveScale };
-}
-
-/** Harmony's main menu — the dock's primary panel, always visible on the
- *  Harmony tab: the per-section working rows — the progression chord lane
- *  and the effect lane (section navigation lives on the SPINE now — the
- *  dock's chips died in P2). The settings toolbox (MIDI export,
- *  key/scale/presets, and the selected chord's editor) lives in
- *  `HarmonyTools` (the dock's Tools panel). */
-export function HarmonyMainMenu() {
-  const { song, updateCurrentSong, activeSection, effectiveKey, effectiveScale } = useHarmonyDockSection();
-  const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
-  const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
-  if (!song || !activeSection || !effectiveKey || !effectiveScale) return null;
-  // Capture the narrowed section for the closures below — TS control-flow
-  // narrowing doesn't persist into nested functions, so the guard above
-  // doesn't make `activeSection` non-null inside them.
-  const section = activeSection;
-
-  function updateChords(chords: Chord[]) {
-    updateCurrentSong((s) => updateSection(s, section.id, (sec) => ({ ...sec, chords })));
-  }
-
-  function updateSingleChord(chordId: string, update: Partial<Chord>) {
-    const next = section.chords.map((c) => (c.id === chordId ? { ...c, ...update } : c));
-    updateChords(next);
-  }
-
-  return (
-    <div className="flex flex-col">
-      {/* Section navigation lives on the SPINE now (shell chrome on every
-          route since P2) — the dock's section chips died here. Selecting a
-          block on the spine writes the shared selection store, which this
-          dock's panels and the hex canvas read. */}
-
-      {/* Progression + effect lanes for the active section */}
-      <ProgressionTrack
-        key={activeSection.id}
-        section={activeSection}
-        keyName={effectiveKey}
-        scale={effectiveScale}
-        selectedChordId={selectedChordId}
-        onSelectChord={setSelectedChordId}
-        onChangeChords={updateChords}
-        onUpdateChord={updateSingleChord}
-      />
-    </div>
-  );
 }
 
 /** Harmony's Tools panel — the right sidebar's tools for the active

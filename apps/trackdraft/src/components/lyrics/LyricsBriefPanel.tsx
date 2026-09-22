@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useSongStore } from "../../store/songStore";
-import { useLyricsSelectionStore } from "../../store/lyricsSelectionStore";
+import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useLyricsSparkStore } from "../../store/lyricsSparkStore";
 import { briefInputFromSection } from "../../lib/lyrics/briefInput";
 import { buildBrief, type BriefInput, type BriefPrompt } from "../../lib/lyrics/lyricBrief";
@@ -107,7 +107,7 @@ function LineRow({ line, analysis, schemeLetter, report }: {
  */
 export default function LyricsBriefPanel() {
   const currentSong = useSongStore((s) => s.currentSong());
-  const selectedSectionId = useLyricsSelectionStore((s) => s.selectedSectionId);
+  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const bumpBriefReroll = useLyricsSparkStore((s) => s.bumpBriefReroll);
   const bumpSparkRoll = useLyricsSparkStore((s) => s.bumpSparkRoll);
   const bumpSubjectRoll = useLyricsSparkStore((s) => s.bumpSubjectRoll);

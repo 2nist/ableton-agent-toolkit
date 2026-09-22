@@ -148,16 +148,27 @@ those controls go and then I will stick with it"):
 
 ## 4. The placement law
 
-**Rail = reference. Dock = workbench. Palette = selection. Modal = import.**
+**Rail = reference. Inspector = workbench. Palette = selection. Modal = import.**
+
+**Slice B shipped 2026-09-21 — the dock is dead, long live the inspector:**
+`InspectorRail` is mounted by `SongEditorLayout` on EVERY song route (six
+facets: ≣ structure · ▦ drums · ♪ harmony · ✎ lyrics · ◉ mix · ⓘ song),
+auto-opens on any section-selection change, collapses to a 36px strip, and
+`dockStore.ts` is deleted from the codebase. Wide surfaces went back to
+their canvases: **Harmony's progression + effect lanes now sit under the
+hex wheel** (the dock's Menu panel is gone). Lyrics *mode* (per-section /
+song-text) moved into `lyricsSelectionStore`; the ✎ facet shows the tools
+in per-section mode and a pointer hint in song-text mode. Drum tools read
+the shared studio selection directly.
 
 | Piece | Home |
 |---|---|
 | Mix/Bend | stacks beneath Structure in the right rail as a **collapsible group** (open on demand) — the lens on the focus. |
 | Structure right sidebar | becomes the rail's **Structure edits for the focused section** (the SectionCard editor ported: name/role/delete, TS, bars, beats/chord, repeats, drums+variant, velocity, transition note — v1 of arrangement editing; v2 mirrors these writes from direct manipulation on the spine). |
 | Maps · genre recipes | **left Library tabs** (revised 2026-09-21 — was the bottom band): Songs · Maps (narrative + genre) · Recipes. Maps replace sections (confirmed); recipes seed genre + bend + tempo. |
-| Harmony's two menus | chord controls move **into the hex workspace** (anchored panel + progression strip + effects row under the wheel); the dock's section chips **die** — the ribbon is the single navigator |
-| Drums dock | contracts as the Blocks selection palette absorbs authoring (classic tools stay until parity) |
-| Lyrics dock | stays — rhyme/meter are workbench tools (rhyme may later become rail reference) |
+| Harmony's two menus | **done (slice B)** — chord controls live **in the hex workspace**: progression strip + effect lane under the wheel, toolbox in the ♪ facet; the dock's section chips **died** (P2) — the ribbon is the single navigator |
+| Drums dock | **retired (slice B)** — tools live in the ▦ facet; the classic line view stays as the level-2 canvas |
+| Lyrics dock | **retired (slice B)** — rhyme/meter live in the ✎ facet (per-section mode gate) |
 | Melody | workspace controls strip only — no rail, no dock |
 | Drums | no rail — correct today |
 
@@ -205,7 +216,9 @@ jump-open included); the karaoke popout is untouched.
   section chips died** as planned: section selection unified on the shared
   `useStudioSelectionStore` — the spine's blocks write it; Studio,
   Workbench and Harmony all read it, so selecting a block anywhere IS
-  selecting the workspace's section. Remaining for P2: nav tabs fold into
+  selecting the workspace's section. **Slice B (also 2026-09-21):** the
+  InspectorRail became shell chrome on every route and the bottom dock was
+  deleted app-wide (details in §4). Remaining for P2: nav tabs fold into
   the strip (P4 retires them), ribbon at element depth.
 - **P3**: interactive section rows (loop, ◆ adopt, open); element embedding
   in place (editors mount under the persistent ribbon); spine grow animation.

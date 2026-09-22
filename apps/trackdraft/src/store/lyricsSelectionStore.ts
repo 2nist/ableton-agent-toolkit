@@ -1,17 +1,16 @@
 import { create } from "zustand";
 
-/** Which section is active in per-section Lyrics mode — lifted out of
- *  LyricsView's local state for the same reason as harmonySelectionStore:
- *  the dock's tools panel (MetricalTable/WritingContext/RhymeSuggestions)
- *  is a sibling component registered once, and needs to derive the same
- *  active section independently rather than have LyricsView push
- *  freshly-computed JSX into the dock on every change. */
+/** Lyrics-view state that is NOT the section selection: the per-section
+ *  vs song-text mode (a view toggle the inspector's ✎ facet also reads,
+ *  to know whether its per-section tools apply). Section selection lives
+ *  in the shared `useStudioSelectionStore` like every other view
+ *  (unified 2026-09-21 with the layout grammar). */
 interface LyricsSelectionState {
-  selectedSectionId: string | null;
-  setSelectedSectionId: (id: string | null) => void;
+  mode: "per-section" | "song-text";
+  setMode: (mode: LyricsSelectionState["mode"]) => void;
 }
 
 export const useLyricsSelectionStore = create<LyricsSelectionState>((set) => ({
-  selectedSectionId: null,
-  setSelectedSectionId: (id) => set({ selectedSectionId: id }),
+  mode: "per-section",
+  setMode: (mode) => set({ mode }),
 }));

@@ -6,12 +6,11 @@ import type { Chord } from "../../types/blueprint";
 import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
-import { useDockStore } from "../../store/dockStore";
 import { updateSection } from "../../lib/sections";
 import HoneycombWheel from "./HoneycombWheel";
+import ProgressionTrack from "./ProgressionTrack";
 import FitStatus from "./FitStatus";
 import ModeInferenceCard from "./ModeInferenceCard";
-import { HarmonyMainMenu, HarmonyTools, HarmonyLayers } from "./HarmonyDockTools";
 import { previewChord } from "../../lib/playback/previewMidi";
 
 /** The Harmony tab's canvas: the hex wheel and the linear progression
@@ -28,27 +27,6 @@ export default function HarmonyView() {
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
-  const setPrimary = useDockStore((s) => s.setPrimary);
-  const setTools = useDockStore((s) => s.setTools);
-  const setLayers = useDockStore((s) => s.setLayers);
-
-  // The dock's panels are registered once and read the shared selection
-  // store directly — they re-render themselves on selection/song changes,
-  // so this effect never needs to re-run (and never risks the update-loop
-  // a content-recomputing effect here would create). The main menu is the
-  // dock's primary panel; Tools holds the settings toolbox (MIDI/color/key,
-  // the progression preview, the Linear/Loop toggle, and the chord editor);
-  // Layers holds the derived-voice settings (Bass/Color) as a bottom tab.
-  useEffect(() => {
-    setPrimary(<HarmonyMainMenu />);
-    setTools(<HarmonyTools />);
-    setLayers(<HarmonyLayers />);
-    return () => {
-      setPrimary(null);
-      setTools(null);
-      setLayers(null);
-    };
-  }, [setPrimary, setTools, setLayers]);
 
   if (!currentSong) return null;
   const song = currentSong;
@@ -93,6 +71,16 @@ export default function HarmonyView() {
     updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, chords })));
   }
 
+  function updateSingleChord(chordId: string, update: Partial<Chord>) {
+    if (!activeSection) return;
+    updateCurrentSong((s) =>
+      updateSection(s, activeSection.id, (sec) => ({
+        ...sec,
+        chords: sec.chords.map((c) => (c.id === chordId ? { ...c, ...update } : c)),
+      })),
+    );
+  }
+
   // Snap the section's `bars` to one clean pass of its progression — wired
   // to the fit status in the hex workspace's bottom-right corner.
   function setSectionBars(bars: number) {
@@ -135,6 +123,23 @@ export default function HarmonyView() {
             />
           )}
         </div>
+        {/* The progression + effect lanes live IN the canvas now (layout
+            grammar 2026-09-21: wide surfaces belong to the canvas, not a
+            bottom menu — the old dock's Menu panel died here). */}
+        {activeSection && (
+          <div className="border-t border-edge/60 bg-[#0a0d12] px-3 py-2 overflow-x-auto">
+            <ProgressionTrack
+              key={activeSection.id}
+              section={activeSection}
+              keyName={effectiveKey}
+              scale={effectiveScale}
+              selectedChordId={selectedChordId}
+              onSelectChord={setSelectedChordId}
+              onChangeChords={updateChords}
+              onUpdateChord={updateSingleChord}
+            />
+          </div>
+        )}
         {activeSection && (
           <div className="flex items-center justify-end gap-2 px-3 py-1.5 border-t border-edge/60 bg-[#0a0d12]">
             <FitStatus section={activeSection} onSetBars={setSectionBars} />

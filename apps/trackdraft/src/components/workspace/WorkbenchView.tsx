@@ -14,11 +14,8 @@ import { roleStyle } from "../../lib/roleColors";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playback/drumPreview";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
-import BendPanel from "../style/BendPanel";
-import SectionStructurePanel from "./SectionStructurePanel";
 import DrumLineEmbed from "./DrumLineEmbed";
-import DrumPatternTools from "../drums/DrumPatternTools";
-import IconBtn from "../common/IconBtn";
+import { useInspectorStore } from "../../store/inspectorStore";
 import HexReadout from "../harmony/HexReadout";
 import NecklaceRow from "../drums/NecklaceRow";
 import MelodyStaff from "../melody/MelodyStaff";
@@ -47,17 +44,7 @@ export default function WorkbenchView() {
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const [railTab, setRailTab] = useState<RailTab>("structure");
-  const [railOpen, setRailOpen] = useState(true);
   const [tick, setTick] = useState<TransportTick | null>(null);
-
-  // The inspector slides open on engagement (layout grammar, user decision
-  // 2026-09-21): selecting anything with controls — a spine block, a
-  // canvas element, the ←→ arrows — opens the rail. A manual collapse
-  // still wins until the NEXT selection change.
-  useEffect(() => {
-    if (selectedSectionId) setRailOpen(true);
-  }, [selectedSectionId]);
 
   useEffect(() => getSongTransport().onTick(setTick), []);
 
@@ -122,10 +109,7 @@ export default function WorkbenchView() {
               count={spans.length}
               isLive={isLive}
               beatInSection={beatInSection}
-              onEngageDrums={() => {
-                setRailTab("drums");
-                setRailOpen(true);
-              }}
+              onEngageDrums={() => useInspectorStore.getState().engage("drums")}
             />
           ) : (
             <div className="h-full flex items-center justify-center">
@@ -134,30 +118,6 @@ export default function WorkbenchView() {
           )}
         </div>
 
-        <aside
-          className={`shrink-0 border-l border-edge bg-panel min-h-0 flex flex-col ${
-            railOpen ? "w-64" : "w-9"
-          }`}
-          aria-label="Context rail — focused-section panels"
-        >
-          {railOpen ? (
-            <>
-              <RailTabStrip tab={railTab} onSelect={setRailTab} onCollapse={() => setRailOpen(false)} />
-              <div className="flex-1 min-h-0 overflow-y-auto p-2">
-                {railTab === "structure" ? <SectionStructurePanel /> : railTab === "drums" ? <DrumPatternTools /> : <BendPanel />}
-              </div>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="h-9 shrink-0 flex items-center justify-center text-inkMuted hover:text-ink text-xs"
-              onClick={() => setRailOpen(true)}
-              title="Open the inspector — the focused object's tools (≣ form · ▦ drums · ◉ mix)"
-            >
-              ◂
-            </button>
-          )}
-        </aside>
       </div>
     </div>
   );
@@ -335,38 +295,18 @@ function ElementRow({
   );
 }
 
-type RailTab = "structure" | "mix" | "drums";
+/** Clicking the drum line view engages the inspector's ▦ Drums facet —
+ *  the thing you touched becomes the thing you edit. */
+type SectionWorkspaceProps = {
+  song: BlueprintSong;
+  span: SectionSpan;
+  index: number;
+  count: number;
+  isLive: boolean;
+  beatInSection: number | null;
+  onEngageDrums?: () => void;
+};
 
-/** The rail's panels as small icon tabs — more will join (lyrics reference,
- *  detected ◆, …), so the rail switches one panel at a time instead of
- *  stacking headers. Glyph-only; names live in the tooltips. Glyphs are
- *  placeholder text for now — first in line for the SVG icon pass. */
-const RAIL_TABS: { id: RailTab; glyph: string; label: string }[] = [
-  { id: "structure", glyph: "≣", label: "Structure — this section's form" },
-  { id: "drums", glyph: "▦", label: "Drums — pattern · detour · transition for this section" },
-  { id: "mix", glyph: "◉", label: "Mix / Bend — the style lens" },
-];
-
-function RailTabStrip({ tab, onSelect, onCollapse }: { tab: RailTab; onSelect: (t: RailTab) => void; onCollapse: () => void }) {
-  return (
-    <div className="flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-edge/60 shrink-0">
-      {RAIL_TABS.map((t) => (
-        <IconBtn key={t.id} title={t.label} active={tab === t.id} onClick={() => onSelect(t.id)}>
-          {t.glyph}
-        </IconBtn>
-      ))}
-      <span className="flex-1" />
-      <IconBtn title="Collapse the inspector — more room for the canvas (clicks reopen it)" onClick={onCollapse}>
-        ▸
-      </IconBtn>
-    </div>
-  );
-}
-
-/** The section workspace — every element of the selected section as a
- *  preview row, in the ladder's order: drums (the clock) first, lyrics
- *  pinned last as annotation. Read-mostly by design; P3 adds light actions
- *  (loop, ◆ adopt) and in-place editors. */
 function SectionWorkspace({
   song,
   span,
@@ -375,17 +315,7 @@ function SectionWorkspace({
   isLive,
   beatInSection,
   onEngageDrums,
-}: {
-  song: BlueprintSong;
-  span: SectionSpan;
-  index: number;
-  count: number;
-  isLive: boolean;
-  beatInSection: number | null;
-  /** Clicking the drum line view asks the workbench to flip the rail to
-   *  the Drums tools (the thing you touched becomes the thing you edit). */
-  onEngageDrums?: () => void;
-}) {
+}: SectionWorkspaceProps) {
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
   const id = songId ?? song.id;

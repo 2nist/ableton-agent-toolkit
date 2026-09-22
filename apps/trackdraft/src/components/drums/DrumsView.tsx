@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
-import { useDockStore } from "../../store/dockStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
 import { updateSection } from "../../lib/sections";
@@ -18,7 +17,6 @@ import { DRUM_LANES, type DrumLane } from "./laneStyle";
 import { TRANSITION_COLOR, TRANSITION_LABEL } from "./transitionStyle";
 import { SECTION_ROLE_COLOR } from "./sectionRoleStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
-import DrumPatternTools from "./DrumPatternTools";
 import DrumBlocksView from "./blocks/DrumBlocksView";
 import { planSectionHandoffFills, planSectionTransitions, FILL_DATA, outlineBeatsPerBar, numerator as outlineNumerator, hashSeed, occurrenceSeed, buildEuclideanOutline, twoThreeCellCounts, type HandoffSectionInput } from "@drum/library";
 import { parseAnalysisFile } from "../../lib/drumImport/analysisFile";
@@ -286,7 +284,6 @@ export default function DrumsView({
   const storedSelection = useStudioSelectionStore((s) => s.selectedSectionId);
   const selectedSectionId = highlightSectionId ?? storedSelection;
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
-  const setTools = useDockStore((s) => s.setTools);
 
   // Horizontal zoom — stretches/shrinks the bar width so the whole song
   // fits on screen or a few bars get detail. Local to the view, not
@@ -384,16 +381,9 @@ export default function DrumsView({
   const draftSectionId = useDrumsDraftStore((s) => s.sectionId);
   const draftSection = useDrumsDraftStore((s) => s.section);
 
-  // Register the dock editor once (Harmony's pattern) — it reads the
-  // shared selection store directly, so clicking the timeline updates it
-  // without this view re-pushing fresh JSX into the dock on every click.
-  // Dock registration is a tab-only concern — an embedded canvas (the
-  // workbench row) must not touch the shared dock.
-  useEffect(() => {
-    if (embedded) return;
-    setTools(<DrumPatternTools />);
-    return () => setTools(null);
-  }, [setTools, embedded]);
+  // The drum TOOLS live in the inspector rail's ▦ facet (shell chrome,
+  // layout grammar 2026-09-21) — this view no longer registers anything
+  // into a dock; the facet reads the shared selection store directly.
 
   if (!song) return null;
   const spans = sectionSpans(song);

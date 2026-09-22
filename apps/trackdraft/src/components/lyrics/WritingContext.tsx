@@ -14,17 +14,18 @@ function Field({ label, value }: { label: string; value?: string }) {
   );
 }
 
-/** Read-only reference pulled from the dock's Info panel (formerly the
- *  standalone Details tab) -- concept, vocal delivery, and lyrical content
- *  are exactly the creative direction you'd want visible while actually
- *  writing lyrics, instead of switching dock panels to remember them. */
+/** Read-only reference pulled from the inspector's ⓘ Song facet (formerly
+ *  the dock's Info panel, before that the standalone Details tab) --
+ *  concept, vocal delivery, and lyrical content are exactly the creative
+ *  direction you'd want visible while actually writing lyrics, instead of
+ *  switching panels to remember them. */
 export default function WritingContext({ song }: WritingContextProps) {
   const hasAny = song.concept || song.notes?.vocalDelivery || song.notes?.lyricalContent;
   if (!hasAny) {
     return (
       <div className="border border-edge rounded bg-panel p-3">
         <p className="text-xs text-inkMuted">
-          No concept or notes yet — fill those in on the dock's Info panel to see them here while writing.
+          No concept or notes yet — fill those in on the inspector's ⓘ Song panel to see them here while writing.
         </p>
       </div>
     );

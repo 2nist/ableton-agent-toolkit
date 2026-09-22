@@ -1,13 +1,12 @@
-import { NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
-import { useEffect, type ReactNode } from "react";
+import { NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
+import { useEffect } from "react";
 import { useSongStore } from "../../store/songStore";
-import { useDockStore } from "../../store/dockStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { getSongTransport } from "../../lib/playback/songTransport";
 import { stopSong, liveRefresh } from "../../lib/playback/transportControl";
 import { classifySong } from "../../lib/classification";
-import SongInfoPanel from "../details/SongInfoPanel";
 import Spine from "../shell/Spine";
+import InspectorRail from "../shell/InspectorRail";
 
 const TABS = [
   { to: "workbench", label: "Workbench β" },
@@ -19,49 +18,12 @@ const TABS = [
   { to: "melody", label: "Melody" },
 ];
 
-type DockTab = { id: "info" | "primary" | "tools" | "layers"; label: string; node: ReactNode };
-
-/** Horizontal tab strip for the dock — shared by the right sidebar
- *  (Structure) and the bottom dock bar (everything else). */
-function DockTabStrip({
-  tabs,
-  activePanel,
-  onSelect,
-}: {
-  tabs: DockTab[];
-  activePanel: string;
-  onSelect: (id: DockTab["id"]) => void;
-}) {
-  return (
-    <div className="flex gap-1 px-3 pt-0 border-b border-edge shrink-0">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          className={`text-[11px] px-2 py-1 border-b-2 -mb-px ${
-            activePanel === tab.id ? "border-accent text-ink" : "border-transparent text-inkMuted hover:text-ink"
-          }`}
-          onClick={() => onSelect(tab.id)}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export default function SongEditorLayout() {
   const { songId } = useParams<{ songId: string }>();
   const navigate = useNavigate();
   const songs = useSongStore((s) => s.songs);
   const openSong = useSongStore((s) => s.openSong);
 
-  const setInfo = useDockStore((s) => s.setInfo);
-  const dockInfo = useDockStore((s) => s.info);
-  const dockPrimary = useDockStore((s) => s.primary);
-  const dockTools = useDockStore((s) => s.tools);
-  const dockLayers = useDockStore((s) => s.layers);
-  const activePanel = useDockStore((s) => s.activePanel);
-  const setActivePanel = useDockStore((s) => s.setActivePanel);
   // Playback deliberately survives tab-to-tab navigation (so you can edit
   // any element while the song sounds); it only stops when leaving the song
   // editor entirely — otherwise the singleton transport would keep sounding
@@ -94,30 +56,6 @@ export default function SongEditorLayout() {
     };
   }, []);
 
-  // Which tab is showing decides where the dock lives: Structure keeps the
-  // right sidebar, every other tab gets the bottom dock bar.
-  const location = useLocation();
-  const activeTab = TABS.find((t) => location.pathname.endsWith(`/${t.to}`))?.to ?? "studio";
-  const isStructure = activeTab === "structure";
-  const isHarmony = activeTab === "harmony";
-
-  // Dock tab order is Menu → Tools → Layers → Info: a tab's main menu first
-  // (Harmony only, today), its selection tools second, its secondary
-  // settings panel third (Harmony's Layers — Bass/Color), and song Info
-  // last — Info alone when a tab has nothing more specific (Studio,
-  // Structure).
-  const dockTabs: DockTab[] = [
-    ...(dockPrimary ? [{ id: "primary" as const, label: "Menu", node: dockPrimary }] : []),
-    ...(dockTools ? [{ id: "tools" as const, label: "Tools", node: dockTools }] : []),
-    ...(dockLayers ? [{ id: "layers" as const, label: "Layers", node: dockLayers }] : []),
-    { id: "info" as const, label: "Info", node: dockInfo },
-  ];
-  // Harmony's Tools live in a right sidebar; keep them out of the bottom
-  // bar so the dock there reads Menu → Layers → Info while still spanning
-  // full width.
-  const bottomTabs = isHarmony ? dockTabs.filter((t) => t.id !== "tools") : dockTabs;
-  const activeNode = bottomTabs.find((t) => t.id === activePanel)?.node ?? dockInfo;
-
   const song = songs.find((s) => s.id === songId);
 
   // Make the route's song the store's current song. This must also re-run
@@ -131,12 +69,6 @@ export default function SongEditorLayout() {
   useEffect(() => {
     if (song && songId && currentSongId !== songId) openSong(songId);
   }, [song?.id, songId, currentSongId, openSong]);
-
-  // Song Info is registered once per song-editor mount and never cleared —
-  // it's available on every tab, unlike `tools` which each tab owns.
-  useEffect(() => {
-    setInfo(<SongInfoPanel />);
-  }, [setInfo]);
 
   if (!song) {
     return (
@@ -189,50 +121,17 @@ export default function SongEditorLayout() {
           every tab, so navigating never loses the song's shape. */}
       <Spine song={song} />
 
-      {/* Main area: content + a dock. Structure keeps the right sidebar;
-          Harmony keeps the bottom dock AND a right sidebar for its Tools;
-          every other tab gets just the bottom dock bar (formerly the right
-          tool menu). */}
+      {/* Main area: the canvas + the inspector (layout grammar, user
+          decision 2026-09-21 — LEFT library · CENTER canvas · RIGHT
+          contextual inspector · no bottom). The old dock's roles are
+          retired: its tools are inspector facets, and wide surfaces (the
+          harmony progression strip) live in their canvases. */}
       <div className="flex-1 flex min-h-0">
         <main className="flex-1 overflow-y-auto min-w-0">
           <Outlet />
         </main>
-
-        {isStructure && (
-          <aside className="w-[272px] shrink-0 border-l border-edge flex flex-col bg-panel">
-            {dockTabs.length > 1 && (
-              <DockTabStrip tabs={dockTabs} activePanel={activePanel} onSelect={setActivePanel} />
-            )}
-            <div className="flex-1 overflow-y-auto">
-              {activeNode}
-            </div>
-          </aside>
-        )}
-
-        {isHarmony && dockTools && (
-          <aside className="w-[272px] shrink-0 border-l border-edge flex flex-col bg-panel">
-            <div className="flex-1 overflow-y-auto">
-              {dockTools}
-            </div>
-          </aside>
-        )}
+        <InspectorRail />
       </div>
-
-      {/* Studio is the "taste + arc" hub now — its arrangement blocks carry
-          per-section harmony/drums/melody readouts and the Mix/Bend panel
-          sits to the right, so the bottom Info dock (the only content Studio
-          ever registered) is dropped there. Every other tab keeps it.
-          Workbench (β) brings its own bands — no legacy dock either. */}
-      {!isStructure && activeTab !== "studio" && activeTab !== "workbench" && (
-        <footer className="shrink-0 border-t border-edge bg-panel flex flex-col max-h-[45vh]">
-          {bottomTabs.length > 1 && (
-            <DockTabStrip tabs={bottomTabs} activePanel={activePanel} onSelect={setActivePanel} />
-          )}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            {activeNode}
-          </div>
-        </footer>
-      )}
     </div>
   );
 }

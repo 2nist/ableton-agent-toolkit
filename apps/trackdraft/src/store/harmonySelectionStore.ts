@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 /** Which CHORD is active in the Harmony tab, plus the honeycomb view mode —
  *  lifted out of HarmonyView's local state so the dock's tools panel (a
- *  sibling component, registered once into `dockStore` rather than
+ *  sibling component, registered once into the inspector rail rather than
  *  re-rendered by HarmonyView on every selection change) can read the same
  *  selection independently. Pushing freshly-computed JSX into the dock via
  *  an effect keyed on this state would risk a render loop (dock update →

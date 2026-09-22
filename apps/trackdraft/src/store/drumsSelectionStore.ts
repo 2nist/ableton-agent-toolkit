@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 /** Which section is active in the Drums tab — same reasoning and same
  *  shape as `harmonySelectionStore`: the dock's tools panel is a sibling
- *  component registered once into `dockStore`, not re-rendered by
+ *  component registered once into the inspector rail, not re-rendered by
  *  DrumsView on every click, so it needs its own store to read the
  *  current selection from rather than being handed fresh JSX each time.
  *
