@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import { useLocation } from "react-router-dom";
 import { useInspectorStore, type InspectorTab } from "../../store/inspectorStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useLyricsSelectionStore } from "../../store/lyricsSelectionStore";
@@ -21,6 +22,36 @@ const FACETS: { id: InspectorTab; glyph: string; label: string }[] = [
   { id: "song", glyph: "ⓘ", label: "Song info" },
 ];
 
+/** Which facets apply per view (user rule 2026-09-21: "the right menu
+ *  should have some context to the view… only showing tabs that have
+ *  controls that can effect that view"). The workbench keeps all six —
+ *  every element is in its workspace; specialised views keep their own
+ *  instrument plus section context and song identity. Arriving at a view
+ *  whose list doesn't include the active facet switches to the view's
+ *  DEFAULT facet (below); a deliberate engagement (e.g. clicking a chord
+ *  on the spine while in the Drums view) still reveals its facet — the
+ *  visible set is allowed ∪ {active}, so a tool you just reached for is
+ *  never hidden. */
+const VIEW_FACETS: Record<string, InspectorTab[]> = {
+  workbench: ["structure", "drums", "harmony", "lyrics", "mix", "song"],
+  studio: ["structure", "mix", "song"],
+  structure: ["structure", "song"],
+  harmony: ["harmony", "structure", "song"],
+  drums: ["drums", "structure", "song"],
+  lyrics: ["lyrics", "structure", "song"],
+  melody: ["structure", "song"],
+  library: ["song"],
+  settings: ["song"],
+};
+
+/** The facet a view opens on when the active one isn't in its list. */
+const VIEW_DEFAULT: Record<string, InspectorTab> = {
+  studio: "mix",
+  harmony: "harmony",
+  drums: "drums",
+  lyrics: "lyrics",
+};
+
 /**
  * The Inspector — the RIGHT zone of the layout grammar (user decision,
  * 2026-09-21): shell chrome on EVERY song route, holding the focused
@@ -36,6 +67,28 @@ export default function InspectorRail() {
   const setOpen = useInspectorStore((s) => s.setOpen);
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const lyricsMode = useLyricsSelectionStore((s) => s.mode);
+  const location = useLocation();
+  const view = location.pathname.split("/")[3] ?? "workbench";
+  const allowed = useMemo(
+    () => VIEW_FACETS[view] ?? FACETS.map((f) => f.id),
+    [view],
+  );
+  const visible = FACETS.filter((f) => allowed.includes(f.id) || f.id === tab);
+
+  // View context drives the active facet: instrument views (harmony ·
+  // drums · lyrics) open on their own tool; other views keep the active
+  // facet when it applies, else fall back to their first. A deliberate
+  // engagement (e.g. a spine chord click while in the Drums view) still
+  // reveals its facet — the visible set is allowed ∪ {active}.
+  useEffect(() => {
+    const current = useInspectorStore.getState().tab;
+    const def = VIEW_DEFAULT[view];
+    if (def) {
+      useInspectorStore.getState().setTab(def);
+    } else if (!allowed.includes(current)) {
+      useInspectorStore.getState().setTab(allowed[0] ?? "song");
+    }
+  }, [view, allowed]);
 
   // Slides open on engagement: selecting anything with controls — a spine
   // block, a canvas element, the ←→ arrows — opens it. A manual collapse
@@ -52,7 +105,7 @@ export default function InspectorRail() {
       {open ? (
         <>
           <div className="flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-edge/60 shrink-0">
-            {FACETS.map((f) => (
+            {visible.map((f) => (
               <IconBtn key={f.id} title={f.label} active={tab === f.id} onClick={() => setTab(f.id)}>
                 {f.glyph}
               </IconBtn>
@@ -90,7 +143,7 @@ export default function InspectorRail() {
           type="button"
           className="h-9 shrink-0 flex items-center justify-center text-inkMuted hover:text-ink text-xs"
           onClick={() => setOpen(true)}
-          title="Open the inspector — the focused object's tools (≣ form · ▦ drums · ♪ harmony · ✎ lyrics · ◉ mix · ⓘ song)"
+          title="Open the inspector — the focused object's tools for this view"
         >
           ◂
         </button>
