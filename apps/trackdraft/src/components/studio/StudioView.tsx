@@ -11,7 +11,6 @@ import StudioConsole from "./StudioConsole";
 import AbletonStatus from "./AbletonStatus";
 import MidiSetupPanel from "./MidiSetupPanel";
 import ExportMenu from "./ExportMenu";
-import BendPanel from "../style/BendPanel";
 
 const SCALES: ScaleType[] = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
 
@@ -269,16 +268,14 @@ export default function StudioView() {
         /* The arrangement is the section *index* (click a block to target
            its mix); the console below mirrors that section's actual
            harmony/drums/melody — the freed vertical band put to musical
-           use. Bend sliders stay pinned on the right. */
+           use. Bend sliders live in the shell inspector's ◉ Mix / Bend
+           facet (layout grammar — the internal rail died with slice B). */
         <div className="flex-1 min-h-0 flex items-stretch gap-3 mt-3">
           <div className="flex-1 min-w-0 flex flex-col gap-3 min-h-0">
             <div className="shrink-0">
               <ArrangementTimeline song={song} />
             </div>
             <StudioConsole song={song} />
-          </div>
-          <div className="w-[216px] shrink-0 min-h-0 overflow-y-auto">
-            <BendPanel />
           </div>
         </div>
       )}
