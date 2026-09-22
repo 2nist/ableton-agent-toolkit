@@ -1,22 +1,23 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
+import Icon, { type IconName } from "../common/Icon";
 
 /** Every song view, in order. The Library is a VIEW like the others now
  *  (user decision 2026-09-21: "make the library a view and we can have a
  *  narrower tool bar") — the browser lives in the center canvas, so this
- *  rail carries navigation and nothing else. Glyphs mirror the
- *  inspector's element icons where they mean the same thing; all
- *  placeholders for the SVG icon pass. */
-const VIEWS: { to: string; label: string; glyph: string; divider?: boolean }[] = [
-  { to: "workbench", label: "Workbench β", glyph: "⊞" },
-  { to: "studio", label: "Studio", glyph: "▤" },
-  { to: "structure", label: "Structure", glyph: "≣" },
-  { to: "harmony", label: "Harmony", glyph: "♪" },
-  { to: "drums", label: "Drums", glyph: "▦" },
-  { to: "lyrics", label: "Lyrics", glyph: "✎" },
-  { to: "melody", label: "Melody", glyph: "♫" },
-  { to: "library", label: "Library", glyph: "☰" },
-  { to: "settings", label: "Settings", glyph: "⚙", divider: true },
+ *  rail carries navigation and nothing else. Icons are the shared SVG set
+ *  (components/common/Icon), matching the inspector's element icons where
+ *  they mean the same thing. */
+const VIEWS: { to: string; label: string; icon: IconName; divider?: boolean }[] = [
+  { to: "workbench", label: "Workbench β", icon: "workbench" },
+  { to: "studio", label: "Studio", icon: "studio" },
+  { to: "structure", label: "Structure", icon: "structure" },
+  { to: "harmony", label: "Harmony", icon: "harmony" },
+  { to: "drums", label: "Drums", icon: "drums" },
+  { to: "lyrics", label: "Lyrics", icon: "lyrics" },
+  { to: "melody", label: "Melody", icon: "melody" },
+  { to: "library", label: "Library", icon: "library" },
+  { to: "settings", label: "Settings", icon: "settings", divider: true },
 ];
 
 /**
@@ -38,11 +39,11 @@ export default function NavRail() {
     <aside className={`shrink-0 border-r border-edge bg-panel flex flex-col min-h-0 ${open ? "w-32" : "w-9"}`} aria-label="Views">
       <button
         type="button"
-        className="h-9 shrink-0 flex items-center justify-center text-inkMuted hover:text-ink text-xs"
+        className="h-9 shrink-0 flex items-center justify-center text-inkMuted hover:text-ink"
         onClick={() => setOpen((v) => !v)}
         title={open ? "Collapse — views stay visible as icons" : "Expand — views with labels"}
       >
-        {open ? "◂" : "▸"}
+        <Icon name={open ? "chevron-left" : "chevron-right"} size={13} />
       </button>
 
       {open ? (
@@ -60,7 +61,7 @@ export default function NavRail() {
                     }`
                   }
                 >
-                  <span className="w-4 text-center shrink-0">{v.glyph}</span>
+                  <Icon name={v.icon} />
                   <span className="truncate">{v.label}</span>
                 </NavLink>
               </div>
@@ -76,12 +77,12 @@ export default function NavRail() {
                 to={v.to}
                 title={v.label}
                 className={({ isActive }) =>
-                  `w-9 h-8 flex items-center justify-center text-sm ${
+                  `w-9 h-8 flex items-center justify-center ${
                     isActive ? "text-accent bg-panelAlt" : "text-inkMuted hover:text-ink"
                   }`
                 }
               >
-                {v.glyph}
+                <Icon name={v.icon} size={16} />
               </NavLink>
             </div>
           ))}

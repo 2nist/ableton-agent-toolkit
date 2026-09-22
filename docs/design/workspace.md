@@ -315,7 +315,10 @@ jump-open included); the karaoke popout is untouched.
   section rows (loop, ◆ adopt, open); spine grow animation.
 - **P4 (partly done 2026-09-21)**: the top tabs + identity header retired
   — views live in the left rail, the Library became a view, the spine
-  chip carries identity. Remaining: arrangement lanes (chord /
+  chip carries identity. **SVG icon pass shipped the same day**
+  (`components/common/Icon.tsx`: views rail · inspector facets · spine
+  strip — every placeholder glyph in the shell chrome replaced).
+  Remaining: arrangement lanes (chord /
   melody contour / groove / bend — **no lyric lane, vetoed 2026-09-21**);
   maps · recipes · templates live in the Library view; library drag-ins.
 

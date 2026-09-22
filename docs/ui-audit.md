@@ -41,32 +41,35 @@ propose changes (those go in the standardization doc, drawn from §7).
 |---|---|
 | `/` | Dashboard — directory browser + songs table; sidebar (Songs/Templates); header links: UI Kit · Sandbox · Canvas · Genre Maps |
 | `/song/:songId` → `studio` | Song workspace (shell below) |
-| `…/studio` | Studio — transport, arrangement timeline, console, export menu |
+| `…/workbench` | Workbench β — the section workspace (spine + in-place element rows) |
+| `…/studio` | Studio — arrangement timeline, console, export menu |
 | `…/structure` | Structure — section cards, map picker, necklace preview |
-| `…/harmony` | Harmony — hex wheel, progression track, dock tools |
-| `…/drums` | Drums — pattern tools, blocks timeline, selection workbench |
+| `…/harmony` | Harmony — hex wheel + progression track (in canvas) |
+| `…/drums` | Drums — Line view (classic) ↔ Blocks, selection workbench |
 | `…/lyrics` | Lyrics — document/text modes, brief panel, metrical table |
 | `…/melody` | Melody — record flow, piano roll, staff notation |
+| `…/library` | Library — songs · maps · recipes browser (a view since 2026-09-21) |
+| `…/settings` | Settings — MIDI & sync · export & popout · files · labs |
 | `/song/:songId/popout` | Lyric + chord popout (second render target — second screen) |
 | `/sandbox` | Puck live-preview sandbox |
 | `/canvas` | Render canvas layout test |
 | `/genre-workbench` | Genre-map authoring (prompt → paste → validate → copy to catalog) |
 | `/design-lab` (old `/ui-kit-sandbox` redirects) | Design Lab — hands-on design surface: accent fork, hue playground, type/button specimens, decisions log |
 
-### Song workspace shell (`SongEditorLayout.tsx`)
+### Song workspace shell (`SongEditorLayout.tsx`) — restructured 2026-09-21
 
-- Header: back, title, key/BPM readout, transport (play/stop/loop), Undo/Redo, Export menu.
-- Six tabs: Studio · Structure · Harmony · Drums · Lyrics · Melody.
-- **Dock grammar** (`dockStore`): four panels — **info / primary / tools / layers** —
-  with auto-focus behavior (`setTools` switches the dock; content cleared on unmount).
-- **Dock placement varies per tab** (`SongEditorLayout` decides):
-  - **Structure** → right sidebar
-  - **Studio** → no dock at all
-  - **Harmony** → bottom dock **and** a right sidebar (for Tools)
-  - **Drums / Lyrics / Melody** → bottom dock bar
-- Dock content registration: **Drums, Harmony, Lyrics** views (`setPrimary/setTools/setLayers`);
-  the layout itself registers `info` (`<SongInfoPanel/>`, the Details panel).
-  **Melody** shows the bottom bar but registers no content of its own (info only).
+- **Spine** (top band, `shell/Spine.tsx`, every route): song chip (title ·
+  key · meter; click = dashboard) + transport strip + ruler + blocks +
+  chords lane; blank songs keep the band with first-section role chips.
+- **Views rail** (left, `shell/NavRail.tsx`, narrow w-32/w-9): all views —
+  Workbench β · Studio · Structure · Harmony · Drums · Lyrics · Melody ·
+  Library · Settings. Icons: `common/Icon.tsx` (SVG icon pass).
+- **Inspector** (right, `shell/InspectorRail.tsx`): contextual facet tabs
+  per view (≣ Section form · ▦ Drums · ♪ Harmony · ✎ Lyrics · ◉ Mix/Bend ·
+  ⓘ Song); slides open on engagement, collapses to a 36px strip.
+- The identity header + tab row + **dock** are gone (`dockStore.ts`
+  deleted); wide surfaces (harmony's progression strip, lyrics pad) live
+  in their canvases.
 
 ### Dashboard (`/`)
 

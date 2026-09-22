@@ -4,6 +4,7 @@ import { useInspectorStore, type InspectorTab } from "../../store/inspectorStore
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useLyricsSelectionStore } from "../../store/lyricsSelectionStore";
 import IconBtn from "../common/IconBtn";
+import Icon, { type IconName } from "../common/Icon";
 import SectionStructurePanel from "../workspace/SectionStructurePanel";
 import DrumPatternTools from "../drums/DrumPatternTools";
 import { HarmonyTools, HarmonyLayers } from "../harmony/HarmonyDockTools";
@@ -11,15 +12,15 @@ import LyricsDockTools from "../lyrics/LyricsDockTools";
 import BendPanel from "../style/BendPanel";
 import SongInfoPanel from "../details/SongInfoPanel";
 
-/** The inspector's facets — one per instrument/system. Glyphs are
- *  placeholders for the SVG pass. */
-const FACETS: { id: InspectorTab; glyph: string; label: string }[] = [
-  { id: "structure", glyph: "≣", label: "Structure — this section's form" },
-  { id: "drums", glyph: "▦", label: "Drums — pattern · detour · transition" },
-  { id: "harmony", glyph: "♪", label: "Harmony — tools, presets & layers" },
-  { id: "lyrics", glyph: "✎", label: "Lyrics — metre, rhyme & writing context" },
-  { id: "mix", glyph: "◉", label: "Mix / Bend — the style lens" },
-  { id: "song", glyph: "ⓘ", label: "Song info" },
+/** The inspector's facets — one per instrument/system. Icons are the
+ *  shared SVG set (components/common/Icon). */
+const FACETS: { id: InspectorTab; icon: IconName; label: string }[] = [
+  { id: "structure", icon: "structure", label: "Structure — this section's form" },
+  { id: "drums", icon: "drums", label: "Drums — pattern · detour · transition" },
+  { id: "harmony", icon: "harmony", label: "Harmony — tools, presets & layers" },
+  { id: "lyrics", icon: "lyrics", label: "Lyrics — metre, rhyme & writing context" },
+  { id: "mix", icon: "mix", label: "Mix / Bend — the style lens" },
+  { id: "song", icon: "song", label: "Song info" },
 ];
 
 /** Which facets apply per view (user rule 2026-09-21: "the right menu
@@ -106,14 +107,10 @@ export default function InspectorRail() {
         <>
           <div className="flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-edge/60 shrink-0">
             {visible.map((f) => (
-              <IconBtn key={f.id} title={f.label} active={tab === f.id} onClick={() => setTab(f.id)}>
-                {f.glyph}
-              </IconBtn>
+              <IconBtn key={f.id} title={f.label} active={tab === f.id} onClick={() => setTab(f.id)} icon={f.icon} />
             ))}
             <span className="flex-1" />
-            <IconBtn title="Collapse the inspector — more room for the canvas (clicks reopen it)" onClick={() => setOpen(false)}>
-              ▸
-            </IconBtn>
+            <IconBtn title="Collapse the inspector — more room for the canvas (clicks reopen it)" onClick={() => setOpen(false)} icon="chevron-right" />
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto p-2">
             {tab === "structure" && <SectionStructurePanel />}
@@ -141,11 +138,11 @@ export default function InspectorRail() {
       ) : (
         <button
           type="button"
-          className="h-9 shrink-0 flex items-center justify-center text-inkMuted hover:text-ink text-xs"
+          className="h-9 shrink-0 flex items-center justify-center text-inkMuted hover:text-ink"
           onClick={() => setOpen(true)}
           title="Open the inspector — the focused object's tools for this view"
         >
-          ◂
+          <Icon name="chevron-left" size={13} />
         </button>
       )}
     </aside>

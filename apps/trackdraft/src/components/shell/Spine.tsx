@@ -546,35 +546,24 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
         >
           <span className="text-inkMuted group-hover:text-ink text-sm shrink-0">←</span>
           <span className="truncate text-xs text-ink/90">{song.title}</span>
-          <span className="text-[9px] font-mono text-inkMuted/60 tabular-nums shrink-0">
+          <span className="hidden md:inline text-[9px] font-mono text-inkMuted/60 tabular-nums shrink-0">
             {song.key} {song.scale} · {song.bpm}
           </span>
         </button>
         <span className="w-px h-3.5 bg-edge/80 mx-1 shrink-0" />
-        <IconBtn title="Play" disabled={tick?.isPlaying === true} onClick={() => void togglePlay()}>
-          ▶
-        </IconBtn>
-        <IconBtn title="Pause" disabled={tick?.isPlaying !== true} onClick={pausePlayback}>
-          ❚❚
-        </IconBtn>
-        <IconBtn title="Stop — reset to the top" disabled={tick?.isPlaying !== true && !isPaused} onClick={stopPlayback}>
-          ■
-        </IconBtn>
+        <IconBtn title="Play" disabled={tick?.isPlaying === true} onClick={() => void togglePlay()} icon="play" />
+        <IconBtn title="Pause" disabled={tick?.isPlaying !== true} onClick={pausePlayback} icon="pause" />
+        <IconBtn title="Stop — reset to the top" disabled={tick?.isPlaying !== true && !isPaused} onClick={stopPlayback} icon="stop" />
         <IconBtn
           title={loopOn ? "Looping this section — click to stop" : "Loop a section — the one playing, or the one selected on the spine"}
           disabled={clockSource === "ableton"}
           active={loopOn}
           onClick={() => void toggleLoop()}
-        >
-          ⟳
-        </IconBtn>
+          icon="loop"
+        />
         <span className="w-px h-3.5 bg-edge/80 mx-1" />
-        <IconBtn title="Undo" disabled={!canUndo} onClick={() => undo()}>
-          ↶
-        </IconBtn>
-        <IconBtn title="Redo" disabled={!canRedo} onClick={() => redo()}>
-          ↷
-        </IconBtn>
+        <IconBtn title="Undo" disabled={!canUndo} onClick={() => undo()} icon="undo" />
+        <IconBtn title="Redo" disabled={!canRedo} onClick={() => redo()} icon="redo" />
         <span className="w-px h-3.5 bg-edge/80 mx-1" />
         <IconBtn
           title="Add a section at the end — it arrives selected with its ≣ form open (right-click any block to insert after it instead)"
@@ -584,29 +573,19 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
             updateCurrentSong(() => withNew);
             setSelectedSectionId(fresh.id);
           }}
-        >
-          ＋
-        </IconBtn>
+          icon="plus"
+        />
         <span className="flex-1" />
-        <IconBtn title={`Zoom out — fewer pixels per bar (now ${barPx}px)`} onClick={() => stepZoom(-1)}>
-          −
-        </IconBtn>
-        <IconBtn title={`Zoom in — more pixels per bar (now ${barPx}px)`} onClick={() => stepZoom(1)}>
-          +
-        </IconBtn>
-        <IconBtn title="Fit the whole song in view" onClick={fitZoom}>
-          {"><"}
-        </IconBtn>
-        <IconBtn title="Zoom to the selected section — fills the view with it" onClick={zoomToSection}>
-          ↑↑
-        </IconBtn>
+        <IconBtn title={`Zoom out — fewer pixels per bar (now ${barPx}px)`} onClick={() => stepZoom(-1)} icon="minus" />
+        <IconBtn title={`Zoom in — more pixels per bar (now ${barPx}px)`} onClick={() => stepZoom(1)} icon="plus" />
+        <IconBtn title="Fit the whole song in view" onClick={fitZoom} icon="fit" />
+        <IconBtn title="Zoom to the selected section — fills the view with it" onClick={zoomToSection} icon="frame" />
         <IconBtn
           title={follow ? "Following the playhead — click to stop" : "Follow the playhead while playing"}
           active={follow}
           onClick={toggleFollow}
-        >
-          |→
-        </IconBtn>
+          icon="follow"
+        />
       </div>
 
       {/* A blank song STILL gets its arrangement surface (user repro
