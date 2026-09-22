@@ -13,6 +13,8 @@ import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playbac
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import DrumLineEmbed from "./DrumLineEmbed";
 import { useInspectorStore } from "../../store/inspectorStore";
+import { playSectionLoop } from "../../lib/playback/transportControl";
+import IconBtn from "../common/IconBtn";
 import ProgressionTrack from "../harmony/ProgressionTrack";
 import HexReadout from "../harmony/HexReadout";
 import BassSettings from "../harmony/BassSettings";
@@ -179,6 +181,7 @@ function SectionWorkspace({
   const effScale: ScaleType = section.scale ?? song.scale;
   const jump = (tab: string) => navigate(`/song/${id}/${tab}?section=${section.id}`);
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
+  const clockSource = useSongStore((s) => s.clockSource);
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
 
@@ -246,6 +249,16 @@ function SectionWorkspace({
           </span>
         )}
         <span className="flex-1" />
+        {/* Section-level actions live with the section (P3): loop auditions
+            this section through the SAME transport path the spine's ⟳
+            uses, so the two can't drift. Disabled under Ableton's clock,
+            which owns position. */}
+        <IconBtn
+          icon="loop"
+          title={`Loop "${section.name}" — audition it while you edit (the spine's loop lights up)`}
+          disabled={clockSource === "ableton"}
+          onClick={() => void playSectionLoop(song, section.id)}
+        />
         <span className="text-[9px] font-mono text-inkMuted/40" title="Navigation grammar: ←→ walks sections anywhere in the workbench">
           ←→ sections
         </span>
