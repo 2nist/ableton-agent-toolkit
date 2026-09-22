@@ -36,10 +36,11 @@ Use these words, in this meaning, in every conversation about the workspace.
 **Canvas** (center) · **Inspector** (right — facets ≣ Section form ·
 ▦ Drums · ♪ Harmony · ✎ Lyrics · ◉ Mix/Bend · ⓘ Song).
 
-**View names ↔ semantic roles** — the six tabs are legacy doors to these
-places; when they dissolve (P4) the names remain:
+**View names ↔ semantic roles** — views live in the left rail's VIEWS
+list since 2026-09-21 (the top tab row and the identity header both
+dissolved); the names below stay the same wherever the doors move:
 
-| Tab today | Semantic name | Depth |
+| View (left rail) | Semantic name | Depth |
 |---|---|---|
 | Studio | **Arrangement board** (timeline + console) | L1 |
 | Workbench β | **Section workspace** | L2 |
@@ -48,6 +49,7 @@ places; when they dissolve (P4) the names remain:
 | Lyrics | **Lyrics editor** — pad + rhyme/meter tools | L3 |
 | Melody | **Melody editor** — staff | L3 |
 | Structure | **Section form** — today's full-page home of the ≣ facet | L2 preset |
+| Library | **Library view** — the browser (songs · maps · recipes) as a center view | — (acts on the open song) |
 
 The drum pair keeps the names it earned: **Line view** = the classic
 timeline (the drums' arrangement face, shown at Section depth with
@@ -81,14 +83,14 @@ until modal parity.)
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  THE SPINE — edge to edge, never squeezed, EVERY view       │
-│  [Intro][Verse 1][Verse 2][Chorus]…   [▶ ⟳ undo · zoom · fit]│
+│  [← song chip] [Intro][Verse 1][Verse 2][Chorus]… [▶ ⟳ zoom]│
 ├────┬────────────────────────────────────────────┬────────────┤
 │ ▸  │                                            │ INSPECTOR  │
-│ LI-│              THE CANVAS                    │ (slides    │
-│ BR-│  line view · hex wheel · blocks grid · …   │  open on   │
-│ ARY│                                            │  engage)   │
+│ VI-│              THE CANVAS                    │ (slides    │
+│ EW-│  line view · hex wheel · blocks grid ·     │  open on   │
+│ S  │  library browser · …                       │  engage)   │
 └────┴────────────────────────────────────────────┴────────────┘
-   sources            the work             the focused object's tools
+   doors              the work             the focused object's tools
 ```
 
 **The three menus, decided 2026-09-21** (user: "logically figure out where
@@ -96,8 +98,8 @@ those controls go and then I will stick with it"):
 
 | Zone | Role | Contents |
 |---|---|---|
-| **LEFT** | **Library — the sources** | songs · maps · recipes (kits, presets later). A browser you pull FROM. Same on every view. |
-| **CENTER** | **The canvas** | the view's visual: the drum line view, hex wheel + progression strip, structure cards, blocks grid, lyric pad. Tool chrome never lives here. |
+| **LEFT** | **Views nav — the doors** | every song view + the Library (itself a view since 2026-09-21). Narrow by design (w-32, or a w-9 glyph strip where the current view lights up). Navigation is explicit and coupled: clicking a view switches the center — the inspector's facets are tools, not doors. |
+| **CENTER** | **The canvas** | the view's visual: the drum line view, hex wheel + progression strip, structure cards, blocks grid, lyric pad, library browser. Tool chrome never lives here. |
 | **RIGHT** | **Inspector — the focused object's tools** | facet tabs (≣ Section form · ▦ Drums · ♪ Harmony · ✎ Lyrics · ◉ Mix/Bend · ⓘ Song — §0); **slides open on engagement** — selecting a section or clicking a canvas element opens it (manual collapse wins until the next selection change); collapses to a thin strip for canvas room. |
 | **BOTTOM** | **retired** | the dock duplicated the rail's job and existed on some views but not others; the workbench's stub band duplicated the left library. Wide surfaces that want the bottom edge (harmony's progression strip) belong to the CANVAS, not a third menu. |
 
@@ -114,6 +116,15 @@ those controls go and then I will stick with it"):
 - The spine spans the **entire width, above the zones row** (user rule,
   2026-09-21: the left browser and right rail must never cut it off). The
   browser and rail live *below* it and can open/close freely.
+- **Views recoupled (2026-09-21, user: "turning the left menu into the tab
+  bar and recouple it… make the library a view"):** the top tab row AND
+  the identity header dissolved — **two rows gained**; identity is now the
+  song chip at the spine strip's left end (title · key · meter, click =
+  dashboard). The left rail is the VIEWS list (narrow w-32, collapses to a
+  w-9 glyph strip with the current view lit); **the Library is a full
+  view** in the center; and touching a chord anywhere — the spine's
+  chords lane included — selects it and engages the ♪ facet, so "click a
+  chord, see chords" holds everywhere.
 - The spine's left end carries the song chip (title · key · bpm), its right
   end the transport readout/controls — the old standalone header dissolves
   into it (P2; v0 keeps the legacy header above while the tabs still exist).
@@ -294,9 +305,11 @@ jump-open included); the karaoke popout is untouched.
   Line view (click dives to Blocks with the range staged — 26cf4f2).
   Remaining: bass/color faces, melody/lyrics in-place pads; interactive
   section rows (loop, ◆ adopt, open); spine grow animation.
-- **P4**: tabs retired to focus presets; arrangement lanes (chord /
+- **P4 (partly done 2026-09-21)**: the top tabs + identity header retired
+  — views live in the left rail, the Library became a view, the spine
+  chip carries identity. Remaining: arrangement lanes (chord /
   melody contour / groove / bend — **no lyric lane, vetoed 2026-09-21**);
-  maps · recipes · templates live in the Library; library drag-ins.
+  maps · recipes · templates live in the Library view; library drag-ins.
 
 ## 8. Defaults chosen (veto-able)
 

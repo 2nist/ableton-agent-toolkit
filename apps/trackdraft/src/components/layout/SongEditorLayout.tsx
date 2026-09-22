@@ -1,23 +1,12 @@
-import { NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
+import { Outlet, useNavigate, useParams } from "react-router-dom";
 import { useEffect } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { getSongTransport } from "../../lib/playback/songTransport";
 import { stopSong, liveRefresh } from "../../lib/playback/transportControl";
-import { classifySong } from "../../lib/classification";
 import Spine from "../shell/Spine";
-import LibraryRail from "../shell/LibraryRail";
+import NavRail from "../shell/NavRail";
 import InspectorRail from "../shell/InspectorRail";
-
-const TABS = [
-  { to: "workbench", label: "Workbench β" },
-  { to: "studio", label: "Studio" },
-  { to: "structure", label: "Structure" },
-  { to: "harmony", label: "Harmony" },
-  { to: "drums", label: "Drums" },
-  { to: "lyrics", label: "Lyrics" },
-  { to: "melody", label: "Melody" },
-];
 
 export default function SongEditorLayout() {
   const { songId } = useParams<{ songId: string }>();
@@ -84,51 +73,18 @@ export default function SongEditorLayout() {
 
   return (
     <div className="h-screen flex flex-col">
-      <header className="flex items-center justify-between border-b border-edge px-3 py-1.5 shrink-0">
-        <div className="flex items-center gap-3">
-          <button className="text-inkMuted text-sm hover:text-ink" onClick={() => navigate("/")}>
-            ←
-          </button>
-          <h1 className="font-medium">{song.title}</h1>
-          <span className="text-xs text-inkMuted">
-            {song.key} {song.scale} · {song.bpm} BPM
-            {song.sections.length > 0 && <> · {classifySong(song).label}</>}
-          </span>
-        </div>
-        {/* Transport now lives in the spine's strip, mounted below on every
-            song route (P2) — the legacy header cluster died along with this
-            layout's copy of its state. What remains here is identity only:
-            song, key, tempo, classification. */}
-      </header>
-
-      <nav className="flex gap-0.5 border-b border-edge px-3 shrink-0">
-        {TABS.map((tab) => (
-          <NavLink
-            key={tab.to}
-            to={tab.to}
-            className={({ isActive }) =>
-              `px-2.5 py-1.5 text-[13px] border-b-2 -mb-px ${
-                isActive ? "border-accent text-ink" : "border-transparent text-inkMuted hover:text-ink"
-              }`
-            }
-          >
-            {tab.label}
-          </NavLink>
-        ))}
-      </nav>
-
-      {/* The spine — shell chrome on every song route (P2): the transport
-          strip, bar ruler, true-scale blocks and chords lane live above
-          every tab, so navigating never loses the song's shape. */}
+      {/* The spine — shell chrome on every song route (P2) and since
+          2026-09-21 the home of the song identity chip (title · key ·
+          meter): the standalone header and the tab row both dissolved,
+          gaining two rows of vertical space. Navigation lives in the
+          left rail's VIEWS list; the inspector's facets are purely the
+          focused object's tools. */}
       <Spine song={song} />
 
-      {/* Main area: library + canvas + inspector (layout grammar, user
-          decision 2026-09-21 — LEFT library · CENTER canvas · RIGHT
-          contextual inspector · no bottom). Slice C: the Library is shell
-          chrome now, same as the spine and the inspector — every song
-          route carries the same three zones. */}
+      {/* Zones row: views+library · canvas · inspector (layout grammar —
+          LEFT · CENTER · RIGHT, no bottom). */}
       <div className="flex-1 flex min-h-0">
-        <LibraryRail />
+        <NavRail />
         <main className="flex-1 overflow-y-auto min-w-0">
           <Outlet />
         </main>

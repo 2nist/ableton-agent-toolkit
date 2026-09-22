@@ -11,6 +11,7 @@ import DrumsView from "./components/drums/DrumsView";
 import LyricsView from "./components/lyrics/LyricsView";
 import MelodyView from "./components/melody/MelodyView";
 import WorkbenchView from "./components/workspace/WorkbenchView";
+import LibraryView from "./components/library/LibraryView";
 import LivePreviewSandbox from "./pages/LivePreviewSandbox";
 import GenreWorkbench from "./pages/GenreWorkbench";
 import DesignLab from "./pages/DesignLab";
@@ -44,6 +45,7 @@ function App() {
             <Route path="lyrics" element={<LyricsView />} />
             <Route path="melody" element={<MelodyView />} />
             <Route path="workbench" element={<WorkbenchView />} />
+            <Route path="library" element={<LibraryView />} />
           </Route>
           {/* Top-level, not nested under SongEditorLayout — deliberately
               chrome-free (no header/nav/dock) for a window meant to be

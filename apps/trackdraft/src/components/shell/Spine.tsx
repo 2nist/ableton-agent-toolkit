@@ -12,6 +12,9 @@ import { getSongTransport, type TransportTick } from "../../lib/playback/songTra
 import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
 import { useSongStore } from "../../store/songStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
+import { useInspectorStore } from "../../store/inspectorStore";
+import { classifySong } from "../../lib/classification";
 import { beatsPerBar, type BlueprintSection, type BlueprintSong, type SectionRole } from "../../types/blueprint";
 
 /** Zoom presets in px per BAR. Bar-linear on purpose: every bar is the
@@ -53,6 +56,7 @@ const ROLES: SectionRole[] = ["intro", "verse", "pre_chorus", "chorus", "bridge"
 export default function Spine({ song, hint }: { song: BlueprintSong; hint?: string }) {
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
   const clockSource = useSongStore((s) => s.clockSource);
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
@@ -529,6 +533,24 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           mounts above every song route and the legacy header transport is
           gone; no controls sit at the timeline's left or right ends. */}
       <div className="flex items-center gap-1 px-2 h-7 border-b border-edge/60">
+        {/* Song chip — the identity (title · key · meter) moved here when
+            the standalone header dissolved (user decision 2026-09-21:
+            dissolve the top tabs, gain two rows). Click = dashboard. */}
+        <button
+          type="button"
+          className="flex items-center gap-1.5 min-w-0 max-w-[260px] shrink group text-left"
+          onClick={() => navigate("/")}
+          title={`${song.title} — ${song.key} ${song.scale} · ${song.bpm} BPM${
+            song.sections.length > 0 ? ` · ${classifySong(song).label}` : ""
+          }\nClick to go back to the dashboard`}
+        >
+          <span className="text-inkMuted group-hover:text-ink text-sm shrink-0">←</span>
+          <span className="truncate text-xs text-ink/90">{song.title}</span>
+          <span className="text-[9px] font-mono text-inkMuted/60 tabular-nums shrink-0">
+            {song.key} {song.scale} · {song.bpm}
+          </span>
+        </button>
+        <span className="w-px h-3.5 bg-edge/80 mx-1 shrink-0" />
         <IconBtn title="Play" disabled={tick?.isPlaying === true} onClick={() => void togglePlay()}>
           ▶
         </IconBtn>
@@ -749,7 +771,11 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
                       }`}
                       style={{ left: x, width: showText ? w : Math.max(1.5, Math.min(2.5, w)) }}
                       title={`${occ.chord.romanNumeral} — ${chordDisplayName(pitchClass(occ.chord.root), occ.chord.quality, effKey)}`}
-                      onClick={() => setSelectedSectionId(span.sectionId)}
+                      onClick={() => {
+                        setSelectedSectionId(span.sectionId);
+                        setSelectedChordId(occ.chord.id);
+                        useInspectorStore.getState().engage("harmony");
+                      }}
                     >
                       {showText ? occ.chord.romanNumeral : ""}
                     </button>
