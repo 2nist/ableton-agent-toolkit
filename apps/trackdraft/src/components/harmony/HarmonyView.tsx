@@ -92,7 +92,7 @@ export default function HarmonyView() {
     return (
       <div className="p-4 max-w-5xl">
         <p className="text-inkMuted text-sm">
-          Add sections in the Structure tab first, then come back here to build chord progressions.
+          Add sections on the spine above first, then build chord progressions here.
         </p>
       </div>
     );

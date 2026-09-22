@@ -188,6 +188,18 @@ those controls go and then I will stick with it"):
   a pure draft recomputes the timeline per frame, ONE undo step on
   release, Esc cancels); the context palette gains **Insert section
   after · Move left · Move right**.
+- **Blank songs still have an arrangement surface (user repro 2026-09-21
+  — "start a blank song and add sections"):** the band used to render
+  `null` when a song had no sections, so a new song had no transport, no
+  ruler, and no way to add anything — every view pointed back at the
+  legacy Structure tab ("the arrangement view dissolved"). Now the strip
+  always stays (undo of the first add matters) and, with zero sections,
+  the timeline area is a row of **first-section role chips** — each chip
+  a miniature of the block it will mint (role colour + label, starts at
+  8 bars · 4/4, arrives selected so the ≣ form opens for naming/tuning).
+  With sections present, the strip carries **＋ Add section** (appends a
+  verse, selected; right-click a block for insert-after). Empty states
+  across the views now point at the spine instead of the Structure tab.
 
 ## 4. The placement law
 

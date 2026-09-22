@@ -95,7 +95,7 @@ export default function MelodyView() {
   if (song.sections.length === 0) {
     return (
       <div className="p-4 text-inkMuted text-sm">
-        Add sections in the Structure tab first, then come back here to hum a melody for one.
+        Add sections on the spine above first, then hum a melody for one here.
       </div>
     );
   }

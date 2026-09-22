@@ -113,7 +113,7 @@ export default function WorkbenchView() {
             />
           ) : (
             <div className="h-full flex items-center justify-center">
-              <p className="text-inkMuted text-sm">Add sections in Structure first — the workbench mirrors the section you pick on the spine.</p>
+              <p className="text-inkMuted text-sm">This song has no sections yet — add the first one on the spine above, then pick it here.</p>
             </div>
           )}
         </div>

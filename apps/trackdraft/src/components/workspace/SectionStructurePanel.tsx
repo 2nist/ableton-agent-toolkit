@@ -37,7 +37,7 @@ export default function SectionStructurePanel() {
   if (!section) {
     return (
       <p className="text-2xs font-mono text-inkMuted/60 italic">
-        No sections yet — mint one from a map in the library.
+        No sections yet — add the first one with ＋ on the spine above (or mint a whole form from a map in the workbench's library).
       </p>
     );
   }

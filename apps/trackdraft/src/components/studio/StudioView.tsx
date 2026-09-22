@@ -261,7 +261,7 @@ export default function StudioView() {
       {song.sections.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <p className="text-inkMuted text-sm">
-            Add sections in the Structure tab first — Studio shows your song's arrangement here once it has some.
+            Add sections on the spine above — Studio shows your song's arrangement here once it has some.
           </p>
         </div>
       ) : (

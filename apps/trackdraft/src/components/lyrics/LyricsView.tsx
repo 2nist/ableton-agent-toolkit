@@ -21,7 +21,7 @@ export default function LyricsView() {
   if (song.sections.length === 0) {
     return (
       <div className="p-4 text-inkMuted text-sm">
-        Add sections in the Structure tab first, then come back here to write lyrics.
+        Add sections on the spine above first, then write lyrics here.
       </div>
     );
   }

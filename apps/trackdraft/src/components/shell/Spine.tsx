@@ -12,7 +12,7 @@ import { getSongTransport, type TransportTick } from "../../lib/playback/songTra
 import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
 import { useSongStore } from "../../store/songStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
-import { beatsPerBar, type BlueprintSection, type BlueprintSong } from "../../types/blueprint";
+import { beatsPerBar, type BlueprintSection, type BlueprintSong, type SectionRole } from "../../types/blueprint";
 
 /** Zoom presets in px per BAR. Bar-linear on purpose: every bar is the
  *  same width — 7/8 bars included — because the bars are the axis (a
@@ -27,6 +27,10 @@ const BAR_PX_STEPS = [4, 6, 8, 10, 14, 20, 28, 40, 56, 80] as const;
  *  citizen, this is the second). */
 const MENU_ITEM =
   "w-full text-left px-2.5 py-1 font-mono text-[11px] text-inkMuted hover:text-ink hover:bg-panelAlt/60";
+
+/** Canonical role order for the blank-song first-section chips (same list
+ *  and order as every other role picker in the app). */
+const ROLES: SectionRole[] = ["intro", "verse", "pre_chorus", "chorus", "bridge", "solo", "breakdown", "outro", "custom"];
 
 /**
  * The Spine — the workspace's full-width top band (docs/design/workspace.md §2).
@@ -280,8 +284,6 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
       el?.removeEventListener("scroll", onScrollOrResize);
     };
   }, [menu]);
-
-  if (spans.length === 0) return null;
 
   const contentW = Math.max(1, Math.ceil(total * barPx));
   const labelEvery = barPx >= 16 ? 4 : barPx >= 10 ? 8 : 16;
@@ -551,6 +553,18 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
         <IconBtn title="Redo" disabled={!canRedo} onClick={() => redo()}>
           ↷
         </IconBtn>
+        <span className="w-px h-3.5 bg-edge/80 mx-1" />
+        <IconBtn
+          title="Add a section at the end — it arrives selected with its ≣ form open (right-click any block to insert after it instead)"
+          onClick={() => {
+            const withNew = addSection(song, "verse");
+            const fresh = withNew.sections[withNew.sections.length - 1];
+            updateCurrentSong(() => withNew);
+            setSelectedSectionId(fresh.id);
+          }}
+        >
+          ＋
+        </IconBtn>
         <span className="flex-1" />
         <IconBtn title={`Zoom out — fewer pixels per bar (now ${barPx}px)`} onClick={() => stepZoom(-1)}>
           −
@@ -573,13 +587,46 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
         </IconBtn>
       </div>
 
-      {/* The timeline — fixed scale, scrolls inside the full-bleed band.
-          A song shorter than the viewport leaves an honest empty tail.
-          overflow-x: SCROLL (not auto): the scrollbar strip's space stays
-          reserved even when the song fits, so nothing jumps up/down by its
-          height. (`scrollbar-gutter: stable` does not cover horizontal
-          scrollbars in Chrome.) */}
-      <div ref={scrollRef} className="daw-scroll overflow-x-scroll overflow-y-hidden">
+      {/* A blank song STILL gets its arrangement surface (user repro
+          2026-09-21: "start a blank song and add sections" — the spine
+          used to render NOTHING when empty, so a new song had no
+          transport, no ruler, and no way to add anything; every view
+          pointed back at the legacy Structure tab). The strip above
+          stays live — undo of your first add matters — and these chips
+          mint a section directly, each a miniature of the block it will
+          create (role colour + label). Adding selects the new section,
+          so the inspector engages and the section workspace follows. */}
+      {spans.length === 0 ? (
+        <div className="flex items-center gap-1.5 flex-wrap px-3 py-2">
+          <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted/60 mr-1 shrink-0">
+            Empty arrangement — add the first section:
+          </span>
+          {ROLES.map((r) => (
+            <button
+              key={r}
+              type="button"
+              className="h-[22px] px-2 rounded-sm text-[10px] font-mono tracking-wide hover:brightness-125 active:brightness-90"
+              style={{ background: roleStyle(r).bg, color: roleStyle(r).text }}
+              title={`Add a ${roleStyle(r).label} section — starts at 8 bars · 4/4; name, bars and harmony live in the ≣ Section form`}
+              onClick={() => {
+                const withNew = addSection(song, r);
+                const fresh = withNew.sections[withNew.sections.length - 1];
+                updateCurrentSong(() => withNew);
+                setSelectedSectionId(fresh.id);
+              }}
+            >
+              ＋ {roleStyle(r).label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        /* The timeline — fixed scale, scrolls inside the full-bleed band.
+           A song shorter than the viewport leaves an honest empty tail.
+           overflow-x: SCROLL (not auto): the scrollbar strip's space stays
+           reserved even when the song fits, so nothing jumps up/down by its
+           height. (`scrollbar-gutter: stable` does not cover horizontal
+           scrollbars in Chrome.) */
+        <div ref={scrollRef} className="daw-scroll overflow-x-scroll overflow-y-hidden">
           <div className="relative h-[68px]" style={{ width: contentW }}>
             {/* Bar ruler — the coordinate system and the seek target. */}
             <div
@@ -720,6 +767,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
             )}
           </div>
         </div>
+      )}
 
       {/* Context palette — right-click on a block (placement law tier 3:
           selection-scoped floats). Fixed-positioned so the timeline's
