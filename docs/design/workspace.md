@@ -89,8 +89,9 @@ until modal parity.)
   transport (play · pause · stop · section loop) + undo/redo, then zoom
   −/+ · fit · zoom-to-section · follow; nothing sits at the timeline's
   left or right ends.
-  That strip is the seed of P2's collapsed header (the workbench already
-  hides the legacy header transport so the two can't disagree). Blocks are
+  That strip IS the shell's collapsed header now — P2 slice 1 (2026-09-21)
+  mounted the spine above every song route and the legacy header transport
+  is gone (the header is identity only: song, key, tempo, classification). Blocks are
   true scale — a short song leaves an honest empty tail instead of
   stretching; labels and the facts line / coverage gauge render only when
   a block is wide enough to read them.
@@ -152,8 +153,15 @@ jump-open included); the karaoke popout is untouched.
   rail (songs) / section workspace rows (drums·bass·chords·color·melody·
   lyrics previews) / BendPanel as the rail / workbench stub band. Existing
   tabs untouched; "Workbench β" nav entry is the door.
-- **P2**: spine becomes shell chrome above *all* song routes; legacy header
-  + nav collapse into it; ribbon at element depth; harmony dock chips die.
+- **P2 (slice 1 shipped 2026-09-21)**: spine becomes shell chrome above
+  *all* song routes — mounted by `SongEditorLayout`, so every tab carries
+  the transport strip / ruler / blocks / chords lane; the legacy header
+  transport cluster died outright (its state plumbing too). **Harmony dock
+  section chips died** as planned: section selection unified on the shared
+  `useStudioSelectionStore` — the spine's blocks write it; Studio,
+  Workbench and Harmony all read it, so selecting a block anywhere IS
+  selecting the workspace's section. Remaining for P2: nav tabs fold into
+  the strip (P4 retires them), ribbon at element depth.
 - **P3**: interactive section rows (loop, ◆ adopt, open); element embedding
   in place (editors mount under the persistent ribbon); spine grow animation.
 - **P4**: tabs retired to focus presets; arrangement lanes (lyric / chord /

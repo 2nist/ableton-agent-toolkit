@@ -6,6 +6,7 @@ import { buildEuclideanOutline, twoThreeCellCounts, numerator as outlineNumerato
 import { EuclidSliders, StepView } from "../drums/euclidEditor";
 import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
+import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { updateSection } from "../../lib/sections";
 import { downloadSongMidi } from "../../lib/midiExport";
 import { previewProgression } from "../../lib/playback/previewMidi";
@@ -37,7 +38,7 @@ function inferRotation(outline: MeterOutline, n: number, k: number): number {
 function useHarmonyDockSection() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const selectedSectionId = useHarmonySelectionStore((s) => s.selectedSectionId);
+  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const song = currentSong;
   const activeSection = song?.sections.find((s) => s.id === selectedSectionId) ?? song?.sections[0] ?? null;
 
@@ -53,15 +54,15 @@ function useHarmonyDockSection() {
 }
 
 /** Harmony's main menu — the dock's primary panel, always visible on the
- *  Harmony tab: the per-section working rows — section chips, the
- *  progression chord lane, and the effect lane. The settings toolbox (MIDI
- *  export, key/scale/presets, and the selected chord's editor) lives in
+ *  Harmony tab: the per-section working rows — the progression chord lane
+ *  and the effect lane (section navigation lives on the SPINE now — the
+ *  dock's chips died in P2). The settings toolbox (MIDI export,
+ *  key/scale/presets, and the selected chord's editor) lives in
  *  `HarmonyTools` (the dock's Tools panel). */
 export function HarmonyMainMenu() {
   const { song, updateCurrentSong, activeSection, effectiveKey, effectiveScale } = useHarmonyDockSection();
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
-  const setSelectedSectionId = useHarmonySelectionStore((s) => s.setSelectedSectionId);
   if (!song || !activeSection || !effectiveKey || !effectiveScale) return null;
   // Capture the narrowed section for the closures below — TS control-flow
   // narrowing doesn't persist into nested functions, so the guard above
@@ -79,31 +80,10 @@ export function HarmonyMainMenu() {
 
   return (
     <div className="flex flex-col">
-      {/* Section chips — the active section drives the progression/effect
-          lanes below, the Tools panel, and the hex canvas above. */}
-      <div className="grid grid-cols-[96px_1fr] items-stretch">
-        <div className="flex flex-col items-end justify-center gap-0.5 px-3 border-r border-edge">
-          <span className="font-mono text-[9px] uppercase tracking-wider text-inkMuted">Sections</span>
-          <span className="font-mono text-[8.5px] text-inkMuted/70">{song.sections.length}</span>
-        </div>
-        <div className="px-2.5 py-1.5 overflow-x-auto">
-          <div className="flex gap-1 flex-wrap">
-            {song.sections.map((section) => (
-              <button
-                key={section.id}
-                className={`font-mono text-[11px] whitespace-nowrap rounded-[5px] border px-2.5 py-1 ${
-                  activeSection.id === section.id
-                    ? "border-accent text-accent bg-accent/10"
-                    : "border-edge text-inkMuted hover:text-ink hover:border-inkMuted"
-                }`}
-                onClick={() => setSelectedSectionId(section.id)}
-              >
-                {section.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* Section navigation lives on the SPINE now (shell chrome on every
+          route since P2) — the dock's section chips died here. Selecting a
+          block on the spine writes the shared selection store, which this
+          dock's panels and the hex canvas read. */}
 
       {/* Progression + effect lanes for the active section */}
       <ProgressionTrack

@@ -523,8 +523,9 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
       {/* Compact control strip — icons only, meaning in the tooltips:
           transport (play · pause · stop · section loop) + undo/redo on the
           left, timeline view controls (zoom −/+, fit, follow) on the right.
-          This row is the seed of P2's collapsed header — no controls sit at
-          the timeline's left or right ends. */}
+          Since P2 this row IS the shell's collapsed header — the spine
+          mounts above every song route and the legacy header transport is
+          gone; no controls sit at the timeline's left or right ends. */}
       <div className="flex items-center gap-1 px-2 h-7 border-b border-edge/60">
         <IconBtn title="Play" disabled={tick?.isPlaying === true} onClick={() => void togglePlay()}>
           ▶

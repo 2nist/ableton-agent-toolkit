@@ -1,14 +1,13 @@
 import { NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useDockStore } from "../../store/dockStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { getSongTransport } from "../../lib/playback/songTransport";
-import { playSong, pauseSong, stopSong, liveRefresh, playSectionLoop, resumeUnlooped } from "../../lib/playback/transportControl";
-import { sectionSpans } from "../../lib/arrangement";
+import { stopSong, liveRefresh } from "../../lib/playback/transportControl";
 import { classifySong } from "../../lib/classification";
 import SongInfoPanel from "../details/SongInfoPanel";
-import type { BlueprintSong } from "../../types/blueprint";
+import Spine from "../shell/Spine";
 
 const TABS = [
   { to: "workbench", label: "Workbench β" },
@@ -55,10 +54,6 @@ export default function SongEditorLayout() {
   const navigate = useNavigate();
   const songs = useSongStore((s) => s.songs);
   const openSong = useSongStore((s) => s.openSong);
-  const canUndo = useSongStore((s) => s.canUndo());
-  const canRedo = useSongStore((s) => s.canRedo());
-  const undo = useSongStore((s) => s.undo);
-  const redo = useSongStore((s) => s.redo);
 
   const setInfo = useDockStore((s) => s.setInfo);
   const dockInfo = useDockStore((s) => s.info);
@@ -67,50 +62,13 @@ export default function SongEditorLayout() {
   const dockLayers = useDockStore((s) => s.layers);
   const activePanel = useDockStore((s) => s.activePanel);
   const setActivePanel = useDockStore((s) => s.setActivePanel);
-  const clockSource = useSongStore((s) => s.clockSource);
-
-  // Global playback state — the header transport (Play / Pause / Stop + a
-  // "now playing" readout) lives on every tab so you can start the song and
-  // keep editing while it sounds.
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [playingBeat, setPlayingBeat] = useState(0);
-  const [playingSection, setPlayingSection] = useState<string | null>(null);
-  const [playingSectionId, setPlayingSectionId] = useState<string | null>(null);
-  /** Section-loop toggle — when on, the current part plays over and over. */
-  const [loopOn, setLoopOn] = useState(false);
-  // The tick handler needs the current song to name the section; keep a ref
-  // so the (once-mounted) subscription always reads the latest song.
-  const songRef = useRef<BlueprintSong | null>(null);
-
-  // Subscribes once for the layout's lifetime. Playback deliberately
-  // survives tab-to-tab navigation (so you can edit Harmony/Drums/Melody
-  // while the song is playing); it only stops when leaving the song editor
-  // entirely — otherwise the singleton transport would keep sounding on the
-  // Dashboard.
-  useEffect(() => {
-    const transport = getSongTransport();
-    const unsubscribe = transport.onTick((tick) => {
-      setIsPlaying(tick.isPlaying);
-      setIsPaused(transport.isPaused());
-      setPlayingBeat(tick.beat);
-      // A hard stop (not a pause) also drops the section loop.
-      if (!tick.isPlaying && !transport.isPaused()) setLoopOn(false);
-      const s = songRef.current;
-      if (s && tick.sectionIndex >= 0) {
-        const span = sectionSpans(s)[tick.sectionIndex];
-        setPlayingSection(span?.section?.name ?? null);
-        setPlayingSectionId(span?.sectionId ?? null);
-      } else {
-        setPlayingSection(null);
-        setPlayingSectionId(null);
-      }
-    });
-    return () => {
-      unsubscribe();
-      stopSong();
-    };
-  }, []);
+  // Playback deliberately survives tab-to-tab navigation (so you can edit
+  // any element while the song sounds); it only stops when leaving the song
+  // editor entirely — otherwise the singleton transport would keep sounding
+  // on the Dashboard. The spine band (mounted below, on EVERY song route)
+  // owns the transport UI, its state and the section loop — P2 folded the
+  // legacy header transport into it, so this layout mirrors none of that.
+  useEffect(() => () => stopSong(), []);
 
   // Real-time editing while playing: whenever the song changes (harmony/
   // melody edits, a committed drums pattern) or the drums editor's draft
@@ -161,7 +119,6 @@ export default function SongEditorLayout() {
   const activeNode = bottomTabs.find((t) => t.id === activePanel)?.node ?? dockInfo;
 
   const song = songs.find((s) => s.id === songId);
-  songRef.current = song ?? songRef.current;
 
   // Make the route's song the store's current song. This must also re-run
   // when hydration populates `songs` (child effects fire BEFORE App's
@@ -192,39 +149,6 @@ export default function SongEditorLayout() {
     );
   }
 
-  /** Global Play / Resume — same shared logic Studio's button uses, so the
-   *  header and Studio can't disagree about what "play" means. Disabled
-   *  while playing (use Pause or Stop); resumes from a paused position. */
-  async function togglePlayback() {
-    if (!song || isPlaying) return;
-    await playSong(song, clockSource);
-  }
-
-  /** Global Pause — freeze the playhead (and silence live MIDI out). */
-  function pausePlayback() {
-    pauseSong();
-  }
-
-  /** Global Stop — reset to the top. */
-  function stopPlayback() {
-    stopSong();
-  }
-
-  /** Section loop toggle — loop the part currently playing, over and over,
-   *  until it's turned off (or playback stops). */
-  async function toggleLoop() {
-    if (!song) return;
-    if (loopOn) {
-      setLoopOn(false);
-      await resumeUnlooped(song);
-      return;
-    }
-    const sectionId = playingSectionId ?? song.sections[0]?.id;
-    if (!sectionId) return;
-    const ok = await playSectionLoop(song, sectionId);
-    if (ok) setLoopOn(true);
-  }
-
   return (
     <div className="h-screen flex flex-col">
       <header className="flex items-center justify-between border-b border-edge px-3 py-1.5 shrink-0">
@@ -238,74 +162,10 @@ export default function SongEditorLayout() {
             {song.sections.length > 0 && <> · {classifySong(song).label}</>}
           </span>
         </div>
-        {/* On the workbench the spine's own control strip owns the
-            transport — hide the legacy cluster there so the two can't
-            disagree (P2 will collapse this header into the spine
-            everywhere). */}
-        {activeTab !== "workbench" && (
-        <div className="flex items-center gap-1.5 text-sm">
-          <button
-            className={`text-xs font-medium px-2.5 py-1 rounded disabled:opacity-40 ${
-              isPlaying ? "bg-panelAlt text-inkMuted" : "bg-accent text-black"
-            }`}
-            onClick={() => void togglePlayback()}
-            disabled={isPlaying || song.sections.length === 0}
-            title={isPaused ? "Resume from where you paused" : "Play the song — keeps playing while you edit any tab"}
-          >
-            {isPaused ? "▶ Resume" : clockSource === "ableton" ? "⟲ Sync" : "▶ Play"}
-          </button>
-          <button
-            className="px-2 py-1 rounded text-xs disabled:opacity-30 hover:bg-panelAlt"
-            disabled={!isPlaying || clockSource === "ableton"}
-            onClick={pausePlayback}
-            title="Pause — freeze the playhead, resume from here later"
-          >
-            ❚❚
-          </button>
-          <button
-            className="px-2 py-1 rounded text-xs disabled:opacity-30 hover:bg-panelAlt"
-            disabled={!isPlaying && !isPaused}
-            onClick={stopPlayback}
-            title="Stop — reset to the start"
-          >
-            ■
-          </button>
-          {(isPlaying || isPaused) && (
-            <span className="text-[11px] text-inkMuted font-mono" title="Current position and section">
-              ● {playingBeat.toFixed(1)}
-              {playingSection ? ` · ${playingSection}` : ""}
-            </span>
-          )}
-          <button
-            className={`px-1.5 py-1 rounded text-sm disabled:opacity-30 hover:bg-panelAlt ${
-              loopOn ? "bg-accent text-black" : ""
-            }`}
-            disabled={!isPlaying || clockSource === "ableton"}
-            onClick={() => void toggleLoop()}
-            title={
-              loopOn
-                ? "Looping this part — click to stop looping"
-                : "Loop the part that's playing, over and over, until you turn it off"
-            }
-          >
-            ⟳
-          </button>
-          <button
-            className="px-2 py-1 rounded disabled:opacity-30 hover:bg-panelAlt"
-            disabled={!canUndo}
-            onClick={() => undo()}
-          >
-            Undo
-          </button>
-          <button
-            className="px-2 py-1 rounded disabled:opacity-30 hover:bg-panelAlt"
-            disabled={!canRedo}
-            onClick={() => redo()}
-          >
-            Redo
-          </button>
-        </div>
-        )}
+        {/* Transport now lives in the spine's strip, mounted below on every
+            song route (P2) — the legacy header cluster died along with this
+            layout's copy of its state. What remains here is identity only:
+            song, key, tempo, classification. */}
       </header>
 
       <nav className="flex gap-0.5 border-b border-edge px-3 shrink-0">
@@ -323,6 +183,11 @@ export default function SongEditorLayout() {
           </NavLink>
         ))}
       </nav>
+
+      {/* The spine — shell chrome on every song route (P2): the transport
+          strip, bar ruler, true-scale blocks and chords lane live above
+          every tab, so navigating never loses the song's shape. */}
+      <Spine song={song} />
 
       {/* Main area: content + a dock. Structure keeps the right sidebar;
           Harmony keeps the bottom dock AND a right sidebar for its Tools;

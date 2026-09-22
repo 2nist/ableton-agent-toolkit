@@ -5,6 +5,7 @@ import type { NoteName } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
 import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
+import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useDockStore } from "../../store/dockStore";
 import { updateSection } from "../../lib/sections";
 import HoneycombWheel from "./HoneycombWheel";
@@ -23,8 +24,8 @@ export default function HarmonyView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const [searchParams] = useSearchParams();
-  const selectedSectionId = useHarmonySelectionStore((s) => s.selectedSectionId);
-  const setSelectedSectionId = useHarmonySelectionStore((s) => s.setSelectedSectionId);
+  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
   const setPrimary = useDockStore((s) => s.setPrimary);

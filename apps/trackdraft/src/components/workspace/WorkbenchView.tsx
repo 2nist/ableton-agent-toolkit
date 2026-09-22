@@ -14,7 +14,6 @@ import { roleStyle } from "../../lib/roleColors";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playback/drumPreview";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
-import Spine from "../shell/Spine";
 import BendPanel from "../style/BendPanel";
 import SectionStructurePanel from "./SectionStructurePanel";
 import IconBtn from "../common/IconBtn";
@@ -26,15 +25,17 @@ import type { BlueprintSection, BlueprintSong } from "../../types/blueprint";
 /**
  * The Workbench — first slice of the new workspace (docs/design/workspace.md).
  *
- * Bands: Spine (full width) → zones row (library rail · section workspace ·
- * bend rail) → workbench stub band. This is "section work" v0: the selected
- * section's materials as preview rows in the ladder's order (drums first as
- * the clock), with the bend lens pinned right and the song list in a
- * collapsible Ableton-style browser on the left.
+ * Bands: zones row (library rail · section workspace · bend rail) →
+ * workbench stub band. The spine is shell chrome now (mounted by
+ * SongEditorLayout above every song route — P2). This is "section work"
+ * v0: the selected section's materials as preview rows in the ladder's
+ * order (drums first as the clock), with the bend lens pinned right and
+ * the song list in a collapsible Ableton-style browser on the left.
  *
  * Deliberately transitional: element rows jump to the existing editor tabs
- * (?section=) until P3 embeds them in place; the legacy header/nav live
- * above until P2 folds them into the spine.
+ * (?section=) until P3 embeds them in place; the legacy nav tabs live
+ * above until P4 retires them (the header transport already folded into
+ * the spine's strip in P2).
  */
 export default function WorkbenchView() {
   const currentSong = useSongStore((s) => s.currentSong());
@@ -89,10 +90,9 @@ export default function WorkbenchView() {
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      {/* Band 1 — the spine, edge to edge */}
-      <Spine song={song} />
-
-      {/* Band 2 — zones row: library · section workspace · bend rail */}
+      {/* Zones row: library · section workspace · bend rail. The spine band
+          above it is shell chrome now — SongEditorLayout mounts it on
+          every song route (P2). */}
       <div className="flex-1 flex min-h-0">
         <LibraryRail
           songs={songs}
