@@ -56,7 +56,10 @@ In-view modes are deliberately NOT doors: the Drums view's **Line view
 ↔ Blocks** toggle, Lyrics' **per-section ↔ song text** toggle, and the
 Harmony wheel's Linear/Loop timing modes all switch *within* their view.
 The lyrics/chords **popout** is a window (opened from Settings or
-Studio), not a view. **Labs** — Genre Workbench · Design Lab · the Puck
+Studio), not a view — since 2026-09-23 it opens in **Song flow** (the
+whole arrangement as one karaoke scroll, every repeat pass labelled,
+current line lit + auto-scrolled) with the performing **Section** face
+one persisted toggle away. **Labs** — Genre Workbench · Design Lab · the Puck
 sandbox — live outside the song editor and are linked from Settings.
 
 The drum pair keeps the names it earned: **Line view** = the classic
@@ -350,7 +353,14 @@ jump-open included); the karaoke popout is untouched.
   the role-driven **auto plan** (dashed — build INTO choruses, break out
   of verses…), with a quick set/clear popover. Hover dividers split
   sections mid-flow, double-click fixes a line's text in place
-  (`updateLineText`). Karaoke popout flow mode = next.
+  (`updateLineText`). **Karaoke popout flow mode shipped the same day
+  (2026-09-23):** the popout gained a persisted **Song flow ↔ Section**
+  toggle — flow renders the whole arrangement (repeats expanded,
+  `Chorus · 2/3` pass labels), lights + auto-scrolls the current line,
+  floats the active pass's chords over the words, and renders even with
+  no playback at all (the rehearsal face for verifying the form from the
+  words alone). Section mode is unchanged (and still the default in the
+  toggle's persistence: first visit opens in flow).
 - **P4 (partly done 2026-09-21)**: the top tabs + identity header retired
   — views live in the left rail, the Library became a view, the spine
   chip carries identity. **SVG icon pass shipped the same day**

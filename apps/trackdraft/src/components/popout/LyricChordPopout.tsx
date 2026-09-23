@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { useSongStore } from "../../store/songStore";
-import { sectionSpans } from "../../lib/arrangement";
+import { sectionSpans, type SectionSpan } from "../../lib/arrangement";
 import { TRANSPORT_CHANNEL_NAME, type TransportTick } from "../../lib/playback/songTransport";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { currentLineIndex, rebaseLyricsTimeline } from "./lyricTimeline";
@@ -42,6 +42,22 @@ function expandChords(section: { chords: { romanNumeral: string; root: string; q
   return slots;
 }
 
+/** Which popout face the performer last chose — persisted so a tab that
+ *  prefers the big single-section view stays there across sessions. */
+const POPOUT_MODE_KEY = "trackdraft-popout-mode";
+
+/** The lines a flow block shows: timeline entries when present (one per
+ *  sung line — the same shape the section view renders), else the plain
+ *  lyrics split into non-blank lines. */
+function flowLinesForSpan(span: SectionSpan): string[] {
+  const tl = span.section.lyricsTimeline;
+  if (tl && tl.length > 0) return tl.map((l) => l.text);
+  return (span.section.lyrics ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
 /** A separate, chrome-free window (opened via `window.open`, not a route
  *  nested under SongEditorLayout) meant to be glanced at from across a
  *  room or on a second monitor while performing/rehearsing. Reads the
@@ -54,11 +70,33 @@ function expandChords(section: { chords: { romanNumeral: string; root: string; q
  *  Chords and lyrics are interleaved inline: lyric lines appear at their
  *  timeline positions, and chord changes appear as accent-colored labels
  *  between them. The current chord and lyric line highlight in sync
- *  (accent color for current chord, white for current lyric line). */
+ *  (accent color for current chord, white for current lyric line).
+ *
+ *  Two faces, toggled top-right (persisted in `trackdraft-popout-mode`):
+ *    · SONG FLOW (default) — the whole arrangement as one scroll: every
+ *      section pass (repeats expanded, "Chorus · 2/3" labels) with the
+ *      current line lit and auto-scrolled into view. Renders even with no
+ *      playback at all, so the form can be reviewed from the words alone —
+ *      the rehearsal face that lets you verify the sections you fixed.
+ *    · SECTION — the original performing face: only the section currently
+ *      playing, big and glanceable. */
 export default function LyricChordPopout() {
   const { songId } = useParams<{ songId: string }>();
   const song = useSongStore((s) => s.songs.find((sg) => sg.id === songId));
   const [tick, setTick] = useState<TransportTick | null>(null);
+  const [mode, setModeState] = useState<"flow" | "section">(() => {
+    try {
+      return localStorage.getItem(POPOUT_MODE_KEY) === "section" ? "section" : "flow";
+    } catch {
+      return "flow";
+    }
+  });
+  function setMode(m: "flow" | "section") {
+    setModeState(m);
+    try {
+      localStorage.setItem(POPOUT_MODE_KEY, m);
+    } catch {}
+  }
 
   useEffect(() => {
     const channel = new BroadcastChannel(TRANSPORT_CHANNEL_NAME);
@@ -72,7 +110,10 @@ export default function LyricChordPopout() {
   // ("rendered more hooks than during the previous render") and crashed the
   // popout the moment the first transport tick arrived, so lyrics/chords
   // never displayed. Derive the plain values first, memoize below.
-  const spans = song ? sectionSpans(song) : [];
+  const spans = useMemo(() => (song ? sectionSpans(song) : []), [song]);
+
+  // SECTION mode — the performing face: only the span actually playing
+  // (requires isPlaying, so the "waiting" screen shows until playback).
   const activeSpan = song && tick && tick.isPlaying && tick.sectionIndex >= 0 ? spans[tick.sectionIndex] : null;
   // Expand chords to full section duration with beat positions (empty while
   // not playing / song not found — deps are stable references + numbers, so
@@ -82,6 +123,37 @@ export default function LyricChordPopout() {
     [activeSpan?.section.chords, activeSpan?.durationBeats],
   );
 
+  // FLOW mode — the rehearsal face: the whole arrangement as one scroll,
+  // every repeat pass its own block. The highlight follows any valid tick
+  // (paused included, so a glance keeps your place); stop() emits
+  // sectionIndex -1 and dims everything. Renders with no tick at all, so
+  // the finished form can be previewed before playing a note.
+  const flowIndex = tick && tick.sectionIndex >= 0 && tick.sectionIndex < spans.length ? tick.sectionIndex : -1;
+  const flowSpan = flowIndex >= 0 ? spans[flowIndex] : null;
+  const flowChordSlots = useMemo<ChordSlot[]>(
+    () => (flowSpan ? expandChords(flowSpan.section, flowSpan.durationBeats) : []),
+    [flowSpan?.section.chords, flowSpan?.durationBeats],
+  );
+  const flowTimeline = useMemo(
+    () => rebaseLyricsTimeline(flowSpan?.section.lyricsTimeline, flowSpan?.startBeat ?? 0),
+    [flowSpan?.section.lyricsTimeline, flowSpan?.startBeat],
+  );
+  const allFlowLines = useMemo(() => spans.map(flowLinesForSpan), [spans]);
+  const flowLines = flowSpan ? allFlowLines[flowIndex] : [];
+  const flowActiveLine = (() => {
+    if (!flowSpan || !tick) return -1;
+    const beatIn = tick.beat - flowSpan.startBeat;
+    if (flowTimeline.length > 0) return currentLineIndex(flowTimeline, beatIn);
+    const n = flowLines.length;
+    if (n === 0) return -1;
+    return Math.min(n - 1, Math.floor((beatIn / Math.max(0.001, flowSpan.durationBeats)) * n));
+  })();
+  const activeLineRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (mode !== "flow") return;
+    activeLineRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [mode, flowIndex, flowActiveLine]);
+
   if (!song) {
     return (
       <div className="min-h-screen bg-black text-neutral-400 flex items-center justify-center">
@@ -90,9 +162,116 @@ export default function LyricChordPopout() {
     );
   }
 
+  const modeToggle = (
+    <div className="fixed top-3 right-4 z-50 flex items-center gap-0.5 rounded border border-neutral-800 bg-black/80 px-1 py-0.5 font-mono text-[11px]">
+      {(["flow", "section"] as const).map((m) => (
+        <button
+          key={m}
+          className={`px-2 py-0.5 rounded ${mode === m ? "bg-neutral-200 text-black" : "text-neutral-400 hover:text-white"}`}
+          title={
+            m === "flow"
+              ? "Song flow — the whole arrangement as one scroll; every pass of every section, the current line lit"
+              : "Section — only the section being played, big and glanceable"
+          }
+          onClick={() => setMode(m)}
+        >
+          {m === "flow" ? "Song flow" : "Section"}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (mode === "flow") {
+    return (
+      <div className="h-screen overflow-y-auto bg-black text-white select-none">
+        {modeToggle}
+        <div className="max-w-3xl mx-auto px-8 py-16 space-y-10">
+          {spans.length === 0 ? (
+            <p className="text-center text-xl text-neutral-600 font-mono">
+              No sections yet — build the arrangement on the spine, then come back to sing it.
+            </p>
+          ) : (
+            spans.map((span, i) => {
+              const isActive = i === flowIndex;
+              const passes = spans.filter((sp) => sp.sectionId === span.sectionId).length;
+              const lines = allFlowLines[i];
+              return (
+                <section
+                  key={`${span.sectionId}:${span.occurrenceIndex}`}
+                  className={`transition-opacity duration-300 ${isActive || flowIndex < 0 ? "" : "opacity-35"}`}
+                >
+                  <p
+                    className={`font-mono text-xs uppercase tracking-[0.2em] mb-3 text-center ${
+                      isActive ? "text-accent" : "text-neutral-500"
+                    }`}
+                  >
+                    {span.section.name}
+                    {passes > 1 ? ` · ${span.occurrenceIndex + 1}/${passes}` : ""}
+                    {span.variation ? ` — ${span.variation}` : ""}
+                  </p>
+                  {lines.length === 0 ? (
+                    <p className="text-center text-xl text-neutral-700 italic">— instrumental —</p>
+                  ) : (
+                    lines.map((text, li) => {
+                      const current = isActive && li === flowActiveLine;
+                      let chords: { display: string; left: number }[] = [];
+                      if (isActive && flowChordSlots.length > 0) {
+                        const tl = flowTimeline.length > 0 ? flowTimeline : null;
+                        const n = lines.length;
+                        const start = tl ? (tl[li]?.startBeat ?? 0) : (li * span.durationBeats) / Math.max(1, n);
+                        const next = tl
+                          ? li + 1 < tl.length
+                            ? tl[li + 1].startBeat
+                            : span.durationBeats
+                          : ((li + 1) * span.durationBeats) / Math.max(1, n);
+                        const spanBeats = Math.max(0.001, next - start);
+                        chords = flowChordSlots
+                          .filter((c) => c.startBeat >= start && c.startBeat < next)
+                          .map((c) => ({ display: c.display, left: 8 + ((c.startBeat - start) / spanBeats) * 84 }));
+                      }
+                      return (
+                        <div key={li} ref={current ? activeLineRef : undefined} className="py-1">
+                          {chords.length > 0 && (
+                            <div className="relative h-6 max-w-3xl mx-auto">
+                              {chords.map((c, ci) => (
+                                <span
+                                  key={ci}
+                                  className="absolute -translate-x-1/2 font-mono text-sm font-semibold text-accent/60"
+                                  style={{ left: `${c.left}%` }}
+                                >
+                                  {c.display}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <p
+                            className={`text-center transition-all duration-200 ${
+                              current
+                                ? "text-4xl font-bold text-white"
+                                : isActive
+                                  ? "text-2xl text-neutral-300"
+                                  : "text-xl text-neutral-600"
+                            }`}
+                          >
+                            {text}
+                          </p>
+                        </div>
+                      );
+                    })
+                  )}
+                </section>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (!activeSpan || !tick) {
     return (
       <div className="min-h-screen bg-black text-neutral-500 flex items-center justify-center">
+        {modeToggle}
         <p className="text-2xl font-mono">{song.title} — waiting for Studio playback…</p>
       </div>
     );
@@ -155,6 +334,7 @@ export default function LyricChordPopout() {
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-8 select-none">
+      {modeToggle}
       <p className="text-sm uppercase tracking-widest text-neutral-500 font-mono mb-3">{section.name}</p>
 
       {hasLyrics ? (
