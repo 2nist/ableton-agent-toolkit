@@ -6,6 +6,7 @@ import {
   splitSectionAt,
   unassignLines,
   detectRepeatedBlocks,
+  updateLineText,
 } from "./sectionize";
 import type { BlueprintSong, BlueprintSection } from "../../types/blueprint";
 
@@ -308,5 +309,38 @@ describe("detectRepeatedBlocks", () => {
     expect(blocks).toHaveLength(1);
     expect(blocks[0].occurrences[0]).toEqual({ start: 0, end: 3 });
     expect(blocks[0].occurrences[1]).toEqual({ start: 5, end: 8 });
+  });
+});
+
+describe("updateLineText — fix a typo in place", () => {
+  it("replaces exactly the addressed line and leaves everything else untouched", () => {
+    const song = makeSong([
+      { id: "s0", lyrics: "line a\nliine b\nline c" },
+      { id: "s1", lyrics: "other section" },
+    ]);
+    const doc = buildLyricDocument(song);
+    const fixed = updateLineText(song, doc[1], "line b");
+    expect(fixed.sections[0].lyrics).toBe("line a\nline b\nline c");
+    expect(fixed.sections[1].lyrics).toBe("other section");
+  });
+
+  it("materializes .lyrics when the section's lines existed only as timeline entries", () => {
+    const song = makeSong([
+      { id: "s0", lyricsTimeline: [{ text: "timed one\ntimed two", startBeat: 0 }] },
+    ]);
+    const doc = buildLyricDocument(song); // two lines via the multi-line entry split
+    expect(doc.map((l) => l.text)).toEqual(["timed one", "timed two"]);
+    const fixed = updateLineText(song, doc[1], "timed too");
+    expect(fixed.sections[0].lyrics).toBe("timed one\ntimed too");
+    // The timeline is deliberately left alone — its entries carry their own
+    // text and a line's ownership inside a multi-line entry is ambiguous.
+    expect(fixed.sections[0].lyricsTimeline).toEqual([{ text: "timed one\ntimed two", startBeat: 0 }]);
+  });
+
+  it("is a no-op for an unknown section or unchanged text", () => {
+    const song = makeSong([{ id: "s0", lyrics: "x" }]);
+    const doc = buildLyricDocument(song);
+    expect(updateLineText(song, { ...doc[0], sectionId: "nope" }, "y")).toBe(song);
+    expect(updateLineText(song, doc[0], "x")).toBe(song);
   });
 });

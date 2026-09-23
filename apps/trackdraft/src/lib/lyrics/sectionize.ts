@@ -283,6 +283,31 @@ export function splitSectionAt(song: BlueprintSong, documentLines: readonly Lyri
   return assignLinesToSection(song, documentLines, { start: docIndexAtSplit, end: docEndIndex }, { role: section.role, name: `${section.name} (cont.)` });
 }
 
+/** "Fix a typo": replace one document line's text in place, writing through
+ *  to its owning section. When the section had no `.lyrics` (its lines came
+ *  from `lyricsTimeline` alone), `.lyrics` is materialized from the
+ *  document's lines first so the edit has somewhere to land. Deliberately
+ *  leaves `lyricsTimeline` untouched — a timeline entry's own text can span
+ *  several lines and which line owns the entry's timestamp is ambiguous
+ *  (see `startBeatsForLines`); retiming is a separate, deliberate op. */
+export function updateLineText(song: BlueprintSong, line: LyricLine, text: string): BlueprintSong {
+  const section = song.sections.find((s) => s.id === line.sectionId);
+  if (!section) return song;
+  const rawLines =
+    section.lyrics != null
+      ? section.lyrics.split("\n")
+      : buildLyricDocument(song)
+          .filter((l) => l.sectionId === section.id)
+          .map((l) => l.text);
+  if (line.lineIndexInSection < 0 || line.lineIndexInSection >= rawLines.length) return song;
+  if (rawLines[line.lineIndexInSection] === text) return song;
+  rawLines[line.lineIndexInSection] = text;
+  return {
+    ...song,
+    sections: song.sections.map((s) => (s.id === section.id ? { ...s, lyrics: rawLines.join("\n") } : s)),
+  };
+}
+
 export interface RepeatedBlock {
   normalizedText: string;
   /** Document line-index ranges (inclusive) of each occurrence, in document order. */

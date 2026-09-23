@@ -6,13 +6,14 @@ import MetricalTable from "./MetricalTable";
 import RhymeSuggestions from "./RhymeSuggestions";
 import WritingContext from "./WritingContext";
 
-/** The Lyrics tab's dock content in per-section mode — registered once by
- *  LyricsView, self-sufficient like HarmonyDockTools/SongInfoPanel (reads
- *  useSongStore + the shared lyricsSelectionStore directly). Formerly a
- *  fixed 280px right sidebar next to the editor; moving it into the dock
- *  frees the editor to use the full width. Song-text mode has no active
- *  section to scope these to, so LyricsView simply doesn't register this
- *  content there — it falls back to the dock's Info panel instead.
+/** The Lyrics tab's dock content — registered once by the inspector rail,
+ *  self-sufficient like HarmonyDockTools/SongInfoPanel (reads useSongStore
+ *  + the shared studio selection directly). Formerly a fixed 280px right
+ *  sidebar next to the editor; moving it into the dock frees the editor to
+ *  use the full width. Song text mode used to hide these tools (there was
+ *  no active section to scope them to) — since the song-text blocks select
+ *  their section on any touch (2026-09-22), the tools follow the block you
+ *  last touched there too, with a note saying so.
  *
  *  LyricsBriefPanel sits with the other writing tools: the section brief,
  *  side-specific nudge, and pronunciation-backed line scan. */

@@ -123,14 +123,16 @@ export default function InspectorRail() {
                 </div>
               </div>
             )}
-            {tab === "lyrics" &&
-              (lyricsMode === "per-section" ? (
+            {tab === "lyrics" && (
+              <div className="space-y-3">
+                {lyricsMode === "song-text" && (
+                  <p className="text-2xs font-mono text-inkMuted/60 italic">
+                    Song text mode — the tools below follow the block you last touched.
+                  </p>
+                )}
                 <LyricsDockTools />
-              ) : (
-                <p className="text-2xs font-mono text-inkMuted/60 italic">
-                  Lyrics tools work per section — switch the Lyrics view to “Per-section” to use them.
-                </p>
-              ))}
+              </div>
+            )}
             {tab === "mix" && <BendPanel />}
             {tab === "song" && <SongInfoPanel />}
           </div>

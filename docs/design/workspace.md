@@ -242,7 +242,9 @@ auto-opens on any section-selection change, collapses to a 36px strip, and
 their canvases: **Harmony's progression + effect lanes now sit under the
 hex wheel** (the dock's Menu panel is gone). Lyrics *mode* (per-section /
 song-text) moved into `lyricsSelectionStore`; the ✎ facet shows the tools
-in per-section mode and a pointer hint in song-text mode. Drum tools read
+in per-section mode; **song-text mode now follows the block you last
+  touched too** (2026-09-23 — the sectioning pass made the blocks select
+  their section on any touch). Drum tools read
 the shared studio selection directly.
 
 | Piece | Home |
@@ -252,7 +254,7 @@ the shared studio selection directly.
 | Maps · genre recipes | **left Library tabs** (revised 2026-09-21 — was the bottom band): Songs · Maps (narrative + genre) · Recipes. Maps replace sections (confirmed); recipes seed genre + bend + tempo. |
 | Harmony's two menus | **done (slice B)** — chord controls live **in the hex workspace**: progression strip + effect lane under the wheel, toolbox in the ♪ facet; the dock's section chips **died** (P2) — the ribbon is the single navigator |
 | Drums dock | **retired (slice B)** — tools live in the ▦ facet; the classic line view stays as the level-2 canvas |
-| Lyrics dock | **retired (slice B)** — rhyme/meter live in the ✎ facet (per-section mode gate) |
+| Lyrics dock | **retired (slice B)** — rhyme/meter live in the ✎ facet, which follows the touched section in BOTH modes since the 2026-09-23 sectioning pass |
 | Melody | workspace controls strip only — no rail, no dock |
 | Drums | no rail — correct today |
 
@@ -277,7 +279,7 @@ drum tools. More instruments join the strip as their broad faces land.
 | Drums | classic lane timeline (fills, detours, transitions across the song) | Blocks editor |
 | Harmony | cross-song progression lane (ProgressionTrack generalized) | hex wheel + chord editor |
 | Melody | contour lane | staff / piano roll + record |
-| Lyrics | **no lane — vetoed (user, 2026-09-21)**: words don't time-snap like notes; a lane would read as noise. Presence at L1 = the coverage gauge's lyrics segment + the block tooltip; the real surfaces are the section row and the pad | lyric pad + rhyme/meter tools |
+| Lyrics | **no lane — vetoed (user, 2026-09-21)**: words don't time-snap like notes; a lane would read as noise. Presence at L1 = the coverage gauge's lyrics segment + the block tooltip; the real surfaces are the section row and the pad | **song-text blocks** (sectioning: carve · label · repeats · split · park, each block carrying the ♪ hex walk + chord chips and its drum-transition chip) + lyric pad + rhyme/meter tools |
 | Bass / Color | register/density strips (later) | controls exist; visuals TBD |
 
 ## 6. Navigation grammar (every depth)
@@ -330,6 +332,25 @@ jump-open included); the karaoke popout is untouched.
   without the header no-op.** Also fixed en route: **undo/redo now
   persist** — an undone edit used to resurrect on reload (songStore
   regression test added).
+  **Song-text sectioning pass (2026-09-23):** the Lyrics view's "Song
+  text" mode rebuilt as **blocks** — and the pass leading with a
+  correctness fix: the old view numbered selections in DISPLAY order
+  while the ops sliced the DOCUMENT, so any selection below an
+  instrumental placeholder or the hidden "Unassigned" tray silently
+  acted on the wrong line (live repro: unassign a line, then Add Section
+  on the row below carved the invisible one). Now: `songTextRows.ts`
+  builds the view model in canonical document order with TRUE doc
+  indices (unit-locked), unassigned lines render in place as a dashed
+  parked tray (nothing vanishes), and blocks carry their system context —
+  role dot/rename, `bars · beats/chord · meter` facts, a **repeats
+  stepper** (chorus ×2 written straight to the arrangement), a ♪
+  disclosure with the read-only **HexReadout** + real chord chips
+  (clicking one selects the chord and pops the ♪ facet), and a
+  **transition chip** showing the manual `drumTransitionModel` (solid) or
+  the role-driven **auto plan** (dashed — build INTO choruses, break out
+  of verses…), with a quick set/clear popover. Hover dividers split
+  sections mid-flow, double-click fixes a line's text in place
+  (`updateLineText`). Karaoke popout flow mode = next.
 - **P4 (partly done 2026-09-21)**: the top tabs + identity header retired
   — views live in the left rail, the Library became a view, the spine
   chip carries identity. **SVG icon pass shipped the same day**
