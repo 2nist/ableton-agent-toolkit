@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { BlueprintSong, DrumTransitionModel, SectionRole } from "../../types/blueprint";
 import { beatsPerBar } from "../../types/blueprint";
@@ -16,9 +16,11 @@ import {
   updateLineText,
   detectRepeatedBlocks,
 } from "../../lib/lyrics/sectionize";
-import { buildSongTextModel, UNASSIGNED_NAME, type SongTextBlock, type SongTextLine } from "../../lib/lyrics/songTextRows";
+import { buildSongTextModel, UNASSIGNED_NAME, type SongTextBlock, type SongTextLine, type SongTextModel } from "../../lib/lyrics/songTextRows";
+import { playbackPosFor, samePlayPos, type SongTextPlayPos } from "../../lib/lyrics/songTextPlayback";
 import { repeatsFor, updateRepeats, updateSection } from "../../lib/sections";
-import { sectionSpans } from "../../lib/arrangement";
+import { sectionSpans, type SectionSpan } from "../../lib/arrangement";
+import { getSongTransport } from "../../lib/playback/songTransport";
 import { planSectionTransitions } from "@drum/library";
 import { velocityNumber } from "../../lib/playback/drumPreview";
 import { TRANSITION_COLOR, TRANSITION_LABEL, TRANSITION_MODELS } from "../drums/transitionStyle";
@@ -40,9 +42,8 @@ const INSTRUMENTAL_LABEL: Partial<Record<SectionRole, string>> = {
  *  choruses, break down out of verses, drop out of bridges, cut into
  *  outros"), so a block's chip here matches what export will play. A manual
  *  `drumTransitionModel` always wins; the chip shows which one is active. */
-function useAutoTransitions(song: BlueprintSong) {
+function useAutoTransitions(spans: SectionSpan[]) {
   return useMemo(() => {
-    const spans = sectionSpans(song);
     const plans = planSectionTransitions(
       spans.map((sp) => ({
         sectionId: sp.sectionId,
@@ -60,7 +61,7 @@ function useAutoTransitions(song: BlueprintSong) {
       if (!bySection.has(sp.sectionId)) bySection.set(sp.sectionId, { model: plans[i].model, bars: plans[i].bars });
     });
     return bySection;
-  }, [song]);
+  }, [spans]);
 }
 
 interface LyricDocumentViewProps {
@@ -95,7 +96,8 @@ export default function LyricDocumentView({ song, onChange }: LyricDocumentViewP
   const docLines = useMemo(() => buildLyricDocument(song), [song]);
   const model = useMemo(() => buildSongTextModel(song), [song]);
   const repeatedBlocks = useMemo(() => detectRepeatedBlocks(docLines), [docLines]);
-  const autoTransitions = useAutoTransitions(song);
+  const spans = useMemo(() => sectionSpans(song), [song]);
+  const autoTransitions = useAutoTransitions(spans);
 
   const [range, setRange] = useState<{ start: number; end: number } | null>(null);
   const [selMode, setSelMode] = useState<"idle" | "active">("idle");
@@ -110,6 +112,35 @@ export default function LyricDocumentView({ song, onChange }: LyricDocumentViewP
   const [lineDraft, setLineDraft] = useState("");
   const [popover, setPopover] = useState<{ kind: "role" | "transition"; sectionId: string; x: number; y: number } | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  // ── playhead follow ───────────────────────────────────────────────
+  // The track (the spine's transport — on this route like every other)
+  // drives the words: the playing block lights with its pass, the current
+  // line highlights + scrolls into view, and the block's authored
+  // progression shows as a live chord mini (looping exactly as playback/
+  // export will sound it). Ticks arrive at 60fps — derive the minimal
+  // play position and only set state when it actually changed.
+  const [playPos, setPlayPos] = useState<SongTextPlayPos | null>(null);
+  const followCtx = useRef<{ song: BlueprintSong; spans: SectionSpan[]; model: SongTextModel } | null>(null);
+  followCtx.current = { song, spans, model };
+  useEffect(() => {
+    const transport = getSongTransport();
+    return transport.onTick((tick) => {
+      const ctx = followCtx.current;
+      if (!ctx) return;
+      const next = playbackPosFor(ctx.song, ctx.spans, ctx.model, tick);
+      setPlayPos((prev) => (samePlayPos(prev, next) ? prev : next));
+    });
+  }, []);
+  const playLineRef = useRef<HTMLDivElement | null>(null);
+  const setPlayLineEl = useCallback((el: HTMLDivElement | null) => {
+    playLineRef.current = el;
+  }, []);
+  useEffect(() => {
+    if (!playPos?.playing || selMode === "active") return;
+    playLineRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scroll on position changes only
+  }, [playPos?.sectionId, playPos?.lineIdx, playPos?.playing, selMode]);
 
   function clearSelection() {
     setRange(null);
@@ -341,6 +372,8 @@ export default function LyricDocumentView({ song, onChange }: LyricDocumentViewP
             block={block}
             song={song}
             auto={autoTransitions.get(block.section.id) ?? null}
+            play={playPos?.sectionId === block.section.id ? playPos : null}
+            onPlayLineRef={setPlayLineEl}
             range={range}
             editingNameId={editingNameId}
             nameDraft={nameDraft}
@@ -518,6 +551,8 @@ interface SongTextBlockViewProps {
   block: SongTextBlock;
   song: BlueprintSong;
   auto: { model: DrumTransitionModel | null; bars: number } | null;
+  play: SongTextPlayPos | null;
+  onPlayLineRef: (el: HTMLDivElement | null) => void;
   range: { start: number; end: number } | null;
   editingNameId: string | null;
   nameDraft: string;
@@ -553,10 +588,15 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
   const rawKey = section.key ?? song.key;
   const effKey: NoteName = rawKey in NOTE_TO_PC ? (rawKey as NoteName) : "C";
   const isUnassigned = block.kind === "unassigned";
+  const isPlayingBlock = props.play !== null;
   const meter = `${section.timeSignatureNumerator}/${2 ** section.timeSignatureDenPower}`;
 
   return (
-    <div className={`rounded border ${isUnassigned ? "border-dashed border-amber-500/40" : "border-edge/70"}`}>
+    <div
+      className={`rounded border ${
+        isPlayingBlock ? "border-accent/50" : isUnassigned ? "border-dashed border-amber-500/40" : "border-edge/70"
+      }`}
+    >
       {/* header */}
       <div className="relative flex items-center gap-2 px-2 py-1 bg-panelAlt/40 border-b border-edge/40 rounded-t flex-wrap">
         <button
@@ -589,6 +629,15 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
             {section.name}
           </button>
         )}
+        {props.play && (
+          <span
+            className="text-[9px] font-mono px-1 py-0.5 rounded border border-accent/50 text-accent whitespace-nowrap"
+            title={props.play.playing ? "Playing now" : "Playhead paused here — press play to resume"}
+          >
+            {props.play.playing ? "▶" : "⏸"}
+            {props.play.passCount > 1 ? ` ${props.play.occurrenceIndex + 1}/${props.play.passCount}` : ""}
+          </span>
+        )}
         {block.kind === "instrumental" && <span className="text-[9px] px-1 rounded border border-edge text-inkMuted/70">instrumental</span>}
         {isUnassigned && <span className="text-[9px] px-1 rounded border border-dashed border-amber-500/40 text-amber-400/80">parked</span>}
         <span className="text-2xs text-inkMuted font-mono">
@@ -608,6 +657,19 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
             ＋
           </button>
         </div>
+        {/* chord mini — the chord sounding right now, as playback loops the
+            section's authored progression */}
+        {props.play?.chordLabel && (
+          <button
+            className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-accent/60 text-accent hover:bg-accent/10 whitespace-nowrap"
+            title="Sounding now — click to open this chord's harmony tools"
+            onClick={() => {
+              if (props.play?.chordId) props.onChordClick(section.id, props.play.chordId);
+            }}
+          >
+            {props.play.chordLabel}
+          </button>
+        )}
         {/* harmony (hex) disclosure */}
         <button
           className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
@@ -646,14 +708,18 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
           {section.chords.length > 0 ? (
             <div className="flex items-start gap-3 flex-wrap">
               <div className="w-40 shrink-0">
-                <HexReadout chords={section.chords} keyName={effKey} />
+                <HexReadout chords={section.chords} keyName={effKey} activeChordId={props.play?.chordId ?? null} />
               </div>
               <div className="flex-1 min-w-[200px] space-y-1">
                 <div className="flex flex-wrap gap-1">
                   {section.chords.map((c) => (
                     <button
                       key={c.id}
-                      className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-edge text-inkMuted hover:text-ink hover:border-accent/60"
+                      className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                        props.play?.chordId === c.id
+                          ? "border-accent/60 text-accent"
+                          : "border-edge text-inkMuted hover:text-ink hover:border-accent/60"
+                      }`}
                       title="Select this chord and open the harmony tools"
                       onClick={() => props.onChordClick(section.id, c.id)}
                     >
@@ -687,6 +753,7 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
         <div className="pb-0.5">
           {block.lines.map((row, i) => {
             const isSelected = props.range != null && row.docIndex >= props.range.start && row.docIndex <= props.range.end;
+            const isPlayLine = props.play != null && props.play.lineIdx === i;
             const lineKey = `${row.line.sectionId}:${row.line.lineIndexInSection}`;
             return (
               <div key={row.docIndex}>
@@ -694,12 +761,18 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
                   <SplitHandle label={row.line.text || "(blank line)"} onSplit={() => props.onSplitAt(section.id, row.line.lineIndexInSection)} />
                 )}
                 <div
-                  className={`px-2 py-0.5 flex items-center gap-2 ${isSelected ? "bg-accent/20" : "hover:bg-panelAlt cursor-pointer"}`}
+                  ref={isPlayLine ? props.onPlayLineRef : undefined}
+                  className={`relative px-2 py-0.5 flex items-center gap-2 ${
+                    isSelected ? "bg-accent/20" : isPlayLine ? "bg-accent/10" : "hover:bg-panelAlt cursor-pointer"
+                  }`}
                   onMouseDown={() => props.onStartRange(row.docIndex, section.id)}
                   onMouseEnter={() => props.onExtendRange(row.docIndex)}
                   onDoubleClick={() => props.onBeginLineEdit(row)}
                   title="Click-drag to select lines · double-click to fix the text"
                 >
+                  {isPlayLine && (
+                    <span className={`absolute left-0 top-0 bottom-0 w-0.5 ${props.play?.playing ? "bg-accent" : "bg-accent/40"}`} />
+                  )}
                   {props.editingLineKey === lineKey ? (
                     <input
                       autoFocus

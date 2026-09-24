@@ -360,7 +360,20 @@ jump-open included); the karaoke popout is untouched.
   floats the active pass's chords over the words, and renders even with
   no playback at all (the rehearsal face for verifying the form from the
   words alone). Section mode is unchanged (and still the default in the
-  toggle's persistence: first visit opens in flow).
+  toggle's persistence: first visit opens in flow). **Playhead follow
+  (2026-09-24):** the Song text view now follows the track — the spine's
+  transport drives it on the lyrics route like everywhere else (the
+  transport is a silent position clock by design; Ableton owns the
+  sound). The playing block lights with a `▶`/`⏸` chip + its pass number
+  (`▶ 2/3`), the current line highlights with an accent bar and
+  auto-scrolls into view, and the block's authored progression shows as
+  a live **chord mini** (`I · F`) that advances as the loop plays —
+  clickable into its harmony tools; the ♪ hex readout lights the
+  sounding cell and the chord chips ring in sync. Derived per tick as a
+  minimal play-position, applied only on line/chord changes
+  (`songTextPlayback.ts` + shared `chordSlots.ts` — one slot
+  implementation shared with the popout, so the two readouts can't
+  drift).
 - **P4 (partly done 2026-09-21)**: the top tabs + identity header retired
   — views live in the left rail, the Library became a view, the spine
   chip carries identity. **SVG icon pass shipped the same day**

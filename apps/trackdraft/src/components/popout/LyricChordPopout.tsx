@@ -4,42 +4,27 @@ import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { useSongStore } from "../../store/songStore";
 import { sectionSpans, type SectionSpan } from "../../lib/arrangement";
+import { chordSlotsForSection } from "../../lib/harmony/chordSlots";
+import type { Chord } from "../../types/blueprint";
 import { TRANSPORT_CHANNEL_NAME, type TransportTick } from "../../lib/playback/songTransport";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { currentLineIndex, rebaseLyricsTimeline } from "./lyricTimeline";
 
 interface ChordSlot {
-  chord: { romanNumeral: string; root: string; quality: string };
+  chord: Chord;
   startBeat: number;
   durationBeats: number;
   display: string;
 }
 
-/** Expand a section's chord list to fill its duration, same as
- *  midiExport's loopChordsToFill — one pass of the user's progression,
- *  looped to cover the section's full beat count. Returns chord slots
- *  with absolute section-relative beat positions. */
-function expandChords(section: { chords: { romanNumeral: string; root: string; quality: string; beats: number }[] }, durationBeats: number): ChordSlot[] {
-  if (section.chords.length === 0) return [];
-  const cycleBeats = section.chords.reduce((sum, c) => sum + c.beats, 0);
-  if (cycleBeats <= 0) return [];
-
-  const slots: ChordSlot[] = [];
-  let cursor = 0;
-  while (cursor < durationBeats) {
-    for (const chord of section.chords) {
-      if (cursor >= durationBeats) break;
-      const chordBeats = Math.min(chord.beats, durationBeats - cursor);
-      slots.push({
-        chord,
-        startBeat: cursor,
-        durationBeats: chordBeats,
-        display: `${chord.romanNumeral} (${chordDisplayName(pitchClass(chord.root), chord.quality as "maj", "C")})`,
-      });
-      cursor += chord.beats;
-    }
-  }
-  return slots;
+/** Expand a section's chord list to fill its duration (the shared
+ *  `chordSlotsForSection` — the same loop `midiExport`'s `loopChordsToFill`
+ *  applies) and decorate each slot with the karaoke display string. */
+function expandChords(section: { chords: Chord[] }, durationBeats: number): ChordSlot[] {
+  return chordSlotsForSection(section.chords, durationBeats).map((slot) => ({
+    ...slot,
+    display: `${slot.chord.romanNumeral} (${chordDisplayName(pitchClass(slot.chord.root), slot.chord.quality as "maj", "C")})`,
+  }));
 }
 
 /** Which popout face the performer last chose — persisted so a tab that
