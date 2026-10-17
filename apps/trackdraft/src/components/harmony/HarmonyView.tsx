@@ -28,10 +28,8 @@ export default function HarmonyView() {
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
 
-  if (!currentSong) return null;
   const song = currentSong;
-
-  const activeSection = song.sections.find((s) => s.id === selectedSectionId) ?? song.sections[0] ?? null;
+  const activeSection = song?.sections.find((s) => s.id === selectedSectionId) ?? song?.sections[0] ?? null;
 
   useEffect(() => {
     setSelectedChordId(null);
@@ -43,12 +41,15 @@ export default function HarmonyView() {
   // deleted), never overriding a manual section-chip click afterward
   // since this only re-runs when the URL's search params actually change.
   useEffect(() => {
+    if (!song) return;
     const sectionParam = searchParams.get("section");
     if (sectionParam && song.sections.some((s) => s.id === sectionParam)) {
       setSelectedSectionId(sectionParam);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  if (!song) return null;
 
   // A section can override the song's key/scale (modulation) — everything
   // downstream reads/writes against this effective value, never

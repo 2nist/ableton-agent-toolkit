@@ -15,8 +15,8 @@
 export function normalizeTitle(title: string): string {
   return title
     .replace(/^CD\s*\d+\s*[-_]*\s*/i, "")
-    .replace(/^0\d+[\s\-_]+(?=[A-Za-z])/, "")
-    .replace(/^\d+[\s\-_]*[\-_][\s\-_]*(?=[A-Za-z])/, "")
+    .replace(/^0\d+[\s_-]+(?=[A-Za-z])/, "")
+    .replace(/^\d+[\s-]*[-_][\s-]*(?=[A-Za-z])/, "")
     .replace(/[_-]/g, " ")
     // LRCLIB track names routinely use Unicode smart-quote / acute-accent
     // characters for apostrophes (U+00B4, U+0060 backtick, U+2018/U+2019
@@ -37,8 +37,8 @@ export function normalizeTitle(title: string): string {
 export function cleanDisplayTitle(title: string): string {
   return title
     .replace(/^CD\s*\d+\s*[-_]*\s*/i, "")
-    .replace(/^0\d+[\s\-_]+(?=[A-Za-z])/, "")
-    .replace(/^\d+[\s\-_]*[\-_][\s\-_]*(?=[A-Za-z])/, "")
+    .replace(/^0\d+[\s_-]+(?=[A-Za-z])/, "")
+    .replace(/^\d+[\s-]*[-_][\s-]*(?=[A-Za-z])/, "")
     .replace(/_/g, " ")
     .replace(/\s+/g, " ")
     .trim();

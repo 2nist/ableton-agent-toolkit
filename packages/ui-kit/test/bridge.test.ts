@@ -14,9 +14,9 @@ import { createBridge, detectHost } from "../src/bridge.js";
 afterEach(() => {
   // @ts-expect-error -- deliberately clearing test-only globals between cases
   delete window.max;
-  // @ts-expect-error
+  // @ts-expect-error -- M4L host global is injected by jweb, not in lib.dom
   delete window.webkit;
-  // @ts-expect-error
+  // @ts-expect-error -- Extensions host global is injected by the webview
   delete window.chrome;
 });
 

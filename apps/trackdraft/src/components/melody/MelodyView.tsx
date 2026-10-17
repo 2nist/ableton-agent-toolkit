@@ -77,14 +77,6 @@ export default function MelodyView() {
     if (s) setSelectedSectionId(s);
   }, [searchParams]);
 
-  if (!currentSong) return null;
-  const song = currentSong;
-  const spans = sectionSpans(song);
-  const activeSection = song.sections.find((s) => s.id === selectedSectionId) ?? song.sections[0] ?? null;
-  const activeSpan = spans.find((s) => s.sectionId === activeSection?.id) ?? null;
-  const sectionKey = activeSection?.key ?? song.key;
-  const sectionScale = activeSection?.scale ?? song.scale;
-
   // Track the transport beat + play state so Record can anchor the take to
   // wherever the playhead is. Release the mic/click on unmount — but NOT the
   // transport: the header's global Play keeps the song going while you edit
@@ -103,6 +95,14 @@ export default function MelodyView() {
       recorderRef.current = null;
     };
   }, []);
+
+  if (!currentSong) return null;
+  const song = currentSong;
+  const spans = sectionSpans(song);
+  const activeSection = song.sections.find((s) => s.id === selectedSectionId) ?? song.sections[0] ?? null;
+  const activeSpan = spans.find((s) => s.sectionId === activeSection?.id) ?? null;
+  const sectionKey = activeSection?.key ?? song.key;
+  const sectionScale = activeSection?.scale ?? song.scale;
 
   if (song.sections.length === 0) {
     return (
