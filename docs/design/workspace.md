@@ -443,6 +443,22 @@ jump-open included); the karaoke popout is untouched.
   the shorter route so the register stays close; notes outside the scale keep
   their alteration above the new degree (a raised 4th stays raised), and the
   range readout (`C3–F#5`) shows where the line landed.
+- **Phase D — harmonic rhythm (2026-10-17)**: the Chords row and the Harmony
+  workspace gained a **rhythm strip** under the progression. A section's chord
+  list is one pass through the progression (every generator loops it to fill
+  the section), so the strip shows one cycle: each chord sized by its `beats`,
+  bar lines as a yardstick, and the repeat count for the section
+  (`4 bars cycle · ↻ ×2`, amber when the last pass is truncated). Dragging the
+  boundary between two chords **trades beats between them** — the cycle length
+  is preserved, so the repeat rate doesn't drift — snapped to a half beat; the
+  `2 bars / 1 bar / ½ bar` presets give every chord the same share, which
+  *does* change the cycle length (and syncs the section's `beatsPerChord`).
+  Because the drums, bass, color and melody stems all resolve chords through
+  the same `resolveChordOccurrences`, changing the harmonic rhythm moves every
+  layer at once — the spine's chord chips, `Bts/ch` and the fit status all
+  follow without a reload. When a meter outline governs chord timing (the
+  drums/Bend grid), the strip is read-only and says so rather than offering a
+  drag the generator would ignore.
 
 ## 8. Defaults chosen (veto-able)
 

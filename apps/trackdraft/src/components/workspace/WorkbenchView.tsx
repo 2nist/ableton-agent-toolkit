@@ -18,6 +18,7 @@ import { playSectionLoop, seekTo } from "../../lib/playback/transportControl";
 import IconBtn from "../common/IconBtn";
 import Icon from "../common/Icon";
 import ProgressionTrack from "../harmony/ProgressionTrack";
+import HarmonicRhythmStrip from "../harmony/HarmonicRhythmStrip";
 import HexReadout from "../harmony/HexReadout";
 import BassSettings from "../harmony/BassSettings";
 import ColorSettings from "../harmony/ColorSettings";
@@ -272,6 +273,15 @@ function SectionWorkspace({
     updateCurrentSong((s) => updateSection(s, section.id, (sec) => ({ ...sec, chords })));
   }
 
+  /** Harmonic-rhythm edits set the chords' `beats` *and* keep the section's
+   *  `beatsPerChord` default in step, so the next chord added inherits the
+   *  rhythm you just shaped. */
+  function updateRhythm(chords: Chord[], beatsPerChord: number) {
+    updateCurrentSong((s) =>
+      updateSection(s, section.id, (sec) => ({ ...sec, chords, beatsPerChord })),
+    );
+  }
+
   function updateSingleChord(chordId: string, update: Partial<Chord>) {
     updateCurrentSong((s) =>
       updateSection(s, section.id, (sec) => ({
@@ -350,6 +360,14 @@ function SectionWorkspace({
   const lyricLines = (section.lyrics ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
 
   const bpb = beatsPerBar(section);
+  /** Chord timing can come from a meter outline (Bend/drums grid) instead of
+   *  the chords' own `beats` — the rhythm strip goes read-only then, rather
+   *  than offering a drag the generator would ignore. Same precedence the
+   *  resolver uses. */
+  const chordsFollowOutline = !!(
+    section.harmonyMeterOutline ??
+    (section.harmonyFollowsDrums === false ? null : section.drumMeterOutline ?? null)
+  );
   const sectionSelection = useTimeSelectionStore((s) =>
     s.selection && s.selection.sectionId === section.id ? s.selection : null,
   );
@@ -583,6 +601,19 @@ function SectionWorkspace({
                 onSelectChord={selectChord}
                 onChangeChords={updateChords}
                 onUpdateChord={updateSingleChord}
+              />
+            </div>
+            <div className="mt-2">
+              <HarmonicRhythmStrip
+                chords={section.chords}
+                keyName={effKey}
+                beatsPerBar={bpb}
+                sectionBeats={span.durationBeats}
+                selectedChordId={selectedChordId}
+                outlineGoverned={chordsFollowOutline}
+                onSelectChord={selectChord}
+                onChange={updateRhythm}
+                compact
               />
             </div>
           </div>

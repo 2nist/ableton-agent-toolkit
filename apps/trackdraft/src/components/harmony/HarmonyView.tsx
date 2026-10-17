@@ -2,13 +2,14 @@ import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
-import type { Chord } from "../../types/blueprint";
+import { beatsPerBar, sectionDurationBeats, type Chord } from "../../types/blueprint";
 import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { updateSection } from "../../lib/sections";
 import HoneycombWheel from "./HoneycombWheel";
 import ProgressionTrack from "./ProgressionTrack";
+import HarmonicRhythmStrip from "./HarmonicRhythmStrip";
 import FitStatus from "./FitStatus";
 import ModeInferenceCard from "./ModeInferenceCard";
 import { previewChord } from "../../lib/playback/previewMidi";
@@ -67,9 +68,26 @@ export default function HarmonyView() {
   const effectiveKey: NoteName = rawKey in NOTE_TO_PC ? (rawKey as NoteName) : "C";
   const effectiveScale = activeSection?.scale ?? song.scale;
 
+  /** True when a meter outline (drums/Bend grid) decides chord timing, so the
+   *  chords' own `beats` are not what plays — the rhythm strip goes read-only. */
+  const chordsFollowOutline = !!(
+    activeSection &&
+    (activeSection.harmonyMeterOutline ??
+      (activeSection.harmonyFollowsDrums === false ? null : activeSection.drumMeterOutline ?? null))
+  );
+
   function updateChords(chords: Chord[]) {
     if (!activeSection) return;
     updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, chords })));
+  }
+
+  /** Harmonic-rhythm edits write the chords' `beats` and the section's
+   *  `beatsPerChord` default together. */
+  function updateRhythm(chords: Chord[], beatsPerChord: number) {
+    if (!activeSection) return;
+    updateCurrentSong((s) =>
+      updateSection(s, activeSection.id, (sec) => ({ ...sec, chords, beatsPerChord })),
+    );
   }
 
   function updateSingleChord(chordId: string, update: Partial<Chord>) {
@@ -139,6 +157,18 @@ export default function HarmonyView() {
               onChangeChords={updateChords}
               onUpdateChord={updateSingleChord}
             />
+            <div className="mt-2">
+              <HarmonicRhythmStrip
+                chords={activeSection.chords}
+                keyName={effectiveKey}
+                beatsPerBar={beatsPerBar(activeSection)}
+                sectionBeats={sectionDurationBeats(activeSection)}
+                selectedChordId={selectedChordId}
+                outlineGoverned={chordsFollowOutline}
+                onSelectChord={setSelectedChordId}
+                onChange={updateRhythm}
+              />
+            </div>
           </div>
         )}
         {activeSection && (
