@@ -12,9 +12,12 @@ import {
   type TransitionModel,
 } from "@drum/library";
 import { useSongStore } from "../../../store/songStore";
-import { useDrumsSelectionStore } from "../../../store/drumsSelectionStore";
+import { useTimeSelectionStore, drumRangeForSection } from "../../../store/timeSelectionStore";
+import { useTimeViewportStore } from "../../../store/timeViewportStore";
 import { useStudioSelectionStore } from "../../../store/studioSelectionStore";
 import { useDrumsDraftStore } from "../../../store/drumsDraftStore";
+import { anchoredScrollLeft, clampBarPx, scrollBarFromLeft, scrollLeftFromBar } from "../../../lib/time/timeMath";
+import { usePinchToZoom } from "../../../hooks/usePinchToZoom";
 import { updateSection } from "../../../lib/sections";
 import { sectionSpans, totalBars, type SectionSpan } from "../../../lib/arrangement";
 import { resolveSectionLaneHits, type LaneHit, type LaneHits } from "../../../lib/timeline/drumLaneHits";
@@ -167,13 +170,30 @@ export default function DrumBlocksView() {
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
-  const range = useDrumsSelectionStore((s) => s.range);
-  const setRange = useDrumsSelectionStore((s) => s.setRange);
-  const clearRange = useDrumsSelectionStore((s) => s.clearRange);
+  const selection = useTimeSelectionStore((s) => s.selection);
+  const range = useMemo(
+    () =>
+      selection && selection.sectionId === selectedSectionId
+        ? { startBeat: selection.startBeat, endBeat: selection.endBeat, laneKeys: selection.lanes }
+        : null,
+    [selection, selectedSectionId],
+  );
+  const setRange = useCallback((next: { startBeat: number; endBeat: number; laneKeys: string[] }) => {
+    const sectionId = useStudioSelectionStore.getState().selectedSectionId;
+    if (!sectionId) return;
+    useTimeSelectionStore.getState().setSelection({
+      sectionId,
+      startBeat: next.startBeat,
+      endBeat: next.endBeat,
+      lanes: next.laneKeys,
+    });
+  }, []);
+  const clearRange = useCallback(() => useTimeSelectionStore.getState().clearSelection(), []);
   const draftSectionId = useDrumsDraftStore((s) => s.sectionId);
   const draftSection = useDrumsDraftStore((s) => s.section);
 
-  const [zoom, setZoom] = useState(1.4);
+  const barPx = useTimeViewportStore((s) => s.scales.section);
+  const zoom = barPx / BAR_PX;
   const [padMode, setPadMode] = useState<"euclid" | "motion">("euclid");
   const [editorOpen, setEditorOpen] = useState(false);
   const [paramMenu, setParamMenu] = useState<string | null>(null);
@@ -201,10 +221,6 @@ export default function DrumBlocksView() {
   const handleRef = useRef<HandleDragState | null>(null);
   const padDragRef = useRef<PadDragState | null>(null);
   const copyRef = useRef<CopyDragState | null>(null);
-  const zoomRef = useRef(zoom);
-  useEffect(() => {
-    zoomRef.current = zoom;
-  }, [zoom]);
 
   // Wheel zoom, cursor-anchored: ⌘/Ctrl anywhere (incl. trackpad pinch),
   // and a PLAIN wheel while the pointer is over the sequencer's cell area
@@ -222,13 +238,15 @@ export default function DrumBlocksView() {
       const overCells = localY >= TOP_PAD && localY <= STACK_BOTTOM;
       if (!e.ctrlKey && !e.metaKey && !overCells) return;
       e.preventDefault();
-      const prev = zoomRef.current;
+      const state = useTimeViewportStore.getState();
+      const prevBarPx = state.scales.section;
+      const prev = prevBarPx / BAR_PX;
       const next = clamp(prev * (e.deltaY < 0 ? 1.12 : 1 / 1.12), 0.5, 6);
       if (Math.abs(next - prev) < 1e-6) return;
+      const nextBarPx = next * BAR_PX;
       const viewX = e.clientX - rect.left;
-      const contentX = viewX + el.scrollLeft;
-      const nextContentX = X0 + (contentX - X0) * (next / prev);
-      setZoom(next);
+      const nextContentX = X0 + (viewX + el.scrollLeft - X0) * (next / prev);
+      state.setScale("section", nextBarPx);
       requestAnimationFrame(() => {
         el.scrollLeft = Math.max(0, nextContentX - viewX);
       });
@@ -236,6 +254,69 @@ export default function DrumBlocksView() {
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
+
+  // A different song is a different timeline: don't restore the previous
+  // song's section-depth scroll into it.
+  const lastSongIdRef = useRef(song?.id ?? null);
+  useEffect(() => {
+    const id = song?.id ?? null;
+    if (lastSongIdRef.current === id) return;
+    lastSongIdRef.current = id;
+    useTimeViewportStore.getState().setScrollBar("section", 0);
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0;
+  }, [song?.id]);
+
+  // Restore the section-depth scroll position (stored in bars) and record
+  // manual scrolls so leaving and returning to the Blocks editor lands in
+  // the same place.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const restore = requestAnimationFrame(() => {
+      const state = useTimeViewportStore.getState();
+      el.scrollLeft = scrollLeftFromBar(state.scrollBars.section, state.scales.section);
+    });
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const state = useTimeViewportStore.getState();
+        state.setScrollBar("section", scrollBarFromLeft(el.scrollLeft, state.scales.section));
+      });
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(restore);
+      el.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  // Pinch-to-zoom on touch. A second finger cancels any single-pointer
+  // gesture that the first finger started (marquee/press), so pinching can
+  // never accidentally edit a step.
+  usePinchToZoom(
+    scrollRef,
+    ({ scale, focalX }) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const prev = useTimeViewportStore.getState().scales.section;
+      const next = clampBarPx("section", prev * scale);
+      if (Math.abs(next - prev) < 1e-6) return;
+      const left = anchoredScrollLeft(el.scrollLeft, focalX, prev, next);
+      useTimeViewportStore.getState().setScale("section", next);
+      requestAnimationFrame(() => {
+        el.scrollLeft = left;
+      });
+    },
+    {
+      onPinchStart: () => {
+        pressRef.current = null;
+        setMarquee(null);
+      },
+    },
+  );
 
   const spans = useMemo(() => (song ? sectionSpans(song) : []), [song]);
   const width = useMemo(() => barX(totalBars(spans), zoom) + 40, [spans, zoom]);
@@ -619,8 +700,7 @@ export default function DrumBlocksView() {
    *  step keeps its box; resolved-only steps flatten in), with the full
    *  note draft and its starting value for the drag delta. */
   const buildParamScrub = useCallback((cell: CellPress, param: StepParam, pressed0: number): ParamScrubTarget | null => {
-    const st = useDrumsSelectionStore.getState();
-    const rng = st.range;
+    const rng = drumRangeForSection(selectedSectionId);
     const grid = gridStepForZoom(zoom);
     if (!rng || rng.endBeat - rng.startBeat <= grid + 1e-6) return null;
     if (cell.stepBeat < rng.startBeat - 1e-6 || cell.stepBeat >= rng.endBeat - 1e-6) return null;
@@ -661,7 +741,7 @@ export default function DrumBlocksView() {
     }
     if (targets.length === 0) return null;
     return { param, laneKey: cell.laneKey, start: rng.startBeat, end: rng.endBeat, pressed0, targets };
-  }, [zoom, hitsForSpan, effectiveSection]);
+  }, [zoom, hitsForSpan, effectiveSection, selectedSectionId]);
 
   /** Range scrub write: one steps block over the selection, rebuilt from
    *  the press-time snapshot — continuous params move by the drag delta,
@@ -1081,7 +1161,9 @@ export default function DrumBlocksView() {
       <div ref={scrollRef} className="relative overflow-x-auto border border-edge rounded bg-black">
         <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-0.5 border border-edge rounded bg-black/90 px-1 py-0.5 select-none">
           <button
-            onClick={() => setZoom((z) => clamp(z / 1.1, 0.5, 6))}
+            onClick={() =>
+              useTimeViewportStore.getState().setScale("section", clampBarPx("section", barPx / 1.1))
+            }
             className="w-5 h-5 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
           >
             −
@@ -1090,7 +1172,9 @@ export default function DrumBlocksView() {
             {Math.round(zoom * 100)}%
           </span>
           <button
-            onClick={() => setZoom((z) => clamp(z * 1.1, 0.5, 6))}
+            onClick={() =>
+              useTimeViewportStore.getState().setScale("section", clampBarPx("section", barPx * 1.1))
+            }
             className="w-5 h-5 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
           >
             +

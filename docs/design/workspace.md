@@ -382,6 +382,24 @@ jump-open included); the karaoke popout is untouched.
   Remaining: arrangement lanes (chord /
   melody contour / groove / bend — **no lyric lane, vetoed 2026-09-21**);
   maps · recipes · templates live in the Library view; library drag-ins.
+- **Phase A — shared time foundation (started 2026-10-17)**: time is now a
+  first-class UI object instead of per-component state. Two stores under
+  `apps/trackdraft/src/store/`:
+  - `timeViewportStore` — one scale (px per **bar**, preserving the
+    bar-linear axis) and scroll position (stored in bars, so it survives
+    zoom) per depth: `song` (spine/studio) and `section` (drums and every
+    future layer editor). Scale + snap persist; scroll hands off between
+    views. Wheel and **two-finger pinch** share the same anchored math
+    (`lib/time/timeMath.ts`), and pinch cancels any in-flight single-pointer
+    gesture in the Blocks editor.
+  - `timeSelectionStore` — the one section-relative beat range
+    (`sectionId · startBeat · endBeat · lanes`). The drums range store is
+    gone; the Blocks marquee, the workbench line view, and future harmony/
+    melody layers all read the same selection, and a range can never leak
+    into a different section.
+  Exit test for the next slice: the section workspace renders harmony,
+  drums, bass, melody and lyrics rows against this shared ruler, and a drag
+  in one row is visible in the others.
 
 ## 8. Defaults chosen (veto-able)
 

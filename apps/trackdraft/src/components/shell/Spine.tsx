@@ -16,15 +16,23 @@ import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { useInspectorStore } from "../../store/inspectorStore";
 import { classifySong } from "../../lib/classification";
 import { askConfirm } from "../../lib/confirm";
+import {
+  SONG_BAR_PX_STEPS as BAR_PX_STEPS,
+  anchoredScrollLeft,
+  clampBarPx,
+  scrollBarFromLeft,
+  scrollLeftFromBar,
+} from "../../lib/time/timeMath";
+import { useTimeViewportStore } from "../../store/timeViewportStore";
+import { usePinchToZoom } from "../../hooks/usePinchToZoom";
 import { beatsPerBar, type BlueprintSection, type BlueprintSong, type SectionRole } from "../../types/blueprint";
 
 /** Zoom presets in px per BAR. Bar-linear on purpose: every bar is the
  *  same width — 7/8 bars included — because the bars are the axis (a
  *  time-linear scale would make odd-meter bars narrower than their
  *  neighbours and break "this section is an 8, that one's a 16"). The
- *  blocks-view lesson applies: zoom must be able to GROW — the ladder runs
- *  4→80 with 10 the default; the mouse wheel and − / + walk it. */
-const BAR_PX_STEPS = [4, 6, 8, 10, 14, 20, 28, 40, 56, 80] as const;
+ *  ladder now lives in `lib/time/timeMath` so every song-depth surface
+ *  shares one zoom state. */
 
 /** Rows for the block context palette (placement law tier 3:
  *  selection-scoped floats — the drums selection control is the first
@@ -63,7 +71,8 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   const { songId } = useParams<{ songId: string }>();
   const id = songId ?? song.id;
   const [tick, setTick] = useState<TransportTick | null>(null);
-  const [barPx, setBarPx] = useState<number>(10);
+  const barPx = useTimeViewportStore((s) => s.scales.song);
+  const setBarPx = (px: number) => useTimeViewportStore.getState().setScale("song", px);
   /** Auto-follow the playhead while playing; drops off on manual scroll. */
   const [follow, setFollow] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
@@ -168,6 +177,44 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     }
   }, [follow, tick?.isPlaying, playheadPx]);
 
+  // A different song is a different timeline: don't restore the previous
+  // song's scroll position into it.
+  const lastSongRef = useRef(song.id);
+  useEffect(() => {
+    if (lastSongRef.current === song.id) return;
+    lastSongRef.current = song.id;
+    useTimeViewportStore.getState().setScrollBar("song", 0);
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0;
+  }, [song.id]);
+
+  // Restore this depth's last scroll position (stored in bars, so it
+  // survives zoom changes) and record manual scrolls for the next view.
+  // Only one song-depth surface is mounted at a time, so this is a
+  // hand-off, not a live sync.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const restore = requestAnimationFrame(() => {
+      const state = useTimeViewportStore.getState();
+      el.scrollLeft = scrollLeftFromBar(state.scrollBars.song, state.scales.song);
+    });
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const state = useTimeViewportStore.getState();
+        state.setScrollBar("song", scrollBarFromLeft(el.scrollLeft, state.scales.song));
+      });
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(restore);
+      el.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
   // Walk the selection into view when stopped (irrelevant while the
   // playhead is driving the scroll — follow owns it then).
   useEffect(() => {
@@ -221,6 +268,21 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [barPx]);
+
+  // Pinch-to-zoom on touch, anchored like the wheel. The wheel path stays
+  // for trackpads; this gives iPad/phone the same gesture as Ableton.
+  usePinchToZoom(scrollRef, ({ scale, focalX }) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const prev = useTimeViewportStore.getState().scales.song;
+    const next = clampBarPx("song", prev * scale);
+    if (Math.abs(next - prev) < 1e-6) return;
+    const left = anchoredScrollLeft(el.scrollLeft, focalX, prev, next);
+    useTimeViewportStore.getState().setScale("song", next);
+    requestAnimationFrame(() => {
+      el.scrollLeft = left;
+    });
+  });
 
   // Hotkeys — workbench-wide: space = play/pause · Z = zoom-to-section ·
   // F = fit · L = section loop · [ ] = zoom ladder · Esc closes the palette

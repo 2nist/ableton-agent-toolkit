@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import type { BlueprintSong } from "../../types/blueprint";
 import { beatsPerBar } from "../../types/blueprint";
 import type { SectionSpan } from "../../lib/arrangement";
-import { useDrumsSelectionStore } from "../../store/drumsSelectionStore";
+import { useTimeSelectionStore } from "../../store/timeSelectionStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import DrumsView, { CLASSIC_BAR_PX } from "../drums/DrumsView";
 
@@ -41,7 +41,7 @@ export default function DrumLineEmbed({
   const { songId } = useParams<{ songId: string }>();
   const id = songId ?? song.id;
   const setSharedSection = useStudioSelectionStore((s) => s.setSelectedSectionId);
-  const setRange = useDrumsSelectionStore((s) => s.setRange);
+  const setRange = useTimeSelectionStore((s) => s.setSelection);
 
   // Measure the crop box so the fitted zoom keeps the whole focused
   // section + 4 bars of context on each side inside it.
@@ -90,12 +90,13 @@ export default function DrumLineEmbed({
       }
     }
 
-    // Section first, then the range — the store drops a range when the
-    // section changes, so order matters here. Staging makes this section
-    // + range the target of the drums tools (rail tab), WITHOUT leaving
-    // the workbench; the double-click dives to the Blocks editor.
+    // Section first, then the range — the shared selection carries its own
+    // sectionId, so a range can never be applied to a different section.
+    // Staging makes this section + range the target of the drums tools
+    // (rail tab), WITHOUT leaving the workbench; the double-click dives to
+    // the Blocks editor.
     setSharedSection(pickedSpan.sectionId);
-    setRange({ startBeat: a, endBeat: b, laneKeys: ALL_LANES });
+    setRange({ sectionId: pickedSpan.sectionId, startBeat: a, endBeat: b, lanes: ALL_LANES });
     onEngage?.();
     if (!dive) return;
     try {
