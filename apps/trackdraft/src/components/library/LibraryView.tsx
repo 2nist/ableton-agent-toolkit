@@ -5,6 +5,7 @@ import { SONG_MAPS, type SongMap } from "../../data/songMaps";
 import { GENRE_CATALOG } from "../../data/genre-catalog/index";
 import { applySongMap } from "../../lib/sections";
 import { STYLE_RECIPES } from "../../lib/style/bend";
+import { askConfirm } from "../../lib/confirm";
 
 /**
  * The Library — a VIEW now (user decision 2026-09-21: "make the library a
@@ -25,8 +26,8 @@ export default function LibraryView() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<"songs" | "maps" | "recipes">("songs");
 
-  function applyMap(map: SongMap) {
-    if (!window.confirm(`Replace "${currentSong?.title}"'s sections with the "${map.name}" map?`)) return;
+  async function applyMap(map: SongMap) {
+    if (!(await askConfirm({ title: "Replace sections", message: `Replace "${currentSong?.title}"'s sections with the "${map.name}" map?`, confirmLabel: "Replace", danger: true }))) return;
     updateCurrentSong((s) => applySongMap(s, map));
   }
 

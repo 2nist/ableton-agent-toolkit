@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PRESET_PROGRESSIONS, SCALE_NAMES, MODE_DATA, pitchClass, noteName } from "@music-theory/core";
 import type { NoteName, ChordQuality } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
+import { askConfirm } from "../../lib/confirm";
 
 interface PresetPickerProps {
   keyName: NoteName;
@@ -108,7 +109,11 @@ export default function PresetPicker({
   const [key, preset] = PRESET_ENTRIES.find(([k]) => k === selected)!;
 
   function handleApplyBuiltin() {
-    if (hasChords && !confirm(`Replace ${sectionName}'s progression with "${preset.name}"?`)) return;
+    void applyBuiltin();
+  }
+
+  async function applyBuiltin() {
+    if (hasChords && !(await askConfirm({ title: "Replace progression", message: `Replace ${sectionName}'s progression with "${preset.name}"?`, confirmLabel: "Replace", danger: true }))) return;
     const keyPc = pitchClass(keyName);
     const chords: Chord[] = [];
     for (const degree of preset.degrees) {
@@ -126,7 +131,11 @@ export default function PresetPicker({
   }
 
   function handleApplyCustom(preset: SavedPreset) {
-    if (hasChords && !confirm(`Replace ${sectionName}'s progression with "${preset.name}"?`)) return;
+    void applyCustom(preset);
+  }
+
+  async function applyCustom(preset: SavedPreset) {
+    if (hasChords && !(await askConfirm({ title: "Replace progression", message: `Replace ${sectionName}'s progression with "${preset.name}"?`, confirmLabel: "Replace", danger: true }))) return;
     onApply(degreesToChords(preset.degrees, keyName, beatsPerChord));
   }
 

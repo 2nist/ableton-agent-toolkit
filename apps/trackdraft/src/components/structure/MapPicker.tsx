@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { SONG_MAPS } from "../../data/songMaps";
 import { GENRE_CATALOG } from "../../data/genre-catalog/index";
 import type { ApplySongMapOptions } from "../../lib/sections";
+import { askConfirm } from "../../lib/confirm";
 
 type MapSource = "narrative" | "genre";
 
@@ -114,10 +115,10 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
         </select>
         <button
           className="bg-accent text-black text-sm font-medium px-3 py-1 rounded"
-          onClick={() => {
+          onClick={async () => {
             const currentMap = maps.find((m) => m.id === effectiveId);
             if (!currentMap) return;
-            if (hasSections && !confirm(`Replace all sections with the "${currentMap.name}" template?`)) return;
+            if (hasSections && !(await askConfirm({ title: "Replace sections", message: `Replace all sections with the "${currentMap.name}" template?`, confirmLabel: "Replace", danger: true }))) return;
             onApply(effectiveId, {
               variantName: variantName || undefined,
               excludeOptional,

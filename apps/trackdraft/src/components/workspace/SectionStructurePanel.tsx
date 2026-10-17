@@ -4,6 +4,7 @@ import { removeSection, repeatsFor, updateRepeats, updateSection } from "../../l
 import { DRUM_PATTERN_OPTIONS, variantCount } from "../../lib/playback/drumPreview";
 import DrumNecklacePreview from "../structure/DrumNecklacePreview";
 import FitStatus from "../harmony/FitStatus";
+import { askConfirm } from "../../lib/confirm";
 import type { BlueprintSection, DrumPattern, SectionRole, VelocityPreset } from "../../types/blueprint";
 
 const ROLES: SectionRole[] = [
@@ -55,8 +56,8 @@ export default function SectionStructurePanel() {
   const onChange = (updater: (s: BlueprintSection) => BlueprintSection) =>
     updateCurrentSong((s) => updateSection(s, section.id, updater));
   const onChangeRepeats = (n: number) => updateCurrentSong((s) => updateRepeats(s, section.id, n));
-  const onDelete = () => {
-    if (!window.confirm(`Delete "${section.name}"?`)) return;
+  const onDelete = async () => {
+    if (!(await askConfirm({ title: "Delete section", message: `Delete "${section.name}"?`, confirmLabel: "Delete", danger: true }))) return;
     updateCurrentSong((s) => removeSection(s, section.id));
     setSelectedSectionId(null);
   };

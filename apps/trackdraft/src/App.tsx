@@ -16,6 +16,7 @@ import LibraryView from "./components/library/LibraryView";
 import SettingsView from "./components/settings/SettingsView";
 import LyricChordPopout from "./components/popout/LyricChordPopout";
 import StorageWarning from "./components/shell/StorageWarning";
+import ConfirmHost from "./components/common/ConfirmHost";
 
 // Labs pull in @measured/puck (and its editor stack). They are dev tools, not
 // part of the songwriting loop — statically importing them put ~4 MB of Puck
@@ -58,6 +59,7 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-canvas text-ink">
         <StorageWarning />
+        <ConfirmHost />
         <Suspense fallback={null}>
           <Routes>
           <Route path="/" element={<Dashboard />} />

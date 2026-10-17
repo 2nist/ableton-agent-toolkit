@@ -15,6 +15,7 @@ import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { useInspectorStore } from "../../store/inspectorStore";
 import { classifySong } from "../../lib/classification";
+import { askConfirm } from "../../lib/confirm";
 import { beatsPerBar, type BlueprintSection, type BlueprintSong, type SectionRole } from "../../types/blueprint";
 
 /** Zoom presets in px per BAR. Bar-linear on purpose: every bar is the
@@ -852,10 +853,10 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           </button>
           <button
             className="w-full text-left px-2.5 py-1 font-mono text-[11px] text-inkMuted/70 hover:text-red-400 hover:bg-panelAlt/60"
-            onClick={() => {
+            onClick={async () => {
               const span = menu.span;
               setMenu(null);
-              if (!window.confirm(`Delete "${span.section.name}"?`)) return;
+              if (!(await askConfirm({ title: "Delete section", message: `Delete "${span.section.name}"?`, confirmLabel: "Delete", danger: true }))) return;
               updateCurrentSong((s) => removeSection(s, span.sectionId));
               if (selectedSectionId === span.sectionId) setSelectedSectionId(null);
             }}
