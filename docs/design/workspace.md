@@ -450,7 +450,12 @@ jump-open included); the karaoke popout is untouched.
   bar lines as a yardstick, and the repeat count for the section
   (`4 bars cycle · ↻ ×2`, amber when the last pass is truncated). Dragging the
   boundary between two chords **trades beats between them** — the cycle length
-  is preserved, so the repeat rate doesn't drift — snapped to a half beat; the
+  is preserved, so the repeat rate doesn't drift — snapped to a half beat.
+  Dragging the **cycle end** resizes the *last* chord, which re-times the loop
+  instead: the header updates live ("4.5 bars cycle · ↻ ×1.778, last pass
+  truncated"), and the strip pins its horizontal scale for the duration of the
+  gesture and scrolls itself when the cycle outgrows the panel, so the handle
+  never runs away from the pointer. The
   `2 bars / 1 bar / ½ bar` presets give every chord the same share, which
   *does* change the cycle length (and syncs the section's `beatsPerChord`).
   Because the drums, bass, color and melody stems all resolve chords through

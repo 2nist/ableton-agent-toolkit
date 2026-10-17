@@ -34,6 +34,7 @@ import {
   dominantBeatsPerChord,
   evenHarmonicRhythm,
   redistributeBeats,
+  resizeCycleEnd,
   repeatsEvenly,
   rhythmPresets,
 } from "../../lib/harmony/harmonicRhythm";
@@ -41,6 +42,11 @@ import {
 const HANDLE_PX = 14;
 /** Left gutter that labels the two lanes, so they stay aligned. */
 const GUTTER_W = 50;
+/** Floor for the horizontal scale: a very long cycle scrolls instead of
+ *  squeezing its cells into unreadable slivers. */
+const MIN_PX_PER_BEAT = 14;
+/** How close to the edge a drag has to get before the strip scrolls itself. */
+const EDGE_SCROLL_PX = 28;
 
 export interface ProgressionStripProps {
   chords: Chord[];
@@ -69,12 +75,19 @@ export default function ProgressionStrip({
 }: ProgressionStripProps) {
   const [width, setWidth] = useState(0);
   const [draft, setDraft] = useState<Chord[] | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ index: number; startX: number } | null>(null);
+  const drag = useRef<{ kind: "boundary" | "end"; index: number; startX: number; pxPerBeat: number } | null>(
+    null,
+  );
+  /** Horizontal scale, pinned for the length of a gesture: dragging the cycle
+   *  end changes the cycle, and letting the scale re-fit mid-drag would make
+   *  the handle run away from the pointer. */
+  const frozenPx = useRef<number | null>(null);
   const draftRef = useRef<Chord[] | null>(null);
 
   useEffect(() => {
-    const el = wrapRef.current;
+    const el = scrollRef.current;
     if (!el) return;
     const observer = new ResizeObserver(() => setWidth(el.clientWidth));
     setWidth(el.clientWidth);
@@ -83,8 +96,10 @@ export default function ProgressionStrip({
   }, []);
 
   const view = draft ?? chords;
-  const cycle = cycleBeats(chords);
-  const pxPerBeat = width > 0 && cycle > 0 ? width / cycle : 0;
+  const cycle = cycleBeats(view);
+  const naturalPx = width > 0 && cycle > 0 ? width / cycle : 0;
+  const pxPerBeat = frozenPx.current ?? Math.max(MIN_PX_PER_BEAT, naturalPx);
+  const contentWidth = Math.max(width, cycle * pxPerBeat);
 
   const cells = useMemo(() => {
     let acc = 0;
@@ -100,10 +115,16 @@ export default function ProgressionStrip({
     setDraft(next);
   }, []);
 
-  function handleDown(event: React.PointerEvent<HTMLDivElement>, index: number) {
+  function beginDrag(
+    kind: "boundary" | "end",
+    index: number,
+    event: React.PointerEvent<HTMLDivElement>,
+  ) {
     if (outlineGoverned || event.button !== 0) return;
     event.stopPropagation();
-    drag.current = { index, startX: event.clientX };
+    if (pxPerBeat <= 0) return;
+    frozenPx.current = pxPerBeat;
+    drag.current = { kind, index, startX: event.clientX, pxPerBeat };
     try {
       wrapRef.current?.setPointerCapture(event.pointerId);
     } catch {
@@ -111,15 +132,33 @@ export default function ProgressionStrip({
     }
   }
 
+  /** Keep the pointer in view while a drag pushes the cycle past the edge. */
+  function autoScroll(event: React.PointerEvent) {
+    const el = scrollRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const fromRight = event.clientX - (rect.right - EDGE_SCROLL_PX);
+    const fromLeft = rect.left + EDGE_SCROLL_PX - event.clientX;
+    if (fromRight > 0) el.scrollLeft += fromRight;
+    else if (fromLeft > 0) el.scrollLeft -= fromLeft;
+  }
+
   function handleMove(event: React.PointerEvent<HTMLDivElement>) {
     const state = drag.current;
-    if (!state || pxPerBeat <= 0) return;
-    applyDraft(redistributeBeats(chords, state.index, (event.clientX - state.startX) / pxPerBeat));
+    if (!state || state.pxPerBeat <= 0) return;
+    const delta = (event.clientX - state.startX) / state.pxPerBeat;
+    applyDraft(
+      state.kind === "end"
+        ? resizeCycleEnd(chords, delta)
+        : redistributeBeats(chords, state.index, delta),
+    );
+    if (state.kind === "end") autoScroll(event);
   }
 
   function handleUp() {
     const state = drag.current;
     drag.current = null;
+    frozenPx.current = null;
     const next = draftRef.current;
     applyDraft(null);
     if (!state || !next) return;
@@ -128,6 +167,7 @@ export default function ProgressionStrip({
 
   function handleCancel() {
     drag.current = null;
+    frozenPx.current = null;
     applyDraft(null);
   }
 
@@ -145,9 +185,9 @@ export default function ProgressionStrip({
     );
   }
 
-  const bars = cycleBars(chords, beatsPerBar);
-  const repeats = cycleRepeats(chords, sectionBeats);
-  const even = repeatsEvenly(chords, sectionBeats);
+  const bars = cycleBars(view, beatsPerBar);
+  const repeats = cycleRepeats(view, sectionBeats);
+  const even = repeatsEvenly(view, sectionBeats);
   const barTicks = barTicksFor(cycle, beatsPerBar);
 
   return (
@@ -167,7 +207,9 @@ export default function ProgressionStrip({
             follows the drum grid
           </span>
         ) : (
-          <span className="text-[9px] font-mono text-inkMuted/45">drag a boundary to rebalance</span>
+          <span className="text-[9px] font-mono text-inkMuted/45">
+            drag a boundary to rebalance · the end to re-time the cycle
+          </span>
         )}
 
         <span className="flex-1" />
@@ -196,21 +238,34 @@ export default function ProgressionStrip({
       </div>
 
       <div className="flex">
-        <div
-          style={{ width: GUTTER_W }}
-          className="shrink-0 pr-1 text-right text-[8px] font-mono uppercase tracking-wide text-inkMuted/50 self-center"
-        >
-          rhythm
+        <div style={{ width: GUTTER_W }} className="shrink-0">
+          <div
+            className={`flex items-center justify-end pr-1 text-[8px] font-mono uppercase tracking-wide text-inkMuted/50 ${
+              compact ? "h-9" : "h-10"
+            }`}
+          >
+            rhythm
+          </div>
+          <div
+            className="mt-0.5 flex items-center justify-end pr-1 text-[8px] font-mono uppercase tracking-wide text-inkMuted/50"
+            style={{ height: 22 }}
+          >
+            voicing
+          </div>
         </div>
-        <div
-          ref={wrapRef}
-          className={`relative flex-1 rounded border border-edge/70 bg-panelAlt/40 overflow-hidden ${
-            compact ? "h-9" : "h-10"
-          } ${outlineGoverned ? "" : "touch-none"}`}
-          onPointerMove={handleMove}
-          onPointerUp={handleUp}
-          onPointerCancel={handleCancel}
-        >
+        <div ref={scrollRef} className="flex-1 overflow-x-auto overflow-y-hidden">
+          <div
+            ref={wrapRef}
+            style={{ width: contentWidth }}
+            onPointerMove={handleMove}
+            onPointerUp={handleUp}
+            onPointerCancel={handleCancel}
+          >
+            <div
+              className={`relative rounded border border-edge/70 bg-panelAlt/40 overflow-hidden ${
+                compact ? "h-9" : "h-10"
+              } ${outlineGoverned ? "" : "touch-none"}`}
+            >
         {cells.map(({ chord, start, end }, index) => {
           const cellWidth = (end - start) * pxPerBeat;
           const selected = chord.id === selectedChordId;
@@ -267,25 +322,36 @@ export default function ProgressionStrip({
               aria-label={`Chord boundary ${index + 1}`}
               className="absolute inset-y-0 z-20 -translate-x-1/2 cursor-col-resize group"
               style={{ left: end * pxPerBeat, width: HANDLE_PX }}
-              onPointerDown={(event) => handleDown(event, index)}
+              onPointerDown={(event) => beginDrag("boundary", index, event)}
               title="Drag to trade beats with the next chord (snaps to a half beat)"
             >
                 <div className="mx-auto h-full w-1 rounded bg-white/15 group-hover:bg-accent/80" />
               </div>
             ))}
-        </div>
-      </div>
 
-      {/* Voicing lane — bass tone and spacing, one click each. Aligned with
-          the rhythm cells above via the same px-per-beat. */}
-      <div className="flex mt-0.5">
-        <div
-          style={{ width: GUTTER_W }}
-          className="shrink-0 pr-1 text-right text-[8px] font-mono uppercase tracking-wide text-inkMuted/50 self-center"
-        >
-          voicing
-        </div>
-        <div className="relative flex-1 rounded border border-edge/50 bg-panelAlt/20 overflow-hidden" style={{ height: 22 }}>
+          {/* Cycle-end handle — resizes the LAST chord, which changes the
+              cycle length (and so the repeat rate) rather than trading with a
+              neighbour. */}
+          {!outlineGoverned && (
+            <div
+              role="separator"
+              aria-label="Cycle end"
+              className="absolute inset-y-0 z-20 cursor-col-resize group"
+              style={{ left: Math.max(0, contentWidth - HANDLE_PX), width: HANDLE_PX }}
+              onPointerDown={(event) => beginDrag("end", cells.length - 1, event)}
+              title="Drag to lengthen or shorten the last chord — this changes the cycle length, so the progression repeats more or less often"
+            >
+              <div className="mx-auto h-full w-1 rounded bg-white/25 group-hover:bg-accent" />
+            </div>
+          )}
+            </div>
+
+            {/* Voicing lane — bass tone and spacing, one click each, aligned
+                with the rhythm cells above. */}
+            <div
+              className="relative mt-0.5 rounded border border-edge/50 bg-panelAlt/20 overflow-hidden"
+              style={{ height: 22 }}
+            >
           {cells.map(({ chord, start, end }, index) => {
             const cellWidth = (end - start) * pxPerBeat;
             const inversion = chord.voicing?.inversion ?? 0;
@@ -333,6 +399,8 @@ export default function ProgressionStrip({
               </div>
             );
           })}
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -117,6 +117,28 @@ export function evenHarmonicRhythm(chords: Chord[], beatsPerChord: number): Chor
   return chords.map((chord) => ({ ...chord, beats }));
 }
 
+/**
+ * Resize the LAST chord, which lengthens or shortens the whole cycle (there
+ * is no next chord to trade with). This is the one edit that changes the
+ * repeat rate, so the UI shows the new cycle beside it. Never shorter than
+ * one grid cell.
+ */
+export function resizeCycleEnd(
+  chords: Chord[],
+  deltaBeats: number,
+  grid: number = RHYTHM_GRID,
+): Chord[] {
+  if (chords.length === 0) return chords;
+  const step = grid > 0 ? grid : MIN_CHORD_BEATS;
+  const last = chords[chords.length - 1];
+  const beats = Math.max(step, Math.round((last.beats + deltaBeats) / step) * step);
+  const rounded = round(beats);
+  if (rounded === last.beats) return chords;
+  return chords.map((chord, index) =>
+    index === chords.length - 1 ? { ...chord, beats: rounded } : chord,
+  );
+}
+
 export interface RhythmPreset {
   label: string;
   /** Beats per chord this preset sets. */

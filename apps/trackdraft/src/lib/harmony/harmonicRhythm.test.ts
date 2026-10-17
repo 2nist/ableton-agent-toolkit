@@ -7,6 +7,7 @@ import {
   dominantBeatsPerChord,
   evenHarmonicRhythm,
   redistributeBeats,
+  resizeCycleEnd,
   repeatsEvenly,
   rhythmPresets,
 } from "./harmonicRhythm";
@@ -130,5 +131,39 @@ describe("rhythmPresets", () => {
 
   it("falls back to 4/4 timing for a broken meter", () => {
     expect(rhythmPresets(0).map((p) => p.beats)).toEqual([8, 4, 2]);
+  });
+});
+
+describe("resizeCycleEnd", () => {
+  it("lengthens the last chord and with it the whole cycle", () => {
+    const longer = resizeCycleEnd(progression(), 4);
+    expect(longer.map((c) => c.beats)).toEqual([4, 4, 4, 8]);
+    expect(cycleBeats(longer)).toBe(20);
+    // The repeat rate follows: 40 beats / 20 = 2 passes.
+    expect(cycleRepeats(longer, 40)).toBe(2);
+  });
+
+  it("shortens the last chord", () => {
+    expect(resizeCycleEnd(progression(), -2).map((c) => c.beats)).toEqual([4, 4, 4, 2]);
+  });
+
+  it("snaps to the half-beat grid", () => {
+    expect(resizeCycleEnd(progression(), 1.3)[3].beats).toBe(5.5);
+    expect(resizeCycleEnd(progression(), -3.7)[3].beats).toBe(0.5);
+  });
+
+  it("never shrinks below one grid cell", () => {
+    expect(resizeCycleEnd(progression(), -99)[3].beats).toBe(MIN_CHORD_BEATS);
+  });
+
+  it("returns the same array when nothing changes", () => {
+    const chords = progression();
+    expect(resizeCycleEnd(chords, 0.2)).toBe(chords);
+    expect(resizeCycleEnd([], 4)).toEqual([]);
+  });
+
+  it("leaves every other chord alone", () => {
+    const resized = resizeCycleEnd(progression(), 2);
+    expect(resized.slice(0, 3)).toEqual(progression().slice(0, 3));
   });
 });
