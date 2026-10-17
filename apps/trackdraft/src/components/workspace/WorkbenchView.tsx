@@ -6,6 +6,7 @@ import { resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@dru
 import { useSongStore } from "../../store/songStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
+import { useTimeSelectionStore } from "../../store/timeSelectionStore";
 import { sectionSpans, type SectionSpan } from "../../lib/arrangement";
 import { updateSection } from "../../lib/sections";
 import { roleStyle } from "../../lib/roleColors";
@@ -23,6 +24,13 @@ import ColorSettings from "../harmony/ColorSettings";
 import LyricsEditor from "../lyrics/LyricsEditor";
 import NecklaceRow from "../drums/NecklaceRow";
 import MelodyStaff from "../melody/MelodyStaff";
+import { SectionGridProvider } from "./layers/LayerGrid";
+import SectionTimeRuler from "./layers/SectionTimeRuler";
+import DrumFace from "./layers/DrumFace";
+import HarmonyFace from "./layers/HarmonyFace";
+import MelodyFace from "./layers/MelodyFace";
+import LyricsFace from "./layers/LyricsFace";
+import { beatsPerBar } from "../../types/blueprint";
 import type { BlueprintSection, BlueprintSong, Chord, SectionRole } from "../../types/blueprint";
 
 /** Canonical role order for the header's role menu (same list everywhere). */
@@ -130,6 +138,7 @@ function ElementRow({
   onOpen,
   collapsed = false,
   onToggle,
+  face,
   children,
 }: {
   title: string;
@@ -137,6 +146,7 @@ function ElementRow({
   onOpen: () => void;
   collapsed?: boolean;
   onToggle?: () => void;
+  face?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -165,7 +175,10 @@ function ElementRow({
           open →
         </button>
       </header>
-      {!collapsed && <div className="p-2.5 flex items-center justify-center min-h-[64px]">{children}</div>}
+      {face && <div className="pt-1.5">{face}</div>}
+      {!collapsed && (
+        <div className={`p-2.5 flex items-center justify-center ${face ? "pt-2" : ""}`}>{children}</div>
+      )}
     </section>
   );
 }
@@ -251,6 +264,11 @@ function SectionWorkspace({
     );
   }
 
+  function selectChord(chordId: string) {
+    setSelectedChordId(chordId);
+    useInspectorStore.getState().engage("harmony");
+  }
+
   /** In-place header basics (the P3 depth pass): rename · bars · role —
    *  each a single undo step, no trip to the inspector for the obvious. */
   function commitName() {
@@ -313,6 +331,20 @@ function SectionWorkspace({
         .join(" · ")
     : null;
   const lyricLines = (section.lyrics ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+
+  const bpb = beatsPerBar(section);
+  const sectionSelection = useTimeSelectionStore((s) =>
+    s.selection && s.selection.sectionId === section.id ? s.selection : null,
+  );
+  const clearSelection = useTimeSelectionStore((s) => s.clearSelection);
+  const selectionStartBar = sectionSelection ? Math.floor(sectionSelection.startBeat / bpb) + 1 : 0;
+  const selectionEndBar = sectionSelection
+    ? Math.max(selectionStartBar, Math.ceil(sectionSelection.endBeat / bpb))
+    : 0;
+
+  function seekInSection(beat: number) {
+    void seekTo(song, clockSource, span.startBeat + beat);
+  }
 
   return (
     <div className="space-y-2 w-full">
@@ -377,6 +409,22 @@ function SectionWorkspace({
           </button>
         </div>
         <span className="text-[10px] font-mono text-inkMuted/40 tabular-nums">block {index + 1}/{count}</span>
+        {sectionSelection && (
+          <span className="flex items-center gap-1 rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[9px] font-mono tabular-nums text-accent/90">
+            {selectionStartBar === selectionEndBar
+              ? `bar ${selectionStartBar}`
+              : `bars ${selectionStartBar}–${selectionEndBar}`}
+            <button
+              type="button"
+              className="text-accent/60 hover:text-accent"
+              onClick={clearSelection}
+              title="Clear the time selection"
+              aria-label="Clear time selection"
+            >
+              ✕
+            </button>
+          </span>
+        )}
         {isLive && (
           <span className="text-[9px] font-mono text-accent animate-pulse" title="Following the playhead">
             ● now playing
@@ -423,11 +471,37 @@ function SectionWorkspace({
         </div>
       )}
 
+      <SectionGridProvider
+        sectionId={section.id}
+        bars={span.bars}
+        beatsPerBar={bpb}
+        durationBeats={span.durationBeats}
+        playheadBeat={beatInSection}
+        onSeek={seekInSection}
+      >
+        <div className="space-y-2">
+          <SectionTimeRuler />
+
       {/* Drums — the clock, with the classic line view as the broad face:
           the whole arrangement cropped to this section + context, so its
           transitions in/out and detours are in view; clicks dive to the
           beat-by-beat Blocks editor on the clicked range. */}
-      <ElementRow title="Drums" hint={drumFamilyLabel(section, song)} onOpen={() => jump("drums")} collapsed={collapsedRows.drums} onToggle={() => toggleRow("drums")}>
+      <ElementRow
+        title="Drums"
+        hint={drumFamilyLabel(section, song)}
+        onOpen={() => jump("drums")}
+        collapsed={collapsedRows.drums}
+        onToggle={() => toggleRow("drums")}
+        face={
+          <DrumFace
+            section={section}
+            song={song}
+            occurrenceIndex={span.occurrenceIndex}
+            onOpen={() => jump("drums")}
+            onEngage={onEngageDrums}
+          />
+        }
+      >
         <div className="w-full space-y-2">
           <DrumLineEmbed song={song} span={span} onEngage={onEngageDrums} />
           {necklaces ? (
@@ -467,6 +541,16 @@ function SectionWorkspace({
         onOpen={() => jump("harmony")}
         collapsed={collapsedRows.chords}
         onToggle={() => toggleRow("chords")}
+        face={
+          <HarmonyFace
+            section={section}
+            keyName={effKey}
+            selectedChordId={selectedChordId}
+            activeChordId={activeChordId}
+            onSelectChord={selectChord}
+            onOpen={() => jump("harmony")}
+          />
+        }
       >
         {section.chords.length > 0 ? (
           <div className="w-full">
@@ -479,10 +563,7 @@ function SectionWorkspace({
                 scale={effScale}
                 selectedChordId={selectedChordId}
                 activeChordId={activeChordId}
-                onSelectChord={(cid) => {
-                  setSelectedChordId(cid);
-                  useInspectorStore.getState().engage("harmony");
-                }}
+                onSelectChord={selectChord}
                 onChangeChords={updateChords}
                 onUpdateChord={updateSingleChord}
               />
@@ -505,7 +586,14 @@ function SectionWorkspace({
       </ElementRow>
 
       {/* Melody */}
-      <ElementRow title="Melody" hint={melody ? `${melody.length} note${melody.length === 1 ? "" : "s"}` : "not recorded"} onOpen={() => jump("melody")} collapsed={collapsedRows.melody} onToggle={() => toggleRow("melody")}>
+      <ElementRow
+        title="Melody"
+        hint={melody ? `${melody.length} note${melody.length === 1 ? "" : "s"}` : "not recorded"}
+        onOpen={() => jump("melody")}
+        collapsed={collapsedRows.melody}
+        onToggle={() => toggleRow("melody")}
+        face={<MelodyFace section={section} onOpen={() => jump("melody")} />}
+      >
         {melody ? (
           <div className="w-full">
             <MelodyStaff
@@ -540,7 +628,14 @@ function SectionWorkspace({
           gutter, the song-text view and the coverage gauge all follow
           immediately; the header's open → still dives to the view for
           the metrical/rhyme tools. */}
-      <ElementRow title="Lyrics" hint={lyricLines.length ? `${lyricLines.length} line${lyricLines.length === 1 ? "" : "s"}` : "not written"} onOpen={() => jump("lyrics")} collapsed={collapsedRows.lyrics} onToggle={() => toggleRow("lyrics")}>
+      <ElementRow
+        title="Lyrics"
+        hint={lyricLines.length ? `${lyricLines.length} line${lyricLines.length === 1 ? "" : "s"}` : "not written"}
+        onOpen={() => jump("lyrics")}
+        collapsed={collapsedRows.lyrics}
+        onToggle={() => toggleRow("lyrics")}
+        face={<LyricsFace section={section} onOpen={() => jump("lyrics")} />}
+      >
         <div className="w-full">
           <LyricsEditor
             value={section.lyrics ?? ""}
@@ -550,6 +645,8 @@ function SectionWorkspace({
           />
         </div>
       </ElementRow>
+        </div>
+      </SectionGridProvider>
     </div>
   );
 }

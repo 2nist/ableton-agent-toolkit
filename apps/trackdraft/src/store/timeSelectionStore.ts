@@ -31,9 +31,23 @@ function normalize(selection: TimeSelection): TimeSelection {
   return { ...selection, startBeat: start, endBeat: end };
 }
 
-export const useTimeSelectionStore = create<TimeSelectionState>((set) => ({
+export const useTimeSelectionStore = create<TimeSelectionState>((set, get) => ({
   selection: null,
-  setSelection: (selection) => set({ selection: normalize(selection) }),
+  setSelection: (selection) => {
+    const next = normalize(selection);
+    const current = get().selection;
+    if (
+      current &&
+      current.sectionId === next.sectionId &&
+      current.startBeat === next.startBeat &&
+      current.endBeat === next.endBeat &&
+      current.lanes.length === next.lanes.length &&
+      current.lanes.every((lane, index) => lane === next.lanes[index])
+    ) {
+      return; // identical range — don't wake every layer on a redundant pointermove
+    }
+    set({ selection: next });
+  },
   clearSelection: () => set({ selection: null }),
 }));
 

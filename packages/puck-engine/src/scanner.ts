@@ -94,8 +94,11 @@ export function scanComponentTree(options: PuckEngineOptions): ComponentPropMeta
         if (ts.isIdentifier(node.expression)) defaultExportName = node.expression.text;
       }
       if (ts.isFunctionDeclaration(node) && node.name) {
+        // Only `export default function` is a Puck component. A named export
+        // (e.g. an internal helper or a hook-adjacent component) must not be
+        // registered — the generator's contracts are default exports only.
         const hasDefault = node.modifiers?.some(
-          (m) => m.kind === ts.SyntaxKind.DefaultKeyword || m.kind === ts.SyntaxKind.ExportKeyword,
+          (m) => m.kind === ts.SyntaxKind.DefaultKeyword,
         );
         if (hasDefault) defaultExportName = node.name.text;
       }

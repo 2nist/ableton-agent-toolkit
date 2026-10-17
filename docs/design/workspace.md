@@ -400,6 +400,20 @@ jump-open included); the karaoke popout is untouched.
   Exit test for the next slice: the section workspace renders harmony,
   drums, bass, melody and lyrics rows against this shared ruler, and a drag
   in one row is visible in the others.
+- **Phase B — the section layer stack (2026-10-17)**: the Workbench's rows
+  are now one grid. A fit-to-width `SectionGridProvider` gives every row the
+  same bar/beat geometry, and `SectionTimeRuler` is the single pointer
+  surface: click a bar to seek + select it, drag to select a range,
+  double-click to clear. Time-aligned **broad faces** sit above each
+  element's existing detail editor — drums (six-lane hit dots), harmony (the
+  progression as it plays), melody (contour), lyrics (timed line blocks) —
+  and the selection band appears in all of them simultaneously. Clicking a
+  chord selects that chord *and* its beat span, so the drums row highlights
+  the same time and the ♪ facet opens. The detail faces are unchanged, so the
+  classic drum line view, the chord wheel, the melody staff and the lyric pad
+  keep their behavior; `open →` still dives to the full editor. The stack is
+  an overview (fit to width); the shared `section` scale still governs the
+  detail editors. No keyboard shortcut is required for any of it.
 
 ## 8. Defaults chosen (veto-able)
 
