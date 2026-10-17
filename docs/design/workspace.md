@@ -414,6 +414,21 @@ jump-open included); the karaoke popout is untouched.
   keep their behavior; `open →` still dives to the full editor. The stack is
   an overview (fit to width); the shared `section` scale still governs the
   detail editors. No keyboard shortcut is required for any of it.
+- **Phase C — melody auto-fill + Bend depth (2026-10-17)**: the Melody layer
+  now has a corpus-driven auto-fill. `@platform/progression-engine`'s melody
+  model (1.42M melody points, shipped as a 1.8 KB table) rides the section's
+  resolved chord stream, and the Mix/Bend's Melody group grew from one axis
+  to six: **Contour** (conjunct ↔ disjunct, both halves implemented),
+  **Density** (notes per chord), **Register** (octave), **Rhythm**
+  (on-grid ↔ syncopated), **Motif** (through-composed ↔ repeat the opening
+  phrase) and **Space** (continuous ↔ airy). Generation is deterministic per
+  seed + Bend; the track stores `source`, `seed`, `params` and
+  `contourApplied`, so the UI can show "◆ Rebuild from Bend" instead of
+  silently rewriting a line, and the export stem never applies contour
+  twice. Auto-fill is available in the Melody row and the Melody view; a
+  recorded line can be replaced explicitly. Melody-only bends no longer
+  reseed the drums (`hasBend` now means "a drum axis is off neutral").
+  Note-level editing (drag/tap in the piano roll) is the remaining slice.
 
 ## 8. Defaults chosen (veto-able)
 

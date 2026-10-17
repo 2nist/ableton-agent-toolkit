@@ -152,6 +152,20 @@ describe("resolveStyleProfile / hasBend — song master + per-section override",
   it("a section-only bend counts as active", () => {
     expect(hasBend({ bend: { energy: 0.8 } }, {})).toBe(true);
   });
+
+  it("melody-, bass- and tempo-only bends do not reseed the drums", () => {
+    expect(hasBend({}, { bend: { melodyDensity: 0.9 } })).toBe(false);
+    expect(hasBend({}, { bend: { melodyContour: 0.1 } })).toBe(false);
+    expect(hasBend({}, { bend: { bassMotion: 1 } })).toBe(false);
+    expect(hasBend({}, { bend: { tempo: 150 } })).toBe(false);
+    expect(hasBend({ bend: { harmony: 0.9 } }, {})).toBe(false);
+  });
+
+  it("an explicit neutral drum axis does not count as a bend", () => {
+    expect(hasBend({}, { bend: { energy: 0.5, feel: 0.5 } })).toBe(false);
+    expect(hasBend({}, { bend: { energy: 0.5000001 } })).toBe(false);
+    expect(hasBend({}, { bend: { energy: 0.51 } })).toBe(true);
+  });
 });
 
 describe("styleFeel — swing/tighten", () => {

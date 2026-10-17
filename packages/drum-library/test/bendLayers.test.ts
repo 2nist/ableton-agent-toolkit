@@ -74,10 +74,16 @@ describe("styleArticulation — block → strum → arp", () => {
 describe("styleMelodyLine — Bend Melody contour", () => {
   const line = [{ pitch: 60 }, { pitch: 72 }, { pitch: 60 }, { pitch: 62 }];
 
-  it("0.5 and above leaves the captured line untouched (same array, no copies)", () => {
+  it("0.5 leaves the captured line untouched (same array, no copies)", () => {
     expect(styleMelodyLine(line, 0.5)).toBe(line);
-    expect(styleMelodyLine(line, 0.9)).toBe(line);
     expect(styleMelodyLine(line, undefined)).toBe(line);
+  });
+
+  it("toward disjunct stretches steps and caps leaps", () => {
+    const angular = styleMelodyLine(line, 0.9);
+    expect(angular[1]!.pitch).toBe(74); // a 12 st leap stretches, capped at 14
+    expect(angular[2]!.pitch).toBe(60); // −14 st down from the stretched peak
+    expect(angular[3]!.pitch).toBe(64); // a 2 st step grows to 4 under 1.8×
   });
 
   it("toward conjunct folds leaps toward steps, preserving direction", () => {

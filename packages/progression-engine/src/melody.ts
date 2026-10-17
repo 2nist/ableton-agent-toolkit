@@ -10,7 +10,15 @@
  * generated line has plausible contour.
  */
 
-import type { NoteDescription } from "@ableton-extensions/sdk";
+/** Structural note shape the generator emits — deliberately not the SDK's
+ *  type, so this package stays pure TypeScript with no extension-runtime
+ *  dependency. */
+export interface GeneratedMelodyNote {
+  pitch: number;
+  startTime: number;
+  duration: number;
+  velocity: number;
+}
 
 /** Per-chord quality: semitone intervals above root (0..11) -> count. */
 export type MelodyIntervalTable = Record<string, number[]>;
@@ -55,7 +63,7 @@ export interface MelodyOptions {
 }
 
 export interface GeneratedMelody {
-  notes: NoteDescription[];
+  notes: GeneratedMelodyNote[];
   /** Total duration in beats. */
   totalBeats: number;
 }
@@ -115,7 +123,7 @@ export function generateMelody(
   const velocity = opts.velocity ?? 104;
   const contourBias = clamp(opts.contourBias ?? 0.4, 0, 1);
 
-  const notes: NoteDescription[] = [];
+  const notes: GeneratedMelodyNote[] = [];
   let cursor = 0;
   let prevIv: number | null = null;
   let prevPitch: number | null = null;

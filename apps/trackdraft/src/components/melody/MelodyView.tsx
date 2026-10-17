@@ -11,6 +11,7 @@ import { adjustMelody, QUANTIZE_GRID_LABELS, type QuantizeGrid } from "../../lib
 import { ClickTrack } from "../../lib/melody/clickTrack";
 import { foldNotesToSection, dedupeNotes } from "../../lib/melody/recordTiming";
 import MelodyStaff from "./MelodyStaff";
+import MelodyGenerateBar from "./MelodyGenerateBar";
 import MelodyPianoRoll from "./MelodyPianoRoll";
 import type { BlueprintSection, MelodyNote } from "../../types/blueprint";
 
@@ -309,6 +310,14 @@ export default function MelodyView() {
           </button>
         ))}
       </div>
+
+      {activeSection && (
+        <MelodyGenerateBar
+          song={song}
+          section={activeSection}
+          sectionId={activeSection.id}
+        />
+      )}
 
       {/* Record + transport row. */}
       <div className="flex items-center gap-2 border-b border-edge pb-2">

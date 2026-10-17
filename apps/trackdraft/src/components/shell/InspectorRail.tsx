@@ -40,7 +40,7 @@ const VIEW_FACETS: Record<string, InspectorTab[]> = {
   harmony: ["harmony", "structure", "song"],
   drums: ["drums", "structure", "song"],
   lyrics: ["lyrics", "structure", "song"],
-  melody: ["structure", "song"],
+  melody: ["structure", "mix", "song"],
   library: ["song"],
   settings: ["song"],
 };

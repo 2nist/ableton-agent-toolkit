@@ -30,11 +30,12 @@ import type { PackedNote, PackedVariant } from "./presetData.js";
 /** The macro axes a user bends — the six the groove engine reads (drums +
  *  harmony voicing) plus the per-layer axes for the Mix/Bend station (Bass
  *  register/motion/rhythm/velocity, Harmony tension/articulation, Melody
- *  contour). All 0..1 except `tempo` (absolute bpm). 0.5 is the neutral
- *  point for every 0..1 axis — the mapper and transforms leave notes
- *  untouched there, so a profile at all-0.5 == the engine's current
- *  behavior. Per-layer axes are OPTIONAL: absent means \"not set\" (an
- *  authored per-section value is never shadowed by an untouched slider). */
+ *  contour/density/register/rhythm/motif/space). All 0..1 except `tempo`
+ *  (absolute bpm). 0.5 is the neutral point for every 0..1 axis — the mapper
+ *  and transforms leave notes untouched there, so a profile at all-0.5 == the
+ *  engine's current behavior. Per-layer axes are OPTIONAL: absent means
+ *  "not set" (an authored per-section value is never shadowed by an
+ *  untouched slider). */
 export interface StyleProfile {
   /** 0 = delicate (ppp-ish) … 1 = driving (fff-ish). */
   energy: number;
@@ -56,9 +57,20 @@ export interface StyleProfile {
    *  staccato arpeggiation. Above 0.5 the chord strums (widening), above
    *  ~0.75 it arpeggiates. */
   articulation?: number;
-  /** 0 = conjunct (leaps smoothed toward steps) … 1 = disjunct (reserved
-   *  until a melody generator exists). 0.5 = untouched captured line. */
+  /** 0 = conjunct (leaps smoothed toward steps) … 1 = disjunct (leaps
+   *  stretched, capped). 0.5 = untouched captured line. */
   melodyContour?: number;
+  /** 0 = long notes / sparse … 1 = busy subdivision. Drives the melody
+   *  generator's notes-per-chord. */
+  melodyDensity?: number;
+  /** 0 = low register … 0.5 = as generated … 1 = an octave up. */
+  melodyRegister?: number;
+  /** 0 = on the grid … 1 = syncopated onsets and pushed phrases. */
+  melodyRhythm?: number;
+  /** 0 = through-composed … 1 = repeat the opening motif across phrases. */
+  melodyRepetition?: number;
+  /** 0 = continuous … 1 = airy (rests at phrase ends). */
+  melodyRest?: number;
   /** 0 = low (octave 2) · 0.5 = standard (3) · 1 = up (4). */
   bassRegister?: number;
   /** 0 = root · 0.5 = root/fifth · 1 = walking. */
@@ -80,6 +92,12 @@ export const DEFAULT_STYLE_PROFILE: StyleProfile = {
   kit: 0.5,
   harmony: 0.5,
   tempo: 120,
+  melodyContour: 0.5,
+  melodyDensity: 0.5,
+  melodyRegister: 0.5,
+  melodyRhythm: 0.5,
+  melodyRepetition: 0.5,
+  melodyRest: 0.5,
 };
 
 /** The engine-side values `styleProfileToEngineTargets` produces — the
@@ -285,11 +303,27 @@ export function resolveStyleProfile(section: BendSource | undefined, song: BendS
   return { ...DEFAULT_STYLE_PROFILE, ...song?.bend, ...section?.bend };
 }
 
-/** Whether a section has an ACTIVE bend (a song master, or its own
- *  override). The variant-seed path only switches to `styleSeed` when this
- *  is true, so existing songs with no bend keep their exact current output. */
+/** The axes that actually change the drum arrangement. Melody/bass/harmony
+ *  bends must not reseed the groove — otherwise touching a melody knob would
+ *  silently pick a different drum variant. */
+const DRUM_BEND_KEYS = ["energy", "density", "backbeat", "feel", "kit"] as const;
+
+function hasDrumBend(source: BendSource | undefined): boolean {
+  const bend = source?.bend;
+  if (!bend) return false;
+  return DRUM_BEND_KEYS.some((key) => {
+    const value = bend[key];
+    return typeof value === "number" && Math.abs(value - 0.5) > 1e-6;
+  });
+}
+
+/** Whether a bend is ACTIVE for the drum engine — any drum axis off neutral
+ *  on the song master or the section override. The variant-seed path only
+ *  switches to `styleSeed` when this is true, so existing songs with no
+ *  drum bend keep their exact current output, and melody-only bends leave
+ *  the groove alone. */
 export function hasBend(section: BendSource | undefined, song: BendSource | undefined): boolean {
-  return Boolean(song?.bend || section?.bend);
+  return hasDrumBend(song) || hasDrumBend(section);
 }
 
 // ---------------------------------------------------------------------------

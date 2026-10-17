@@ -27,11 +27,13 @@ export function planMelodyStem(spans: SectionSpan[], song?: BlueprintSong): Midi
   for (const span of spans) {
     const melody = span.section.melody;
     if (!melody || melody.notes.length === 0) continue;
-    // Bend Melody layer: the Contour axis (conjunct smoothing) applies to
-    // the captured line here — the same place the other stems consult the
-    // resolved style profile. 0.5 = the player's line, untouched.
+    // Bend Melody layer: the Contour axis applies to a captured line here.
+    // Generated lines already applied it (and set `contourApplied`), so they
+    // are passed through untouched — no double shaping.
     const profile = resolveStyleProfile(span.section, song);
-    const shaped = styleMelodyLine(melody.notes, profile.melodyContour);
+    const shaped = melody.contourApplied
+      ? melody.notes
+      : styleMelodyLine(melody.notes, profile.melodyContour);
     for (const n of shaped) {
       notes.push({
         pitch: Math.max(0, Math.min(127, Math.round(n.pitch))),

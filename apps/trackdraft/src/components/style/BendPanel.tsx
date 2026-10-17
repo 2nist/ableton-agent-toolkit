@@ -20,6 +20,7 @@ import Knob from "../common/Knob";
 
 type AxisKey = "energy" | "density" | "backbeat" | "feel" | "kit" | "harmony"
   | "tension" | "articulation" | "melodyContour"
+  | "melodyDensity" | "melodyRegister" | "melodyRhythm" | "melodyRepetition" | "melodyRest"
   | "bassRegister" | "bassMotion" | "bassRhythm" | "bassVelocity";
 
 interface AxisDef { key: AxisKey; label: string; lo: string; hi: string };
@@ -59,9 +60,14 @@ const LAYERS: LayerDef[] = [
     ],
   },
   {
-    id: "melody", title: "Melody", hint: "contour of the line",
+    id: "melody", title: "Melody", hint: "auto-fill shape + contour",
     axes: [
       { key: "melodyContour", label: "Contour", lo: "conjunct", hi: "disjunct" },
+      { key: "melodyDensity", label: "Density", lo: "sparse", hi: "busy" },
+      { key: "melodyRegister", label: "Register", lo: "low", hi: "high" },
+      { key: "melodyRhythm", label: "Rhythm", lo: "on grid", hi: "syncopated" },
+      { key: "melodyRepetition", label: "Motif", lo: "through", hi: "repeat" },
+      { key: "melodyRest", label: "Space", lo: "continuous", hi: "airy" },
     ],
   },
 ];

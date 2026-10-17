@@ -24,6 +24,7 @@ import ColorSettings from "../harmony/ColorSettings";
 import LyricsEditor from "../lyrics/LyricsEditor";
 import NecklaceRow from "../drums/NecklaceRow";
 import MelodyStaff from "../melody/MelodyStaff";
+import MelodyGenerateBar from "../melody/MelodyGenerateBar";
 import { SectionGridProvider } from "./layers/LayerGrid";
 import SectionTimeRuler from "./layers/SectionTimeRuler";
 import DrumFace from "./layers/DrumFace";
@@ -63,6 +64,16 @@ export default function WorkbenchView() {
 
   const song = currentSong;
   const spans = useMemo(() => (song ? sectionSpans(song) : []), [song]);
+
+  // A direct route (or a reload) can land here with no section selected;
+  // the workspace falls back to the first span, so make that real in the
+  // shared selection too — the inspector, bend overrides and MCP tools all
+  // read the same id.
+  useEffect(() => {
+    if (!song || spans.length === 0) return;
+    if (spans.some((span) => span.sectionId === selectedSectionId)) return;
+    setSelectedSectionId(spans[0]!.sectionId);
+  }, [song, spans, selectedSectionId, setSelectedSectionId]);
 
   // The ladder's first navigation step: ←→ walks sections. Ignored while
   // typing / interacting with form controls (the bend rail's selects, the
@@ -594,31 +605,34 @@ function SectionWorkspace({
         onToggle={() => toggleRow("melody")}
         face={<MelodyFace section={section} onOpen={() => jump("melody")} />}
       >
-        {melody ? (
-          <div className="w-full">
-            <MelodyStaff
-              notes={melody}
-              sectionBeats={span.durationBeats}
-              songKey={effKey}
-              scale={effScale}
-              height={128}
-              activeBeat={beatInSection}
-              onSeekBeat={(beat) => void seekTo(song, clockSource, span.startBeat + beat)}
-            />
-          </div>
-        ) : (
-          <div className="text-center px-2 space-y-1.5">
-            <p className="text-2xs text-inkMuted/60 italic font-mono">No melody yet — the recorder lives in the melody workspace.</p>
-            <button
-              type="button"
-              className="text-[10px] font-mono text-accent/80 hover:text-accent border border-edge/70 rounded px-2 py-0.5"
-              onClick={() => jump("melody")}
-              title={`Open the melody workspace on "${section.name}" — press ● Record there to hum this section`}
-            >
-              ● Record…
-            </button>
-          </div>
-        )}
+        <div className="w-full space-y-2">
+          <MelodyGenerateBar song={song} section={section} sectionId={section.id} compact />
+          {melody ? (
+            <div className="w-full">
+              <MelodyStaff
+                notes={melody}
+                sectionBeats={span.durationBeats}
+                songKey={effKey}
+                scale={effScale}
+                height={128}
+                activeBeat={beatInSection}
+                onSeekBeat={(beat) => void seekTo(song, clockSource, span.startBeat + beat)}
+              />
+            </div>
+          ) : (
+            <div className="text-center px-2 space-y-1.5">
+              <p className="text-2xs text-inkMuted/60 italic font-mono">No melody yet — auto-fill from the corpus or hum one in the melody workspace.</p>
+              <button
+                type="button"
+                className="text-[10px] font-mono text-accent/80 hover:text-accent border border-edge/70 rounded px-2 py-0.5"
+                onClick={() => jump("melody")}
+                title={`Open the melody workspace on "${section.name}" — press ● Record there to hum this section`}
+              >
+                ● Record…
+              </button>
+            </div>
+          )}
+        </div>
       </ElementRow>
 
       {/* Lyrics — pinned last: the annotation layer, and since P3 slice 2

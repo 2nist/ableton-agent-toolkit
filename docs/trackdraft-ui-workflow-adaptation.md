@@ -51,9 +51,11 @@ history. Verified on two routes.
 > Song master + Drums / Bass / Harmony / Melody, with the new axes wired
 > end-to-end through the shared engine (bass register/motion/rhythm/velocity →
 > `bassProfile`; Color/Tension/Articulation → chord quality + performance;
-> Melody contour → the captured line). Song master + per-section override per
-> layer. Remaining P1 work = **seeding these sliders FROM the profiles**
-> ("detected" badges + adopt) instead of starting neutral.
+> Melody contour → the captured line; and since 2026-10-17 the Melody group
+> also drives corpus auto-fill — density, register, rhythm, motif and space).
+> Song master + per-section override per layer. Remaining P1 work = **seeding
+> these sliders FROM the profiles** ("detected" badges + adopt) instead of
+> starting neutral.
 1. **Section style + Bend sliders**: drum profile's per-section energy/share,
    density spread, and backbeat index → *suggested* style chip and slider
    positions, marked "detected", with manual override staying first-class.

@@ -261,7 +261,8 @@ export interface BassProfile {
 /** The macro "Bend" axes a user can tint the whole song or one section
  *  with — the six the groove engine reads (drums + harmony voicing) plus
  *  the per-layer axes for the Mix/Bend station (Bass, Tension,
- *  Articulation, Melody contour). Structurally identical to
+ *  Articulation, and the six Melody axes: contour, density, register,
+ *  rhythm, motif, space). Structurally identical to
  *  `@drum/library`'s `StyleProfile`; declared here independently for the
  *  same schema-decoupling reason `BassProfile`/`MeterOutline` are. All
  *  values 0..1 except `tempo` (absolute bpm); 0.5 is the neutral point on
@@ -287,9 +288,19 @@ export interface StyleProfile {
   /** 0..0.5 = block/legato (neutral at 0.5) · >0.5 strumming · >0.75
    *  staccato arpeggiation. */
   articulation?: number;
-  /** 0 = conjunct (leaps smoothed) … 1 = disjunct (reserved). 0.5 = the
-   *  captured line, untouched. */
+  /** 0 = conjunct (leaps smoothed) … 1 = disjunct (leaps stretched,
+   *  capped). 0.5 = the captured line, untouched. */
   melodyContour?: number;
+  /** 0 = sparse … 1 = busy subdivision (notes per chord). */
+  melodyDensity?: number;
+  /** 0 = low register … 0.5 = as generated … 1 = an octave up. */
+  melodyRegister?: number;
+  /** 0 = on the grid … 1 = syncopated onsets and pushed phrases. */
+  melodyRhythm?: number;
+  /** 0 = through-composed … 1 = repeat the opening motif across phrases. */
+  melodyRepetition?: number;
+  /** 0 = continuous … 1 = airy (rests at phrase ends). */
+  melodyRest?: number;
   /** 0 = low (octave 2) · 0.5 = standard (3) · 1 = up (4). */
   bassRegister?: number;
   /** 0 = root · 0.5 = root/fifth · 1 = walking. */
@@ -324,8 +335,32 @@ export interface MelodyNote {
  *  authoring-time representation, parallel to `chords`/`bassProfile`.
  *  Absent (per section) → the section has no melody, and every exporter
  *  (MIDI export, live MIDI out, Send to Ableton) simply skips it. */
+/** The macro controls the melody generator was built from — stored so the
+ *  UI can tell "the Bend changed since this line was generated" without
+ *  guessing, and so a rebuild is reproducible. */
+export interface MelodyGenerationParams {
+  contour: number;
+  density: number;
+  register: number;
+  rhythm: number;
+  repetition: number;
+  rest: number;
+}
+
 export interface MelodyTrack {
   notes: MelodyNote[];
+  /** Where the line came from. `generated` lines may be rebuilt from Bend;
+   *  `recorded` (or absent) lines are the player's and only get the
+   *  render-time contour transform. */
+  source?: "recorded" | "generated";
+  /** Deterministic generator seed (reroll changes it). */
+  seed?: number;
+  /** The Bend values used at generation time. */
+  params?: MelodyGenerationParams;
+  /** True when `styleMelodyLine` was already applied to `notes` — the stem
+   *  must not shape the line a second time. */
+  contourApplied?: boolean;
+  generatedAt?: string;
 }
 
 /** A section as authored in the app. Mirrors song-structure's SongSection
