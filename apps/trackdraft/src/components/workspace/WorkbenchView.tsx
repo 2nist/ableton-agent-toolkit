@@ -17,8 +17,7 @@ import { useInspectorStore } from "../../store/inspectorStore";
 import { playSectionLoop, seekTo } from "../../lib/playback/transportControl";
 import IconBtn from "../common/IconBtn";
 import Icon from "../common/Icon";
-import ProgressionTrack from "../harmony/ProgressionTrack";
-import ProgressionStrip from "../harmony/ProgressionStrip";
+import ProgressionEditor from "../harmony/ProgressionEditor";
 import HexReadout from "../harmony/HexReadout";
 import BassSettings from "../harmony/BassSettings";
 import ColorSettings from "../harmony/ColorSettings";
@@ -269,25 +268,12 @@ function SectionWorkspace({
   /** Chord writes from the embedded progression strip — the same
    *  updateSection path the harmony editor uses, so the spine's chords
    *  lane, playback and the rail's Fit readout all follow immediately. */
-  function updateChords(chords: Chord[]) {
-    updateCurrentSong((s) => updateSection(s, section.id, (sec) => ({ ...sec, chords })));
-  }
-
   /** Harmonic-rhythm edits set the chords' `beats` *and* keep the section's
    *  `beatsPerChord` default in step, so the next chord added inherits the
    *  rhythm you just shaped. */
   function updateRhythm(chords: Chord[], beatsPerChord: number) {
     updateCurrentSong((s) =>
       updateSection(s, section.id, (sec) => ({ ...sec, chords, beatsPerChord })),
-    );
-  }
-
-  function updateSingleChord(chordId: string, update: Partial<Chord>) {
-    updateCurrentSong((s) =>
-      updateSection(s, section.id, (sec) => ({
-        ...sec,
-        chords: sec.chords.map((c) => (c.id === chordId ? { ...c, ...update } : c)),
-      })),
     );
   }
 
@@ -590,26 +576,16 @@ function SectionWorkspace({
         {section.chords.length > 0 ? (
           <div className="w-full">
             <HexReadout chords={section.chords} keyName={effKey} activeChordId={activeChordId} />
-            <div className="mt-2 rounded border border-edge/60 bg-[#0a0d12] px-2 py-1.5 overflow-x-auto">
-              <ProgressionTrack
+            <div className="mt-2 rounded border border-edge/60 bg-[#0a0d12] px-2 py-1.5">
+              <ProgressionEditor
                 key={section.id}
-                section={section}
-                keyName={effKey}
-                scale={effScale}
-                selectedChordId={selectedChordId}
-                activeChordId={activeChordId}
-                onSelectChord={selectChord}
-                onChangeChords={updateChords}
-                onUpdateChord={updateSingleChord}
-              />
-            </div>
-            <div className="mt-2">
-              <ProgressionStrip
                 chords={section.chords}
                 keyName={effKey}
+                scale={effScale}
                 beatsPerBar={bpb}
                 sectionBeats={span.durationBeats}
                 selectedChordId={selectedChordId}
+                activeChordId={activeChordId}
                 outlineGoverned={chordsFollowOutline}
                 onSelectChord={selectChord}
                 onChange={updateRhythm}

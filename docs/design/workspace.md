@@ -474,6 +474,17 @@ jump-open included); the karaoke popout is untouched.
   HoneycombWheel audition and the Ableton bridge's clip planner all call it,
   so a voiced chord sounds and exports identically in all four — the bridge's
   chord-clip test asserts the same pitches the app's export test does.
+- **Phase D — one progression editor (2026-10-17)**: the chord cards, the
+  voicing lane and the effects lane merged into a single time-aligned stack —
+  `ProgressionEditor`, replacing `ProgressionTrack` + `HarmonicRhythmStrip`.
+  Tap a card to select, drag a card to reorder (a caret shows the drop), drag
+  a boundary to trade beats, drag the cycle end to re-time the loop. Reorder
+  is plain pointer math (no drag-and-drop library) because the editor already
+  owns a capture-based gesture system — two systems over the same pixels is
+  what made reorder and resize fight. The voicing and effects lanes are
+  **collapsible**, and the choice persists (`trackdraft-progression-lanes`),
+  so the workbench row stays slim while the Harmony canvas opens everything.
+  `ProgressionTrack` and its `dnd-kit` sortable are deleted.
 
 ## 8. Defaults chosen (veto-able)
 

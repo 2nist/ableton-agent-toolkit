@@ -23,7 +23,7 @@ interface ChordEditorPopoverProps {
 }
 
 /** The selected chord's editor — the dock's "tools" content whenever a chord
- *  is selected (HoneycombWheel or ProgressionTrack). The right menu reads
+ *  is selected (HoneycombWheel or ProgressionEditor). The right menu reads
  *  top-to-bottom: selection/remove → Beats → Quality → Substitutions.
  *  Performance effects are edited in the progression's effect row instead
  *  (each chord's own effect slot). Substitution options are compact chips

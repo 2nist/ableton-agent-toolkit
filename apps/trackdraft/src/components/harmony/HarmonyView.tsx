@@ -8,8 +8,7 @@ import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { updateSection } from "../../lib/sections";
 import HoneycombWheel from "./HoneycombWheel";
-import ProgressionTrack from "./ProgressionTrack";
-import ProgressionStrip from "./ProgressionStrip";
+import ProgressionEditor from "./ProgressionEditor";
 import FitStatus from "./FitStatus";
 import ModeInferenceCard from "./ModeInferenceCard";
 import { previewChord } from "../../lib/playback/previewMidi";
@@ -90,16 +89,6 @@ export default function HarmonyView() {
     );
   }
 
-  function updateSingleChord(chordId: string, update: Partial<Chord>) {
-    if (!activeSection) return;
-    updateCurrentSong((s) =>
-      updateSection(s, activeSection.id, (sec) => ({
-        ...sec,
-        chords: sec.chords.map((c) => (c.id === chordId ? { ...c, ...update } : c)),
-      })),
-    );
-  }
-
   // Snap the section's `bars` to one clean pass of its progression — wired
   // to the fit status in the hex workspace's bottom-right corner.
   function setSectionBars(bars: number) {
@@ -146,29 +135,19 @@ export default function HarmonyView() {
             grammar 2026-09-21: wide surfaces belong to the canvas, not a
             bottom menu — the old dock's Menu panel died here). */}
         {activeSection && (
-          <div className="border-t border-edge/60 bg-[#0a0d12] px-3 py-2 overflow-x-auto">
-            <ProgressionTrack
+          <div className="border-t border-edge/60 bg-[#0a0d12] px-3 py-2">
+            <ProgressionEditor
               key={activeSection.id}
-              section={activeSection}
+              chords={activeSection.chords}
               keyName={effectiveKey}
               scale={effectiveScale}
+              beatsPerBar={beatsPerBar(activeSection)}
+              sectionBeats={sectionDurationBeats(activeSection)}
               selectedChordId={selectedChordId}
+              outlineGoverned={chordsFollowOutline}
               onSelectChord={setSelectedChordId}
-              onChangeChords={updateChords}
-              onUpdateChord={updateSingleChord}
+              onChange={updateRhythm}
             />
-            <div className="mt-2">
-              <ProgressionStrip
-                chords={activeSection.chords}
-                keyName={effectiveKey}
-                beatsPerBar={beatsPerBar(activeSection)}
-                sectionBeats={sectionDurationBeats(activeSection)}
-                selectedChordId={selectedChordId}
-                outlineGoverned={chordsFollowOutline}
-                onSelectChord={setSelectedChordId}
-                onChange={updateRhythm}
-              />
-            </div>
           </div>
         )}
         {activeSection && (
