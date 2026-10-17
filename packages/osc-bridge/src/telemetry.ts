@@ -8,10 +8,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 
-const PORT = process.env.TELEMETRY_PORT || 5200;
+const PORT = Number(process.env.TELEMETRY_PORT ?? 5200);
 const OSC_IN_PORT = process.env.OSC_IN_PORT || 6000;
+// Loopback by default: both the REST command routes and the WebSocket relay
+// can drive Live, so LAN exposure is opt-in (`start-all.sh lan` sets
+// BRIDGE_HOST=0.0.0.0).
+const HOST = process.env.BRIDGE_HOST || "127.0.0.1";
+const LAN_EXPOSED = HOST !== "127.0.0.1" && HOST !== "localhost";
 // Matches the trackdraft-bridge extension's storageDirectory so "Send to
 // Ableton" writes to the same place the extension's picker reads from.
 // Pattern: ~/Library/Application Support/Ableton/Extensions Data/{author}.{name}/
@@ -50,6 +55,19 @@ let liveStateCache: AbletonState = {
 // (wired by cli.ts to push the same state into the WebSocket bridge, so
 // browser clients get tempo/key/scale over the single ws:8081 channel).
 let onLiveState: ((state: AbletonState) => void) | undefined;
+
+const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+
+// A malicious page open in the same browser can POST to localhost. Both
+// command routes write files that the extension later executes, so reject
+// cross-site origins unless the operator explicitly exposed the bridge to
+// the LAN (where the app is served from a non-loopback origin by design).
+app.use((req, res, next) => {
+  if (req.method !== "POST" || LAN_EXPOSED) return next();
+  const origin = req.headers.origin;
+  if (!origin || origin === "null" || LOOPBACK_ORIGIN.test(origin)) return next();
+  res.status(403).json({ error: "Origin not allowed" });
+});
 
 // 1. Initialize OSC over UDP Listener
 const udpPort = new osc.UDPPort({
@@ -201,8 +219,8 @@ app.use((req, res, next) => {
  *  connection. */
 export function startTelemetryServer(liveStateListener?: (state: AbletonState) => void) {
   if (liveStateListener) onLiveState = liveStateListener;
-  app.listen(PORT, () => {
-    console.log(`[OSC-BRIDGE] REST Telemetry server active on http://localhost:${PORT}`);
+  app.listen(PORT, HOST, () => {
+    console.log(`[OSC-BRIDGE] REST Telemetry server active on http://${HOST}:${PORT}`);
   });
 }
 

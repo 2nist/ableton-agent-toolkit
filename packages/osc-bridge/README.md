@@ -30,6 +30,12 @@ Connect a WebSocket client to `ws://127.0.0.1:8081`. On connect, you immediately
 
 ## Design notes
 
+- **Loopback by default.** Both the REST server (5200) and the WebSocket server
+  (8081) bind `127.0.0.1`. The WebSocket channel is bidirectional and can drive
+  Live via AbletonOSC, and the REST routes queue commands the extension will
+  execute — so LAN exposure is explicit: set `BRIDGE_HOST=0.0.0.0` (the
+  TrackDraft launcher does this for you in `start-all.sh lan`). When loopback-
+  bound, cross-site `POST`s are rejected by an Origin check.
 - AbletonOSC's reply port (`OSC_RESPONSE_PORT`, fixed at 11001) is singular — only one process can hold the OSC-subscriber role at a time. This package is that single subscriber, fanning out to any number of WebSocket clients.
 - Subscriptions are re-sent every 5s (configurable via `resubscribeIntervalMs`). AbletonOSC's listener registration doesn't survive an AbletonOSC/Live restart; re-subscribing an already-active listener is a harmless no-op, so this makes the bridge self-healing without a manual restart.
 - `startPositionBridge()` is also exported for programmatic use (e.g. embedding in another process) rather than running the standalone CLI.

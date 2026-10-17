@@ -19,6 +19,10 @@ export interface PositionBridgeOptions {
   abletonOscListenPort?: number;
   /** Port this bridge's WebSocket server listens on for browser clients. */
   websocketPort?: number;
+  /** Interface to bind. Loopback by default: the socket is bidirectional and
+   *  can drive Ableton, so exposing it to the LAN is an explicit opt-in
+   *  (BRIDGE_HOST=0.0.0.0, used by `start-all.sh lan`). */
+  host?: string;
   /** How often to re-send the start_listen subscriptions. */
   resubscribeIntervalMs?: number;
   /** Called for every event relayed, before it's broadcast — for logging/observability. */
@@ -30,6 +34,7 @@ const DEFAULTS: Required<Omit<PositionBridgeOptions, "onEvent">> = {
   abletonOscSendPort: 11000,
   abletonOscListenPort: 11001,
   websocketPort: 8081,
+  host: "127.0.0.1",
   resubscribeIntervalMs: 5000,
 };
 
@@ -129,7 +134,7 @@ export function startPositionBridge(options: PositionBridgeOptions = {}): Positi
 
   // --- WebSocket server (bidirectional) ---
 
-  const wss = new WebSocketServer({ port: config.websocketPort });
+  const wss = new WebSocketServer({ port: config.websocketPort, host: config.host });
   wss.on("connection", (client) => {
     clients.add(client);
 

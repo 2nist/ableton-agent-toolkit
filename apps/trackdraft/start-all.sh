@@ -13,6 +13,10 @@ cd "$DIR"
 LAN_MODE=0
 if [ "$1" = "lan" ]; then
   LAN_MODE=1
+  # The bridge is loopback-only by default (its command routes can drive
+  # Live). LAN mode is the explicit opt-in: bind it so an iPad hitting the
+  # Mac's IP can reach ws:8081 / REST:5200 too.
+  export BRIDGE_HOST=0.0.0.0
 fi
 
 echo "═══════════════════════════════════════"
@@ -117,7 +121,7 @@ BRIDGE_LOG="$DIR/.osc-bridge.log"
   exec npm run bridge
 ) > "$BRIDGE_LOG" 2>&1 &
 BRIDGE_PID=$!
-echo "   osc-bridge starting (ws://127.0.0.1:8081, REST :5200, log: $BRIDGE_LOG)…"
+echo "   osc-bridge starting (ws://${BRIDGE_HOST:-127.0.0.1}:8081, REST :5200, log: $BRIDGE_LOG)…"
 
 # Wait for the bridge's REST health endpoint so we report success/failure
 # here instead of letting the app guess. ~10s is plenty for npm+tsx to boot.
