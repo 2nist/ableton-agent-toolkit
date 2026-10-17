@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useSongStore } from "./store/songStore";
 import { flushAllPendingWrites } from "./store/storage";
@@ -14,12 +14,16 @@ import MelodyView from "./components/melody/MelodyView";
 import WorkbenchView from "./components/workspace/WorkbenchView";
 import LibraryView from "./components/library/LibraryView";
 import SettingsView from "./components/settings/SettingsView";
-import LivePreviewSandbox from "./pages/LivePreviewSandbox";
-import GenreWorkbench from "./pages/GenreWorkbench";
-import DesignLab from "./pages/DesignLab";
-import RenderCanvasLayout from "./components/RenderCanvasLayout";
 import LyricChordPopout from "./components/popout/LyricChordPopout";
 import StorageWarning from "./components/shell/StorageWarning";
+
+// Labs pull in @measured/puck (and its editor stack). They are dev tools, not
+// part of the songwriting loop — statically importing them put ~4 MB of Puck
+// into the main chunk. Load them only when their route is visited.
+const LivePreviewSandbox = lazy(() => import("./pages/LivePreviewSandbox"));
+const GenreWorkbench = lazy(() => import("./pages/GenreWorkbench"));
+const DesignLab = lazy(() => import("./pages/DesignLab"));
+const RenderCanvasLayout = lazy(() => import("./components/RenderCanvasLayout"));
 
 function App() {
   const loadFromStorage = useSongStore((s) => s.loadFromStorage);
@@ -54,7 +58,8 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-canvas text-ink">
         <StorageWarning />
-        <Routes>
+        <Suspense fallback={null}>
+          <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/song/:songId" element={<SongEditorLayout />}>
             <Route index element={<Navigate to="studio" replace />} />
@@ -78,7 +83,8 @@ function App() {
           <Route path="/design-lab" element={<DesignLab />} />
           <Route path="/ui-kit-sandbox" element={<Navigate to="/design-lab" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+          </Routes>
+        </Suspense>
       </div>
     </BrowserRouter>
   );
