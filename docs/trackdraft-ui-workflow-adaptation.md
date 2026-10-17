@@ -55,10 +55,11 @@ history. Verified on two routes.
 > also drives corpus auto-fill — density, register, rhythm, motif and space).
 > Song master + per-section override per layer. Melody notes are hand-editable
 > in place (`MelodyNoteEditor`: tap to add, drag to move, edge-drag to resize,
-> velocity lane), so a Bend-shaped line can be finished by hand without
-> leaving the arrangement — hand edits win and export as drawn. Remaining P1
-> work = **seeding these sliders FROM the profiles** ("detected" badges +
-> adopt) instead of starting neutral.
+> velocity lane) and transposable as a line — octave ± and "sits on I ii iii
+> IV V vi vii°" for diatonic, in-key moves — so a Bend-shaped line can be
+> finished by hand without leaving the arrangement; hand edits win and export
+> as drawn. Remaining P1 work = **seeding these sliders FROM the profiles**
+> ("detected" badges + adopt) instead of starting neutral.
 1. **Section style + Bend sliders**: drum profile's per-section energy/share,
    density spread, and backbeat index → *suggested* style chip and slider
    positions, marked "detected", with manual override staying first-class.

@@ -32,6 +32,14 @@ import {
   setVelocity,
 } from "../../lib/melody/noteEdits";
 import type { QuantizeGrid } from "../../lib/melody/quantize";
+import {
+  anchorDegree,
+  canShiftOctave,
+  noteRange,
+  scaleDegreeLabels,
+  shiftOctave,
+  transposeToDegree,
+} from "../../lib/melody/transpose";
 
 const GUTTER_W = 46;
 const RULER_H = 16;
@@ -332,6 +340,29 @@ export default function MelodyNoteEditor({
     onChange(next);
   }
 
+  const key = keyName && scale ? { keyName, scale } : null;
+  const degreeLabels = useMemo(
+    () => (scale ? scaleDegreeLabels({ scale }) : []),
+    [scale],
+  );
+  const anchor = key ? anchorDegree(local, key) : null;
+  const pitchSpan = noteRange(local);
+
+  function moveOctave(direction: 1 | -1) {
+    const next = shiftOctave(localRef.current, direction);
+    if (next === localRef.current) return;
+    applyLocal(next);
+    onChange(next);
+  }
+
+  function moveToDegree(degree: number) {
+    if (!key) return;
+    const next = transposeToDegree(localRef.current, degree, key);
+    if (next === localRef.current) return;
+    applyLocal(next);
+    onChange(next);
+  }
+
   // Escape cancels a gesture in flight; Delete/Backspace removes the selected
   // note. Both are announced in the toolbar hint — neither is required.
   useEffect(() => {
@@ -407,6 +438,59 @@ export default function MelodyNoteEditor({
           </button>
         )}
       </div>
+
+      {/* Transpose — octave, then the key's scale degrees ("move the line to
+          the vi"). Both are whole-line moves and one undo step each. */}
+      {local.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap pb-1.5">
+          <span className="text-3xs font-mono uppercase tracking-wide text-inkMuted">Octave</span>
+          <button
+            type="button"
+            className="border border-edge rounded px-1.5 py-0.5 text-[10px] font-mono text-inkMuted enabled:hover:text-ink disabled:opacity-30"
+            onClick={() => moveOctave(-1)}
+            disabled={!canShiftOctave(local, -1)}
+            title="Move the whole line down an octave"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            className="border border-edge rounded px-1.5 py-0.5 text-[10px] font-mono text-inkMuted enabled:hover:text-ink disabled:opacity-30"
+            onClick={() => moveOctave(1)}
+            disabled={!canShiftOctave(local, 1)}
+            title="Move the whole line up an octave"
+          >
+            +
+          </button>
+          {pitchSpan && (
+            <span className="text-[9px] font-mono text-inkMuted/60">
+              {midiToNoteName(pitchSpan.low)}–{midiToNoteName(pitchSpan.high)}
+            </span>
+          )}
+
+          {key && degreeLabels.length > 0 && (
+            <>
+              <span className="ml-2 text-3xs font-mono uppercase tracking-wide text-inkMuted">Sits on</span>
+              {degreeLabels.map(({ index, numeral }) => (
+                <button
+                  key={index}
+                  type="button"
+                  className={`min-w-[22px] rounded border px-1 py-0.5 text-[10px] font-mono ${
+                    anchor === index
+                      ? "border-accent/70 bg-accent/15 text-accent"
+                      : "border-edge text-inkMuted hover:text-ink"
+                  }`}
+                  onClick={() => moveToDegree(index)}
+                  disabled={anchor === index}
+                  title={`Move the line to ${numeral} — diatonic, stays in ${keyName} ${scale}`}
+                >
+                  {numeral}
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Bar ruler. */}
       <div className="flex">

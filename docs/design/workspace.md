@@ -436,6 +436,13 @@ jump-open included); the karaoke popout is untouched.
   the raw capture so the quantize knobs can't silently undo a drag, and set
   `contourApplied` — the drawn line is what exports. Every gesture is one
   song-store write, so the header's Undo steps back through them.
+  Two whole-line moves sit in the same toolbar: **Octave −/+** (refused at the
+  MIDI range edges instead of clamped) and **Sits on** — the key's degrees as
+  roman numerals cased by triad quality (`I ii iii IV V vi vii°`). Clicking a
+  degree transposes the line diatonically so its first note lands there, by
+  the shorter route so the register stays close; notes outside the scale keep
+  their alteration above the new degree (a raised 4th stays raised), and the
+  range readout (`C3–F#5`) shows where the line landed.
 
 ## 8. Defaults chosen (veto-able)
 
