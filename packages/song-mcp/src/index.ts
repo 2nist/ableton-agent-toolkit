@@ -22,65 +22,19 @@ import { z } from "zod";
 import type { BlueprintSong } from "@music-theory/song-blueprint";
 import { songDigest, songDetail } from "./digest.js";
 import { songOpSchema, applyOps } from "./ops.js";
+import { assertSafeId, createSongLibrary } from "./library.js";
 
 // ---------------------------------------------------------------------------
 // Library storage
 // ---------------------------------------------------------------------------
 
 const LIBRARY_DIR = process.env.TRACKDRAFT_LIBRARY_DIR ?? path.join(os.homedir(), "TrackDraft", "library");
-const TEMPLATES_DIR = path.join(LIBRARY_DIR, "..", "templates");
-const BACKUPS_DIR = path.join(LIBRARY_DIR, "..", ".backups");
+const library = createSongLibrary(LIBRARY_DIR);
+const TEMPLATES_DIR = library.templatesDir;
+const { readSong, writeSong, backupSong, listBackups, listAllSongs } = library;
 
 function ensureDir(dir: string): void {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
-
-function readSong(id: string): BlueprintSong | null {
-  const file = path.join(LIBRARY_DIR, `${id}.blueprint.json`);
-  if (!fs.existsSync(file)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf-8")) as BlueprintSong;
-  } catch {
-    return null;
-  }
-}
-
-function writeSong(song: BlueprintSong): void {
-  ensureDir(LIBRARY_DIR);
-  const file = path.join(LIBRARY_DIR, `${song.id}.blueprint.json`);
-  song.updatedAt = new Date().toISOString();
-  fs.writeFileSync(file, JSON.stringify(song, null, 2), "utf-8");
-}
-
-function backupSong(songId: string): string | null {
-  const src = path.join(LIBRARY_DIR, `${songId}.blueprint.json`);
-  if (!fs.existsSync(src)) return null;
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupDir = path.join(BACKUPS_DIR, songId);
-  ensureDir(backupDir);
-  const dest = path.join(backupDir, `${timestamp}.json`);
-  fs.copyFileSync(src, dest);
-  return dest;
-}
-
-function listBackups(songId: string): string[] {
-  const dir = path.join(BACKUPS_DIR, songId);
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter((f) => f.endsWith(".json"))
-    .sort()
-    .reverse();
-}
-
-function listAllSongs(): BlueprintSong[] {
-  ensureDir(LIBRARY_DIR);
-  const files = fs.readdirSync(LIBRARY_DIR).filter((f) => f.endsWith(".blueprint.json"));
-  const songs: BlueprintSong[] = [];
-  for (const file of files) {
-    const song = readSong(file.replace(".blueprint.json", ""));
-    if (song) songs.push(song);
-  }
-  return songs;
 }
 
 // ---------------------------------------------------------------------------
@@ -397,7 +351,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           backupFile = backups[0]!;
         }
 
-        const backupPath = path.join(BACKUPS_DIR, parsed.songId, backupFile);
+        const backupPath = path.join(library.backupsDir, assertSafeId(parsed.songId), path.basename(backupFile));
         const song = JSON.parse(fs.readFileSync(backupPath, "utf-8")) as BlueprintSong;
         writeSong(song);
         return {
@@ -408,7 +362,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
       case "song_create_template": {
         const parsed = createTemplateSchema.parse(args ?? {});
         ensureDir(TEMPLATES_DIR);
-        const filename = `${parsed.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.template.json`;
+        const slug = parsed.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "template";
+        const filename = `${slug}.template.json`;
         const filepath = path.join(TEMPLATES_DIR, filename);
         if (fs.existsSync(filepath)) {
           try {
