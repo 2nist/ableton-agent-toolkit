@@ -13,6 +13,42 @@
  * render.
  */
 
+export interface StorageFailure {
+  key: string;
+  message: string;
+  at: number;
+}
+
+let lastFailure: StorageFailure | null = null;
+const failureListeners = new Set<(failure: StorageFailure | null) => void>();
+
+/** The most recent failed write, or null after a successful write to the
+ *  same key. Used by the shell's autosave banner — a swallowed quota error
+ *  otherwise means the user keeps editing and loses work on reload. */
+export function getStorageFailure(): StorageFailure | null {
+  return lastFailure;
+}
+
+export function subscribeStorageFailure(listener: (failure: StorageFailure | null) => void): () => void {
+  failureListeners.add(listener);
+  return () => failureListeners.delete(listener);
+}
+
+function reportFailure(key: string, error: unknown): void {
+  lastFailure = {
+    key,
+    message: error instanceof Error ? error.message : String(error),
+    at: Date.now(),
+  };
+  for (const listener of failureListeners) listener(lastFailure);
+}
+
+function clearFailure(key: string): void {
+  if (lastFailure?.key !== key) return;
+  lastFailure = null;
+  for (const listener of failureListeners) listener(null);
+}
+
 /** Read + JSON.parse a key; any failure (corrupt JSON, privacy mode,
  *  missing key) returns `fallback` instead of throwing. */
 export function readStorage<T>(key: string, fallback: T): T {
@@ -33,12 +69,15 @@ export function readRawStorage(key: string): string | null {
   }
 }
 
-/** JSON.stringify + setItem; quota / privacy failures are swallowed. */
+/** JSON.stringify + setItem; quota / privacy failures are surfaced through
+ *  `getStorageFailure()` so the shell can warn instead of failing silently. */
 export function writeStorage<T>(key: string, value: T): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
-  } catch {
+    clearFailure(key);
+  } catch (error) {
     // Never crash the app over persistence (quota, private mode...).
+    reportFailure(key, error);
   }
 }
 
@@ -47,8 +86,9 @@ export function writeStorage<T>(key: string, value: T): void {
 export function writeRawStorage(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
-  } catch {
-    // ignore
+    clearFailure(key);
+  } catch (error) {
+    reportFailure(key, error);
   }
 }
 
@@ -57,6 +97,18 @@ export interface DebouncedWriter<T> {
   write: (value: T) => void;
   /** Persist immediately, cancelling any pending debounce. */
   flush: (value: T) => void;
+  /** Persist the value currently waiting on the debounce, if any. Called
+   *  from the shell's pagehide/visibility handler so closing the tab
+   *  mid-edit cannot drop the last keystroke. */
+  flushPending: () => void;
+}
+
+/** Every debounced writer created in the app, so one pagehide handler can
+ *  flush them all without the shell knowing each store. */
+const pendingWriters = new Set<DebouncedWriter<unknown>>();
+
+export function flushAllPendingWrites(): void {
+  for (const writer of pendingWriters) writer.flushPending();
 }
 
 /** A debounced writer for one key — the song store's autosave. Uses plain
@@ -70,20 +122,35 @@ export function createDebouncedWriter<T>(
   persist: (value: T) => void = (value) => writeStorage(key, value),
 ): DebouncedWriter<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null;
-  return {
+  let pendingValue: T;
+  let hasPending = false;
+
+  const writer: DebouncedWriter<T> = {
     write(value: T): void {
+      pendingValue = value;
+      hasPending = true;
       if (timeout !== null) clearTimeout(timeout);
       timeout = setTimeout(() => {
-        persist(value);
+        persist(pendingValue);
+        hasPending = false;
         timeout = null;
       }, ms);
     },
     flush(value: T): void {
-      if (timeout !== null) {
-        clearTimeout(timeout);
-        timeout = null;
-      }
+      if (timeout !== null) clearTimeout(timeout);
+      timeout = null;
+      hasPending = false;
       persist(value);
     },
+    flushPending(): void {
+      if (!hasPending) return;
+      if (timeout !== null) clearTimeout(timeout);
+      timeout = null;
+      hasPending = false;
+      persist(pendingValue);
+    },
   };
+
+  pendingWriters.add(writer as DebouncedWriter<unknown>);
+  return writer;
 }

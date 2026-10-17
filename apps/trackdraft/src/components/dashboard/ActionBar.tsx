@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSongStore } from "../../store/songStore";
-import { readSongFile } from "../../lib/exportImport";
+import { readSongFile, downloadLibraryBackup, readLibraryBackupFile } from "../../lib/exportImport";
 import { extractVideoId } from "../../lib/youtube";
 import { assembleBlueprint } from "../../lib/youtubeFullImport";
 import type { ChordMiniAppResult, LrclibData } from "../../lib/youtubeFullImport";
@@ -18,6 +18,7 @@ export default function ActionBar() {
   const importSong = useSongStore((s) => s.importSong);
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
 
   const [newTitle, setNewTitle] = useState("");
@@ -35,6 +36,19 @@ export default function ActionBar() {
       navigate(`/song/${song.id}`);
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Failed to import file.");
+    }
+  }
+
+  /** Restores a whole-library backup (or a bare array of songs). Import is
+   *  upsert-by-id, so restoring a backup never duplicates existing songs. */
+  async function handleRestoreBackup(file: File) {
+    try {
+      const songs = await readLibraryBackupFile(file);
+      for (const song of songs) importSong(song);
+      setImportError(null);
+      alert(`Restored ${songs.length} song(s).`);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Failed to restore backup.");
     }
   }
 
@@ -204,6 +218,31 @@ export default function ActionBar() {
           >
             Sync library to folder
           </button>
+          <button
+            className="border border-edge rounded px-3 py-1 text-xs text-inkMuted hover:text-ink hover:bg-panelAlt"
+            onClick={() => downloadLibraryBackup(useSongStore.getState().songs)}
+            title="Download the entire library as one JSON backup (restorable below) — the safety net for localStorage"
+          >
+            Backup all songs
+          </button>
+          <button
+            className="border border-edge rounded px-3 py-1 text-xs text-inkMuted hover:text-ink hover:bg-panelAlt"
+            onClick={() => backupInputRef.current?.click()}
+            title="Restore a library backup or a bare array of song files (upsert by song id)"
+          >
+            Restore backup
+          </button>
+          <input
+            ref={backupInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleRestoreBackup(file);
+              e.target.value = "";
+            }}
+          />
           <input
             ref={fileInputRef}
             type="file"

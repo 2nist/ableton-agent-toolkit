@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { readStorage, readRawStorage, writeStorage, writeRawStorage, createDebouncedWriter } from "./storage";
+import {
+  readStorage,
+  readRawStorage,
+  writeStorage,
+  writeRawStorage,
+  createDebouncedWriter,
+  getStorageFailure,
+  subscribeStorageFailure,
+} from "./storage";
 
 /** Minimal in-memory localStorage polyfill (same pattern as
  *  songStore.repair.test.ts) — Node has no such global. */
@@ -48,6 +56,22 @@ describe("readStorage / writeStorage", () => {
     expect(() => writeRawStorage("k", "v")).not.toThrow();
     backing.setItem = original;
   });
+
+  it("reports a failed write to subscribers and clears it on the next success", () => {
+    const seen: (string | null)[] = [];
+    const unsubscribe = subscribeStorageFailure((failure) => seen.push(failure?.message ?? null));
+    const original = backing.setItem;
+    backing.setItem = () => {
+      throw new Error("quota exceeded");
+    };
+    writeStorage("songs", { a: 1 });
+    expect(getStorageFailure()?.key).toBe("songs");
+    backing.setItem = original;
+    writeStorage("songs", { a: 2 });
+    expect(getStorageFailure()).toBeNull();
+    expect(seen).toEqual(["quota exceeded", null]);
+    unsubscribe();
+  });
 });
 
 describe("readRawStorage / writeRawStorage", () => {
@@ -83,5 +107,23 @@ describe("createDebouncedWriter", () => {
     expect(JSON.parse(backing.getItem("songs")!)).toEqual([9]);
     vi.advanceTimersByTime(5000);
     expect(JSON.parse(backing.getItem("songs")!)).toEqual([9]); // no late overwrite
+  });
+
+  it("flushPending persists the value waiting on the debounce (tab close path)", () => {
+    const w = createDebouncedWriter<number[]>("songs", 1500);
+    w.write([1, 2]);
+    w.flushPending();
+    expect(JSON.parse(backing.getItem("songs")!)).toEqual([1, 2]);
+    vi.advanceTimersByTime(5000);
+    expect(JSON.parse(backing.getItem("songs")!)).toEqual([1, 2]);
+  });
+
+  it("flushPending is a no-op when nothing is pending", () => {
+    const w = createDebouncedWriter<number[]>("songs", 1500);
+    w.write([1]);
+    vi.advanceTimersByTime(1500);
+    backing.clear();
+    w.flushPending();
+    expect(backing.getItem("songs")).toBeNull();
   });
 });

@@ -61,9 +61,56 @@ export function downloadSongJson(song: BlueprintSong) {
   URL.revokeObjectURL(url);
 }
 
+/** The whole library in one file — the safety net beside the per-song
+ *  export. localStorage is the only live store, so a quota failure or a
+ *  browser profile reset can otherwise take every song at once. */
+export interface LibraryBackup {
+  app: "trackdraft";
+  version: 1;
+  exportedAt: string;
+  songs: BlueprintSong[];
+}
+
+export function downloadLibraryBackup(songs: BlueprintSong[]): void {
+  const backup: LibraryBackup = {
+    app: "trackdraft",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    songs,
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `trackdraft-library-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Accepts a library backup, a bare array of songs, or a single song. */
+export function parseLibraryBackup(raw: unknown): BlueprintSong[] {
+  const list: unknown[] = Array.isArray(raw)
+    ? raw
+    : typeof raw === "object" && raw !== null && Array.isArray((raw as { songs?: unknown }).songs)
+      ? ((raw as { songs: unknown[] }).songs)
+      : [raw];
+  if (list.length === 0) {
+    throw new Error("Backup contains no songs.");
+  }
+  return list.map((entry) => parseImportedSong(entry, { preserveTimestamps: true }));
+}
+
+export async function readLibraryBackupFile(file: File): Promise<BlueprintSong[]> {
+  const text = await file.text();
+  return parseLibraryBackup(JSON.parse(text));
+}
+
 /** Minimal shape validation for imported JSON -- catches obviously wrong
  *  files (wrong app, corrupted) without being a full schema validator. */
-export function parseImportedSong(raw: unknown): BlueprintSong {
+export function parseImportedSong(
+  raw: unknown,
+  opts: { preserveTimestamps?: boolean } = {},
+): BlueprintSong {
   if (typeof raw !== "object" || raw === null) {
     throw new Error("Not a valid song file: expected a JSON object.");
   }
@@ -146,7 +193,8 @@ export function parseImportedSong(raw: unknown): BlueprintSong {
     // answered. See exportImport.test.ts for the regression lock.
     blueprintAcks: (obj.blueprintAcks as BlueprintSong["blueprintAcks"]) ?? undefined,
     createdAt: typeof obj.createdAt === "string" ? obj.createdAt : now,
-    updatedAt: now,
+    updatedAt:
+      opts.preserveTimestamps && typeof obj.updatedAt === "string" ? obj.updatedAt : now,
   };
 }
 

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useSongStore } from "./store/songStore";
+import { flushAllPendingWrites } from "./store/storage";
 import { startAtomSqUserMidi, stopAtomSqUserMidi } from "./lib/playback/userMidi";
 import Dashboard from "./components/dashboard/Dashboard";
 import SongEditorLayout from "./components/layout/SongEditorLayout";
@@ -18,6 +19,7 @@ import GenreWorkbench from "./pages/GenreWorkbench";
 import DesignLab from "./pages/DesignLab";
 import RenderCanvasLayout from "./components/RenderCanvasLayout";
 import LyricChordPopout from "./components/popout/LyricChordPopout";
+import StorageWarning from "./components/shell/StorageWarning";
 
 function App() {
   const loadFromStorage = useSongStore((s) => s.loadFromStorage);
@@ -32,9 +34,26 @@ function App() {
     return () => stopAtomSqUserMidi();
   }, []);
 
+  // Autosave is debounced; without this, closing the tab within the debounce
+  // window silently drops the last edit. `visibilitychange` covers mobile and
+  // tab switches, `pagehide` covers navigation/close.
+  useEffect(() => {
+    const flush = () => flushAllPendingWrites();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-canvas text-ink">
+        <StorageWarning />
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/song/:songId" element={<SongEditorLayout />}>

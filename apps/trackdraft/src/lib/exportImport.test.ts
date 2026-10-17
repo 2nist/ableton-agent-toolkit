@@ -10,7 +10,7 @@
  * rebuild so the next field addition fails loudly instead of quietly.
  */
 import { describe, expect, it } from "vitest";
-import { parseImportedSong } from "./exportImport";
+import { parseImportedSong, parseLibraryBackup } from "./exportImport";
 
 const RAW = {
   id: "song-1",
@@ -52,5 +52,28 @@ describe("parseImportedSong — whitelist rebuild", () => {
     expect(minimal.bend).toBeUndefined();
     expect(minimal.detected).toBeUndefined();
     expect(minimal.blueprintAcks).toBeUndefined();
+  });
+});
+
+describe("parseLibraryBackup", () => {
+  it("restores a backup bundle, preserving each song's updatedAt", () => {
+    const songs = parseLibraryBackup({
+      app: "trackdraft",
+      version: 1,
+      exportedAt: "2026-10-17T00:00:00Z",
+      songs: [{ ...RAW, updatedAt: "2026-09-15T12:00:00Z" }],
+    });
+    expect(songs).toHaveLength(1);
+    expect(songs[0].id).toBe("song-1");
+    expect(songs[0].updatedAt).toBe("2026-09-15T12:00:00Z");
+  });
+
+  it("accepts a bare array and a single song object", () => {
+    expect(parseLibraryBackup([RAW])).toHaveLength(1);
+    expect(parseLibraryBackup(RAW)).toHaveLength(1);
+  });
+
+  it("rejects an empty bundle", () => {
+    expect(() => parseLibraryBackup({ songs: [] })).toThrow(/no songs/i);
   });
 });
