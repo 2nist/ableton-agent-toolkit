@@ -1,10 +1,12 @@
 /**
- * MelodyPianoRoll — the Melody tab's pitch/time view: notes as horizontal
- * bars across the section's beat span, positioned by pitch (low at the
- * bottom, high at the top), with a mini piano keyboard down the left gutter
- * so each row reads as a key. This is the DAW-standard representation
- * (Ableton's own MIDI editor) — it shows the melody's contour at a glance,
- * which the old flat single-row "blocks" view couldn't.
+ * MelodyPianoRoll — a read-only pitch/time view: notes as horizontal bars
+ * across the section's beat span, positioned by pitch (low at the bottom,
+ * high at the top), with a mini piano keyboard down the left gutter so each
+ * row reads as a key.
+ *
+ * The Melody tab's editing surface is `MelodyNoteEditor` (pointer/touch note
+ * drawing, drag, resize and velocity); this canvas roll survives as the
+ * non-interactive preview registered in the design lab.
  *
  * Drawn on a canvas so the grid + keyboard + bars stay crisp at any size;
  * the pure math (pitch rows, note rects) is small enough to live here.

@@ -6,7 +6,8 @@ const HEIGHT = 52;
 const PAD = 7;
 
 /** The melody layer's arrangement face: a compact contour/roll on the
- *  shared grid. Read-only in this pass — the note editor lands in Phase C. */
+ *  shared grid. Read-only overview — the note editor lives in the Melody
+ *  row (✎ Notes) and the Melody workspace. */
 export default function MelodyFace({
   section,
   onOpen,
@@ -32,7 +33,7 @@ export default function MelodyFace({
     return (
       <FaceFrame height={HEIGHT}>
         <p className="absolute inset-0 flex items-center justify-center text-2xs font-mono italic text-inkMuted/50">
-          No melody yet — record one in the melody editor.
+          No melody yet — open ✎ Notes to draw one, or auto-fill.
         </p>
       </FaceFrame>
     );

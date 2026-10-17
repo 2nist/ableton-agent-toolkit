@@ -10,10 +10,11 @@ import { MelodyRecorder, rawNotesToBeats, midiToNoteName } from "../../lib/melod
 import { adjustMelody, QUANTIZE_GRID_LABELS, type QuantizeGrid } from "../../lib/melody/quantize";
 import { ClickTrack } from "../../lib/melody/clickTrack";
 import { foldNotesToSection, dedupeNotes } from "../../lib/melody/recordTiming";
+import { useWriteMelodyNotes } from "../../hooks/useWriteMelodyNotes";
 import MelodyStaff from "./MelodyStaff";
 import MelodyGenerateBar from "./MelodyGenerateBar";
-import MelodyPianoRoll from "./MelodyPianoRoll";
-import type { BlueprintSection, MelodyNote } from "../../types/blueprint";
+import MelodyNoteEditor from "./MelodyNoteEditor";
+import { beatsPerBar, type BlueprintSection, type MelodyNote } from "../../types/blueprint";
 
 /** The Melody tab — capture a sung/hummed line from the microphone while a
  *  section plays, then dial it in with a quantize grid + fit-to-scale knob.
@@ -38,6 +39,9 @@ import type { BlueprintSection, MelodyNote } from "../../types/blueprint";
 export default function MelodyView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
+  const undo = useSongStore((s) => s.undo);
+  const canUndo = useSongStore((s) => s.canUndo());
+  const writeNotes = useWriteMelodyNotes();
   const midiOutputId = useMidiSettingsStore((s) => s.midiOutputId);
   const midiChannels = useMidiSettingsStore((s) => s.channels);
 
@@ -54,7 +58,7 @@ export default function MelodyView() {
   const [liveClarity, setLiveClarity] = useState(0);
   const [quantize, setQuantize] = useState<QuantizeGrid>("1/8");
   const [fitToScale, setFitToScale] = useState(true);
-  const [viewMode, setViewMode] = useState<"staff" | "piano">("staff");
+  const [viewMode, setViewMode] = useState<"staff" | "piano">("piano");
   /** Metronome click during recording — helps users stay on time. */
   const [clickEnabled, setClickEnabled] = useState(false);
   /** What plays while recording: follow the song (record whatever section
@@ -154,6 +158,16 @@ export default function MelodyView() {
   /** Rewrite a section's attached melody from an adjusted note list. */
   function applyMelody(sectionId: string, notes: MelodyNote[]) {
     updateCurrentSong((s) => updateSection(s, sectionId, (sec) => ({ ...sec, melody: { notes } })));
+  }
+
+  /** Hand edits from the note editor. They win over the capture knobs — the
+   *  raw take is dropped so "reapply from raw" can't silently undo a drag —
+   *  and `useWriteMelodyNotes` marks the line as edited (no more Bend
+   *  rebuild nudge, no export re-shaping). */
+  function editNotes(next: MelodyNote[]) {
+    if (!activeSection) return;
+    setRawCapture(null);
+    writeNotes(activeSection.id, next);
   }
 
   async function toggleRecord() {
@@ -450,21 +464,31 @@ export default function MelodyView() {
             <button
               className={`text-[10px] px-1.5 py-0.5 rounded ${viewMode === "piano" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
               onClick={() => setViewMode("piano")}
-              title="Show the melody as a piano roll — pitch up/down, time left/right"
+              title="Note editor — tap the grid to add, drag to move, drag an edge to resize, drag the velocity lane"
             >
-              Piano roll
+              ✎ Note editor
             </button>
           </div>
         </div>
 
-        {sortedNotes.length === 0 ? (
+        {viewMode === "piano" ? (
+          <MelodyNoteEditor
+            notes={sortedNotes}
+            sectionBeats={sectionBeats}
+            beatsPerBar={activeSection ? beatsPerBar(activeSection) : 4}
+            keyName={sectionKey}
+            scale={sectionScale}
+            maxHeight={300}
+            onChange={editNotes}
+            onUndo={undo}
+            canUndo={canUndo}
+          />
+        ) : sortedNotes.length === 0 ? (
           <div className="h-28 bg-panelAlt border border-edge rounded flex items-center justify-center text-[11px] text-inkMuted">
-            No melody yet — press ● Record and hum this section.
+            No melody yet — draw notes in the note editor, auto-fill, or press ● Record and hum this section.
           </div>
-        ) : viewMode === "staff" ? (
-          <MelodyStaff notes={sortedNotes} sectionBeats={sectionBeats} songKey={sectionKey} scale={sectionScale} height={128} />
         ) : (
-          <MelodyPianoRoll notes={sortedNotes} sectionBeats={sectionBeats} height={150} />
+          <MelodyStaff notes={sortedNotes} sectionBeats={sectionBeats} songKey={sectionKey} scale={sectionScale} height={128} />
         )}
       </div>
 
@@ -492,8 +516,7 @@ export default function MelodyView() {
                   title="Remove this note"
                   onClick={() => {
                     if (!activeSection) return;
-                    const next = melodyNotes.filter((_, j) => j !== i);
-                    updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, melody: { notes: next } })));
+                    editNotes(melodyNotes.filter((note) => note !== n));
                   }}
                 >
                   &times;
@@ -516,8 +539,10 @@ export default function MelodyView() {
       <p className="text-[11px] text-inkMuted leading-relaxed max-w-2xl">
         Record while a section plays — the take attaches to whatever section was under the playhead when you pressed ●. It's
         immediately playable (Studio ▶ streams it on the template's <span className="font-mono">melody</span> track, ch.5) and
-        exported with the .mid (a Melody track). The knobs re-run over your raw take non-destructively; delete individual notes
-        to nudge the line. Melody capture is monophonic — hum or sing one voice at a time.
+        exported with the .mid (a Melody track). The knobs re-run over your raw take non-destructively; in the note editor you
+        can also draw, drag and resize notes by hand and drag the velocity lane. Hand edits win: the line is marked
+        <span className="font-mono"> edited</span>, the capture knobs drop their raw take, and the export uses exactly the
+        notes you drew. Melody capture is monophonic — hum or sing one voice at a time.
       </p>
     </div>
   );

@@ -34,6 +34,7 @@ export default function MelodyGenerateBar({
   const currentParams = melodyParamsFromProfile(profile);
   const melody = section.melody;
   const generated = melody?.source === "generated";
+  const edited = melody?.source === "edited";
   const stale = generated && melodyParamsDiffer(melody?.params, currentParams);
   const ready = canAutoFill(section);
   const seed = melody?.seed ?? melodySeedFor(section.id);
@@ -136,12 +137,21 @@ export default function MelodyGenerateBar({
         </>
       ) : melody?.notes.length ? (
         <>
-          <span className="font-mono text-[9px] text-inkMuted/60">recorded</span>
+          <span
+            className="font-mono text-[9px] text-inkMuted/60"
+            title={
+              edited
+                ? "Hand-edited — exports exactly as drawn (no Bend contour re-shaping, no rebuild nudge)"
+                : "Captured from the mic — the Bend contour still shapes it at render time"
+            }
+          >
+            {edited ? "✎ edited" : "recorded"}
+          </span>
           <button
             type="button"
             className={primary}
             onClick={() => void autoFill()}
-            title="Replace the recorded line with a corpus auto-fill shaped by the Mix/Bend"
+            title="Replace this line with a corpus auto-fill shaped by the Mix/Bend"
           >
             ✨ Auto-fill
           </button>

@@ -351,8 +351,10 @@ export interface MelodyTrack {
   notes: MelodyNote[];
   /** Where the line came from. `generated` lines may be rebuilt from Bend;
    *  `recorded` (or absent) lines are the player's and only get the
-   *  render-time contour transform. */
-  source?: "recorded" | "generated";
+   *  render-time contour transform; `edited` means drawn/moved by hand in the
+   *  note editor, which wins over both (no rebuild nudge, and the stem uses
+   *  the notes exactly as written). */
+  source?: "recorded" | "generated" | "edited";
   /** Deterministic generator seed (reroll changes it). */
   seed?: number;
   /** The Bend values used at generation time. */

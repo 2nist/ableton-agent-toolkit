@@ -428,7 +428,14 @@ jump-open included); the karaoke popout is untouched.
   twice. Auto-fill is available in the Melody row and the Melody view; a
   recorded line can be replaced explicitly. Melody-only bends no longer
   reseed the drums (`hasBend` now means "a drum axis is off neutral").
-  Note-level editing (drag/tap in the piano roll) is the remaining slice.
+  Note-level editing lives in **`MelodyNoteEditor`** (pointer/touch first —
+  tap the grid to add, drag to move, drag a note's edge to resize, drag the
+  velocity lane, `✕ Delete`): it runs on the Melody workspace and inline in
+  the Melody row (Staff | ✎ Notes), snapping to the same `QuantizeGrid`
+  vocabulary as capture. Hand edits mark the line `source: "edited"`, drop
+  the raw capture so the quantize knobs can't silently undo a drag, and set
+  `contourApplied` — the drawn line is what exports. Every gesture is one
+  song-store write, so the header's Undo steps back through them.
 
 ## 8. Defaults chosen (veto-able)
 

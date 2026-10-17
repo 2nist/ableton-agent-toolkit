@@ -25,6 +25,8 @@ import LyricsEditor from "../lyrics/LyricsEditor";
 import NecklaceRow from "../drums/NecklaceRow";
 import MelodyStaff from "../melody/MelodyStaff";
 import MelodyGenerateBar from "../melody/MelodyGenerateBar";
+import MelodyNoteEditor from "../melody/MelodyNoteEditor";
+import { useWriteMelodyNotes } from "../../hooks/useWriteMelodyNotes";
 import { SectionGridProvider } from "./layers/LayerGrid";
 import SectionTimeRuler from "./layers/SectionTimeRuler";
 import DrumFace from "./layers/DrumFace";
@@ -226,6 +228,10 @@ function SectionWorkspace({
   const jump = (tab: string) => navigate(`/song/${id}/${tab}?section=${section.id}`);
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const clockSource = useSongStore((s) => s.clockSource);
+  const undo = useSongStore((s) => s.undo);
+  const canUndo = useSongStore((s) => s.canUndo());
+  const writeMelodyNotes = useWriteMelodyNotes();
+  const [melodyMode, setMelodyMode] = useState<"staff" | "notes">("staff");
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
   const [renaming, setRenaming] = useState(false);
@@ -607,7 +613,44 @@ function SectionWorkspace({
       >
         <div className="w-full space-y-2">
           <MelodyGenerateBar song={song} section={section} sectionId={section.id} compact />
-          {melody ? (
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex gap-1 border border-edge rounded p-0.5">
+              <button
+                type="button"
+                className={`text-[10px] px-1.5 py-0.5 rounded ${melodyMode === "staff" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
+                onClick={() => setMelodyMode("staff")}
+                title="Read the line as notation"
+              >
+                Staff
+              </button>
+              <button
+                type="button"
+                className={`text-[10px] px-1.5 py-0.5 rounded ${melodyMode === "notes" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
+                onClick={() => setMelodyMode("notes")}
+                title={`Edit "${section.name}"'s notes right here — tap the grid to add, drag to move, drag an edge to resize`}
+              >
+                ✎ Notes
+              </button>
+            </div>
+            {melodyMode === "notes" && (
+              <span className="text-[9px] font-mono text-inkMuted/60">
+                tap to add · drag to move · edge = length · vel lane
+              </span>
+            )}
+          </div>
+          {melodyMode === "notes" ? (
+            <MelodyNoteEditor
+              notes={melody ?? []}
+              sectionBeats={span.durationBeats}
+              beatsPerBar={bpb}
+              keyName={effKey}
+              scale={effScale}
+              maxHeight={260}
+              onChange={(next) => writeMelodyNotes(section.id, next)}
+              onUndo={undo}
+              canUndo={canUndo}
+            />
+          ) : melody ? (
             <div className="w-full">
               <MelodyStaff
                 notes={melody}
