@@ -172,3 +172,22 @@ export function zoomBy(camera: SceneCamera, factor: number): SceneCamera {
 export function panBy(camera: SceneCamera, dxPixels: number, dyPixels: number): SceneCamera {
   return { ...camera, panX: camera.panX + dxPixels, panY: camera.panY + dyPixels };
 }
+
+/** Tallest and shortest box in the scene, in world units. */
+export const MIN_BOX_HEIGHT = 7;
+export const MAX_BOX_HEIGHT = 34;
+
+/**
+ * A chord's box height is its LENGTH in beats, so harmonic rhythm is legible
+ * without reading a label: four beats ≈ 16px, eight ≈ 25px, clamped so a
+ * single bar-long chord can't dominate the scene.
+ */
+export function boxHeightForBeats(beats: number): number {
+  return Math.min(MAX_BOX_HEIGHT, MIN_BOX_HEIGHT + Math.max(0.5, beats) * 2.4);
+}
+
+/** Older chords dim towards the background so a run leaves a visible wake. */
+export function trailFade(index: number, total: number): number {
+  if (total <= 1) return 1;
+  return 0.4 + 0.6 * (index / (total - 1));
+}

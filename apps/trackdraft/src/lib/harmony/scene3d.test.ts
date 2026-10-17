@@ -4,12 +4,16 @@ import {
   MAX_PITCH,
   MAX_ZOOM,
   MIN_ZOOM,
+  MAX_BOX_HEIGHT,
+  MIN_BOX_HEIGHT,
   boxFaces,
+  boxHeightForBeats,
   clampCamera,
   orbit,
   panBy,
   projectPoint,
   rotatePoint,
+  trailFade,
   zoomBy,
 } from "./scene3d";
 
@@ -96,5 +100,29 @@ describe("camera controls", () => {
 
   it("clampCamera leaves a valid camera alone", () => {
     expect(clampCamera(DEFAULT_CAMERA)).toEqual(DEFAULT_CAMERA);
+  });
+});
+
+describe("boxHeightForBeats", () => {
+  it("grows with the chord's length", () => {
+    const one = boxHeightForBeats(1);
+    const four = boxHeightForBeats(4);
+    const eight = boxHeightForBeats(8);
+    expect(four).toBeGreaterThan(one);
+    expect(eight).toBeGreaterThan(four);
+  });
+
+  it("clamps at both ends", () => {
+    expect(boxHeightForBeats(0.01)).toBeGreaterThanOrEqual(MIN_BOX_HEIGHT);
+    expect(boxHeightForBeats(64)).toBe(MAX_BOX_HEIGHT);
+  });
+});
+
+describe("trailFade", () => {
+  it("lights a single chord and ramps the rest", () => {
+    expect(trailFade(0, 1)).toBe(1);
+    expect(trailFade(0, 5)).toBeCloseTo(0.4);
+    expect(trailFade(4, 5)).toBe(1);
+    expect(trailFade(2, 5)).toBeGreaterThan(trailFade(1, 5));
   });
 });

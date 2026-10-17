@@ -29,9 +29,12 @@ import {
 } from "../../lib/harmony/honeycombWalk";
 import {
   DEFAULT_CAMERA,
+  MAX_BOX_HEIGHT,
   MAX_ZOOM,
   MIN_ZOOM,
   boxFaces,
+  boxHeightForBeats,
+  trailFade,
   clampCamera,
   orbit,
   panBy,
@@ -43,7 +46,7 @@ import {
 } from "../../lib/harmony/scene3d";
 
 const DEG_W = 46;
-const ACC_H = 32;
+const ACC_H = 40;
 const Z_STEP = 34;
 const BOX: Vec3 = { x: 26, y: 12, z: 26 };
 const FLOOR_Y = -14;
@@ -62,8 +65,17 @@ interface Node {
   step: number;
   degree: number;
   accidental: number;
+  /** Box height in world units — the chord's length in beats, so harmonic
+   *  rhythm is legible in the picture. */
+  height: number;
   center: Vec3;
 }
+
+/** Accidental tiers on the y axis: flat / natural / sharp. */
+const LANES = [-1, 0, 1] as const;
+const LANE_LABEL: Record<number, string> = { [-1]: "♭", [0]: "♮", [1]: "♯" };
+
+
 
 function shadeHex(hex: string, shade: number): string {
   const value = parseInt(hex.replace("#", ""), 16);
@@ -111,12 +123,15 @@ export default function HarmonyScene({
       const step = steps[index];
       const degree = step?.deg ?? 0;
       const accidental = step?.acc ?? 0;
+      const height = boxHeightForBeats(chord.beats);
       return {
         chord,
         step: index,
         degree,
         accidental,
-        center: { x: degree * DEG_W, y: accidental * ACC_H, z: index * Z_STEP },
+        height,
+        // The box sits ON its lane and grows upward.
+        center: { x: degree * DEG_W, y: accidental * ACC_H + height / 2, z: index * Z_STEP },
       };
     });
   }, [chords]);
@@ -131,7 +146,7 @@ export default function HarmonyScene({
     const xs = points.map((point) => point.x);
     const ys = points.map((point) => point.y);
     const spanX = Math.max(180, Math.max(...xs) - Math.min(...xs) + BOX.x * 2);
-    const spanY = Math.max(150, Math.max(...ys) - Math.min(...ys) + BOX.y + BOX.z * 2);
+    const spanY = Math.max(170, Math.max(...ys) - Math.min(...ys) + MAX_BOX_HEIGHT + BOX.z * 2);
     return Math.max(0.45, Math.min(2.4, Math.min((width - 120) / spanX, (height - 120) / spanY)));
   }, [nodes, width, height]);
 
@@ -153,10 +168,12 @@ export default function HarmonyScene({
   };
 
   const projected = useMemo(() => {
-    const faces: (SceneFace & { node: Node })[] = [];
+    const faces: (SceneFace & { node: Node; fade: number })[] = [];
     for (const node of nodes) {
-      for (const face of boxFaces(node.center, BOX, renderCamera, origin)) {
-        faces.push({ ...face, node });
+      const size = { x: BOX.x, y: node.height, z: BOX.z };
+      const fade = trailFade(node.step, nodes.length);
+      for (const face of boxFaces(node.center, size, renderCamera, origin)) {
+        faces.push({ ...face, node, fade });
       }
     }
     faces.sort((left, right) => left.depth - right.depth);
@@ -292,6 +309,55 @@ export default function HarmonyScene({
       >
         <rect x={0} y={0} width={width} height={height} fill="#0b0e13" />
 
+        {/* Accidental lanes — b / ♮ / # — so a borrowed chord visibly leaves
+            the diatonic tier instead of just floating a little higher. */}
+        {LANES.map((lane) => {
+          const y = lane * ACC_H;
+          const lastZ = Math.max(1, nodes.length - 1) * Z_STEP;
+          const near = projectPoint({ x: 0, y, z: 0 }, renderCamera, origin);
+          const far = projectPoint({ x: 6 * DEG_W, y, z: 0 }, renderCamera, origin);
+          const backNear = projectPoint({ x: 0, y, z: lastZ }, renderCamera, origin);
+          const backFar = projectPoint({ x: 6 * DEG_W, y, z: lastZ }, renderCamera, origin);
+          const outer = lane !== 0;
+          return (
+            <g key={`lane-${lane}`} style={{ pointerEvents: "none" }}>
+              {/* Only the diatonic tier gets a plane — three filled slabs read
+                  as stacked floors and drown the boxes. The outer tiers are
+                  marked with their two edges plus a dashed guide. */}
+              {!outer && (
+                <polygon
+                  points={[near, far, backFar, backNear]
+                    .map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+                    .join(" ")}
+                  fill="#ffffff"
+                  fillOpacity={0.04}
+                  stroke="#ffffff"
+                  strokeOpacity={0.1}
+                  strokeWidth={1}
+                />
+              )}
+              {outer && (
+                <>
+                  <line x1={near.x} y1={near.y} x2={far.x} y2={far.y}
+                    stroke="#E8B54A" strokeOpacity={0.16} strokeWidth={1} />
+                  <line x1={backNear.x} y1={backNear.y} x2={backFar.x} y2={backFar.y}
+                    stroke="#E8B54A" strokeOpacity={0.1} strokeWidth={1} strokeDasharray="5 5" />
+                </>
+              )}
+              <text
+                x={near.x - 12}
+                y={near.y + 3}
+                textAnchor="end"
+                fontFamily="'IBM Plex Mono', monospace"
+                fontSize={outer ? 10 : 9}
+                fill={outer ? "#8a7350" : "#7A8290"}
+              >
+                {LANE_LABEL[lane]}
+              </text>
+            </g>
+          );
+        })}
+
         {/* Floor grid: degrees across, steps deep. */}
         {grid.map((line, index) => (
           <line
@@ -326,10 +392,10 @@ export default function HarmonyScene({
             <polygon
               key={`face-${face.node.step}-${index}`}
               points={face.points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ")}
-              fill={shadeHex(hue.fill, face.shade)}
-              stroke={shadeHex(hue.rim, face.shade)}
+              fill={shadeHex(hue.fill, face.shade * face.fade)}
+              stroke={shadeHex(hue.rim, face.shade * face.fade)}
               strokeWidth={0.6}
-              strokeOpacity={0.5}
+              strokeOpacity={0.5 * face.fade}
               data-chord-id={face.node.chord.id}
               style={{ cursor: "pointer" }}
             />
@@ -342,7 +408,11 @@ export default function HarmonyScene({
           const hue = HUES[node.degree] ?? HUES[0];
           const name = chordDisplayName(pitchClass(node.chord.root), node.chord.quality, keyName);
           return (
-            <g key={`label-${node.step}`} style={{ pointerEvents: "none" }}>
+            <g
+              key={`label-${node.step}`}
+              style={{ pointerEvents: "none" }}
+              opacity={trailFade(node.step, nodes.length)}
+            >
               <text
                 x={point.x}
                 y={point.y - 7}
@@ -368,7 +438,7 @@ export default function HarmonyScene({
                 strokeWidth={2.5}
                 paintOrder="stroke"
               >
-                {name}
+                {name} · {Math.round(node.chord.beats * 10) / 10}b
               </text>
             </g>
           );

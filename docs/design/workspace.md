@@ -522,7 +522,13 @@ jump-open included); the karaoke popout is untouched.
   three-quarter view; the camera auto-fits once per content change (never
   mid-gesture) and centres on the walk's centroid, so tilting keeps the music
   in frame. Tapping a box selects that chord. The honeycomb and its Depth mode
-  are untouched.
+  are untouched. Second pass (same day): **accidental tiers** — the y axis now
+  shows explicit `♭ / ♮ / ♯` lanes (only the diatonic tier gets a plane; the
+  outer tiers are two edge lines, because three filled slabs read as stacked
+  floors and drowned the boxes); **beat-height boxes** — a chord's box height
+  is its length in beats (`boxHeightForBeats`), so harmonic rhythm is visible
+  without reading a label; and a **ghost trail** — older chords dim to 40% so a
+  run leaves a visible wake behind the current chord.
 
 ## 8. Defaults chosen (veto-able)
 
