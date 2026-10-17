@@ -498,6 +498,18 @@ jump-open included); the karaoke popout is untouched.
   A zoom control (24–56 px, persisted in `trackdraft-honeycomb-scale`) gives
   stacked cells room. Next: a contour view mode for runs and modulation, then
   modulation layers (which need a decision: inferred vs authored tonic).
+- **Phase D — Depth view (z = time) (2026-10-17)**: a third wheel mode.
+  Each step gets a depth equal to its position in the sequence and the
+  projection shears by it (`lib/harmony/depthView.ts`), so every chord has its
+  own screen position and the path is monitone along depth — repeats advance
+  instead of stacking on one hex, runs stop doubling back, and a modulation is
+  a lattice step taken at a new depth. The shear is deliberately **not** a
+  lattice direction (`shearIsSafe` asserts no two `(q, r, z)` collide), depth
+  mode draws smaller hexes (`DEPTH_CELL_SCALE`), older steps fade to 35%, and
+  the add-a-chord choices sit on the next plane so adding reads as stepping
+  forward. Long progressions scroll horizontally at a fixed cell size. This
+  subsumes the planned contour mode; modulation **layers** are now optional
+  (key-signature regions) rather than the linearity fix.
 
 ## 8. Defaults chosen (veto-able)
 

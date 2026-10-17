@@ -1,4 +1,5 @@
 import { useMemo, useCallback, useState } from "react";
+import { DEPTH_CELL_SCALE, depthOpacity, projectDepth } from "../../lib/harmony/depthView";
 import { pitchClass } from "@music-theory/core";
 import type { ScaleType, ChordQuality, NoteName } from "@music-theory/core";
 import { resolveFlavor, BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR } from "@platform/progression-engine";
@@ -123,6 +124,14 @@ export default function HoneycombWheel({
   // selecting an earlier chord to inspect must never relocate where a
   // click-to-add lands (see honeycomb design spec: cell position vs.
   // sequence step are decoupled).
+  // Depth (z = time): each step is its own hex at its own depth, so the path
+  // is monotone and nothing needs to share a cell. Falls back to the flat
+  // lattice when there is no walk yet (an empty section still shows the
+  // starter ring, and its choices are the seeded `revealed` cells).
+  const isDepth = viewMode === "depth" && walk.length > 0;
+  /** Depth mode's own cell size — smaller hexes keep the ribbon readable. */
+  const SD = Math.round(S * DEPTH_CELL_SCALE);
+
   const endStep = displayWalk.length ? displayWalk.length - 1 : 0;
 
   const revealed = useMemo(() => {
@@ -171,6 +180,36 @@ export default function HoneycombWheel({
   // come back with a single variant, so the diatonic case is unchanged.
   const variants = useMemo(() => walkVariants(displayWalk, steps), [displayWalk, steps]);
 
+  const depthNodes = useMemo(
+    () =>
+      isDepth
+        ? walk.map((cell, index) => ({
+            ...projectDepth(cell.q, cell.r, index, SD),
+            index,
+            q: cell.q,
+            r: cell.r,
+          }))
+        : [],
+    [isDepth, walk, SD],
+  );
+
+  const depthPath = useMemo(
+    () => (depthNodes.length ? `M ${depthNodes.map((node) => `${node.x} ${node.y}`).join(" L ")}` : ""),
+    [depthNodes],
+  );
+
+  /** The next chord is chosen from the latest chord's neighbours, one step
+   *  deeper — "add" reads as stepping forward. */
+  const frontier = useMemo(() => {
+    if (!isDepth) return [];
+    const last = walk[walk.length - 1];
+    return DIRS.map(([a, b]) => {
+      const q = last.q + a;
+      const r = last.r + b;
+      return { ...projectDepth(q, r, walk.length, SD), q, r, d: degreeAt(q, r) };
+    });
+  }, [isDepth, walk, SD]);
+
   const loop = useMemo(() => detectLoop(steps, displayWalk), [steps, displayWalk]);
   // The loop's translation vector in pixel space, under the same projection
   // as the cells themselves (hexToPixel handles the pointy-top mapping).
@@ -187,7 +226,10 @@ export default function HoneycombWheel({
     if (revealed.length > 0) {
       allPts.push(...revealed.map((c) => hexToPixel(c.q, c.r, S)));
     }
-    if (displayWalk.length > 0) {
+    if (isDepth) {
+      allPts.push(...depthNodes.map(({ x, y }) => ({ x, y })));
+      allPts.push(...frontier.map(({ x, y }) => ({ x, y })));
+    } else if (displayWalk.length > 0) {
       allPts.push(...displayWalk.map((p) => hexToPixel(p.q, p.r, S)));
       if (loopVec) {
         const first = hexToPixel(displayWalk[0].q, displayWalk[0].r, S);
@@ -200,7 +242,9 @@ export default function HoneycombWheel({
     }
     const xs = allPts.map((p) => p.x);
     const ys = allPts.map((p) => p.y);
-    const pad = S * 2.5;
+    // Depth mode's content already spans the sequence, so it needs far less
+    // margin than the flat lattice's ring of choice cells.
+    const pad = isDepth ? 26 : S * 2.5;
     const minX = Math.min(...xs) - pad;
     const minY = Math.min(...ys) - pad;
     const maxX = Math.max(...xs) + pad;
@@ -210,7 +254,7 @@ export default function HoneycombWheel({
       w: Math.max(220, maxX - minX + 16),
       h: Math.max(180, maxY - minY + 16),
     };
-  }, [revealed, displayWalk, loopVec, S]);
+  }, [revealed, displayWalk, loopVec, S, isDepth, depthNodes, frontier]);
 
   const addChordAtDegree = useCallback((deg: number) => {
     const diatonic = diatonicByDegree[deg].triad;
@@ -260,7 +304,7 @@ export default function HoneycombWheel({
   const dialCenter = dial ? { x: svgDims.vb[2] - 32, y: 30 } : null;
 
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", minWidth: 0, maxWidth: "100%" }}>
       <div className="absolute left-1 top-1 z-10 flex gap-1">
         <button
           type="button"
@@ -281,6 +325,7 @@ export default function HoneycombWheel({
           +
         </button>
       </div>
+      <div className="w-full max-w-full overflow-x-auto">
       <svg
         viewBox={vbStr}
         style={{ width: svgDims.w, height: svgDims.h, display: "block" }}
@@ -295,11 +340,11 @@ export default function HoneycombWheel({
           </marker>
         </defs>
 
-        {pathD && (
+        {!isDepth && pathD && (
           <path d={pathD} fill="none" stroke="#F5E7C8" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" opacity={0.85} filter="url(#hw-glow)" style={{ pointerEvents: "none" }} />
         )}
 
-        {loop && loop.translated && (
+        {!isDepth && loop && loop.translated && (
           <g style={{ pointerEvents: "none" }}>
             <line x1={hexToPixel(displayWalk[0].q, displayWalk[0].r, S).x} y1={hexToPixel(displayWalk[0].q, displayWalk[0].r, S).y}
               x2={hexToPixel(displayWalk[displayWalk.length - 1].q, displayWalk[displayWalk.length - 1].r, S).x} y2={hexToPixel(displayWalk[displayWalk.length - 1].q, displayWalk[displayWalk.length - 1].r, S).y}
@@ -307,7 +352,81 @@ export default function HoneycombWheel({
           </g>
         )}
 
-        {revealed.map((cell) => {
+        {isDepth && depthPath && (
+          <path d={depthPath} fill="none" stroke="#F5E7C8" strokeWidth={2.4} strokeLinecap="round"
+            strokeLinejoin="round" opacity={0.45} style={{ pointerEvents: "none" }} />
+        )}
+
+        {isDepth &&
+          depthNodes.map((node) => {
+            const chord = chords[node.index];
+            if (!chord) return null;
+            const hue = HUES[degreeAt(node.q, node.r)];
+            const name = chordDisplayName(pitchClass(chord.root), chord.quality, keyName);
+            const isSelected = node.index === selectedStep;
+            const isLatest = node.index === depthNodes.length - 1;
+            return (
+              <g
+                key={`depth-${node.index}`}
+                transform={`translate(${node.x}, ${node.y})`}
+                opacity={depthOpacity(node.index, depthNodes.length)}
+                style={{ cursor: "pointer" }}
+                onClick={() => {
+                  onSelectChord(chord.id);
+                  onPreviewChord?.(chord);
+                }}
+              >
+                <polygon
+                  points={hexPoints(SD - 2)}
+                  fill={hue.fill}
+                  stroke={hue.rim}
+                  strokeWidth={isLatest ? 2.5 : 1.2}
+                  style={isLatest ? { filter: "url(#hw-glow)" } : undefined}
+                />
+                {isSelected && (
+                  <polygon points={hexPoints(SD + 2)} fill="none" stroke="#E8B54A" strokeWidth={2}
+                    strokeDasharray="3 2" style={{ pointerEvents: "none" }} />
+                )}
+                <text x={0} y={0} textAnchor="middle" dominantBaseline="middle"
+                  fontFamily="'IBM Plex Mono', monospace" fontSize={10} fontWeight={600}
+                  fill={hue.ink} style={{ pointerEvents: "none" }}>
+                  {chord.romanNumeral}
+                </text>
+                <text x={0} y={SD * 0.42} textAnchor="middle"
+                  fontFamily="'IBM Plex Mono', monospace" fontSize={7}
+                  fill={hue.rim} style={{ pointerEvents: "none" }}>
+                  {name}
+                </text>
+                <text x={-SD * 0.62} y={-SD * 0.55} textAnchor="middle"
+                  fontFamily="'IBM Plex Mono', monospace" fontSize={7}
+                  fill="#8B94A1" style={{ pointerEvents: "none" }}>
+                  {node.index + 1}
+                </text>
+              </g>
+            );
+          })}
+
+        {frontier.map((cell) => (
+          <g
+            key={`frontier-${cell.q},${cell.r}`}
+            transform={`translate(${cell.x}, ${cell.y})`}
+            opacity={0.5}
+            style={{ cursor: "pointer" }}
+            onClick={() => addChordAtDegree(cell.d)}
+          >
+            <polygon points={hexPoints(SD - 2)} fill="#12161D"
+              stroke={`${HUES[cell.d].rim}66`} strokeWidth={1.4} strokeDasharray="4 3" />
+            <text x={0} y={0} textAnchor="middle" dominantBaseline="middle"
+              fontFamily="'IBM Plex Mono', monospace" fontSize={9} fontWeight={600}
+              fill="#8B94A1" style={{ pointerEvents: "none" }}>
+              {diatonicByDegree[cell.d].triad.minor
+                ? ROMAN_UP[cell.d].toLowerCase()
+                : ROMAN_UP[cell.d]}
+            </text>
+          </g>
+        ))}
+
+        {!isDepth && revealed.map((cell) => {
           const { q, r, d, type } = cell;
           const cx = hexToPixel(q, r, S).x;
           const cy = hexToPixel(q, r, S).y;
@@ -443,7 +562,7 @@ export default function HoneycombWheel({
           );
         })}
 
-        {walkBadges.map(({ q, r, indices }) => {
+        {!isDepth && walkBadges.map(({ q, r, indices }) => {
           const center = hexToPixel(q, r, S);
           const bx = center.x + S * 0.6;
           const by = center.y - S * 0.6;
@@ -499,6 +618,7 @@ export default function HoneycombWheel({
           </g>
         )}
       </svg>
+      </div>
     </div>
   );
 }

@@ -18,11 +18,15 @@ import { create } from "zustand";
 interface HarmonySelectionState {
   selectedChordId: string | null;
   /** Honeycomb view mode — lifted so the wheel (in the canvas) and the
-   *  Linear/Loop toggle (in the dock's Tools panel) stay in sync without
-   *  HarmonyView re-registering dock content. */
-  honeycombMode: "linear" | "loop";
+   *  view toggle (in the dock's Tools panel) stay in sync without
+   *  HarmonyView re-registering dock content.
+   *
+   *  `linear` / `loop` draw the degree lattice flat; `depth` gives each step
+   *  a depth (z = sequence position) and shears the projection, so the path
+   *  is monotone — repeats and runs advance instead of backtracking. */
+  honeycombMode: "linear" | "loop" | "depth";
   setSelectedChordId: (id: string | null) => void;
-  setHoneycombMode: (mode: "linear" | "loop") => void;
+  setHoneycombMode: (mode: "linear" | "loop" | "depth") => void;
 }
 
 export const useHarmonySelectionStore = create<HarmonySelectionState>((set) => ({
