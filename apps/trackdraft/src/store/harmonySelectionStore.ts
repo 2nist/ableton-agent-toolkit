@@ -24,9 +24,9 @@ interface HarmonySelectionState {
    *  `linear` / `loop` draw the degree lattice flat; `depth` gives each step
    *  a depth (z = sequence position) and shears the projection, so the path
    *  is monotone — repeats and runs advance instead of backtracking. */
-  honeycombMode: "linear" | "loop" | "depth";
+  honeycombMode: "linear" | "loop" | "depth" | "scene";
   setSelectedChordId: (id: string | null) => void;
-  setHoneycombMode: (mode: "linear" | "loop" | "depth") => void;
+  setHoneycombMode: (mode: "linear" | "loop" | "depth" | "scene") => void;
 }
 
 export const useHarmonySelectionStore = create<HarmonySelectionState>((set) => ({

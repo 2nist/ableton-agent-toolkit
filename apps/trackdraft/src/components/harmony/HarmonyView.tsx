@@ -9,6 +9,7 @@ import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { updateSection } from "../../lib/sections";
 import HoneycombWheel from "./HoneycombWheel";
 import ProgressionEditor from "./ProgressionEditor";
+import HarmonyScene from "./HarmonyScene";
 import FitStatus from "./FitStatus";
 import ModeInferenceCard from "./ModeInferenceCard";
 import { previewChord } from "../../lib/playback/previewMidi";
@@ -26,6 +27,7 @@ export default function HarmonyView() {
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
+  const honeycombMode = useHarmonySelectionStore((s) => s.honeycombMode);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
 
   const song = currentSong;
@@ -113,7 +115,16 @@ export default function HarmonyView() {
          The progression-fit status lives in this workspace's bottom-right. */}
       <div className="border border-edge rounded-lg bg-[#0e1218] overflow-hidden min-h-[420px] flex flex-col">
         <div className="flex-1 flex items-center justify-center p-4 pt-6">
-          {activeSection && (
+          {activeSection && honeycombMode === "scene" && (
+            <HarmonyScene
+              chords={activeSection.chords}
+              keyName={effectiveKey}
+              scale={effectiveScale}
+              selectedChordId={selectedChordId}
+              onSelectChord={setSelectedChordId}
+            />
+          )}
+          {activeSection && honeycombMode !== "scene" && (
             <HoneycombWheel
               keyName={effectiveKey}
               scale={effectiveScale}

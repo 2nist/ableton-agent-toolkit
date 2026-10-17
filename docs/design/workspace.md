@@ -510,6 +510,19 @@ jump-open included); the karaoke popout is untouched.
   forward. Long progressions scroll horizontally at a fixed cell size. This
   subsumes the planned contour mode; modulation **layers** are now optional
   (key-signature regions) rather than the linearity fix.
+- **Phase D — 3D scene experiment (2026-10-17)**: a fourth mode next to the
+  wheel, deliberately **not** hexagonal — a rectilinear space where
+  `x` = scale degree, `y` = chromatic alteration (b / ♮ / #) and `z` = time.
+  Boxes rather than hexes because this view is testing the concept, and a
+  square grid makes the three axes unambiguous: a diatonic run climbs x, a
+  borrowed chord lifts y, and a repeat steps deeper in z. `lib/harmony/scene3d.ts`
+  is a hand-rolled orthographic pipeline (yaw/pitch rotation, projection,
+  painter's-order face sorting, normal shading) with 13 tests; no 3D library.
+  Drag orbits, wheel/pinch zooms, shift-drag pans, Reset returns to the
+  three-quarter view; the camera auto-fits once per content change (never
+  mid-gesture) and centres on the walk's centroid, so tilting keeps the music
+  in frame. Tapping a box selects that chord. The honeycomb and its Depth mode
+  are untouched.
 
 ## 8. Defaults chosen (veto-able)
 

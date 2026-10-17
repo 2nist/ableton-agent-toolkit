@@ -312,7 +312,7 @@ export function HarmonyTools() {
           </button>
         ))}
         <span className="w-px h-4 bg-edge mx-1" />
-        {(["linear", "loop", "depth"] as const).map((mode) => (
+        {(["linear", "loop", "depth", "scene"] as const).map((mode) => (
           <button
             key={mode}
             aria-pressed={honeycombMode === mode}
@@ -326,11 +326,13 @@ export function HarmonyTools() {
                 ? "One hex per chord (only immediate back-and-forth reuses a hex)"
                 : mode === "loop"
                   ? "Collapse repeating vamps onto a single lap"
-                  : "Depth (z = time): each chord steps back in depth, so repeats, runs and modulations all advance in one direction"
+                  : mode === "depth"
+                    ? "Depth (z = time): each chord steps back in depth, so repeats, runs and modulations all advance in one direction"
+                    : "3D scene: degree × alteration × time — drag to orbit, wheel to zoom, shift-drag to pan"
             }
             onClick={() => setHoneycombMode(mode)}
           >
-            {mode === "linear" ? "Linear" : mode === "loop" ? "Loop" : "Depth"}
+            {mode === "linear" ? "Linear" : mode === "loop" ? "Loop" : mode === "depth" ? "Depth" : "3D"}
           </button>
         ))}
       </div>
