@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { pitchClass } from "@music-theory/core";
 import type { ScaleType, ChordQuality, NoteName } from "@music-theory/core";
 import { resolveFlavor, BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR } from "@platform/progression-engine";
@@ -11,6 +11,7 @@ import {
   buildWalk,
   collapseRepeatsForLoopView,
   detectLoop,
+  walkVariants,
   getRevealedCells,
   getWalkPathD,
   hexToPixel,
@@ -25,7 +26,20 @@ import {
   type RevealedCell,
 } from "../../lib/harmony/honeycombWalk";
 
-const S = 34;
+const DEFAULT_SCALE = 34;
+const MIN_SCALE = 24;
+const MAX_SCALE = 56;
+const SCALE_KEY = "trackdraft-honeycomb-scale";
+
+function readScale(): number {
+  try {
+    const raw = Number(localStorage.getItem(SCALE_KEY));
+    if (Number.isFinite(raw) && raw >= MIN_SCALE && raw <= MAX_SCALE) return raw;
+  } catch {
+    /* a corrupt flag is not worth breaking the wheel over */
+  }
+  return DEFAULT_SCALE;
+}
 
 interface HoneycombWheelProps {
   keyName: NoteName;
@@ -64,6 +78,19 @@ export default function HoneycombWheel({
   harmonyOutline,
   onPreviewChord,
 }: HoneycombWheelProps) {
+  const [scaleSize, setScaleSize] = useState<number>(() => readScale());
+  const S = scaleSize;
+
+  function changeScale(delta: number) {
+    const next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scaleSize + delta));
+    setScaleSize(next);
+    try {
+      localStorage.setItem(SCALE_KEY, String(next));
+    } catch {
+      /* persistence is a nicety */
+    }
+  }
+
   const keyPc = pitchClass(keyName);
   const scaleKey = MODE_TO_SCALE_KEY[scale as keyof typeof MODE_TO_SCALE_KEY] ?? "major";
   const intervals = SCALE_INTERVALS[scaleKey];
@@ -139,6 +166,11 @@ export default function HoneycombWheel({
     return Array.from(byCell.values());
   }, [displayWalk]);
 
+  // Which chords actually landed on each cell: a cell is a DEGREE, a variant
+  // is the chord (Em vs E, bVI vs VI). Cells that only ever see one chord
+  // come back with a single variant, so the diatonic case is unchanged.
+  const variants = useMemo(() => walkVariants(displayWalk, steps), [displayWalk, steps]);
+
   const loop = useMemo(() => detectLoop(steps, displayWalk), [steps, displayWalk]);
   // The loop's translation vector in pixel space, under the same projection
   // as the cells themselves (hexToPixel handles the pointy-top mapping).
@@ -146,7 +178,7 @@ export default function HoneycombWheel({
 
   const pathD = useMemo(
     () => getWalkPathD(displayWalk, endStep, "full", S),
-    [displayWalk, endStep],
+    [displayWalk, endStep, S],
   );
 
   // SVG bounds — guard against empty (no chords) section
@@ -178,7 +210,7 @@ export default function HoneycombWheel({
       w: Math.max(220, maxX - minX + 16),
       h: Math.max(180, maxY - minY + 16),
     };
-  }, [revealed, displayWalk, loopVec]);
+  }, [revealed, displayWalk, loopVec, S]);
 
   const addChordAtDegree = useCallback((deg: number) => {
     const diatonic = diatonicByDegree[deg].triad;
@@ -229,6 +261,26 @@ export default function HoneycombWheel({
 
   return (
     <div style={{ position: "relative" }}>
+      <div className="absolute left-1 top-1 z-10 flex gap-1">
+        <button
+          type="button"
+          className="rounded border border-edge/70 bg-[#0E1116]/80 px-1.5 text-[11px] leading-4 text-inkMuted hover:text-ink"
+          onClick={() => changeScale(-4)}
+          disabled={S <= MIN_SCALE}
+          title="Zoom the honeycomb out"
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className="rounded border border-edge/70 bg-[#0E1116]/80 px-1.5 text-[11px] leading-4 text-inkMuted hover:text-ink"
+          onClick={() => changeScale(6)}
+          disabled={S >= MAX_SCALE}
+          title="Zoom the honeycomb in — room for stacked variants"
+        >
+          +
+        </button>
+      </div>
       <svg
         viewBox={vbStr}
         style={{ width: svgDims.w, height: svgDims.h, display: "block" }}
@@ -277,11 +329,36 @@ export default function HoneycombWheel({
             ? (flavorLabel.length > 7 ? `${flavorLabel.slice(0, 6)}…` : flavorLabel)
             : null;
 
-          const romanLabel = diatonicByDegree[d].triad.minor ? ROMAN_UP[d].toLowerCase() : ROMAN_UP[d];
-          const rootPc = intervals[d];
-          const subLabel = chordDisplayName((keyPc + rootPc) % 12, diatonicByDegree[d].triad.minor ? "min" : "maj", keyName);
+          // The cell is a DEGREE; label it with the chord that actually
+          // landed there — an E major on degree 3 must read "III / E", never
+          // the diatonic placeholder "iii / Em".
+          const cellKey = `${q},${r}`;
+          const lastStep = lastStepAtCell(displayWalk, q, r);
+          const cellChord = lastStep >= 0 ? chords[lastStep] : undefined;
+          const romanLabel = cellChord
+            ? cellChord.romanNumeral
+            : diatonicByDegree[d].triad.minor
+              ? ROMAN_UP[d].toLowerCase()
+              : ROMAN_UP[d];
+          const subLabel = cellChord
+            ? chordDisplayName(pitchClass(cellChord.root), cellChord.quality, keyName)
+            : chordDisplayName(
+                (keyPc + intervals[d]) % 12,
+                diatonicByDegree[d].triad.minor ? "min" : "maj",
+                keyName,
+              );
           const hue = HUES[d];
-          const labelSize = romanLabel.length > 3 ? 10 : romanLabel.length > 2 ? 12 : 14;
+
+          // Chords that share this degree (Em → E, VI → bVI) stack as chips
+          // instead of silently reusing the cell.
+          const cellVariants = variants.byCell.get(cellKey) ?? [];
+          const hasVariants = cellVariants.length > 1;
+          const currentVariant = lastStep >= 0 ? variants.variantOfStep[lastStep] : 0;
+          const selectedVariant =
+            selectedStep >= 0 && displayWalk[selectedStep].q === q && displayWalk[selectedStep].r === r
+              ? variants.variantOfStep[selectedStep]
+              : -1;
+          const labelSize = hasVariants ? 12 : romanLabel.length > 3 ? 10 : romanLabel.length > 2 ? 12 : 14;
 
           return (
             <g key={`${q},${r}`} transform={`translate(${cx}, ${cy})`} style={{ cursor: "pointer" }}
@@ -299,16 +376,46 @@ export default function HoneycombWheel({
               {isSelected && (
                 <polygon points={hexPoints(S + 2)} fill="none" stroke="#E8B54A" strokeWidth={2} strokeDasharray="3 2" style={{ pointerEvents: "none" }} />
               )}
-              <text x={0} y={1} textAnchor="middle" dominantBaseline="middle"
+              <text x={0} y={hasVariants ? -S * 0.24 : 1} textAnchor="middle" dominantBaseline="middle"
                 fontFamily="'IBM Plex Mono', monospace" fontSize={labelSize} fontWeight={600}
                 fill={isChoice ? "#8B94A1" : hue.ink} style={{ pointerEvents: "none" }}>
-                {romanLabel}
+                {hasVariants ? subLabel : romanLabel}
               </text>
-              <text x={0} y={S * 0.38} textAnchor="middle"
-                fontFamily="'IBM Plex Mono', monospace" fontSize={9}
-                fill={isChoice ? "#57606D" : hue.rim} style={{ pointerEvents: "none" }}>
-                {subLabel}
-              </text>
+              {!hasVariants && (
+                <text x={0} y={S * 0.38} textAnchor="middle"
+                  fontFamily="'IBM Plex Mono', monospace" fontSize={9}
+                  fill={isChoice ? "#57606D" : hue.rim} style={{ pointerEvents: "none" }}>
+                  {subLabel}
+                </text>
+              )}
+              {hasVariants && (
+                <g style={{ pointerEvents: "none" }}>
+                  {variantChips(cellVariants, currentVariant, selectedVariant).map(({ variant, label, x, width, isCurrent, isSelected }) => (
+                    <g key={variant.key}>
+                      <rect
+                        x={x}
+                        y={S * 0.2}
+                        width={width}
+                        height={11}
+                        rx={2.5}
+                        fill={isCurrent ? hue.rim : "#10141C"}
+                        stroke={isSelected ? "#E8B54A" : hue.rim}
+                        strokeWidth={isSelected ? 1.5 : 0.9}
+                      />
+                      <text
+                        x={x + width / 2}
+                        y={S * 0.2 + 8}
+                        textAnchor="middle"
+                        fontFamily="'IBM Plex Mono', monospace"
+                        fontSize={7}
+                        fill={isCurrent ? "#0E1116" : hue.rim}
+                      >
+                        {label}
+                      </text>
+                    </g>
+                  ))}
+                </g>
+              )}
               {badgeLabel && (
                 <g style={{ pointerEvents: "none" }}>
                   <rect
@@ -340,9 +447,23 @@ export default function HoneycombWheel({
           const center = hexToPixel(q, r, S);
           const bx = center.x + S * 0.6;
           const by = center.y - S * 0.6;
-          const label = indices.length > 1 ? `${indices[0]}×${indices.length}` : String(indices[0]);
+          // "3×2" means the SAME chord twice; "1·3" means two different
+          // chords landed on this degree — a stack, not a repeat.
+          const firstVariant = variants.variantOfStep[indices[0] - 1] ?? 0;
+          const mixed = !indices.every((i) => variants.variantOfStep[i - 1] === firstVariant);
+          const label = mixed
+            ? indices.length <= 3
+              ? indices.join("·")
+              : `${indices[0]}+${indices.length - 1}`
+            : indices.length > 1
+              ? `${indices[0]}×${indices.length}`
+              : String(indices[0]);
+          const badgeTitle = `Step${indices.length > 1 ? "s" : ""} ${indices.join(", ")} — ${
+            mixed ? "different chords on this degree" : "same chord repeated"
+          }`;
           return (
             <g key={`${q},${r}`} style={{ pointerEvents: "none" }}>
+              <title>{badgeTitle}</title>
               <circle cx={bx} cy={by} r={9} fill="#0E1116" stroke="#F5E7C8" strokeWidth={1.5} />
               <text x={bx} y={by + 1} textAnchor="middle" dominantBaseline="middle"
                 fontFamily="'IBM Plex Mono', monospace" fontSize={8} fontWeight={600} fill="#F5E7C8">
@@ -380,4 +501,47 @@ export default function HoneycombWheel({
       </svg>
     </div>
   );
+}
+
+/** Index of the LAST step that visited a cell (-1 when it was never walked).
+ *  The newest visit is what the cell should be labelled with. */
+function lastStepAtCell(walk: { q: number; r: number }[], q: number, r: number): number {
+  for (let i = walk.length - 1; i >= 0; i--) {
+    if (walk[i].q === q && walk[i].r === r) return i;
+  }
+  return -1;
+}
+
+/** Lay out the variant chips centred inside a hex, three at most. */
+function variantChips<T extends { key: string; label: string; suffix: string }>(
+  variants: T[],
+  current: number,
+  selected: number,
+): { variant: T; label: string; x: number; width: number; isCurrent: boolean; isSelected: boolean }[] {
+  // Two variants can share a numeral (I and Imaj7): spell out the suffix only
+  // when the bare label would be ambiguous.
+  const counts = new Map<string, number>();
+  for (const variant of variants) counts.set(variant.label, (counts.get(variant.label) ?? 0) + 1);
+  const labelOf = (variant: T) =>
+    (counts.get(variant.label) ?? 0) > 1 && variant.suffix
+      ? `${variant.label}${variant.suffix.slice(0, 4)}`
+      : variant.label;
+  const shown = variants.slice(0, 3);
+  const widths = shown.map((variant) => Math.max(13, labelOf(variant).length * 4.6 + 4));
+  const gap = 2;
+  const total = widths.reduce((sum, width) => sum + width + gap, -gap);
+  let x = -total / 2;
+  return shown.map((variant, index) => {
+    const width = widths[index];
+    const chip = {
+      variant,
+      label: labelOf(variant),
+      x,
+      width,
+      isCurrent: index === current,
+      isSelected: index === selected,
+    };
+    x += width + gap;
+    return chip;
+  });
 }

@@ -489,6 +489,91 @@ export function buildWalk(steps: HoneycombStep[]): HexCell[] {
 }
 
 /* ============================================================
+   CELL VARIANTS — the chords that actually landed on a degree
+   ============================================================ */
+
+/** One distinct chord that visited a hex cell. A cell is a scale DEGREE;
+ *  a variant is what was actually played there (Em vs E, VI vs bVI, I7 vs I). */
+export interface CellVariant {
+  /** Stable identity: degree|accidental|quality|suffix|bass. */
+  key: string;
+  /** Short chip label — accidental + roman numeral, cased by quality. */
+  label: string;
+  /** The chord's suffix ("maj7", "7", "m7b5"), used to tell two variants of
+   *  the same numeral apart on the chip. */
+  suffix: string;
+  minor: boolean;
+  acc: number;
+  /** Index of the first step that used this variant. */
+  firstStep: number;
+}
+
+export interface WalkVariants {
+  /** "q,r" → the variants seen there, in first-visit order. */
+  byCell: Map<string, CellVariant[]>;
+  /** step index → variant index within that step's cell. */
+  variantOfStep: number[];
+  /** step index → number of steps that share its variant (repeat count). */
+  visitsOfStep: number[];
+}
+
+/** A step's identity, matching the repeat detector's notion of "same chord". */
+export function stepSignature(step: HoneycombStep): string {
+  return `${step.deg}|${step.acc}|${step.minor}|${step.suffix}|${step.bass}`;
+}
+
+/** Short label for a variant chip: accidental + roman, cased by quality. */
+export function variantLabel(step: HoneycombStep): string {
+  const acc = step.acc === -1 ? "b" : step.acc === 1 ? "#" : "";
+  const roman = ROMAN_UP[step.deg] ?? String(step.deg + 1);
+  return `${acc}${step.minor ? roman.toLowerCase() : roman}`;
+}
+
+/**
+ * Group the steps of a walk into the variants each cell holds.
+ *
+ * This is what makes "same degree, different chord" visible: the walk stays
+ * on one hex (a degree is a position in the lattice), but the SEQUENCE still
+ * moved — Em → E is a variant hop inside the same cell. Cells that only ever
+ * see one chord come back with a single variant, so the ordinary diatonic
+ * case renders exactly as before.
+ */
+export function walkVariants(walk: HexCell[], steps: HoneycombStep[]): WalkVariants {
+  const byCell = new Map<string, CellVariant[]>();
+  const variantOfStep: number[] = [];
+  const visitsOfStep: number[] = [];
+  const counts = new Map<string, number>(); // signature → visit count
+
+  for (let i = 0; i < walk.length && i < steps.length; i++) {
+    const cellKey = `${walk[i].q},${walk[i].r}`;
+    const signature = stepSignature(steps[i]);
+    let variants = byCell.get(cellKey);
+    if (!variants) {
+      variants = [];
+      byCell.set(cellKey, variants);
+    }
+    let index = variants.findIndex((variant) => variant.key === signature);
+    if (index === -1) {
+      variants.push({
+        key: signature,
+        label: variantLabel(steps[i]),
+        suffix: steps[i].suffix,
+        minor: steps[i].minor,
+        acc: steps[i].acc,
+        firstStep: i,
+      });
+      index = variants.length - 1;
+    }
+    variantOfStep.push(index);
+    const seen = (counts.get(signature) ?? 0) + 1;
+    counts.set(signature, seen);
+    visitsOfStep.push(seen);
+  }
+
+  return { byCell, variantOfStep, visitsOfStep };
+}
+
+/* ============================================================
    PROGRESSION VIEW — repeat-run detection & collapse
    ============================================================ */
 

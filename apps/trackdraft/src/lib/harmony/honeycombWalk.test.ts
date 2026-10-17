@@ -13,6 +13,9 @@ import {
   bassInterval,
   diatonicChordAt,
   buildWalk,
+  walkVariants,
+  variantLabel,
+  stepSignature,
   detectRepeatRuns,
   collapseRepeatsForLoopView,
   detectLoop,
@@ -900,5 +903,76 @@ describe("stepMidiChord", () => {
     expect(notes).toContain(48); // root C4
     expect(notes).toContain(52); // third E4
     expect(notes).toContain(55); // fifth G4
+  });
+});
+
+describe("walkVariants", () => {
+  const stepsOf = (text: string) => parseProgression(text).steps;
+
+  it("gives a single variant for an ordinary diatonic walk", () => {
+    const steps = stepsOf("I vi IV V");
+    const { byCell, variantOfStep } = walkVariants(buildWalk(steps), steps);
+    expect(variantOfStep).toEqual([0, 0, 0, 0]);
+    for (const variants of byCell.values()) expect(variants).toHaveLength(1);
+  });
+
+  it("stacks same-degree chords as separate variants (Em → E)", () => {
+    const steps = stepsOf("iii III");
+    const walk = buildWalk(steps);
+    // Both are degree 3, so the walk stays on one hex…
+    expect(walk[0]).toEqual(walk[1]);
+    const { byCell, variantOfStep } = walkVariants(walk, steps);
+    // …but the sequence still moved: two variants in that cell.
+    expect(variantOfStep).toEqual([0, 1]);
+    const variants = byCell.get(`${walk[0].q},${walk[0].r}`)!;
+    expect(variants.map((v) => v.label)).toEqual(["iii", "III"]);
+  });
+
+  it("stacks a borrowed chord next to its diatonic twin (VI / bVI)", () => {
+    const steps = stepsOf("VI bVI");
+    const walk = buildWalk(steps);
+    const { byCell } = walkVariants(walk, steps);
+    const variants = byCell.get(`${walk[0].q},${walk[0].r}`)!;
+    expect(variants.map((v) => v.label)).toEqual(["VI", "bVI"]);
+  });
+
+  it("reuses the variant when the same chord comes back", () => {
+    const steps = stepsOf("I vi I");
+    const walk = buildWalk(steps);
+    const { byCell, variantOfStep, visitsOfStep } = walkVariants(walk, steps);
+    expect(variantOfStep).toEqual([0, 0, 0]);
+    expect(visitsOfStep).toEqual([1, 1, 2]);
+    expect(byCell.get(`${walk[0].q},${walk[0].r}`)!).toHaveLength(1);
+  });
+
+  it("distinguishes a quality change from a true repeat", () => {
+    const steps = stepsOf("I I Imaj7 I");
+    const walk = buildWalk(steps);
+    const { variantOfStep, visitsOfStep } = walkVariants(walk, steps);
+    expect(variantOfStep).toEqual([0, 0, 1, 0]);
+    expect(visitsOfStep).toEqual([1, 2, 1, 3]);
+  });
+
+  it("counts visits per variant, not per cell", () => {
+    const steps = stepsOf("IV I IV");
+    const walk = buildWalk(steps);
+    const { visitsOfStep } = walkVariants(walk, steps);
+    expect(visitsOfStep[0]).toBe(1);
+    expect(visitsOfStep[2]).toBe(2);
+  });
+});
+
+describe("variantLabel / stepSignature", () => {
+  it("cased the numeral by quality and keeps the accidental", () => {
+    expect(variantLabel(parseToken("iii")!)).toBe("iii");
+    expect(variantLabel(parseToken("III")!)).toBe("III");
+    expect(variantLabel(parseToken("bVI")!)).toBe("bVI");
+    expect(variantLabel(parseToken("vii")!)).toBe("vii");
+  });
+
+  it("separates chords that differ only in quality or bass", () => {
+    expect(stepSignature(parseToken("I")!)).not.toBe(stepSignature(parseToken("I7")!));
+    expect(stepSignature(parseToken("I")!)).not.toBe(stepSignature(parseToken("I/3")!));
+    expect(stepSignature(parseToken("I")!)).toBe(stepSignature(parseToken("I")!));
   });
 });

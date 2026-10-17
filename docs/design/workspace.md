@@ -485,6 +485,19 @@ jump-open included); the karaoke popout is untouched.
   **collapsible**, and the choice persists (`trackdraft-progression-lanes`),
   so the workbench row stays slim while the Harmony canvas opens everything.
   `ProgressionTrack` and its `dnd-kit` sortable are deleted.
+- **Phase D — the wheel tells the truth about chords (2026-10-17)**: two
+  fixes to the honeycomb. It labelled every cell with its degree's *diatonic*
+  chord, so an E major on degree 3 read `iii / Em`; the label now comes from
+  the chord that actually landed there (falling back to diatonic only on
+  unwalked choice cells). And a cell is a *degree*, so same-degree chords
+  (Em → E, VI → bVI, I → Imaj7) reused one hex and read as a repeat — they
+  now stack as **variant chips** inside the hex (`I | Imaj7`), with
+  `walkVariants` grouping steps per cell and disambiguating chips that share a
+  numeral by suffix. The step badge distinguishes a genuine repeat (`3×2`)
+  from a stack of different chords (`1·2`), with the visits in its `<title>`.
+  A zoom control (24–56 px, persisted in `trackdraft-honeycomb-scale`) gives
+  stacked cells room. Next: a contour view mode for runs and modulation, then
+  modulation layers (which need a decision: inferred vs authored tonic).
 
 ## 8. Defaults chosen (veto-able)
 
