@@ -15,7 +15,7 @@
  * the web app has no dependency on).
  */
 
-import { chordToMidiNotes, getChordIntervals, pitchClass, planChordNotes, type ChordQuality } from "@music-theory/core";
+import { chordToMidiNotes, getChordIntervals, pitchClass, planChordNotes, voiceChord, type ChordQuality } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
 import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
@@ -83,12 +83,19 @@ export function planChordStem(spans: SectionSpan[], song?: BlueprintSong): MidiN
       // Bend Harmony layer: Color (extensions) then Tension (dissonance
       // lean); an authored extendedSuffix always wins untouched.
       const quality = styleQualityFor(occ.chord, profile.harmony, profile.tension ?? 0.5);
+      // Voicing (inversion + spread) re-expresses the chord as root +
+      // intervals, so the shared planner below stays the single note builder.
+      const voiced = voiceChord(
+        CHORD_OCTAVE * 12 + rootPc,
+        getChordIntervals(quality as ChordQuality),
+        occ.chord.voicing,
+      );
       // Shared planner (block + performance effect) — the same call the
       // in-app preview and the Ableton bridge make, so export sounds like
       // the audition. Plan section-relative, then offset to absolute.
       const chordNotes: MidiNote[] = planChordNotes(
-        CHORD_OCTAVE * 12 + rootPc,
-        getChordIntervals(quality as ChordQuality),
+        voiced.rootMidi,
+        voiced.intervals,
         occ.startTime,
         occ.duration,
         CHORD_VELOCITY,

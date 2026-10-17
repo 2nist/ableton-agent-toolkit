@@ -1,4 +1,10 @@
-import { chordToMidiNotes, pitchClass, type ChordQuality, applyPerformanceEffect } from "@music-theory/core";
+import {
+  getChordIntervals,
+  pitchClass,
+  voiceChord,
+  type ChordQuality,
+  applyPerformanceEffect,
+} from "@music-theory/core";
 import type { NoteDescription } from "@ableton-extensions/sdk";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
 import { resolveChordOccurrences, resolveStyleProfile, styleArticulation, styleQualityFor, styleSpacing } from "@drum/library";
@@ -31,8 +37,17 @@ export function planChordClips(song: BlueprintSong, octave: number = DEFAULT_OCT
       const rootPc = pitchClass(occurrence.chord.root);
       // Bend Harmony layer: Color + Tension (authored suffix wins).
       const quality = styleQualityFor(occurrence.chord, profile.harmony, profile.tension ?? 0.5);
+      // Voicing (inversion + spread) is applied the same way the app's .mid
+      // export applies it, so "Send to Ableton" and the exported file voice a
+      // chord identically.
+      const voiced = voiceChord(
+        octave * 12 + rootPc,
+        getChordIntervals(quality as ChordQuality),
+        occurrence.chord.voicing,
+      );
       let chordNotes: NoteDescription[] = [];
-      for (const pitch of chordToMidiNotes(rootPc, quality as ChordQuality, octave)) {
+      for (const interval of voiced.intervals) {
+        const pitch = voiced.rootMidi + interval;
         chordNotes.push({ pitch, startTime: occurrence.startTime, duration: occurrence.duration, velocity: DEFAULT_VELOCITY });
       }
 

@@ -15,6 +15,8 @@ import {
   getChordIntervals,
   pitchClass,
   planChordNotes,
+  voiceChord,
+  type ChordVoicing,
   type ChordPerformanceEffect,
   type ChordQuality,
   type PlannedChordNote,
@@ -67,6 +69,8 @@ export interface PreviewChord {
   quality: string;
   beats?: number;
   performance?: ChordPerformanceEffect;
+  /** Inversion/spread — auditioned exactly as the export voices it. */
+  voicing?: ChordVoicing;
 }
 
 /** Plan a chord's effect-applied notes in beat-space (startBeat-relative),
@@ -77,9 +81,19 @@ function planPreviewChord(
   startBeat: number,
   durationBeats: number,
 ): PlannedChordNote[] {
-  const rootMidi = CHORD_OCTAVE * 12 + pitchClass(chord.root);
-  const intervals = getChordIntervals(chord.quality as ChordQuality);
-  return planChordNotes(rootMidi, intervals, startBeat, durationBeats, PREVIEW_VELOCITY, chord.performance);
+  const voiced = voiceChord(
+    CHORD_OCTAVE * 12 + pitchClass(chord.root),
+    getChordIntervals(chord.quality as ChordQuality),
+    chord.voicing,
+  );
+  return planChordNotes(
+    voiced.rootMidi,
+    voiced.intervals,
+    startBeat,
+    durationBeats,
+    PREVIEW_VELOCITY,
+    chord.performance,
+  );
 }
 
 /** Send a planned note as note-on/note-off at the given beat-domain times. */

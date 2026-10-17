@@ -95,6 +95,68 @@ export function chordToMidiNotes(
   return intervals.map((interval) => base + rootPc + interval);
 }
 
+/**
+ * How a chord is voiced — which tone is in the bass and how tightly the
+ * upper voices sit.
+ *
+ * `inversion` rotates the chord tones (0 = root position, 1 = first
+ * inversion with the third in the bass, …), `spread` chooses close spacing
+ * or an "open" voicing that drops the second-highest tone an octave. Both are
+ * optional: absent means root position, close — exactly the historical
+ * block chord, so an existing song sounds unchanged.
+ */
+export interface ChordVoicing {
+  /** 0 = root position, 1 = 1st inversion, … clamped to the chord's size. */
+  inversion?: number;
+  /** "close" (default) stacks the tones; "open" drops the second-highest an
+   *  octave so the voicing spans more than an octave. */
+  spread?: "close" | "open";
+}
+
+/**
+ * Rotate the chord tones: the lowest `n` move up an octave, so the nth tone
+ * becomes the bass. Offsets stay relative to the ORIGINAL root (they can
+ * exceed 12), which is what `voiceChord` re-bases afterwards.
+ */
+function invertIntervals(intervals: number[], inversion: number): number[] {
+  const size = intervals.length;
+  if (size === 0) return [];
+  const shift = ((Math.round(inversion) % size) + size) % size;
+  if (shift === 0) return [...intervals];
+  return [
+    ...intervals.slice(shift),
+    ...intervals.slice(0, shift).map((interval) => interval + 12),
+  ];
+}
+
+/** Drop the second-highest tone an octave — the classic "open" spread. */
+function openIntervals(intervals: number[]): number[] {
+  if (intervals.length < 3) return [...intervals];
+  const pitches = [...intervals];
+  pitches[pitches.length - 2] -= 12;
+  return pitches.sort((a, b) => a - b);
+}
+
+/**
+ * Re-express a chord as (root, intervals) with a voicing applied. The result
+ * is the same shape every planner already takes (`rootMidi` + ascending
+ * semitone offsets), so the export, the in-app audition and the Ableton
+ * bridge can all share one voicing decision instead of each re-deriving it.
+ */
+export function voiceChord(
+  rootMidi: number,
+  intervals: number[],
+  voicing?: ChordVoicing
+): { rootMidi: number; intervals: number[] } {
+  const inverted = invertIntervals(intervals, voicing?.inversion ?? 0);
+  const shaped = voicing?.spread === "open" ? openIntervals(inverted) : inverted;
+  const base = shaped.length > 0 ? Math.min(...shaped) : 0;
+  return {
+    rootMidi: rootMidi + base,
+    intervals: shaped.map((interval) => interval - base),
+  };
+}
+
 /** One note in a block chord — the shape every performance-effect input/
  *  output shares (pitch/velocity untouched by the effect, only timing
  *  redistributed). Structurally typed rather than importing

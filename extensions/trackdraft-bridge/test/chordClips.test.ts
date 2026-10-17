@@ -138,3 +138,32 @@ describe("planChordClips", () => {
     );
   });
 });
+
+describe("planChordClips — chord voicing", () => {
+  const voicedSong = (voicing: { inversion?: number; spread?: "close" | "open" }) =>
+    makeSong({
+      id: "voicing",
+      title: "Voicing",
+      bpm: 120,
+      sections: [
+        makeSection({
+          id: "1",
+          name: "Verse",
+          bars: 1,
+          timeSignatureNumerator: 4,
+          chords: [makeChord({ romanNumeral: "I", root: "C", quality: "maj", beats: 4, voicing })],
+        }),
+      ],
+      arrangement: [{ sectionId: "1", repeats: 1 }],
+    });
+
+  it("puts the inverted tone in the bass, same as the app's .mid export", () => {
+    const [clip] = planChordClips(voicedSong({ inversion: 1 }));
+    expect(clip.notes.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([64, 67, 72]);
+  });
+
+  it("spreads a chord open", () => {
+    const [clip] = planChordClips(voicedSong({ spread: "open" }));
+    expect(clip.notes.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([52, 60, 67]);
+  });
+});

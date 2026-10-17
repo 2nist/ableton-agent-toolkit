@@ -9,7 +9,7 @@ import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { updateSection } from "../../lib/sections";
 import HoneycombWheel from "./HoneycombWheel";
 import ProgressionTrack from "./ProgressionTrack";
-import HarmonicRhythmStrip from "./HarmonicRhythmStrip";
+import ProgressionStrip from "./ProgressionStrip";
 import FitStatus from "./FitStatus";
 import ModeInferenceCard from "./ModeInferenceCard";
 import { previewChord } from "../../lib/playback/previewMidi";
@@ -158,7 +158,7 @@ export default function HarmonyView() {
               onUpdateChord={updateSingleChord}
             />
             <div className="mt-2">
-              <HarmonicRhythmStrip
+              <ProgressionStrip
                 chords={activeSection.chords}
                 keyName={effectiveKey}
                 beatsPerBar={beatsPerBar(activeSection)}

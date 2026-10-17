@@ -18,7 +18,7 @@ import { playSectionLoop, seekTo } from "../../lib/playback/transportControl";
 import IconBtn from "../common/IconBtn";
 import Icon from "../common/Icon";
 import ProgressionTrack from "../harmony/ProgressionTrack";
-import HarmonicRhythmStrip from "../harmony/HarmonicRhythmStrip";
+import ProgressionStrip from "../harmony/ProgressionStrip";
 import HexReadout from "../harmony/HexReadout";
 import BassSettings from "../harmony/BassSettings";
 import ColorSettings from "../harmony/ColorSettings";
@@ -604,7 +604,7 @@ function SectionWorkspace({
               />
             </div>
             <div className="mt-2">
-              <HarmonicRhythmStrip
+              <ProgressionStrip
                 chords={section.chords}
                 keyName={effKey}
                 beatsPerBar={bpb}

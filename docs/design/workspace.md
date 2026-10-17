@@ -459,6 +459,16 @@ jump-open included); the karaoke popout is untouched.
   follow without a reload. When a meter outline governs chord timing (the
   drums/Bend grid), the strip is read-only and says so rather than offering a
   drag the generator would ignore.
+- **Phase D — chord voicing (2026-10-17)**: a second lane under the rhythm
+  strip gives every chord a **bass tone** (R / 1 / 2 / 3 — one click cycles)
+  and a **spacing** (close / open — one click). Both are stored minimally
+  (`voicing?: { inversion?, spread? }`; root position with close spacing is
+  simply absent, so untouched songs keep their exact JSON), and the musical
+  result comes from `@music-theory/core`'s `voiceChord`, which re-expresses a
+  chord as (root, intervals). The .mid export, live MIDI out, the
+  HoneycombWheel audition and the Ableton bridge's clip planner all call it,
+  so a voiced chord sounds and exports identically in all four — the bridge's
+  chord-clip test asserts the same pitches the app's export test does.
 
 ## 8. Defaults chosen (veto-able)
 

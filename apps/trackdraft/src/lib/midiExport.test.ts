@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { songToMidi, planDrumStem, planBassStem } from "./midiExport";
+import { songToMidi, planChordStem, planDrumStem, planBassStem } from "./midiExport";
 import { resolveChordOccurrences } from "@drum/library";
 import { sectionSpans } from "./arrangement";
 import { parseMidiBytes } from "./parsers/parseMidi";
@@ -404,5 +404,28 @@ describe("planBassStem", () => {
     expect(notes[0]).toMatchObject({ pitch: 36, velocity: 60 }); // C root
     expect(notes[1].pitch).toBe(42); // walking approach: F# below G
     expect(notes[2]).toMatchObject({ pitch: 43, velocity: 60 }); // G root
+  });
+});
+
+describe("planChordStem — chord voicing", () => {
+  it("puts the third in the bass for a first inversion, keeping every tone", () => {
+    const song = testSong();
+    song.sections[0].chords[0].voicing = { inversion: 1 };
+    const first = planChordStem(sectionSpans(song)).filter((n) => n.startTime === 0);
+    // C/E: E4 G4 C5 instead of C4 E4 G4.
+    expect(first.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([64, 67, 72]);
+  });
+
+  it("spreads a chord open", () => {
+    const song = testSong();
+    song.sections[0].chords[0].voicing = { spread: "open" };
+    const first = planChordStem(sectionSpans(song)).filter((n) => n.startTime === 0);
+    expect(first.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([52, 60, 67]);
+  });
+
+  it("is unchanged for a chord with no voicing", () => {
+    const song = testSong();
+    const first = planChordStem(sectionSpans(song)).filter((n) => n.startTime === 0);
+    expect(first.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([60, 64, 67]);
   });
 });

@@ -1,5 +1,5 @@
 /**
- * HarmonicRhythmStrip — the progression's *rhythm* as a draggable strip.
+ * ProgressionStrip — the progression's rhythm and voicing, in one place.
  *
  * A section's chord list is one pass through the progression and the
  * generator loops it to fill the section, so the strip shows ONE cycle:
@@ -13,6 +13,12 @@
  * drag-with-Alt — the handles are wide and the snap is a half beat. When a
  * meter outline governs chord timing (the Bend/drums grid), the strip turns
  * read-only rather than pretending a `beats` edit will be heard.
+ *
+ * The second lane is the **voicing**: each chord shows the tone in its bass
+ * (R / 1 / 2 / 3) and whether the upper voices are stacked close or spread
+ * open. Both are one click to cycle — no menus — and both are resolved by the
+ * shared `voiceChord` in `@music-theory/core`, so the .mid export, live MIDI
+ * out, the audition and the Ableton bridge voice the chord identically.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,6 +26,7 @@ import { pitchClass } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
+import { bassName, cycleInversion, inversionCount, toggleSpread } from "../../lib/harmony/voicing";
 import {
   cycleBars,
   cycleBeats,
@@ -32,8 +39,10 @@ import {
 } from "../../lib/harmony/harmonicRhythm";
 
 const HANDLE_PX = 14;
+/** Left gutter that labels the two lanes, so they stay aligned. */
+const GUTTER_W = 50;
 
-export interface HarmonicRhythmStripProps {
+export interface ProgressionStripProps {
   chords: Chord[];
   keyName: NoteName;
   beatsPerBar: number;
@@ -47,7 +56,7 @@ export interface HarmonicRhythmStripProps {
   compact?: boolean;
 }
 
-export default function HarmonicRhythmStrip({
+export default function ProgressionStrip({
   chords,
   keyName,
   beatsPerBar,
@@ -57,7 +66,7 @@ export default function HarmonicRhythmStrip({
   onSelectChord,
   onChange,
   compact = false,
-}: HarmonicRhythmStripProps) {
+}: ProgressionStripProps) {
   const [width, setWidth] = useState(0);
   const [draft, setDraft] = useState<Chord[] | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -186,15 +195,22 @@ export default function HarmonicRhythmStrip({
           })}
       </div>
 
-      <div
-        ref={wrapRef}
-        className={`relative rounded border border-edge/70 bg-panelAlt/40 overflow-hidden ${
-          compact ? "h-9" : "h-10"
-        } ${outlineGoverned ? "" : "touch-none"}`}
-        onPointerMove={handleMove}
-        onPointerUp={handleUp}
-        onPointerCancel={handleCancel}
-      >
+      <div className="flex">
+        <div
+          style={{ width: GUTTER_W }}
+          className="shrink-0 pr-1 text-right text-[8px] font-mono uppercase tracking-wide text-inkMuted/50 self-center"
+        >
+          rhythm
+        </div>
+        <div
+          ref={wrapRef}
+          className={`relative flex-1 rounded border border-edge/70 bg-panelAlt/40 overflow-hidden ${
+            compact ? "h-9" : "h-10"
+          } ${outlineGoverned ? "" : "touch-none"}`}
+          onPointerMove={handleMove}
+          onPointerUp={handleUp}
+          onPointerCancel={handleCancel}
+        >
         {cells.map(({ chord, start, end }, index) => {
           const cellWidth = (end - start) * pxPerBeat;
           const selected = chord.id === selectedChordId;
@@ -254,13 +270,76 @@ export default function HarmonicRhythmStrip({
               onPointerDown={(event) => handleDown(event, index)}
               title="Drag to trade beats with the next chord (snaps to a half beat)"
             >
-              <div className="mx-auto h-full w-1 rounded bg-white/15 group-hover:bg-accent/80" />
-            </div>
-          ))}
+                <div className="mx-auto h-full w-1 rounded bg-white/15 group-hover:bg-accent/80" />
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {/* Voicing lane — bass tone and spacing, one click each. Aligned with
+          the rhythm cells above via the same px-per-beat. */}
+      <div className="flex mt-0.5">
+        <div
+          style={{ width: GUTTER_W }}
+          className="shrink-0 pr-1 text-right text-[8px] font-mono uppercase tracking-wide text-inkMuted/50 self-center"
+        >
+          voicing
+        </div>
+        <div className="relative flex-1 rounded border border-edge/50 bg-panelAlt/20 overflow-hidden" style={{ height: 22 }}>
+          {cells.map(({ chord, start, end }, index) => {
+            const cellWidth = (end - start) * pxPerBeat;
+            const inversion = chord.voicing?.inversion ?? 0;
+            const open = chord.voicing?.spread === "open";
+            const size = inversionCount(chord);
+            const bassLabel = inversion === 0 ? "R" : String(inversion);
+            return (
+              <div
+                key={`voicing-${chord.id}-${index}`}
+                className="absolute inset-y-0 border-r border-edge/30 flex items-center gap-0.5 px-0.5 overflow-hidden"
+                style={{ left: start * pxPerBeat, width: Math.max(2, cellWidth - 1) }}
+              >
+                {cellWidth >= 26 && (
+                  <button
+                    type="button"
+                    className={`rounded px-1 py-[1px] text-[9px] font-mono ${
+                      inversion === 0
+                        ? "text-inkMuted/70 hover:text-ink"
+                        : "bg-accent/20 text-accent"
+                    }`}
+                    onClick={() => onChange(replaceChord(chords, cycleInversion(chord)), dominantBeatsPerChord(chords))}
+                    title={`Bass: ${bassName(inversion)} — click for ${bassName(
+                      (inversion + 1) % size,
+                    )}${inversion + 1 >= size ? " (root position again)" : ""}`}
+                  >
+                    {bassLabel}
+                  </button>
+                )}
+                {cellWidth >= 46 && (
+                  <button
+                    type="button"
+                    className={`rounded px-1 py-[1px] text-[9px] font-mono ${
+                      open ? "bg-accent/20 text-accent" : "text-inkMuted/70 hover:text-ink"
+                    }`}
+                    onClick={() => onChange(replaceChord(chords, toggleSpread(chord)), dominantBeatsPerChord(chords))}
+                    title={
+                      open
+                        ? "Open spacing — click for close"
+                        : "Close spacing — click to drop the second-highest voice an octave"
+                    }
+                  >
+                    {open ? "open" : "close"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 }
+
+
 
 /** Bar lines inside one cycle, skipping the very end (the container's edge). */
 function barTicksFor(cycle: number, beatsPerBar: number): number[] {
@@ -279,4 +358,9 @@ function formatBars(bars: number): string {
 
 function formatBeats(beats: number): string {
   return `${Math.round(beats * 100) / 100}b`;
+}
+
+/** Swap one chord back into the progression by id. */
+function replaceChord(chords: Chord[], next: Chord): Chord[] {
+  return chords.map((chord) => (chord.id === next.id ? next : chord));
 }

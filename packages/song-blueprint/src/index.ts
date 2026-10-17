@@ -1,4 +1,4 @@
-import type { NoteName, ScaleType, ChordQuality } from "@music-theory/core";
+import type { NoteName, ScaleType, ChordQuality, ChordVoicing } from "@music-theory/core";
 import type {
   ArrangementEntry,
   SectionChord,
@@ -230,6 +230,13 @@ export interface Chord {
    *  absent the chord plays as a plain block chord — no change from
    *  current behaviour. */
   performance?: ChordPerformanceEffect;
+  /** Optional voicing — which chord tone sits in the bass (`inversion`) and
+   *  whether the upper voices are stacked close or spread open. Absent means
+   *  root position, close: exactly the historical block chord, so existing
+   *  songs sound and export unchanged. Every planner (the .mid export, live
+   *  MIDI out, the in-app audition and the Ableton bridge) resolves it
+   *  through `@music-theory/core`'s `voiceChord`, so they can't disagree. */
+  voicing?: ChordVoicing;
 }
 
 /** The generated bass voice's shape for a section. Pure number knobs so
