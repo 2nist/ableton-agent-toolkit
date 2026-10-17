@@ -26,6 +26,18 @@ Node **24** is required (`engines` + `.npmrc` enforce it; `.nvmrc` pins 24.18.0)
 - **`extensions/trackdraft-bridge`** — the flagship Ableton Extension: applies a song blueprint to Live as chord/drum/bass/color clips, with a picker/viewer webview and a file-based command queue polled from the extension host.
 - **User song library** — lives in `~/TrackDraft/library` (read by `packages/song-mcp`, `osc-bridge`, and the bridge extension). The source/draft songs are kept in `~/Downloads/lalo-chezia`.
 
+## Verification
+
+`npm run lint` and `npm run verify` (typecheck + tests) are the gate. `npm install`
+installs a pre-push hook (`.githooks/pre-push`, enabled via `prepare` → `core.hooksPath`)
+that runs both and refuses to push on Node < 24; bypass deliberately with
+`SKIP_VERIFY=1 git push` or `git push --no-verify`.
+
+The GitHub Actions workflow (`.github/workflows/verify.yml`) runs the same commands,
+but is currently blocked by an account/repo-side `startup_failure` — a workflow
+containing only `echo ok` fails the same way, so the hook is the enforced gate until
+that is resolved.
+
 ## Dev loop (Phase 0)
 
 ```bash

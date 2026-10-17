@@ -20,7 +20,8 @@
     "dev": "npm run dev --workspace=apps/trackdraft",
     "cli": "node packages/cli/dist/cli.js",
     "bridge": "npm run start -w packages/osc-bridge",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

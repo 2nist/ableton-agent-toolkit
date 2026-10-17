@@ -1,0 +1,41 @@
+#!/bin/sh
+# Local pre-push gate: lint + typecheck + tests.
+#
+# GitHub Actions is currently blocked account-side (every run ends in
+# startup_failure before a job is created), so this is the enforced gate.
+# Bypass deliberately with `SKIP_VERIFY=1 git push` or `git push --no-verify`.
+set -eu
+
+if [ "${SKIP_VERIFY:-0}" = "1" ]; then
+  echo "pre-push: SKIP_VERIFY=1 — skipping lint/tests."
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+node_major() {
+  node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0
+}
+
+# The workspace requires Node 24 (engines + .nvmrc). Prefer the user's nvm so
+# the hook works from a shell where the default node is older.
+if [ "$(node_major)" != "24" ] && [ -s "$HOME/.nvm/nvm.sh" ]; then
+  # shellcheck disable=SC1090
+  . "$HOME/.nvm/nvm.sh"
+  nvm use --silent >/dev/null 2>&1 || true
+fi
+
+if [ "$(node_major)" != "24" ]; then
+  echo "pre-push: Node 24 is required (found $(node -v 2>/dev/null || echo none))." >&2
+  echo "          Run 'nvm use' (see .nvmrc), or bypass with SKIP_VERIFY=1." >&2
+  exit 1
+fi
+
+echo "pre-push: lint…"
+npm run lint
+
+echo "pre-push: typecheck + tests…"
+npm run verify
+
+echo "pre-push: ok."
