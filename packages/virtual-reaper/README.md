@@ -1,5 +1,8 @@
 # @daw/virtual-reaper
 
+**Status (2026-10-17): parked.** No workspace imports this package yet. It is kept for a planned integration, is still typechecked/tested, and should be adopted deliberately (or removed) rather than treated as live surface.
+
+
 Ported verbatim from `/Users/Matthew/unified-music-platform/packages/virtual-reaper` (based on EnviREAment's `enhanced_virtual_reaper.lua`, 3,035 lines). Zero runtime dependencies. This is a TypeScript port of the environment-detection/mocking *architecture* — not a line-for-line port of the Lua mock bodies, which live in the original Lua project.
 
 ## `env` is a module-level singleton, evaluated at import time

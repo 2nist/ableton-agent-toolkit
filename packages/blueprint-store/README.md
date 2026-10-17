@@ -1,5 +1,8 @@
 # @platform/blueprint-store
 
+**Status (2026-10-17): parked.** No workspace imports this package yet. It is kept for a planned integration, is still typechecked/tested, and should be adopted deliberately (or removed) rather than treated as live surface.
+
+
 A Node-side SQLite catalog for `BlueprintSong` data. Separate from TrackDraft's web app on purpose — the browser keeps using `localStorage` + JSON import/export exactly as before; this package is for ingestion/extraction scripts (docx, audio, future MIDI) and other Node tooling that wants a durable, queryable archive without a backend server.
 
 ## Hybrid schema, not fully normalized

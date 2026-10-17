@@ -340,8 +340,8 @@ and a ◆ ghost in the Drums station"* — and that sentence builds itself.
    explicit "keyboard is not first-class" (also defensible; the app is mouse-first by
    design today).
 4. **`*View` → `*Station` rename** — recommend keep names, vocabulary only.
-5. **`newview.html` destination** — `docs/design/` (recommend — it's the v3 design
-   record) vs `archive/`.
+5. ~~**`newview.html` destination**~~ — **resolved 2026-10-17:** moved to
+   `docs/design/prototypes/newview.html` (the v3 design record, out of `src/`).
 
 ---
 

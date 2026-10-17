@@ -23,7 +23,7 @@ Hands-on in the browser, assisted by Copilot in chat:
 | `/design-lab` | Hands-on surface + the **design decisions log** (D1–D6 today) |
 | `docs/ui-audit.md` | Measured inventory of the UI (numbered findings, regeneration greps) |
 | `docs/ui-standardization.md` | The constitution: principles, taxonomy, phases, definition of done |
-| `docs/design/` | This note + design history/prototypes (the `newview.html` prototype should move here) |
+| `docs/design/` | This note + design history/prototypes (the `newview.html` prototype lives at `docs/design/prototypes/newview.html`) |
 
 ## Ground rules
 

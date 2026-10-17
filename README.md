@@ -2,11 +2,13 @@
 
 Agentic tooling for Ableton Live 12: Extensions SDK tools and Max for Live devices sharing one music-theory backend and one HTML/CSS/JS UI kit. Private, personal, built to be genuinely reusable.
 
-See `docs/architecture.md` for the design and `docs/m4l-scaffolding-risk.md` before touching anything under `templates/m4l-device-basic`.
+See `docs/architecture.md` for the design, `docs/design/workspace.md` for the current TrackDraft workspace direction, and `docs/m4l-scaffolding-risk.md` before touching anything under `templates/m4l-device-basic`.
 
 ## Status
 
-~1,400 tests passing repo-wide (`npm run verify` = typecheck + tests; 0 type errors across all workspaces).
+~1,600 tests passing repo-wide (`npm run verify` = typecheck + tests), 0 type errors across all workspaces, and a CI `verify` workflow runs lint + typecheck + tests on every push.
+
+Node **24** is required (`engines` + `.npmrc` enforce it; `.nvmrc` pins 24.18.0). `npm run lint` is the ESLint gate.
 
 - [x] **Phase 0** — repo scaffold, `extensions/hello-world` dev-loop validation
 - [x] **Phase 1** — `packages/test-harness`: fakes only `initializeExtensionHost`, real SDK does the rest
@@ -16,6 +18,8 @@ See `docs/architecture.md` for the design and `docs/m4l-scaffolding-risk.md` bef
 - [x] **Phase 5** — `create device`: hand-authored `reference.amxd` in Live, reverse-engineered the (undocumented) `.amxd` binary format byte-by-byte to patch it programmatically. Fully verified end-to-end in real Live, including a genuine gotcha found along the way — `jweb` silently drops custom JS→Max messages without an undocumented `nonstandardoutletcalls 1` attribute, which doesn't survive a save and has to be re-asserted via `loadbang` on every load. See `docs/m4l-scaffolding-risk.md`
 - [x] **Phase 6** — `osc-bridge` is implemented and running: relays Ableton transport/beat state over WebSocket (`ws://127.0.0.1:8081`) and serves M4L telemetry + the blueprint command queue over REST (`http://localhost:5200`). See `packages/osc-bridge`.
 - [ ] **Phase 7+** — on-demand `ui-kit` components, master-Set consolidation tooling
+
+**Current work (2026-09)** is the TrackDraft workspace overhaul: one shell (spine · views rail · canvas · inspector) across every song route, in-place section editing, and the lyrics/karaoke pass — see `docs/design/workspace.md` for the frozen direction and what remains (arrangement lanes, melody note editing). The UI standardization plan (`docs/ui-standardization.md`) has landed its first slice: shared primitives and a promise-based confirm dialog, with no native `confirm()` left in the app.
 
 ### Apps, extensions, and the flagship
 - **`apps/trackdraft`** — the main React songwriting app (structure/harmony/lyrics/drums/melody) built on `@music-theory/*` and `@platform/*`.
@@ -69,3 +73,14 @@ extensions/   Ableton Extensions (Node.js/TypeScript, @ableton-extensions/sdk)
 devices/      Max for Live devices
 vendor/       vendored beta SDK/CLI tarballs (not on public npm)
 ```
+
+Parked packages (kept, tested, not imported by any app yet — see each README):
+`@daw/routing-matrix`, `@groove/capture`, `@daw/virtual-reaper`,
+`@platform/blueprint-store`. Adopt or remove them deliberately; don't treat
+them as live surface.
+
+## Local services and network exposure
+
+`osc-bridge` binds loopback (`127.0.0.1:5200` REST, `127.0.0.1:8081` WebSocket)
+by default because both channels can drive Live. `bash start-all.sh lan` is the
+explicit opt-in that sets `BRIDGE_HOST=0.0.0.0` for iPad/phone control.

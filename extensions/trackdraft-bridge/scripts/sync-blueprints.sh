@@ -9,8 +9,9 @@
 # and viewer see the latest version.
 set -euo pipefail
 
-SOURCE_DIR="/Users/Matthew/ableton-agent-toolkit/apps/trackdraft/scripts/output"
-DEST_DIR="/Users/Matthew/Library/Application Support/Ableton/Extensions Data/matthew.trackdraft-bridge/blueprints"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+SOURCE_DIR="${TRACKDRAFT_OUTPUT_DIR:-$ROOT/apps/trackdraft/scripts/output}"
+DEST_DIR="${TRACKDRAFT_EXTENSION_DATA:-$HOME/Library/Application Support/Ableton/Extensions Data/matthew.trackdraft-bridge}/blueprints"
 
 mkdir -p "$DEST_DIR"
 cp "$SOURCE_DIR"/*.trackdraft.json "$DEST_DIR"/

@@ -1,5 +1,8 @@
 # @daw/routing-matrix
 
+**Status (2026-10-17): parked.** No workspace imports this package yet. It is kept for a planned integration, is still typechecked/tested, and should be adopted deliberately (or removed) rather than treated as live surface.
+
+
 Ported verbatim from `/Users/Matthew/unified-music-platform/packages/routing-matrix`. Zero runtime dependencies. Models MIDI/audio signal routing as a directed graph of `RoutingNode`s and `RoutingConnection`s, with cycle detection and unconnected-node warnings.
 
 ## `buildMatrix` auto-routes tracks, but only nodes of `kind: "track"`

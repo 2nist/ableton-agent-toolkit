@@ -1,5 +1,8 @@
 # @groove/capture
 
+**Status (2026-10-17): parked.** No workspace imports this package yet. It is kept for a planned integration, is still typechecked/tested, and should be adopted deliberately (or removed) rather than treated as live surface.
+
+
 Ported verbatim from `/Users/Matthew/unified-music-platform/packages/groove-capture` (source: BirdBird Global Sampler + DMGE 600-bar ring buffer patterns). Zero runtime dependencies, pure TS.
 
 A time-windowed ring buffer for MIDI events plus a `CaptureEngine` that wraps it with trigger logic ("give me the last 4 bars", "everything since this marker"), for retroactive/backwards-looking capture rather than pre-arming a fixed-length recording.

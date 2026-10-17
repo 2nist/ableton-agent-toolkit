@@ -288,7 +288,7 @@ persistence only for durable config, never for selection/preview state.
     range-input accent-color), ~15 "active chip" class strings in drums
     (`border-[#E8B54A] text-[#E8B54A] bg-[#E8B54A]/10` across 4 files), and the rest SVG
     `fill=`/`stroke=` attributes, `style={{…}}` shadows, and local `const AMBER = "#E8B54A"`
-    (3 drums files) — plus **50 more in `components/drums/newview.html`**.
+    (3 drums files) — plus **50 more in `docs/design/prototypes/newview.html`**.
   - The design question this surfaces (one accent or two — interactive vs instrument) is
     now presented hands-on at **`/design-lab`** (decision D1).
 - **Fonts**: token **187** vs bracket **159** — the migration is about half done.
@@ -310,7 +310,7 @@ persistence only for durable config, never for selection/preview state.
 
 ### Stray artifact
 
-`components/drums/newview.html` — 32 KB committed **design prototype**
+`docs/design/prototypes/newview.html` (moved out of `src/` on 2026-10-17) — 32 KB committed **design prototype**
 ("Drum Blocks v3 — docked pad + step lanes"), unreferenced by any code, and the historical
 source of the drums palette + token ideas (its CSS vars define `--kick/--snare/…`, and an
 `--accent:#FFA500` vs `--amber:#E8B54A` split). Decide: `docs/design/` or archive.
