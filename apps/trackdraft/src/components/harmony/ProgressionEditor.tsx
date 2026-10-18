@@ -22,6 +22,7 @@
  * Harmony canvas opens everything up.
  */
 
+import { uuid } from "../../lib/uuid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
@@ -289,6 +290,18 @@ export default function ProgressionEditor({
     onChange(chords.filter((item) => item.id !== chord.id), dominantBeatsPerChord(chords));
   }
 
+  /** Append a chord at the end of the cycle — a copy of the last one, so it
+   *  lands with the same voicing and effect and is immediately editable in
+   *  the chord menu. The strip could re-order, re-time and remove, but there
+   *  was no way to ADD a chord from it at all. */
+  function appendChord() {
+    const last = chords[chords.length - 1];
+    if (!last) return;
+    const next: Chord = { ...last, id: uuid() };
+    onChange([...chords, next], dominantBeatsPerChord(chords));
+    onSelectChord?.(next.id);
+  }
+
   if (chords.length === 0) {
     return (
       <p className="text-2xs font-mono italic text-inkMuted/50 px-1 py-1">
@@ -326,6 +339,17 @@ export default function ProgressionEditor({
         )}
 
         <span className="flex-1" />
+
+        {!outlineGoverned && (
+          <button
+            type="button"
+            className="rounded border border-edge px-1.5 py-0.5 text-[10px] font-mono text-inkMuted hover:border-accent/70 hover:text-accent"
+            onClick={appendChord}
+            title={`Add a chord at the end of the cycle (${formatBeats(chords[chords.length - 1].beats)}, a copy of the last one) and select it`}
+          >
+            + chord
+          </button>
+        )}
 
         {(["voicing", "effects"] as const).map((lane) => (
           <button
@@ -460,10 +484,10 @@ export default function ProgressionEditor({
                         </span>
                       )}
                     </div>
-                    {selected && cellWidth >= 34 && (
+                    {selected && (
                       <button
                         type="button"
-                        className="absolute right-0.5 top-0.5 z-30 px-1 text-[10px] leading-none text-inkMuted hover:text-red-400"
+                        className="absolute right-0.5 top-0.5 z-30 rounded bg-[#0E1116]/70 px-1 text-[10px] leading-none text-inkMuted hover:text-red-400"
                         aria-label="Remove chord"
                         title="Remove this chord"
                         onPointerDown={(event) => event.stopPropagation()}

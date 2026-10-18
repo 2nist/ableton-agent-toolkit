@@ -474,6 +474,15 @@ jump-open included); the karaoke popout is untouched.
   follow without a reload. When a meter outline governs chord timing (the
   drums/Bend grid), the strip is read-only and says so rather than offering a
   drag the generator would ignore.
+- **The strip can add a chord (2026-10-18)**: it could reorder, re-time, voice
+  and effect a chord, but there was **no add control anywhere on it** — the
+  only way to get a new chord was to click an empty hex in the wheel — and
+  the remove `✕` only rendered on a selected card at least 34px wide, so in
+  the workbench's compact strip it could never appear. `+ chord` now appends a
+  copy of the last chord (same voicing and effect, section defaults) and
+  selects it, and `✕` shows on any selected card at any width. `+ chord` is
+  hidden when chord timing follows the meter outline, where a chord's `beats`
+  is not what plays.
 - **Phase D — chord voicing (2026-10-17)**: a second lane under the rhythm
   strip gives every chord a **bass tone** (R / 1 / 2 / 3 — one click cycles)
   and a **spacing** (close / open — one click). Both are stored minimally
