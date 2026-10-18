@@ -32,6 +32,8 @@ import SectionTimeRuler from "./layers/SectionTimeRuler";
 import DrumFace from "./layers/DrumFace";
 import HarmonyFace from "./layers/HarmonyFace";
 import MelodyFace from "./layers/MelodyFace";
+import BassFace from "./layers/BassFace";
+import ColorFace from "./layers/ColorFace";
 import LyricsFace from "./layers/LyricsFace";
 import { beatsPerBar } from "../../types/blueprint";
 import type { BlueprintSection, BlueprintSong, Chord, SectionRole } from "../../types/blueprint";
@@ -540,7 +542,14 @@ function SectionWorkspace({
       {/* Bass — the real controls inline (P3 slice 3): register · motion ·
           rhythm · velocity, writing the same per-section `bassProfile`
           that the MIDI export and Send to Ableton plan from. */}
-      <ElementRow title="Bass" hint={bassBits ?? "auto — follows the chords"} onOpen={() => jump("harmony")} collapsed={collapsedRows.bass} onToggle={() => toggleRow("bass")}>
+      <ElementRow
+        title="Bass"
+        hint={bassBits ?? "auto — follows the chords"}
+        onOpen={() => jump("harmony")}
+        collapsed={collapsedRows.bass}
+        onToggle={() => toggleRow("bass")}
+        face={<BassFace section={section} song={song} span={span} onOpen={() => jump("harmony")} />}
+      >
         <div className="w-full">
           <BassSettings
             section={section}
@@ -600,7 +609,14 @@ function SectionWorkspace({
 
       {/* Color — flavor chips + register, inline (the same settings the ♪
           Layers facet hosts); writes `colorFlavor` / `colorOctave`. */}
-      <ElementRow title="Color" hint={`register oct ${section.colorOctave ?? 6}`} onOpen={() => jump("harmony")} collapsed={collapsedRows.color} onToggle={() => toggleRow("color")}>
+      <ElementRow
+        title="Color"
+        hint={`register oct ${section.colorOctave ?? 6}`}
+        onOpen={() => jump("harmony")}
+        collapsed={collapsedRows.color}
+        onToggle={() => toggleRow("color")}
+        face={<ColorFace section={section} song={song} span={span} onOpen={() => jump("harmony")} />}
+      >
         <div className="w-full">
           <ColorSettings
             section={section}

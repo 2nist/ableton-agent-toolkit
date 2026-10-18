@@ -414,6 +414,16 @@ jump-open included); the karaoke popout is untouched.
   keep their behavior; `open →` still dives to the full editor. The stack is
   an overview (fit to width); the shared `section` scale still governs the
   detail editors. No keyboard shortcut is required for any of it.
+  Follow-up (2026-10-18): **all six elements now have a face.** Bass and Color
+  were the last two rows still showing only their controls, so the ladder's
+  order (Drums → Bass → Chords → Color → Melody → Lyrics) existed in the
+  markup but not on the timeline. `layers/BassFace.tsx` and
+  `layers/ColorFace.tsx` plan their notes with the *same* functions the
+  exporter, live MIDI out and the Ableton bridge use (`planBassStem`,
+  `planColorStem`) and render them through one shared `StemFace` roll, so a
+  face can never promise something the export wouldn't play. Both are thin:
+  the row's controls (`bassProfile`, `colorFlavor`/`colorOctave`) stay the
+  source of truth, and the face only answers "what will sound, and when".
 - **Phase C — melody auto-fill + Bend depth (2026-10-17)**: the Melody layer
   now has a corpus-driven auto-fill. `@platform/progression-engine`'s melody
   model (1.42M melody points, shipped as a 1.8 KB table) rides the section's
