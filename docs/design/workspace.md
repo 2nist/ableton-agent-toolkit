@@ -493,8 +493,8 @@ jump-open included); the karaoke popout is untouched.
   (Em → E, VI → bVI, I → Imaj7) reused one hex and read as a repeat — they
   now stack as **variant chips** inside the hex (`I | Imaj7`), with
   `walkVariants` grouping steps per cell and disambiguating chips that share a
-  numeral by suffix. The step badge distinguishes a genuine repeat (`3×2`)
-  from a stack of different chords (`1·2`), with the visits in its `<title>`.
+  numeral by suffix. The step badge lists the visits that reached the cell
+  (`1·3`), with the full list in its `<title>`.
   A zoom control (24–56 px, persisted in `trackdraft-honeycomb-scale`) gives
   stacked cells room. Next: a contour view mode for runs and modulation, then
   modulation layers (which need a decision: inferred vs authored tonic).
@@ -510,6 +510,16 @@ jump-open included); the karaoke popout is untouched.
   forward. Long progressions scroll horizontally at a fixed cell size. This
   subsumes the planned contour mode; modulation **layers** are now optional
   (key-signature regions) rather than the linearity fix.
+- **Repeats read as a sequence, not a count (2026-10-18)**: the flat wheel
+  cannot advance a revisit — a hex's six neighbours hold the other six degrees,
+  so a return to a chord the progression has already played has nowhere to go
+  and used to fold into the same cell behind a `×2` badge. `visitBeads` now
+  gives **each visit its own numbered bead** in a row under the chord label
+  (spread `min(11, 1.2·S / visits)`, i.e. still inside the hex) and the walk
+  path threads those beads, so `I–IV–IV–V` and `I–vi–I` both read as a
+  sequence; cells visited once keep their single step badge. Numbered beads are
+  suppressed in Depth mode, which already gives every step its own hex — that
+  remains the honest "one hex per chord" view for long progressions.
 - **Phase D — 3D scene experiment (2026-10-17)**: a fourth mode next to the
   wheel, deliberately **not** hexagonal — a rectilinear space where
   `x` = scale degree, `y` = chromatic alteration (b / ♮ / #) and `z` = time.

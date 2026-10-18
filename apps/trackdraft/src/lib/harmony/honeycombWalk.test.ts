@@ -4,6 +4,7 @@ import {
   degreeAt,
   hexDistance,
   hexToPixel,
+  visitBeads,
   hexPoints,
   parseToken,
   parseProgression,
@@ -974,5 +975,67 @@ describe("variantLabel / stepSignature", () => {
     expect(stepSignature(parseToken("I")!)).not.toBe(stepSignature(parseToken("I7")!));
     expect(stepSignature(parseToken("I")!)).not.toBe(stepSignature(parseToken("I/3")!));
     expect(stepSignature(parseToken("I")!)).toBe(stepSignature(parseToken("I")!));
+  });
+});
+
+describe("visitBeads", () => {
+  it("leaves a walk without repeats on the cell centres", () => {
+    const walk = [
+      { q: 0, r: 0 },
+      { q: 1, r: 0 },
+    ];
+    const { beads, points } = visitBeads(walk, 28);
+    expect(beads).toEqual([]);
+    expect(points).toEqual([hexToPixel(0, 0, 28), hexToPixel(1, 0, 28)]);
+  });
+
+  it("gives every visit of a repeated chord its own bead", () => {
+    const walk = [
+      { q: 0, r: 0 },
+      { q: 1, r: 0 },
+      { q: 1, r: 0 },
+    ];
+    const { beads, points } = visitBeads(walk, 28);
+    expect(beads.map((b) => b.step)).toEqual([2, 3]);
+    // Siblings sit on one row below the chord label, so both read at once.
+    expect(beads[0].y).toBeCloseTo(beads[1].y);
+    expect(beads[0].x).toBeLessThan(beads[1].x);
+    // The path threads the beads, not the hex centre, so the repeat advances.
+    expect(points[1]).toEqual({ x: beads[0].x, y: beads[0].y });
+    expect(points[2]).toEqual({ x: beads[1].x, y: beads[1].y });
+  });
+
+  it("keeps three visits of one chord inside the hex", () => {
+    const walk = [
+      { q: 0, r: 0 },
+      { q: 0, r: 0 },
+      { q: 0, r: 0 },
+    ];
+    const { beads } = visitBeads(walk, 28);
+    const center = hexToPixel(0, 0, 28);
+    expect(beads).toHaveLength(3);
+    expect(beads.map((b) => b.step)).toEqual([1, 2, 3]);
+    for (const bead of beads) {
+      expect(Math.abs(bead.x - center.x)).toBeLessThanOrEqual(28 * 0.6);
+      expect(bead.y).toBeCloseTo(center.y + 28 * 0.6);
+    }
+  });
+
+  it("tracks repeat counts per cell, not per walk", () => {
+    const walk = [
+      { q: 0, r: 0 },
+      { q: 0, r: 0 },
+      { q: 2, r: 0 },
+      { q: 2, r: 0 },
+      { q: 2, r: 0 },
+    ];
+    const { beads } = visitBeads(walk, 28);
+    expect(beads.map((b) => b.step)).toEqual([1, 2, 3, 4, 5]);
+    const first = hexToPixel(0, 0, 28);
+    const second = hexToPixel(2, 0, 28);
+    expect(beads[0].x).toBeLessThan(first.x);
+    expect(beads[1].x).toBeGreaterThan(first.x);
+    expect(beads[4].x - beads[2].x).toBeCloseTo(2 * Math.min(11, (28 * 1.2) / 3));
+    expect(beads[2].y).toBeCloseTo(second.y + 28 * 0.6);
   });
 });

@@ -14,7 +14,7 @@ import {
   detectLoop,
   walkVariants,
   getRevealedCells,
-  getWalkPathD,
+  visitBeads,
   hexToPixel,
   hexPoints,
   HUES,
@@ -224,10 +224,24 @@ export default function HoneycombWheel({
   // as the cells themselves (hexToPixel handles the pointy-top mapping).
   const loopVec = loop?.translated ? hexToPixel(loop.dq, loop.dr, S) : null;
 
-  const pathD = useMemo(
-    () => getWalkPathD(displayWalk, endStep, "full", S),
-    [displayWalk, endStep, S],
-  );
+  // Repeats become beads on a wire — see visitBeads for why a revisit can't
+  // just step to another hex of the same degree.
+  const visitPlan = useMemo(() => visitBeads(displayWalk, S), [displayWalk, S]);
+  const stepPoints = visitPlan.points;
+
+  const pathD = useMemo(() => {
+    if (stepPoints.length < 2) return "";
+    const points = stepPoints.filter(
+      (point, index) =>
+        index === 0 ||
+        point.x !== stepPoints[index - 1].x ||
+        point.y !== stepPoints[index - 1].y,
+    );
+    if (points.length < 2) return "";
+    return points
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+      .join(" ");
+  }, [stepPoints]);
 
   // SVG bounds — guard against empty (no chords) section
   const svgDims = useMemo(() => {
@@ -240,6 +254,7 @@ export default function HoneycombWheel({
       allPts.push(...frontier.map(({ x, y }) => ({ x, y })));
     } else if (displayWalk.length > 0) {
       allPts.push(...displayWalk.map((p) => hexToPixel(p.q, p.r, S)));
+      allPts.push(...stepPoints);
       if (loopVec) {
         const first = hexToPixel(displayWalk[0].q, displayWalk[0].r, S);
         allPts.push({ x: first.x + loopVec.x, y: first.y + loopVec.y });
@@ -263,7 +278,7 @@ export default function HoneycombWheel({
       w: Math.max(220, maxX - minX + 16),
       h: Math.max(180, maxY - minY + 16),
     };
-  }, [revealed, displayWalk, loopVec, S, isDepth, depthNodes, frontier]);
+  }, [revealed, displayWalk, loopVec, S, isDepth, depthNodes, frontier, stepPoints]);
 
   const addChordAtDegree = useCallback((deg: number) => {
     const diatonic = diatonicByDegree[deg].triad;
@@ -576,7 +591,27 @@ export default function HoneycombWheel({
           );
         })}
 
-        {!isDepth && walkBadges.map(({ q, r, indices }) => {
+        {/* Numbered beads for chords the progression revisits: the sequence is
+            visible in place, instead of a "×2" repeat count. */}
+        {!isDepth &&
+          visitPlan.beads.map((bead) => (
+            <g key={`bead-${bead.step}`} style={{ pointerEvents: "none" }}>
+              <circle cx={bead.x} cy={bead.y} r={5.5} fill="#0E1116" stroke="#F5E7C8" strokeWidth={1.2} />
+              <text
+                x={bead.x}
+                y={bead.y + 0.5}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontFamily="'IBM Plex Mono', monospace"
+                fontSize={7}
+                fill="#F5E7C8"
+              >
+                {bead.step}
+              </text>
+            </g>
+          ))}
+
+        {!isDepth && walkBadges.filter(({ indices }) => indices.length === 1).map(({ q, r, indices }) => {
           const center = hexToPixel(q, r, S);
           const bx = center.x + S * 0.6;
           const by = center.y - S * 0.6;
@@ -584,15 +619,14 @@ export default function HoneycombWheel({
           // chords landed on this degree — a stack, not a repeat.
           const firstVariant = variants.variantOfStep[indices[0] - 1] ?? 0;
           const mixed = !indices.every((i) => variants.variantOfStep[i - 1] === firstVariant);
-          const label = mixed
-            ? indices.length <= 3
+          // List the visits, not a repeat count: "1·3" tells you the sequence
+          // came back, "1×2" only tells you it happened twice.
+          const label =
+            indices.length <= 4
               ? indices.join("·")
-              : `${indices[0]}+${indices.length - 1}`
-            : indices.length > 1
-              ? `${indices[0]}×${indices.length}`
-              : String(indices[0]);
+              : `${indices[0]}…${indices[indices.length - 1]}`;
           const badgeTitle = `Step${indices.length > 1 ? "s" : ""} ${indices.join(", ")} — ${
-            mixed ? "different chords on this degree" : "same chord repeated"
+            mixed ? "different chords on this degree" : "the progression returns here"
           }`;
           return (
             <g key={`${q},${r}`} style={{ pointerEvents: "none" }}>

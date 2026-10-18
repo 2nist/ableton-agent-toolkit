@@ -936,3 +936,51 @@ export function transposeChords(chords: Chord[], newKeyPc: number, newKeyName: N
     return { ...c, root: noteNameFn(rootPc, newKeyName) };
   });
 }
+export interface VisitBead {
+  x: number;
+  y: number;
+  /** 1-based step number, matching the badge numbering. */
+  step: number;
+}
+
+/**
+ * A chord the progression returns to cannot advance on the honeycomb: the
+ * lattice only holds one cell per degree in each neighbourhood, so a repeat has
+ * nowhere to go. Instead each visit gets its own bead inside the hex, and the
+ * path threads the beads — the sequence stays visible in place rather than
+ * collapsing into a single "×2" repeat count.
+ *
+ * `points` is the path vertex for every step (cell centre, or the bead when the
+ * cell is revisited); `beads` holds only the revisited ones.
+ */
+export function visitBeads(
+  walk: HexCell[],
+  size: number,
+): { beads: VisitBead[]; points: Vec2[] } {
+  const stepsPerCell = new Map<string, number>();
+  for (const { q, r } of walk) {
+    const key = `${q},${r}`;
+    stepsPerCell.set(key, (stepsPerCell.get(key) ?? 0) + 1);
+  }
+
+  const seen = new Map<string, number>();
+  const beads: VisitBead[] = [];
+  const points = walk.map(({ q, r }, index) => {
+    const key = `${q},${r}`;
+    const visit = seen.get(key) ?? 0;
+    seen.set(key, visit + 1);
+    const center = hexToPixel(q, r, size);
+    const total = stepsPerCell.get(key)!;
+    if (total < 2) return center;
+    const spread = Math.min(11, (size * 1.2) / total);
+    const bead: VisitBead = {
+      x: center.x + (visit - (total - 1) / 2) * spread,
+      y: center.y + size * 0.6,
+      step: index + 1,
+    };
+    beads.push(bead);
+    return { x: bead.x, y: bead.y };
+  });
+
+  return { beads, points };
+}
