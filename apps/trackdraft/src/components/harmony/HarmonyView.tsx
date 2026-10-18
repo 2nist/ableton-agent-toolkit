@@ -31,6 +31,7 @@ export default function HarmonyView() {
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const honeycombMode = useHarmonySelectionStore((s) => s.honeycombMode);
+  const setHoneycombMode = useHarmonySelectionStore((s) => s.setHoneycombMode);
   const [tick, setTick] = useState<TransportTick | null>(null);
 
   // The canvas follows the transport: the chord under the playhead is
@@ -142,7 +143,37 @@ export default function HarmonyView() {
       {/* Hex canvas — full room to wander now that the preview controls,
          Linear/Loop toggle, and settings live in the dock's Tools panel.
          The progression-fit status lives in this workspace's bottom-right. */}
-      <div className="border border-edge rounded-lg bg-[#0e1218] overflow-hidden min-h-[420px] flex flex-col">
+      <div className="relative border border-edge rounded-lg bg-[#0e1218] overflow-hidden min-h-[420px] flex flex-col">
+        {/* View-mode switcher ON the canvas: the same control lives in the
+            dock's tools panel, but the inspector rail is narrow enough that a
+            fourth button could wrap out of sight — the canvas is where you
+            look, so the modes belong here too. */}
+        <div className="absolute right-2 top-2 z-20 flex gap-1">
+          {(["linear", "loop", "depth", "scene"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={honeycombMode === mode}
+              className={`rounded border px-1.5 py-0.5 text-[10px] font-mono ${
+                honeycombMode === mode
+                  ? "border-accent bg-accent/15 text-accent"
+                  : "border-edge/70 bg-[#0E1116]/80 text-inkMuted hover:text-ink"
+              }`}
+              onClick={() => setHoneycombMode(mode)}
+              title={
+                mode === "linear"
+                  ? "One hex per chord"
+                  : mode === "loop"
+                    ? "Collapse repeating vamps onto one lap"
+                    : mode === "depth"
+                      ? "Depth (z = time): every step advances"
+                      : "3D scene: degree × alteration × time"
+              }
+            >
+              {mode === "linear" ? "Linear" : mode === "loop" ? "Loop" : mode === "depth" ? "Depth" : "3D"}
+            </button>
+          ))}
+        </div>
         <div className="flex-1 flex items-center justify-center p-4 pt-6">
           {activeSection && honeycombMode === "scene" && (
             <HarmonyScene

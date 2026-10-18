@@ -540,6 +540,17 @@ jump-open included); the karaoke popout is untouched.
   **rAF-driven** — a backgrounded/hidden tab gets zero animation frames, so
   the playhead (and therefore any highlight) freezes until the tab is
   visible again.
+  Follow-up (2026-10-18): the mode switcher also sits **on the canvas**
+  (top-right) as well as in the dock, because the inspector rail is narrow
+  enough that the fourth button could still wrap out of sight; and each
+  accidental tier in the 3D scene shows its **occupancy count** (`♭ 0 · ♮ 4 ·
+  ♯ 0`), which keeps a diatonic-only progression honest — nothing looks
+  stacked because nothing left the tier. A borrowed chord (`♭VI`) was verified
+  to drop its box onto the ♭ lane. **Modulation still cannot show**: the
+  schema holds one key/scale per section, and a modulation to the dominant
+  keeps every chord diatonic to the *new* key, so nothing leaves the ♮ tier.
+  Key changes need a tonal-centre concept (per chord or per region) — the next
+  step if this scene is to earn the axis it was built for.
 
 ## 8. Defaults chosen (veto-able)
 

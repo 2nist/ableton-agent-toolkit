@@ -208,6 +208,14 @@ export default function HarmonyScene({
     return lines;
   }, [nodes.length, renderCamera, origin.x, origin.y]);
 
+  /** How many chords sit on each accidental tier — a flat progression shows
+   *  "♭ 0 / ♮ 4 / ♯ 0", which is exactly why nothing looks stacked. */
+  const laneCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const node of nodes) counts.set(node.accidental, (counts.get(node.accidental) ?? 0) + 1);
+    return counts;
+  }, [nodes]);
+
   const degreeTicks = useMemo(
     () =>
       Array.from({ length: 7 }, (_, degree) => {
@@ -357,6 +365,10 @@ export default function HarmonyScene({
                 fill={outer ? "#8a7350" : "#7A8290"}
               >
                 {LANE_LABEL[lane]}
+                <tspan fill={laneCounts.get(lane) ? "#E8B54A" : "#4d5560"} fontSize={7}>
+                  {" "}
+                  {laneCounts.get(lane) ?? 0}
+                </tspan>
               </text>
             </g>
           );
