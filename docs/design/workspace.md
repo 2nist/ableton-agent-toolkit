@@ -572,6 +572,29 @@ jump-open included); the karaoke popout is untouched.
   Key changes need a tonal-centre concept (per chord or per region) — the next
   step if this scene is to earn the axis it was built for.
 
+- **Tonal centre — inferred, editable (2026-10-18)**: the schema holds one
+  key/scale for the whole song and a section has none of its own, so a
+  modulation was unrepresentable: every chord was measured against the same
+  tonic, which is why the 3D scene's y axis could only ever show borrowing,
+  never a key change. `lib/harmony/tonic.ts` introduces a **tonic region** —
+  a run of the section with one home note — and infers them from the resolved
+  chords with the Krumhansl-Kessler profiles (the same ones the audio key
+  estimator uses). Three details make the inference usable rather than noisy:
+  a 16-beat window (two chords is ambiguous — `G–C` fits both keys), **hysteresis**
+  (a new home must beat the current one by more than 8%, so equal fits stay
+  put), and a **chord-root tiebreak** within 2% (a progression loop usually
+  lands on its own tonic). Runs shorter than two bars fold into the region
+  before them, so a borrowed pair of bars is not a modulation. The *mode* is
+  never inferred — only the home note; the scale stays authored. The scene now
+  measures every box against the home in force at its own beat
+  (`degreeRelativeTo`) and prints the trail (`home C ionian → G ionian @7`),
+  so a C chord reads `I` before the modulation and `IV` after it. `setTonicAt`
+  marks an authored region and is the seam for the edit UI (a boundary per
+  chord), which is the remaining half of the feature: nothing is persisted
+  yet, the scene infers on the fly. Region consumers still to convert: the
+  hex wheel (re-root the lattice per region), borrowed-chord flags and the
+  Bend/colour heuristics, which all still assume one key.
+
 ## 8. Defaults chosen (veto-able)
 
 - Level-1 rows = **rich previews with light actions**, not lite editors

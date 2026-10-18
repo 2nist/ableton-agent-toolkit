@@ -18,12 +18,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
-import { chordDisplayName, chordsToHoneycombText } from "../../lib/harmony/chordBuilder";
+import { chordDisplayName } from "../../lib/harmony/chordBuilder";
+import { degreeRelativeTo, inferTonicRegions, resolveTonicAt } from "../../lib/harmony/tonic";
 import {
   HUES,
   ROMAN_UP,
   diatonicChordAt,
-  parseProgression,
   SCALE_INTERVALS,
   MODE_TO_SCALE_KEY,
 } from "../../lib/harmony/honeycombWalk";
@@ -67,6 +67,8 @@ interface Node {
   step: number;
   degree: number;
   accidental: number;
+  /** Beat where the home this box was measured against begins. */
+  tonicBeat: number;
   /** Box height in world units — the chord's length in beats, so harmonic
    *  rhythm is legible in the picture. */
   height: number;
@@ -120,24 +122,49 @@ export default function HarmonyScene({
   const scaleKey = MODE_TO_SCALE_KEY[scale as keyof typeof MODE_TO_SCALE_KEY] ?? "major";
   const intervals = SCALE_INTERVALS[scaleKey];
 
-  const nodes = useMemo<Node[]>(() => {
-    const { steps } = parseProgression(chordsToHoneycombText(chords));
-    return chords.map((chord, index) => {
-      const step = steps[index];
-      const degree = step?.deg ?? 0;
-      const accidental = step?.acc ?? 0;
+  // The tonic is inferred from the chords themselves (see lib/harmony/tonic):
+  // one home note may cover the whole cycle, or the cycle may modulate. Every
+  // box is then placed relative to the home that is actually in force at its
+  // own beat, which is what lets a modulation show on the y axis instead of
+  // staying invisible in the ♮ tier.
+  const { nodes, regions } = useMemo(() => {
+    let beat = 0;
+    const occurrences = chords.map((chord) => {
+      const startBeat = beat;
+      beat += chord.beats;
+      return { chord, startBeat };
+    });
+    const inferred = inferTonicRegions(
+      occurrences.map(({ chord, startBeat }) => ({
+        root: chord.root as NoteName,
+        quality: chord.quality,
+        startTime: startBeat,
+        duration: chord.beats,
+      })),
+      { scale, fallbackKey: keyName },
+    );
+    const fallback = { key: keyName, scale };
+    const built = occurrences.map(({ chord, startBeat }, index): Node => {
+      const tonic = resolveTonicAt(inferred, startBeat, fallback);
+      const { deg, acc } = degreeRelativeTo(
+        pitchClass(chord.root),
+        pitchClass(tonic.key),
+        tonic.scale,
+      );
       const height = boxHeightForBeats(chord.beats);
       return {
         chord,
         step: index,
-        degree,
-        accidental,
+        degree: deg,
+        accidental: acc,
+        tonicBeat: tonic.startBeat,
         height,
         // The box sits ON its lane and grows upward.
-        center: { x: degree * DEG_W, y: accidental * ACC_H + height / 2, z: index * Z_STEP },
+        center: { x: deg * DEG_W, y: acc * ACC_H + height / 2, z: index * Z_STEP },
       };
     });
-  }, [chords]);
+    return { nodes: built, regions: inferred };
+  }, [chords, keyName, scale]);
 
   // Auto-fit once per content/viewport change (never while orbiting, which
   // would rescale the scene under the pointer), then keep the content centred
@@ -273,11 +300,31 @@ export default function HarmonyScene({
     setCamera((current) => zoomBy(current, event.deltaY > 0 ? 0.92 : 1.08));
   }
 
+  /** "C ionian → G ionian @6" — the homes the boxes were measured against,
+   *  numbered by the step that starts each one. A single home stays quiet. */
+  const homeTrail = useMemo(() => {
+    if (regions.length <= 1) return regions.length ? `${regions[0].key} ${regions[0].scale}` : "";
+    return regions
+      .map((region) => {
+        const step = nodes.findIndex((node) => node.tonicBeat >= region.startBeat - 1e-6);
+        return `${region.key} ${region.scale}${step > 0 ? ` @${step + 1}` : ""}`;
+      })
+      .join(" → ");
+  }, [regions, nodes]);
+
   const selectedNode = nodes.find((node) => node.chord.id === selectedChordId);
   const activeNode = nodes.find((node) => node.chord.id === activeChordId);
 
   return (
     <div ref={wrapRef} className="relative w-full" style={{ height }}>
+      {homeTrail && (
+        <div
+          className="pointer-events-none absolute bottom-1 left-1 z-10 rounded bg-[#0E1116]/80 px-1.5 py-0.5 font-mono text-[9px] text-inkMuted"
+          title="The home each box is measured against — inferred from the chords, one region per stretch that shares it"
+        >
+          home {homeTrail}
+        </div>
+      )}
       <div className="absolute left-1 top-1 z-10 flex items-center gap-1">
         <button
           type="button"
