@@ -17,9 +17,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
-import type { Chord } from "../../types/blueprint";
+import type { Chord, TonicRegion } from "../../types/blueprint";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
-import { degreeRelativeTo, inferTonicRegions, resolveTonicAt } from "../../lib/harmony/tonic";
+import {
+  degreeRelativeTo,
+  effectiveTonicRegions,
+  resolveTonicAt,
+} from "../../lib/harmony/tonic";
 import {
   HUES,
   ROMAN_UP,
@@ -58,6 +62,8 @@ export interface HarmonySceneProps {
   selectedChordId?: string | null;
   /** Chord sounding at the playhead, so the scene follows playback. */
   activeChordId?: string | null;
+  /** Authored tonic regions; absent → inferred from the chords. */
+  regions?: TonicRegion[];
   onSelectChord?: (chordId: string) => void;
   height?: number;
 }
@@ -97,6 +103,7 @@ export default function HarmonyScene({
   selectedChordId,
   activeChordId = null,
   onSelectChord,
+  regions: storedRegions,
   height = 420,
 }: HarmonySceneProps) {
   const [camera, setCamera] = useState<SceneCamera>(DEFAULT_CAMERA);
@@ -134,7 +141,8 @@ export default function HarmonyScene({
       beat += chord.beats;
       return { chord, startBeat };
     });
-    const inferred = inferTonicRegions(
+    const inferred = effectiveTonicRegions(
+      storedRegions,
       occurrences.map(({ chord, startBeat }) => ({
         root: chord.root as NoteName,
         quality: chord.quality,
@@ -164,7 +172,7 @@ export default function HarmonyScene({
       };
     });
     return { nodes: built, regions: inferred };
-  }, [chords, keyName, scale]);
+  }, [chords, keyName, scale, storedRegions]);
 
   // Auto-fit once per content/viewport change (never while orbiting, which
   // would rescale the scene under the pointer), then keep the content centred

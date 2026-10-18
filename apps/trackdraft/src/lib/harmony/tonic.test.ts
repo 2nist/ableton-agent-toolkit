@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bestTonic,
   degreeRelativeTo,
+  effectiveTonicRegions,
   inferTonicRegions,
   resolveTonicAt,
   setTonicAt,
@@ -176,5 +177,45 @@ describe("degreeRelativeTo", () => {
   it("moves with the tonic, so the same shape reads differently after a modulation", () => {
     expect(degreeRelativeTo(2, 0, "ionian")).toEqual({ deg: 1, acc: 0 });
     expect(degreeRelativeTo(2, 7, "ionian")).toEqual({ deg: 4, acc: 0 }); // D is V of G
+  });
+});
+
+describe("effectiveTonicRegions", () => {
+  const chords = progression(...C_MAJOR);
+
+  it("prefers what the author set", () => {
+    const stored = [
+      { startBeat: 0, key: "C", scale: "ionian", source: "inferred" },
+      { startBeat: 8, key: "D", scale: "ionian", source: "authored" },
+    ] as const;
+    const regions = effectiveTonicRegions([...stored], chords, {
+      scale: "ionian",
+      fallbackKey: "C",
+    });
+    expect(regions).toHaveLength(2);
+    expect(regions[1]).toMatchObject({ startBeat: 8, key: "D", source: "authored" });
+  });
+
+  it("infers when nothing was set, including an empty list", () => {
+    for (const stored of [undefined, []]) {
+      const regions = effectiveTonicRegions(stored, chords, {
+        scale: "ionian",
+        fallbackKey: "C",
+      });
+      expect(regions).toHaveLength(1);
+      expect(regions[0]).toMatchObject({ key: "C", source: "inferred" });
+    }
+  });
+
+  it("sorts stored regions, so a hand-edited list still resolves in time order", () => {
+    const stored = [
+      { startBeat: 8, key: "D", scale: "ionian", source: "authored" },
+      { startBeat: 0, key: "C", scale: "ionian", source: "inferred" },
+    ] as const;
+    const regions = effectiveTonicRegions([...stored], chords, {
+      scale: "ionian",
+      fallbackKey: "C",
+    });
+    expect(regions.map((region) => region.startBeat)).toEqual([0, 8]);
   });
 });

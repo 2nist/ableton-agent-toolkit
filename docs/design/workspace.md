@@ -588,12 +588,20 @@ jump-open included); the karaoke popout is untouched.
   never inferred — only the home note; the scale stays authored. The scene now
   measures every box against the home in force at its own beat
   (`degreeRelativeTo`) and prints the trail (`home C ionian → G ionian @7`),
-  so a C chord reads `I` before the modulation and `IV` after it. `setTonicAt`
-  marks an authored region and is the seam for the edit UI (a boundary per
-  chord), which is the remaining half of the feature: nothing is persisted
-  yet, the scene infers on the fly. Region consumers still to convert: the
-  hex wheel (re-root the lattice per region), borrowed-chord flags and the
-  Bend/colour heuristics, which all still assume one key.
+  so a C chord reads `I` before the modulation and `IV` after it.
+  Follow-up (2026-10-18): the regions are **persisted and editable**. The
+  section carries `tonicRegions` (schema in `@music-theory/song-blueprint`,
+  next to the existing per-section `key`/`scale` overrides), stored regions
+  win over inference (`effectiveTonicRegions`), and a `TonicStrip` under the
+  canvas lists the homes in force — authored ones marked `⌂`, because a
+  correction must survive re-inference. Two controls: **⌂ home from here**
+  re-homes at the selected chord's root (a modulation is usually "this chord
+  is the new I"), and **follow the chords** drops the authored list and hands
+  the decision back to the key finder. Verified end to end: authoring G at
+  beat 12 turns the V chord into `I`, persists to the song, and the scene
+  readout follows (`home C ionian → G ionian @4`). Region consumers still to
+  convert: the hex wheel (re-root the lattice per region), borrowed-chord
+  flags and the Bend/colour heuristics, which all still assume one key.
 
 ## 8. Defaults chosen (veto-able)
 

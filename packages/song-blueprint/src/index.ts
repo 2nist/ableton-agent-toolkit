@@ -517,6 +517,25 @@ export interface BlueprintSection {
   /** Section-level scale/mode override. Works the same way as `key`:
    *  absent → falls back to the song's global `scale`. */
   scale?: ScaleType;
+  /** Modulation *within* this section: runs of chords that share a home
+   *  note, section-relative. Authored entries win over inference, so a
+   *  correction sticks. Empty/absent → one home for the whole section. */
+  tonicRegions?: TonicRegion[];
+}
+
+/** Where a tonal-centre region came from: proposed by the key finder, or
+ *  authored (and therefore never silently re-inferred). */
+export type TonicSource = "inferred" | "authored";
+
+/** A run of a section that shares one home note — a modulation *inside* a
+ *  section. `startBeat` is section-relative; the first region always starts
+ *  at 0. Absent (or empty) → the whole section has one home, its
+ *  `key`/`scale` override or the song's. */
+export interface TonicRegion {
+  startBeat: number;
+  key: NoteName;
+  scale: ScaleType;
+  source: TonicSource;
 }
 
 /** One pass of a section through the song timeline. Lets one canonical

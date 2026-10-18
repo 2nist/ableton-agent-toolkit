@@ -16,16 +16,9 @@
 
 import { getChordIntervals, noteName, pitchClass, SCALE_INTERVALS } from "@music-theory/core";
 import type { ChordQuality, NoteName, ScaleType } from "@music-theory/core";
+import type { TonicRegion, TonicSource } from "@music-theory/song-blueprint";
 
-export type TonicSource = "inferred" | "authored";
-
-export interface TonicRegion {
-  /** Section-relative beat where this home takes over (the first is always 0). */
-  startBeat: number;
-  key: NoteName;
-  scale: ScaleType;
-  source: TonicSource;
-}
+export type { TonicRegion, TonicSource };
 
 export interface TonicChordOccurrence {
   root: NoteName;
@@ -305,4 +298,18 @@ export function degreeRelativeTo(
     }
   });
   return { deg: best.deg, acc: best.acc };
+}
+
+/** The regions in force for a section: what the author set, or what the key
+ *  finder proposed. Stored regions win even if only partially authored —
+ *  half a correction is still a correction, and the strip shows which
+ *  boundaries came from where. */
+export function effectiveTonicRegions(
+  stored: TonicRegion[] | undefined,
+  chords: TonicChordOccurrence[],
+  options: { scale: ScaleType; fallbackKey: NoteName; windowBeats?: number; minRegionBeats?: number },
+): TonicRegion[] {
+  const usable = (stored ?? []).slice().sort((a, b) => a.startBeat - b.startBeat);
+  if (usable.length > 0) return usable;
+  return inferTonicRegions(chords, options);
 }

@@ -5,6 +5,9 @@ import type { NoteName } from "@music-theory/core";
 import { beatsPerBar, sectionDurationBeats, type Chord } from "../../types/blueprint";
 import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
+import TonicStrip from "./TonicStrip";
+import { effectiveTonicRegions } from "../../lib/harmony/tonic";
+import { resolveChordOccurrences } from "@drum/library";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { updateSection } from "../../lib/sections";
 import { sectionSpans } from "../../lib/arrangement";
@@ -81,8 +84,6 @@ export default function HarmonyView() {
     beatInSection,
   );
 
-  if (!song) return null;
-
   // A section can override the song's key/scale (modulation) — everything
   // downstream reads/writes against this effective value, never
   // song.key/song.scale directly, so a modulated section is edited correctly
@@ -95,9 +96,30 @@ export default function HarmonyView() {
   // bare note name, which used to crash the whole tree here with no way to
   // reach the key selector to fix it. Falling back to "C" keeps the tab
   // usable so the bad value can be corrected through the dock instead.
-  const rawKey = activeSection?.key ?? song.key;
+  const rawKey = activeSection?.key ?? song?.key ?? "C";
   const effectiveKey: NoteName = rawKey in NOTE_TO_PC ? (rawKey as NoteName) : "C";
-  const effectiveScale = activeSection?.scale ?? song.scale;
+  const effectiveScale = activeSection?.scale ?? song?.scale ?? "ionian";
+
+  /** The homes in force: what the author set, or what the key finder
+   *  proposes for the progression as it actually plays. */
+  const effectiveRegions = useMemo(() => {
+    if (!activeSection) return [];
+    const occurrences = resolveChordOccurrences(
+      activeSection,
+      sectionDurationBeats(activeSection),
+    ).map((occurrence) => ({
+      root: occurrence.chord.root,
+      quality: occurrence.chord.quality,
+      startTime: occurrence.startTime,
+      duration: occurrence.duration,
+    }));
+    return effectiveTonicRegions(activeSection.tonicRegions, occurrences, {
+      scale: effectiveScale,
+      fallbackKey: effectiveKey,
+    });
+  }, [activeSection, effectiveKey, effectiveScale]);
+
+  if (!song) return null;
 
   /** True when a meter outline (drums/Bend grid) decides chord timing, so the
    *  chords' own `beats` are not what plays — the rhythm strip goes read-only. */
@@ -183,6 +205,7 @@ export default function HarmonyView() {
               selectedChordId={selectedChordId}
               activeChordId={activeChordId}
               onSelectChord={setSelectedChordId}
+              regions={activeSection.tonicRegions}
             />
           )}
           {activeSection && honeycombMode !== "scene" && (
@@ -203,6 +226,23 @@ export default function HarmonyView() {
             />
           )}
         </div>
+        {activeSection && (
+          <div className="px-3 pt-1.5">
+            <TonicStrip
+              chords={activeSection.chords}
+              regions={effectiveRegions}
+              stored={activeSection.tonicRegions}
+              keyName={effectiveKey}
+              scale={effectiveScale}
+              selectedChordId={selectedChordId}
+              onChange={(regions) =>
+                updateCurrentSong((s) =>
+                  updateSection(s, activeSection.id, (sec) => ({ ...sec, tonicRegions: regions })),
+                )
+              }
+            />
+          </div>
+        )}
         {/* The progression + effect lanes live IN the canvas now (layout
             grammar 2026-09-21: wide surfaces belong to the canvas, not a
             bottom menu — the old dock's Menu panel died here). */}
