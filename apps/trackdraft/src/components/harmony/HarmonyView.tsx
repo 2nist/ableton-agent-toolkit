@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
@@ -7,6 +7,9 @@ import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { updateSection } from "../../lib/sections";
+import { sectionSpans } from "../../lib/arrangement";
+import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
+import { useActiveChord } from "../../hooks/useActiveChord";
 import HoneycombWheel from "./HoneycombWheel";
 import ProgressionEditor from "./ProgressionEditor";
 import HarmonyScene from "./HarmonyScene";
@@ -28,6 +31,15 @@ export default function HarmonyView() {
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const honeycombMode = useHarmonySelectionStore((s) => s.honeycombMode);
+  const [tick, setTick] = useState<TransportTick | null>(null);
+
+  // The canvas follows the transport: the chord under the playhead is
+  // highlighted in every mode, so the view "moves with the timeline" while
+  // the song plays instead of being a static map.
+  useEffect(() => {
+    const transport = getSongTransport();
+    return transport.onTick(setTick);
+  }, []);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
 
   const song = currentSong;
@@ -50,6 +62,23 @@ export default function HarmonyView() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  const spans = useMemo(() => (song ? sectionSpans(song) : []), [song]);
+  const activeSpan = activeSection
+    ? spans.find((span) => span.sectionId === activeSection.id) ?? null
+    : null;
+  const beatInSection = useMemo(() => {
+    if (!tick || !activeSpan) return null;
+    const beat = tick.beat - activeSpan.startBeat;
+    if (beat < 0 || beat > activeSpan.durationBeats) return null;
+    return beat;
+  }, [tick, activeSpan]);
+  const activeChordId = useActiveChord(
+    activeSection,
+    song,
+    activeSpan?.durationBeats ?? 0,
+    beatInSection,
+  );
 
   if (!song) return null;
 
@@ -121,6 +150,7 @@ export default function HarmonyView() {
               keyName={effectiveKey}
               scale={effectiveScale}
               selectedChordId={selectedChordId}
+              activeChordId={activeChordId}
               onSelectChord={setSelectedChordId}
             />
           )}
@@ -155,6 +185,7 @@ export default function HarmonyView() {
               beatsPerBar={beatsPerBar(activeSection)}
               sectionBeats={sectionDurationBeats(activeSection)}
               selectedChordId={selectedChordId}
+              activeChordId={activeChordId}
               outlineGoverned={chordsFollowOutline}
               onSelectChord={setSelectedChordId}
               onChange={updateRhythm}

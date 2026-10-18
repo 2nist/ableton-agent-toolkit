@@ -48,6 +48,8 @@ interface HoneycombWheelProps {
   chords: Chord[];
   beatsPerChord: number;
   selectedChordId: string | null;
+  /** Chord sounding at the playhead — highlighted so the map follows playback. */
+  activeChordId?: string | null;
   /** Selecting a chord (a new one, or an existing placed one) is now the
    *  only signal needed — its editor lives in the dock, driven by the
    *  shared `harmonySelectionStore`, not a click-anchored popover this
@@ -73,6 +75,7 @@ export default function HoneycombWheel({
   chords,
   beatsPerChord,
   selectedChordId,
+  activeChordId = null,
   onSelectChord,
   onChangeChords,
   colorFlavor,
@@ -148,6 +151,12 @@ export default function HoneycombWheel({
     }
     return cells;
   }, [displayWalk, endStep]);
+
+  const activeStep = useMemo(() => {
+    if (!activeChordId) return -1;
+    const index = chords.findIndex((chord) => chord.id === activeChordId);
+    return index >= 0 && index < displayWalk.length ? index : -1;
+  }, [chords, activeChordId, displayWalk.length]);
 
   // Separately, which walk step (if any) corresponds to the chord picked
   // for editing — used only for a "selected" highlight, never for choice-
@@ -433,6 +442,8 @@ export default function HoneycombWheel({
           const isCurrent = type === "current";
           const isChoice = type === "choice";
           const isSelected = selectedStep >= 0 && displayWalk[selectedStep].q === q && displayWalk[selectedStep].r === r;
+          const isPlaying =
+            activeStep >= 0 && displayWalk[activeStep].q === q && displayWalk[activeStep].r === r;
 
           // Color-flavor badge: the bi-tonal color extension this chord maps
           // to under the section's flavor, shown as a small square badge like
@@ -492,6 +503,9 @@ export default function HoneycombWheel({
                 strokeDasharray={isChoice ? "4 3" : undefined}
                 style={isCurrent ? { filter: "url(#hw-glow)" } : undefined}
               />
+              {isPlaying && (
+                <polygon points={hexPoints(S + 4)} fill="none" stroke="#8FD3FF" strokeWidth={2.4} style={{ pointerEvents: "none" }} />
+              )}
               {isSelected && (
                 <polygon points={hexPoints(S + 2)} fill="none" stroke="#E8B54A" strokeWidth={2} strokeDasharray="3 2" style={{ pointerEvents: "none" }} />
               )}

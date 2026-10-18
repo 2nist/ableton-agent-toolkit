@@ -529,6 +529,17 @@ jump-open included); the karaoke popout is untouched.
   is its length in beats (`boxHeightForBeats`), so harmonic rhythm is visible
   without reading a label; and a **ghost trail** — older chords dim to 40% so a
   run leaves a visible wake behind the current chord.
+- **Phase D — the canvases follow the transport (2026-10-18)**: the harmony
+  workspace now subscribes to the transport and resolves the chord under the
+  playhead through the same `resolveChordOccurrences` the generators use
+  (`useActiveChord` + `activeChordIdAt`), so every mode marks what is
+  sounding: a ring in the wheel, a lit box and a `▶ now` marker in 3D, the
+  active card in the segment editor. Two bugs fell out of the same session:
+  the dock's view-mode row didn't wrap, so the fourth mode ("3D") was pushed
+  off the rail and looked like nothing had changed; and note that playback is
+  **rAF-driven** — a backgrounded/hidden tab gets zero animation frames, so
+  the playhead (and therefore any highlight) freezes until the tab is
+  visible again.
 
 ## 8. Defaults chosen (veto-able)
 

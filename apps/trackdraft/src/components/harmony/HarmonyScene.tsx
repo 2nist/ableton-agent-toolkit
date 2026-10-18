@@ -56,6 +56,8 @@ export interface HarmonySceneProps {
   keyName: NoteName;
   scale: ScaleType;
   selectedChordId?: string | null;
+  /** Chord sounding at the playhead, so the scene follows playback. */
+  activeChordId?: string | null;
   onSelectChord?: (chordId: string) => void;
   height?: number;
 }
@@ -91,6 +93,7 @@ export default function HarmonyScene({
   keyName,
   scale,
   selectedChordId,
+  activeChordId = null,
   onSelectChord,
   height = 420,
 }: HarmonySceneProps) {
@@ -263,6 +266,7 @@ export default function HarmonyScene({
   }
 
   const selectedNode = nodes.find((node) => node.chord.id === selectedChordId);
+  const activeNode = nodes.find((node) => node.chord.id === activeChordId);
 
   return (
     <div ref={wrapRef} className="relative w-full" style={{ height }}>
@@ -393,9 +397,13 @@ export default function HarmonyScene({
               key={`face-${face.node.step}-${index}`}
               points={face.points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ")}
               fill={shadeHex(hue.fill, face.shade * face.fade)}
-              stroke={shadeHex(hue.rim, face.shade * face.fade)}
-              strokeWidth={0.6}
-              strokeOpacity={0.5 * face.fade}
+              stroke={
+                face.node.chord.id === activeChordId
+                  ? "#8FD3FF"
+                  : shadeHex(hue.rim, face.shade * face.fade)
+              }
+              strokeWidth={face.node.chord.id === activeChordId ? 2 : 0.6}
+              strokeOpacity={face.node.chord.id === activeChordId ? 0.95 : 0.5 * face.fade}
               data-chord-id={face.node.chord.id}
               style={{ cursor: "pointer" }}
             />
@@ -443,6 +451,25 @@ export default function HarmonyScene({
             </g>
           );
         })}
+
+        {activeNode && (
+          <g style={{ pointerEvents: "none" }}>
+            <text
+              x={projectPoint(activeNode.center, renderCamera, origin).x}
+              y={projectPoint(activeNode.center, renderCamera, origin).y - 22}
+              textAnchor="middle"
+              fontFamily="'IBM Plex Mono', monospace"
+              fontSize={8}
+              fontWeight={600}
+              fill="#8FD3FF"
+              stroke="#0b0e13"
+              strokeWidth={2.5}
+              paintOrder="stroke"
+            >
+              ▶ now
+            </text>
+          </g>
+        )}
 
         {selectedNode && (
           <circle

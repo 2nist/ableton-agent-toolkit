@@ -294,8 +294,9 @@ export function HarmonyTools() {
         />
       </div>
 
-      {/* Preview layers + honeycomb view mode */}
-      <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-edge">
+      {/* Preview layers + honeycomb view mode — wraps, because four modes plus
+          the two layer toggles overflowed the rail and pushed "3D" off-screen. */}
+      <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-1.5 border-b border-edge">
         {(["bass", "color"] as const).map((layer) => (
           <button
             key={layer}
