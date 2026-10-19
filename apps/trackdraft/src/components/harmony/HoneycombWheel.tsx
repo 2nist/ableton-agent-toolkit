@@ -4,12 +4,13 @@ import { pitchClass } from "@music-theory/core";
 import type { ScaleType, ChordQuality, NoteName } from "@music-theory/core";
 import { resolveFlavor, BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR } from "@platform/progression-engine";
 import { chordOnsetsForOutline, outlineBeatsPerBar } from "@drum/library";
-import type { Chord, MeterOutline } from "../../types/blueprint";
+import type { Chord, MeterOutline, TonicRegion } from "../../types/blueprint";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { chordFromDegree, chordsToHoneycombText, chordDisplayName } from "../../lib/harmony/chordBuilder";
+import { degreeRelativeTo, resolveTonicAt } from "../../lib/harmony/tonic";
+import { buildRegionWalk } from "../../lib/harmony/tonicWalk";
 import {
   parseProgression,
-  buildWalk,
   collapseRepeatsForLoopView,
   detectLoop,
   walkVariants,
@@ -67,6 +68,10 @@ interface HoneycombWheelProps {
   /** Called when a chord is clicked or added, so the host can audition it
    *  through the selected MIDI port. */
   onPreviewChord?: (chord: Chord) => void;
+  /** The section's tonic regions (authored, or inferred by the host). With
+   *  more than one, each chord is placed relative to the home in force at
+   *  its own beat and the lattice re-roots at the modulation. */
+  regions?: TonicRegion[];
 }
 
 export default function HoneycombWheel({
@@ -81,6 +86,7 @@ export default function HoneycombWheel({
   colorFlavor,
   harmonyOutline,
   onPreviewChord,
+  regions,
 }: HoneycombWheelProps) {
   const [scaleSize, setScaleSize] = useState<number>(() => readScale());
   const S = scaleSize;
@@ -104,8 +110,70 @@ export default function HoneycombWheel({
   );
 
   const honeycombText = useMemo(() => chordsToHoneycombText(chords), [chords]);
-  const { steps } = useMemo(() => parseProgression(honeycombText), [honeycombText]);
-  const walk = useMemo(() => buildWalk(steps), [steps]);
+  const parsedSteps = useMemo(() => parseProgression(honeycombText).steps, [honeycombText]);
+
+  /** Which tonic region each chord belongs to, and its degree *in that
+   *  region*. The authored roman numeral is relative to one key, so after a
+   *  modulation it names the wrong function — the root measured against the
+   *  home in force at the chord's own beat is the truthful reading. */
+  const regionSteps = useMemo(() => {
+    const fallback = { key: keyName, scale };
+    const usable = (regions ?? []).slice().sort((a, b) => a.startBeat - b.startBeat);
+    let beat = 0;
+    const perStep = chords.map((chord) => {
+      const startBeat = beat;
+      beat += chord.beats;
+      if (usable.length === 0) return { region: 0, deg: null as number | null, acc: 0 };
+      const home = resolveTonicAt(usable, startBeat, fallback);
+      const { deg, acc } = degreeRelativeTo(
+        pitchClass(chord.root),
+        pitchClass(home.key),
+        home.scale,
+      );
+      return { region: usable.findIndex((region) => region === home), deg, acc };
+    });
+    return perStep;
+  }, [chords, regions, keyName, scale]);
+
+  const steps = useMemo(
+    () =>
+      parsedSteps.map((step, index) => {
+        const derived = regionSteps[index];
+        if (!derived || derived.deg == null) return step;
+        return { ...step, deg: derived.deg, acc: derived.acc };
+      }),
+    [parsedSteps, regionSteps],
+  );
+
+  /** The walk, re-rooted at every modulation. A single region (the normal
+   *  case) is byte-identical to the plain buildWalk. */
+  const regionWalk = useMemo(
+    () =>
+      buildRegionWalk(
+        steps.map((step, index) => ({ deg: step.deg, region: regionSteps[index]?.region ?? 0 })),
+      ),
+    [steps, regionSteps],
+  );
+  const walk = regionWalk.walk;
+
+  /** Home note per region index — used for the seam labels. */
+  const homeOfRegion = useMemo(() => {
+    const usable = (regions ?? []).slice().sort((a, b) => a.startBeat - b.startBeat);
+    return usable.length > 0 ? usable.map((region) => region.key) : [];
+  }, [regions]);
+
+  /** Modulations, in pixels: a dashed translation guide plus the new home.
+   *  Only meaningful in the flat views (depth already steps every chord). */
+  const modulationSeams = useMemo(
+    () =>
+      regionWalk.seams.map((seam) => ({
+        ...seam,
+        fromPx: hexToPixel(seam.from.q, seam.from.r, S),
+        toPx: hexToPixel(seam.to.q, seam.to.r, S),
+        home: homeOfRegion[seam.region] ?? null,
+      })),
+    [regionWalk.seams, homeOfRegion, S],
+  );
 
   // "linear" is the straight-line walk above (one hex per chord, only a
   // literal back-and-forth reuses a hex). "loop" collapses a detected
@@ -255,6 +323,7 @@ export default function HoneycombWheel({
     } else if (displayWalk.length > 0) {
       allPts.push(...displayWalk.map((p) => hexToPixel(p.q, p.r, S)));
       allPts.push(...stepPoints);
+      allPts.push(...modulationSeams.flatMap((seam) => [seam.fromPx, seam.toPx]));
       if (loopVec) {
         const first = hexToPixel(displayWalk[0].q, displayWalk[0].r, S);
         allPts.push({ x: first.x + loopVec.x, y: first.y + loopVec.y });
@@ -278,7 +347,7 @@ export default function HoneycombWheel({
       w: Math.max(220, maxX - minX + 16),
       h: Math.max(180, maxY - minY + 16),
     };
-  }, [revealed, displayWalk, loopVec, S, isDepth, depthNodes, frontier, stepPoints]);
+  }, [revealed, displayWalk, loopVec, S, isDepth, depthNodes, frontier, stepPoints, modulationSeams]);
 
   const addChordAtDegree = useCallback((deg: number) => {
     const diatonic = diatonicByDegree[deg].triad;
@@ -363,6 +432,51 @@ export default function HoneycombWheel({
             <path d="M 0 0 L 10 5 L 0 10 z" fill="#E8B54A" />
           </marker>
         </defs>
+
+        {/* Modulation seams: the lattice re-roots, so show the translation
+            and name the new home. This is the flat view's version of the 3D
+            scene's y-axis lift — a change of key is new ground, not a
+            borrowed chord on the same map. */}
+        {!isDepth &&
+          modulationSeams.map((seam) => (
+            <g key={`seam-${seam.step}`} style={{ pointerEvents: "none" }}>
+              <line
+                x1={seam.fromPx.x}
+                y1={seam.fromPx.y}
+                x2={seam.toPx.x}
+                y2={seam.toPx.y}
+                stroke="#8FD3FF"
+                strokeOpacity={0.5}
+                strokeWidth={1.4}
+                strokeDasharray="5 4"
+              />
+              <circle
+                cx={seam.toPx.x}
+                cy={seam.toPx.y}
+                r={4.5}
+                fill="#0b0e13"
+                stroke="#8FD3FF"
+                strokeOpacity={0.7}
+                strokeWidth={1.2}
+              />
+              {seam.home && (
+                <text
+                  x={(seam.fromPx.x + seam.toPx.x) / 2}
+                  y={(seam.fromPx.y + seam.toPx.y) / 2 - 5}
+                  textAnchor="middle"
+                  fontFamily="'IBM Plex Mono', monospace"
+                  fontSize={8.5}
+                  fontWeight={600}
+                  fill="#8FD3FF"
+                  stroke="#0b0e13"
+                  strokeWidth={2.5}
+                  paintOrder="stroke"
+                >
+                  → {seam.home}
+                </text>
+              )}
+            </g>
+          ))}
 
         {!isDepth && pathD && (
           <path d={pathD} fill="none" stroke="#F5E7C8" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" opacity={0.85} filter="url(#hw-glow)" style={{ pointerEvents: "none" }} />

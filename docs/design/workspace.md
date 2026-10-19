@@ -483,6 +483,27 @@ jump-open included); the karaoke popout is untouched.
   selects it, and `✕` shows on any selected card at any width. `+ chord` is
   hidden when chord timing follows the meter outline, where a chord's `beats`
   is not what plays.
+- **The wheel re-roots at a modulation (2026-10-18)**: the flat map's cells
+  are scale degrees (`degreeAt = (3q + r) mod 7`), which only means anything
+  relative to *one* tonic — so after a key change the wheel was still
+  measuring every chord against the old home, and a modulation could only
+  ever look like borrowed chords. `lib/harmony/tonicWalk.ts` continues the
+  walk from the same cell **translated by (3, −2)** at every region boundary
+  — a vector the lattice maps onto itself (3·3 − 2 = 7 ≡ 0 mod 7), so every
+  cell still reports exactly the degree it was placed at and the
+  neighbourhood stays a valid hex neighbourhood — while on screen it is ~3½
+  cells right and 3 cells up, i.e. visibly new ground. The wheel also derives
+  each chord's degree from its **root measured against the home in force at
+  its own beat** (`degreeRelativeTo`) instead of the authored numeral, which
+  is the only reading that is correct after a change of key. A dashed guide
+  plus a `→ G` label marks each seam. Verified with `C F | G D` (authored
+  regions C@0, G@8): step 3 lands on a *different* hex from step 1 (pixel
+  `(117.8, −102)` = exactly `2√3·S, −3S`), labelled `I / G`, and step 4 reads
+  `V / D` — the same two chords that would have been `I` and `II` in C. Known
+  limit: the unwalked choice cells around a translated region are still
+  labelled from the song's key, so their names are right for the first region
+  only; the walked chords, the seam label and the home strip carry the truth.
+  Loop and 3D modes agree with Linear on every case checked.
 - **Phase D — chord voicing (2026-10-17)**: a second lane under the rhythm
   strip gives every chord a **bass tone** (R / 1 / 2 / 3 — one click cycles)
   and a **spacing** (close / open — one click). Both are stored minimally

@@ -217,6 +217,7 @@ export default function HarmonyView() {
               selectedChordId={selectedChordId}
               onSelectChord={setSelectedChordId}
               onChangeChords={updateChords}
+              regions={effectiveRegions}
               colorFlavor={activeSection.colorFlavor}
               harmonyOutline={
                 activeSection.harmonyMeterOutline ??
