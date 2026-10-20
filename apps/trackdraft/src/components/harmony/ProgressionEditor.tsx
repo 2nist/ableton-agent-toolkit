@@ -26,9 +26,9 @@ import { uuid } from "../../lib/uuid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
-import type { Chord } from "../../types/blueprint";
+import type { Chord, TonicRegion } from "../../types/blueprint";
 import { chordDisplayName, chordFunction, functionColorHex } from "../../lib/harmony/chordBuilder";
-import { isChordDiatonic } from "../../lib/harmony/modeInference";
+import { borrowedChordIds, chordHomes } from "../../lib/harmony/modeInference";
 import { bassName, cycleInversion, inversionCount, toggleSpread } from "../../lib/harmony/voicing";
 import {
   insertionIndexAt,
@@ -89,6 +89,9 @@ export interface ProgressionEditorProps {
   activeChordId?: string | null;
   /** Chord timing comes from a meter outline, so `beats` is not what plays. */
   outlineGoverned?: boolean;
+  /** Tonic regions, so "borrowed" is judged against the home in force where
+   *  each chord plays rather than one key for the whole cycle. */
+  regions?: TonicRegion[];
   onSelectChord?: (chordId: string) => void;
   onChange: (chords: Chord[], beatsPerChord: number) => void;
   compact?: boolean;
@@ -108,6 +111,7 @@ export default function ProgressionEditor({
   chords,
   keyName,
   scale,
+  regions,
   beatsPerBar,
   sectionBeats,
   selectedChordId,
@@ -286,6 +290,17 @@ export default function ProgressionEditor({
     );
   }
 
+  /** Chords outside the home they play under — per chord, so a modulation's
+   *  own chords are not flagged as borrowed. */
+  const borrowedIds = useMemo(
+    () => borrowedChordIds(chords, regions, { key: keyName, scale }),
+    [chords, regions, keyName, scale],
+  );
+  const chordHomeOf = useMemo(
+    () => chordHomes(chords, regions, { key: keyName, scale }),
+    [chords, regions, keyName, scale],
+  );
+
   function removeChord(chord: Chord) {
     onChange(chords.filter((item) => item.id !== chord.id), dominantBeatsPerChord(chords));
   }
@@ -441,7 +456,8 @@ export default function ProgressionEditor({
                 const name = chordDisplayName(pitchClass(chord.root), chord.quality, keyName);
                 const func = chord.isSubstitution ? null : chordFunction(chord, scale);
                 const stripe = chord.isSubstitution ? "#ffa500" : functionColorHex(func) ?? "#2e2e34";
-                const borrowed = !chord.isSubstitution && !isChordDiatonic(chord, keyName, scale);
+                const borrowed = borrowedIds.has(chord.id);
+                const home = chordHomeOf.get(chord.id) ?? { key: keyName, scale };
                 return (
                   <div
                     key={chord.id}
@@ -478,7 +494,9 @@ export default function ProgressionEditor({
                           {borrowed && (
                             <span
                               className="ml-1 inline-block h-[5px] w-[5px] rounded-full bg-accent/80 align-middle"
-                              title={`${name} is borrowed — outside ${keyName} ${scale}`}
+                              title={`${name} is borrowed — outside ${home.key} ${home.scale}${
+                                home.key !== keyName ? ` (the home from beat ${chordHomeOf.get(chord.id)?.startBeat})` : ""
+                              }`}
                             />
                           )}
                         </span>

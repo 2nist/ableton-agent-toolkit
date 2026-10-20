@@ -2,7 +2,9 @@ import { useState } from "react";
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { ScaleType, NoteName } from "@music-theory/core";
 import type { Chord, MeterOutline } from "../../types/blueprint";
-import { buildEuclideanOutline, twoThreeCellCounts, numerator as outlineNumerator } from "@drum/library";
+import { buildEuclideanOutline, resolveChordOccurrences, twoThreeCellCounts, numerator as outlineNumerator } from "@drum/library";
+import { chordHomes } from "../../lib/harmony/modeInference";
+import { effectiveTonicRegions } from "../../lib/harmony/tonic";
 import { EuclidSliders, StepView } from "../drums/euclidEditor";
 import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
@@ -129,6 +131,24 @@ export function HarmonyTools() {
 
   const editorChord = selectedChordId ? activeSection.chords.find((c) => c.id === selectedChordId) ?? null : null;
 
+  /** The selected chord's own home, when the section modulates. Its editor
+   *  offers substitutions relative to that home — the menu was built from the
+   *  song key, so after a key change every suggestion was wrong. */
+  const editorHome = (() => {
+    if (!editorChord || !activeSection) return null;
+    const regions = effectiveTonicRegions(
+      activeSection.tonicRegions,
+      resolveChordOccurrences(activeSection, Math.max(4, activeSection.bars * 4)).map((occurrence) => ({
+        root: occurrence.chord.root,
+        quality: occurrence.chord.quality,
+        startTime: occurrence.startTime,
+        duration: occurrence.duration,
+      })),
+      { scale: effectiveScale, fallbackKey: effectiveKey },
+    );
+    return chordHomes(activeSection.chords, regions, { key: effectiveKey, scale: effectiveScale }).get(editorChord.id) ?? null;
+  })();
+
   return (
     <div className="flex flex-col">
       {/* Tools header — the progression preview's play button lives here,
@@ -166,8 +186,8 @@ export function HarmonyTools() {
         <div className="border-b border-edge">
           <ChordEditorPopover
             chord={editorChord}
-            keyName={effectiveKey}
-            scale={effectiveScale}
+            keyName={editorHome?.key ?? effectiveKey}
+            scale={editorHome?.scale ?? effectiveScale}
             onChange={(updated) => updateChords(activeSection.chords.map((c) => (c.id === updated.id ? updated : c)))}
             onRemove={() => {
               updateChords(activeSection.chords.filter((c) => c.id !== editorChord.id));

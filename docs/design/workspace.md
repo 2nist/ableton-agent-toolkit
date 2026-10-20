@@ -504,6 +504,22 @@ jump-open included); the karaoke popout is untouched.
   labelled from the song's key, so their names are right for the first region
   only; the walked chords, the seam label and the home strip carry the truth.
   Loop and 3D modes agree with Linear on every case checked.
+- **Borrowing is judged per home, not per song (2026-10-19)**: three places
+  measured every chord against one key, so a modulation made them lie.
+  `borrowedChordIds` / `chordHomes` (`lib/harmony/modeInference.ts`) give each
+  chord the home in force at its own beat, and the consumers follow: the
+  progression editor's borrowed dot (its title now names the local home and
+  where it starts), the **mode-inference card** (which ran on the *foreign*
+  chords only, so a modulation no longer triggers "set section to <mode>" —
+  that suggestion was the bug in its most visible form), and the chord
+  editor's substitution menu, which now offers the degrees of the local home
+  (`D` in G reads `V`, and its menu lists G's `iii · Bm`, `vi · Em`,
+  `vii° · F#dim`). Verified A/B on `C F | G D`: with no regions `D` is marked
+  "borrowed — outside C ionian" **and** the mode card appears; with regions
+  authored at C@0 / G@8 both are gone, and a deliberately outside `♭VI` chord
+  in the second region is still flagged ("outside G ionian (the home from
+  beat 8)"). Checked and found already key-agnostic: `detectBend` and
+  `colorStem` never read the key, so the Bend/colour axes needed no change.
 - **Phase D — chord voicing (2026-10-17)**: a second lane under the rhythm
   strip gives every chord a **bass tone** (R / 1 / 2 / 3 — one click cycles)
   and a **spacing** (close / open — one click). Both are stored minimally

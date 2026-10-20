@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { BlueprintSection, BlueprintSong } from "../../types/blueprint";
-import { detectModeSuggestion, type ModeSuggestion } from "../../lib/harmony/modeInference";
+import type { BlueprintSection, BlueprintSong, TonicRegion } from "../../types/blueprint";
+import { borrowedChordIds, detectModeSuggestion, type ModeSuggestion } from "../../lib/harmony/modeInference";
 
 /**
  * ModeInferenceCard — the Harmony tab's "are you borrowing or switching
@@ -21,6 +21,9 @@ interface ModeInferenceCardProps {
   section: BlueprintSection;
   keyName: BlueprintSong["key"];
   scale: BlueprintSong["scale"];
+  /** Tonic regions. A modulation already *explains* chords that leave the
+   *  song key, so the card must not offer a mode switch for them. */
+  regions?: TonicRegion[];
   /** Apply the suggested mode as a per-section scale override (undoable). */
   onAdoptMode: (scale: ModeSuggestion["scale"]) => void;
   /** Record that the user is deliberately keeping this borrowed sound. */
@@ -34,16 +37,23 @@ export default function ModeInferenceCard({
   section,
   keyName,
   scale,
+  regions,
   onAdoptMode,
   onKeepBorrowed,
 }: ModeInferenceCardProps) {
   const [dismissedId, setDismissedId] = useState<string | null>(null);
 
-  // Derived: recompute the suggestion straight from the section's chords.
-  const suggestion = useMemo(
-    () => detectModeSuggestion(section.chords, keyName, scale),
-    [section.chords, keyName, scale],
-  );
+  // Derived: recompute the suggestion straight from the section's chords —
+  // but only from the ones that are outside their *own* home. Chords that a
+  // modulation explains are not borrowing, and must not trigger a mode
+  // suggestion (that was the bug: after a key change every diatonic chord of
+  // the new key looked foreign to the old one).
+  const suggestion = useMemo(() => {
+    const borrowed = borrowedChordIds(section.chords, regions, { key: keyName, scale });
+    const foreign = section.chords.filter((chord) => borrowed.has(chord.id));
+    if (foreign.length === 0) return null;
+    return detectModeSuggestion(foreign, keyName, scale);
+  }, [section.chords, regions, keyName, scale]);
 
   const acknowledged = (song.blueprintAcks ?? {})[`${section.id}:${suggestion?.candidateId ?? ""}`];
   const visible = suggestion !== null && !acknowledged && dismissedId !== suggestion.candidateId;

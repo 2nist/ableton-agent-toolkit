@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectModeSuggestion, isChordDiatonic } from "./modeInference";
+import { borrowedChordIds, chordHomes, detectModeSuggestion, isChordDiatonic } from "./modeInference";
 import type { Chord } from "../../types/blueprint";
 
 let n = 0;
@@ -65,5 +65,64 @@ describe("isChordDiatonic", () => {
   it("respects the section's own mode", () => {
     // Ab major IS diatonic in C aeolian.
     expect(isChordDiatonic(chord("G#", "maj"), "C", "aeolian")).toBe(true);
+  });
+});
+
+describe("chordHomes", () => {
+  const C = { key: "C" as const, scale: "ionian" as const };
+
+  it("gives the fallback home to every chord when there are no regions", () => {
+    const chords = [chord("C", "maj"), chord("F", "maj")];
+    const homes = chordHomes(chords, undefined, C);
+    expect(homes.size).toBe(2);
+    for (const home of homes.values()) expect(home).toMatchObject({ key: "C", scale: "ionian" });
+  });
+
+  it("switches home at the region boundary, using each chord's own beat", () => {
+    const chords = [chord("C", "maj"), chord("F", "maj"), chord("G", "maj"), chord("D", "maj")];
+    const regions = [
+      { startBeat: 0, key: "C" as const, scale: "ionian" as const, source: "authored" as const },
+      { startBeat: 8, key: "G" as const, scale: "ionian" as const, source: "authored" as const },
+    ];
+    const homes = chordHomes(chords, regions, C);
+    expect(homes.get(chords[0].id)!.key).toBe("C");
+    expect(homes.get(chords[1].id)!.key).toBe("C");
+    expect(homes.get(chords[2].id)!.key).toBe("G");
+    expect(homes.get(chords[3].id)!.key).toBe("G");
+  });
+});
+
+describe("borrowedChordIds", () => {
+  const C = { key: "C" as const, scale: "ionian" as const };
+
+  it("flags an outside chord when the section has one home", () => {
+    const chords = [chord("C", "maj"), chord("G#", "maj")];
+    expect([...borrowedChordIds(chords, undefined, C)]).toEqual([chords[1].id]);
+  });
+
+  it("does not flag the new key's own chords after a modulation", () => {
+    // C F in C, then G D in G: D major is F#-bearing and outside C, but it is
+    // the V of G — the whole point of a modulation is that it is not borrowed.
+    const chords = [chord("C", "maj"), chord("F", "maj"), chord("G", "maj"), chord("D", "maj")];
+    const regions = [
+      { startBeat: 0, key: "C" as const, scale: "ionian" as const, source: "authored" as const },
+      { startBeat: 8, key: "G" as const, scale: "ionian" as const, source: "authored" as const },
+    ];
+    expect(borrowedChordIds(chords, undefined, C).has(chords[3].id)).toBe(true);
+    expect(borrowedChordIds(chords, regions, C).size).toBe(0);
+  });
+
+  it("still flags a genuinely outside chord inside a modulated region", () => {
+    const chords = [chord("C", "maj"), chord("G", "maj"), chord("G#", "maj")];
+    const regions = [
+      { startBeat: 0, key: "C" as const, scale: "ionian" as const, source: "authored" as const },
+      { startBeat: 4, key: "G" as const, scale: "ionian" as const, source: "authored" as const },
+    ];
+    expect([...borrowedChordIds(chords, regions, C)]).toEqual([chords[2].id]);
+  });
+
+  it("leaves substitutions alone — they are deliberate", () => {
+    const sub: Chord = { ...chord("G#", "maj"), isSubstitution: true };
+    expect(borrowedChordIds([sub], undefined, C).size).toBe(0);
   });
 });

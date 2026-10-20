@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import { resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
+import { effectiveTonicRegions } from "../../lib/harmony/tonic";
 import { useSongStore } from "../../store/songStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
@@ -227,6 +228,22 @@ function SectionWorkspace({
   const rawKey = section.key ?? song.key;
   const effKey: NoteName = rawKey in NOTE_TO_PC ? (rawKey as NoteName) : "C";
   const effScale: ScaleType = section.scale ?? song.scale;
+  /** The homes in force — same derivation the harmony canvas uses, so the
+   *  row's borrowed markers and the wheel agree. */
+  const sectionRegions = useMemo(
+    () =>
+      effectiveTonicRegions(
+        section.tonicRegions,
+        resolveChordOccurrences(section, span.durationBeats).map((occurrence) => ({
+          root: occurrence.chord.root,
+          quality: occurrence.chord.quality,
+          startTime: occurrence.startTime,
+          duration: occurrence.duration,
+        })),
+        { scale: effScale, fallbackKey: effKey },
+      ),
+    [section, span.durationBeats, effScale, effKey],
+  );
   const jump = (tab: string) => navigate(`/song/${id}/${tab}?section=${section.id}`);
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const clockSource = useSongStore((s) => s.clockSource);
@@ -596,6 +613,7 @@ function SectionWorkspace({
                 selectedChordId={selectedChordId}
                 activeChordId={activeChordId}
                 outlineGoverned={chordsFollowOutline}
+                regions={sectionRegions}
                 onSelectChord={selectChord}
                 onChange={updateRhythm}
                 compact

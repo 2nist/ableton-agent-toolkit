@@ -17,7 +17,8 @@
  */
 
 import { pitchClass, noteName, type NoteName, type ScaleType } from "@music-theory/core";
-import type { Chord } from "../../types/blueprint";
+import type { Chord, TonicRegion } from "../../types/blueprint";
+import { resolveTonicAt } from "./tonic";
 
 /** Parallel-mode pitch sets (7-note), indexed by the song's tonic. These are
  *  the modes we offer as "switch" candidates. */
@@ -134,4 +135,46 @@ export function isChordDiatonic(chord: Chord, key: NoteName, scale: ScaleType): 
   const tonic = pitchClass(key);
   const scalePcs = new Set((MODE_INTERVALS[scale] ?? MODE_INTERVALS.ionian).map((i) => (tonic + i) % 12));
   return chordPitchClasses(chord).every((pc) => scalePcs.has(pc));
+}
+
+/** The home each chord sits under, keyed by chord id. With tonic regions
+ *  (a modulation inside the section) this is per chord: the same pitch can be
+ *  diatonic before a key change and borrowed after it. */
+export function chordHomes(
+  chords: Chord[],
+  regions: TonicRegion[] | undefined,
+  fallback: { key: NoteName; scale: ScaleType },
+): Map<string, { startBeat: number; key: NoteName; scale: ScaleType }> {
+  const homes = new Map<string, { startBeat: number; key: NoteName; scale: ScaleType }>();
+  let beat = 0;
+  for (const chord of chords) {
+    const home = resolveTonicAt(regions, beat, fallback);
+    homes.set(chord.id, { startBeat: home.startBeat, key: home.key, scale: home.scale });
+    beat += chord.beats;
+  }
+  return homes;
+}
+
+/**
+ * Chords that are borrowed — outside the home in force where they play.
+ *
+ * Measured against the section's single key, a chord that is diatonic to the
+ * *new* key after a modulation was flagged as borrowed, which is exactly
+ * backwards: a modulation is the one case where the change is the point.
+ * With regions, each chord is judged against its own home, so a V in the new
+ * key stays clean and only a genuine outside chord is marked.
+ */
+export function borrowedChordIds(
+  chords: Chord[],
+  regions: TonicRegion[] | undefined,
+  fallback: { key: NoteName; scale: ScaleType },
+): Set<string> {
+  const homes = chordHomes(chords, regions, fallback);
+  const borrowed = new Set<string>();
+  for (const chord of chords) {
+    if (chord.isSubstitution) continue;
+    const home = homes.get(chord.id) ?? fallback;
+    if (!isChordDiatonic(chord, home.key, home.scale)) borrowed.add(chord.id);
+  }
+  return borrowed;
 }

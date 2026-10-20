@@ -259,6 +259,7 @@ export default function HarmonyView() {
               selectedChordId={selectedChordId}
               activeChordId={activeChordId}
               outlineGoverned={chordsFollowOutline}
+              regions={effectiveRegions}
               onSelectChord={setSelectedChordId}
               onChange={updateRhythm}
             />
@@ -279,6 +280,7 @@ export default function HarmonyView() {
           section={activeSection}
           keyName={effectiveKey}
           scale={effectiveScale}
+          regions={effectiveRegions}
           onAdoptMode={(mode) =>
             updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, scale: mode })))
           }
