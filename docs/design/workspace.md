@@ -500,9 +500,19 @@ jump-open included); the karaoke popout is untouched.
   regions C@0, G@8): step 3 lands on a *different* hex from step 1 (pixel
   `(117.8, −102)` = exactly `2√3·S, −3S`), labelled `I / G`, and step 4 reads
   `V / D` — the same two chords that would have been `I` and `II` in C. Known
-  limit: the unwalked choice cells around a translated region are still
-  labelled from the song's key, so their names are right for the first region
-  only; the walked chords, the seam label and the home strip carry the truth.
+  Follow-up (2026-10-20): that limit is closed. Unwalked **choice** cells
+  take the home of their nearest walked step (`regionOfCell`), so the degrees
+  offered beside a re-rooted region read in *that* region's key — a C chord
+  next to the G region is `IV`, not `I`, and `F#m` appears as `vii` — and
+  clicking one adds the chord **its own home** would build there, which is the
+  thing that would otherwise silently write the old key's chord. The depth
+  mode's frontier uses the region the next chord would land in. Verified on
+  `C F | G D` with C@0 / G@8: the five placeholders around the shifted region
+  read `ii/Am`, `IV/C`, `vii/F#m` (G's degrees) while those around the first
+  region keep `iii/Em`, `vi/Am`; clicking the `IV` placeholder appended
+  `IV: Cmaj` (C, not F) and its chord menu then offered `ii·Am`, `I·G`, `V·D`.
+  Cells exactly equidistant from two regions take the earlier one, so the
+  key the progression starts in wins the contested band.
   Loop and 3D modes agree with Linear on every case checked.
 - **Borrowing is judged per home, not per song (2026-10-19)**: three places
   measured every chord against one key, so a modulation made them lie.

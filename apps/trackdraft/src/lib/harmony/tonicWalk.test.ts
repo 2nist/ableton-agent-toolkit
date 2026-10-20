@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildWalk, degreeAt, DIRS } from "./honeycombWalk";
-import { buildRegionWalk, MODULATION_SHIFT } from "./tonicWalk";
+import { buildRegionWalk, MODULATION_SHIFT, regionOfCell } from "./tonicWalk";
 
 const steps = (degrees: number[], regionOf: (index: number) => number = () => 0) =>
   degrees.map((deg, index) => ({ deg, region: regionOf(index) }));
@@ -85,5 +85,32 @@ describe("buildRegionWalk", () => {
 
   it("returns nothing for an empty progression", () => {
     expect(buildRegionWalk([])).toEqual({ walk: [], regionOfStep: [], seams: [], anchors: [] });
+  });
+});
+
+describe("regionOfCell", () => {
+  it("reports the region of a walked cell", () => {
+    const { walk, regionOfStep } = buildRegionWalk(
+      [0, 3, 0, 3].map((deg, index) => ({ deg, region: index < 2 ? 0 : 1 })),
+    );
+    const first = regionOfCell(walk[0], walk, regionOfStep);
+    const third = regionOfCell(walk[2], walk, regionOfStep);
+    expect(first).toBe(0);
+    expect(third).toBe(1);
+  });
+
+  it("gives an unwalked neighbour the nearest region", () => {
+    const { walk, regionOfStep } = buildRegionWalk(
+      [0, 3, 0, 3].map((deg, index) => ({ deg, region: index < 2 ? 0 : 1 })),
+    );
+    // A cell one step off the last (re-rooted) chord is still in region 1.
+    const near = { q: walk[3].q + 1, r: walk[3].r };
+    expect(regionOfCell(near, walk, regionOfStep)).toBe(1);
+    // One off the very first chord is region 0.
+    expect(regionOfCell({ q: walk[0].q + 1, r: walk[0].r }, walk, regionOfStep)).toBe(0);
+  });
+
+  it("falls back to region 0 for an empty walk", () => {
+    expect(regionOfCell({ q: 1, r: 2 }, [], [])).toBe(0);
   });
 });

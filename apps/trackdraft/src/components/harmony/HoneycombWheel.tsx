@@ -8,7 +8,7 @@ import type { Chord, MeterOutline, TonicRegion } from "../../types/blueprint";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { chordFromDegree, chordsToHoneycombText, chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { degreeRelativeTo, resolveTonicAt } from "../../lib/harmony/tonic";
-import { buildRegionWalk } from "../../lib/harmony/tonicWalk";
+import { buildRegionWalk, regionOfCell } from "../../lib/harmony/tonicWalk";
 import {
   parseProgression,
   collapseRepeatsForLoopView,
@@ -101,14 +101,6 @@ export default function HoneycombWheel({
     }
   }
 
-  const keyPc = pitchClass(keyName);
-  const scaleKey = MODE_TO_SCALE_KEY[scale as keyof typeof MODE_TO_SCALE_KEY] ?? "major";
-  const intervals = SCALE_INTERVALS[scaleKey];
-  const diatonicByDegree = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => diatonicChordAt(intervals, i)),
-    [intervals],
-  );
-
   const honeycombText = useMemo(() => chordsToHoneycombText(chords), [chords]);
   const parsedSteps = useMemo(() => parseProgression(honeycombText).steps, [honeycombText]);
 
@@ -156,11 +148,38 @@ export default function HoneycombWheel({
   );
   const walk = regionWalk.walk;
 
-  /** Home note per region index — used for the seam labels. */
-  const homeOfRegion = useMemo(() => {
+  /** One entry per tonic region: its home, its scale, and the diatonic chords
+   *  that scale builds. Placeholder cells and "add this chord" choices use the
+   *  entry of the region they sit in, so a re-rooted region offers its own
+   *  degrees instead of the song key's. */
+  const homes = useMemo(() => {
     const usable = (regions ?? []).slice().sort((a, b) => a.startBeat - b.startBeat);
-    return usable.length > 0 ? usable.map((region) => region.key) : [];
-  }, [regions]);
+    const list = usable.length > 0 ? usable : [{ key: keyName, scale }];
+    return list.map((region) => {
+      const regionIntervals =
+        SCALE_INTERVALS[MODE_TO_SCALE_KEY[region.scale as keyof typeof MODE_TO_SCALE_KEY] ?? "major"];
+      return {
+        key: region.key,
+        scale: region.scale,
+        keyPc: pitchClass(region.key),
+        intervals: regionIntervals,
+        diatonicByDegree: Array.from({ length: 7 }, (_, i) => diatonicChordAt(regionIntervals, i)),
+      };
+    });
+  }, [regions, keyName, scale]);
+
+  /** Home note per region index — used for the seam labels. */
+  const homeOfRegion = useMemo(() => homes.map((home) => home.key), [homes]);
+
+  /** Which region the *next* chord would land in — depth mode's frontier
+   *  offers the choices in that home. */
+  const nextRegion = regionSteps[walk.length]?.region ?? regionSteps[regionSteps.length - 1]?.region ?? 0;
+
+  /** The home a cell belongs to — the nearest walked step's region. */
+  const regionAt = useCallback(
+    (q: number, r: number) => regionOfCell({ q, r }, walk, regionWalk.regionOfStep),
+    [walk, regionWalk.regionOfStep],
+  );
 
   /** Modulations, in pixels: a dashed translation guide plus the new home.
    *  Only meaningful in the flat views (depth already steps every chord). */
@@ -349,14 +368,15 @@ export default function HoneycombWheel({
     };
   }, [revealed, displayWalk, loopVec, S, isDepth, depthNodes, frontier, stepPoints, modulationSeams]);
 
-  const addChordAtDegree = useCallback((deg: number) => {
-    const diatonic = diatonicByDegree[deg].triad;
+  const addChordAtDegree = useCallback((deg: number, region = 0) => {
+    const home = homes[region] ?? homes[0];
+    const diatonic = home.diatonicByDegree[deg].triad;
     const degreeLabel = diatonic.minor
       ? ROMAN_UP[deg].toLowerCase()
       : ROMAN_UP[deg];
-    const rootPc = intervals[deg];
+    const rootPc = home.intervals[deg];
     const newChord = chordFromDegree(
-      keyPc, keyName, degreeLabel,
+      home.keyPc, home.key, degreeLabel,
       (diatonic.minor ? "min" : "maj") as ChordQuality,
       rootPc, beatsPerChord,
     );
@@ -364,7 +384,7 @@ export default function HoneycombWheel({
     onChangeChords(updated);
     onSelectChord(newChord.id);
     onPreviewChord?.(newChord);
-  }, [chords, keyPc, keyName, intervals, diatonicByDegree, beatsPerChord, onChangeChords, onSelectChord, onPreviewChord]);
+  }, [chords, homes, beatsPerChord, onChangeChords, onSelectChord, onPreviewChord]);
 
   const selectChordAtCell = useCallback((q: number, r: number) => {
     if (!displayWalk.length) return;
@@ -381,9 +401,11 @@ export default function HoneycombWheel({
   }, [displayWalk, chords, onSelectChord, onPreviewChord]);
 
   const handleCellClick = useCallback((cell: RevealedCell) => {
-    if (cell.type === "choice") addChordAtDegree(cell.d);
+    // A choice cell adds the chord *its own* home would build there, so a
+    // click in a re-rooted region writes the new key's chord, not the old one.
+    if (cell.type === "choice") addChordAtDegree(cell.d, regionAt(cell.q, cell.r));
     else selectChordAtCell(cell.q, cell.r);
-  }, [addChordAtDegree, selectChordAtCell]);
+  }, [addChordAtDegree, regionAt, selectChordAtCell]);
 
   const vbStr = `${svgDims.vb[0]} ${svgDims.vb[1]} ${svgDims.vb[2]} ${svgDims.vb[3]}`;
 
@@ -550,14 +572,14 @@ export default function HoneycombWheel({
             transform={`translate(${cell.x}, ${cell.y})`}
             opacity={0.5}
             style={{ cursor: "pointer" }}
-            onClick={() => addChordAtDegree(cell.d)}
+            onClick={() => addChordAtDegree(cell.d, nextRegion)}
           >
             <polygon points={hexPoints(SD - 2)} fill="#12161D"
               stroke={`${HUES[cell.d].rim}66`} strokeWidth={1.4} strokeDasharray="4 3" />
             <text x={0} y={0} textAnchor="middle" dominantBaseline="middle"
               fontFamily="'IBM Plex Mono', monospace" fontSize={9} fontWeight={600}
               fill="#8B94A1" style={{ pointerEvents: "none" }}>
-              {diatonicByDegree[cell.d].triad.minor
+              {(homes[nextRegion] ?? homes[0]).diatonicByDegree[cell.d].triad.minor
                 ? ROMAN_UP[cell.d].toLowerCase()
                 : ROMAN_UP[cell.d]}
             </text>
@@ -594,17 +616,21 @@ export default function HoneycombWheel({
           const cellKey = `${q},${r}`;
           const lastStep = lastStepAtCell(displayWalk, q, r);
           const cellChord = lastStep >= 0 ? chords[lastStep] : undefined;
+          // An unwalked cell is named by the home it sits nearest, so the
+          // choices offered beside a re-rooted region read in that region's
+          // key rather than the song's.
+          const home = homes[regionAt(q, r)] ?? homes[0];
           const romanLabel = cellChord
             ? cellChord.romanNumeral
-            : diatonicByDegree[d].triad.minor
+            : home.diatonicByDegree[d].triad.minor
               ? ROMAN_UP[d].toLowerCase()
               : ROMAN_UP[d];
           const subLabel = cellChord
             ? chordDisplayName(pitchClass(cellChord.root), cellChord.quality, keyName)
             : chordDisplayName(
-                (keyPc + intervals[d]) % 12,
-                diatonicByDegree[d].triad.minor ? "min" : "maj",
-                keyName,
+                (home.keyPc + home.intervals[d]) % 12,
+                home.diatonicByDegree[d].triad.minor ? "min" : "maj",
+                home.key,
               );
           const hue = HUES[d];
 

@@ -87,3 +87,36 @@ export function buildRegionWalk(
 
   return { walk, regionOfStep, seams, anchors };
 }
+
+/** Axial hex distance — the number of neighbour steps between two cells. */
+export function hexDistance(a: HexCell, b: HexCell): number {
+  const dq = a.q - b.q;
+  const dr = a.r - b.r;
+  return (Math.abs(dq) + Math.abs(dq + dr) + Math.abs(dr)) / 2;
+}
+
+/**
+ * Which region a cell belongs to. Walked cells answer for themselves; the
+ * unwalked "choice" cells around them take the region of the nearest walked
+ * step, so the diatonic names offered next to a re-rooted region come from
+ * *that* region's home rather than the song's.
+ */
+export function regionOfCell(
+  cell: HexCell,
+  walk: HexCell[],
+  regionOfStep: number[],
+): number {
+  if (walk.length === 0) return 0;
+  let best = 0;
+  let bestDistance = Infinity;
+  for (let i = 0; i < walk.length; i++) {
+    const distance = hexDistance(cell, walk[i]);
+    // Ties keep the earlier step, so the region the progression starts in
+    // wins the contested cells between two regions.
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = regionOfStep[i] ?? 0;
+    }
+  }
+  return best;
+}
