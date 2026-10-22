@@ -116,11 +116,44 @@ than a fabricated one), the melody track becomes a `MelodyTrack`, and a
 percussion track becomes one `steps` `DrumBlock` per lane, which stores the
 notes verbatim rather than guessing a groove.
 
-Sections: one **honest** section spanning the file's real bar count. Structure
-is not recoverable from a monophonic line, and the old "every 12 bars is a
-section" carving invented section names A, B, C… A single `Full Song` section
-says what is actually known, and the import's `provenance.warnings` spell out
-what was found, what was skipped, and why.
+### When the file has no harmony or structure to read
+
+A melody-only file still has to yield a usable song, so the importer **infers**
+what is missing — and says so. `lib/parsers/melodyHarmony.ts`:
+
+- **Chords** — duration- and accent-weighted pitch classes are scored against
+  the seven diatonic triads plus a dominant seventh, then a transition prior
+  picks the best path across the bars, so the answer reads as a progression
+  (V→I, ii→V, a chord held across two bars) rather than as independent guesses.
+  The key comes from the file's key signature, which is reliable in these
+  corpora (Dancing Queen reads A major, Respect reads E).
+- **Sections** — from repeated **harmonic** material, not the melody. A bare
+  melody does not segment cleanly: pitch-class histograms are near-identical
+  across a tonal song (every block collapsed to one label) while bar-level
+  fingerprints were so noisy that a 76-bar song came out as 38 two-bar
+  "sections". Harmonic loops are what actually repeat — a verse *is* its chord
+  cycle — so block matching works on the chord sequence: 16/8/4-bar blocks,
+  ≥75 % agreement to share a label, at most 4 labels, and at least a third of
+  the song inside a repeat, or nothing is reported.
+- **Drums** — parsed whenever the file has them (channel 9), never invented.
+
+Everything inferred is flagged in `provenance.warnings` ("chords INFERRED from
+the melody … review these"), because a guess that looks like extraction is
+worse than no guess. Splitting into inferred sections **slices** the melody per
+section and re-infers that stretch's harmony — cloning the full section into
+each part would repeat the whole line in every one.
+
+Measured on the real corpora:
+
+| File | Result |
+|---|---|
+| ABBA – Dancing Queen (76 bars) | 1 section, 301 melody notes, inferred I/ii/IV/V/vi in A |
+| Aretha – Respect (62 bars) | 1 section, 246 notes, inferred I/IV/V/vii in E |
+| Big Joe Turner – Shake Rattle and Roll | **5 sections A B C B A**, melody sliced 48/96/48/48/48, harmony re-inferred per part |
+| e-gmd drum groove | 3 lane blocks: kick 40, snare 32, hat 125 hits at their real beats |
+
+When nothing repeats convincingly the importer keeps one honest `Full Song`
+section rather than inventing structure.
 
 Verified through the UI on the real corpora (ABBA – Dancing Queen, 76 bars):
 0 fabricated chords, 301 melody notes imported (A4–C#5). BiMMuDa resolves the

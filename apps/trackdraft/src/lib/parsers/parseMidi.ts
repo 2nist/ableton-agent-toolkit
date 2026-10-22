@@ -4,7 +4,7 @@
  * Produces a BlueprintSong skeleton with chord detection for every detected section.
  */
 
-import type { BlueprintSong, BlueprintSection } from "../../types/blueprint";
+import type { BlueprintSong, BlueprintSection, SectionRole } from "../../types/blueprint";
 import type { NoteName } from "@music-theory/core";
 import { detectMidiChords, parserNotesToTimed } from "./midiChordDetect";
 import {
@@ -13,6 +13,11 @@ import {
   melodyFromTrack,
   type TrackRole,
 } from "./midiTracks";
+import {
+  inferChordProgression,
+  inferSectionsFromChords,
+  inferredChordsToBlueprint,
+} from "./melodyHarmony";
 
 interface MidiEvent {
   tick: number;
@@ -363,8 +368,8 @@ export function midiToBlueprintSong(midi: ParsedMidi, title: string): BlueprintS
     if (section.chords.length === 0) {
       warnings.push(`harmony track(s) ${[...harmonyTracks].join(", ")} produced no chords`);
     }
-  } else {
-    warnings.push("no polyphonic track — chords left empty rather than guessed from a melody");
+  } else if (!melodyTrack) {
+    warnings.push("no polyphonic track and no melody — chords left empty");
   }
 
   if (melodyTrack) {
@@ -375,6 +380,84 @@ export function midiToBlueprintSong(midi: ParsedMidi, title: string): BlueprintS
     }
   } else {
     warnings.push("no monophonic track — no melody imported");
+  }
+
+  // No harmony track (the melody-only corpora): infer the harmony the line
+  // implies. This is a guess and is always labelled as one — the file has no
+  // chords in it, so anything here comes from the melody plus the key.
+  if (harmonyTracks.size === 0 && section.melody?.notes.length) {
+    const inferred = inferChordProgression(section.melody.notes, {
+      keyName: midi.key,
+      scale: midi.scale as BlueprintSong["scale"],
+      beatsPerBar,
+      totalBeats: sectionBeats,
+    });
+    if (inferred.length > 0) {
+      section.chords = inferredChordsToBlueprint(inferred, midi.key, midi.scale as BlueprintSong["scale"]);
+      warnings.push(
+        `chords INFERRED from the melody against ${midi.key} ${midi.scale} — the file contains no harmony track, so review these`,
+      );
+    }
+    // Structure, from repeated harmonic material — the only repeat signal a
+    // melody-only file has. Empty when nothing repeats convincingly.
+    const inferredStructure = inferSectionsFromChords(inferred, { beatsPerBar, bars });
+    if (inferredStructure.length > 1) {
+      /** A slice of the song as its own section: only the bars it owns, with
+       *  the melody rebased and the harmony re-inferred for that stretch.
+       *  Cloning the full section would repeat the whole line in every part. */
+      const sliceSection = (part: { startBar: number; bars: number; label: string; role: SectionRole }) => {
+        const fromBeat = part.startBar * beatsPerBar;
+        const toBeat = Math.min(sectionBeats, fromBeat + part.bars * beatsPerBar);
+        const sliceBeats = toBeat - fromBeat;
+
+        const notes = (section.melody?.notes ?? [])
+          .filter((note) => note.startTime < toBeat - 1e-6 && note.startTime + note.duration > fromBeat + 1e-6)
+          .map((note) => {
+            const start = Math.max(0, note.startTime - fromBeat);
+            const end = Math.min(sliceBeats, note.startTime + note.duration - fromBeat);
+            return {
+              pitch: note.pitch,
+              startTime: Math.round(start * 1000) / 1000,
+              duration: Math.max(1 / midi.ticksPerQuarter, Math.round((end - start) * 1000) / 1000),
+              velocity: note.velocity,
+            };
+          });
+
+        const sliceChords = inferChordProgression(notes, {
+          keyName: midi.key,
+          scale: midi.scale as BlueprintSong["scale"],
+          beatsPerBar,
+          totalBeats: sliceBeats,
+        });
+
+        return {
+          ...section,
+          id: crypto.randomUUID(),
+          name: part.label,
+          role: part.role,
+          bars: Math.max(1, Math.round(sliceBeats / beatsPerBar)),
+          chords: inferredChordsToBlueprint(sliceChords, midi.key, midi.scale as BlueprintSong["scale"]),
+          melody: notes.length > 0 ? { notes, source: "recorded" as const } : undefined,
+          drumBlocks: section.drumBlocks,
+        };
+      };
+
+      const structureSections = inferredStructure.map(sliceSection);
+      song.sections = structureSections;
+      song.arrangement = structureSections.map((part) => ({ sectionId: part.id, repeats: 1 }));
+      song.provenance = {
+        ...song.provenance,
+        source: "midi-import",
+        extractedAt: now,
+        warnings: [
+          ...warnings,
+          `sections INFERRED from repeated harmonic material (${inferredStructure
+            .map((part) => `${part.label}:${part.bars}b`)
+            .join(" ")}) — rename them in Structure`,
+        ],
+      };
+      return song;
+    }
   }
 
   if (drumTrack) {
