@@ -11,6 +11,7 @@ import { parseMidiBytes, midiToBlueprintSong } from "./parseMidi";
 import { audioToBlueprintSong, textToBlueprintSong } from "./parseAudio";
 import { parseMcgillJcrd, parseRockCorpusJcrd } from "./parseJcrd";
 import { parseMozartJcrd } from "./parseMozart";
+import { parseCorpusFileName } from "./corpusFileName";
 import { searchLrclib, parseSyncedLyrics } from "../youtube";
 import { buildLyricDocument, detectRepeatedBlocks, assignLinesToSection, mergeLinesIntoSection } from "../lyrics/sectionize";
 import { alsToBlueprintSong } from "./parseAbleton";
@@ -79,6 +80,10 @@ function autoSectionFromRepeats(song: BlueprintSong): BlueprintSong {
   // Take the single best repeated block (longest + most frequent)
   const bestBlock = blocks[0];
   if (bestBlock.occurrences.length < 2) return currentSong;
+  // A "chorus" of one or two lines is noise, not structure. Splitting on it
+  // left a stray extra section beside the original and doubled the song's bar
+  // count, which is worse than not splitting at all.
+  if (bestBlock.occurrences[0].end - bestBlock.occurrences[0].start + 1 < 4) return currentSong;
 
   // Process occurrences in document order — first creates the chorus, rest merge into it
   for (let i = 0; i < bestBlock.occurrences.length; i++) {
@@ -121,7 +126,19 @@ function autoSectionFromRepeats(song: BlueprintSong): BlueprintSong {
     return section;
   });
 
-  return { ...currentSong, sections: finalSections };
+  // Every section must be reachable from the arrangement, or the split leaves
+  // orphan sections behind and the song plays to a different length than its
+  // spine shows. Rebuilding it in document order keeps the two in step.
+  const arranged = new Set(currentSong.arrangement.map((entry) => entry.sectionId));
+  const missing = finalSections.filter((section) => !arranged.has(section.id));
+  return {
+    ...currentSong,
+    sections: finalSections,
+    arrangement:
+      missing.length === 0
+        ? currentSong.arrangement
+        : finalSections.map((section) => ({ sectionId: section.id, repeats: 1 })),
+  };
 }
 
 async function enrichWithLrclib(song: BlueprintSong): Promise<BlueprintSong> {
@@ -178,7 +195,11 @@ async function enrichWithLrclib(song: BlueprintSong): Promise<BlueprintSong> {
 
 export async function parseFile(dirPath: string, entry: DirectoryEntry): Promise<ParseResult> {
   const baseName = entry.file.replace(/\.[^.]+$/, "");
-  const title = baseName.replace(/[-_]/g, " ");
+  // Corpus names carry artist/title/year (`ABBA_DancingQueen_1976`); everything
+  // else falls back to the file name with separators loosened. The parsed form
+  // matters for the lyrics lookup, which cannot find "ABBA DancingQueen 1976".
+  const corpus = parseCorpusFileName(baseName);
+  const title = corpus?.title ?? baseName.replace(/[-_]/g, " ");
   try {
     const res = await fetch(`/__local-file?dir=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(entry.file)}`);
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
@@ -233,6 +254,7 @@ export async function parseFile(dirPath: string, entry: DirectoryEntry): Promise
         }
       }
     }
+    if (corpus?.artist && !song.artist) song.artist = corpus.artist;
     return { ok: true, song: await enrichWithLrclib(song) };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Unknown parse error" };

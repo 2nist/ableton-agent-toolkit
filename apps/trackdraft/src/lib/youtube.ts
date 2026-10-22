@@ -7,6 +7,7 @@
 import type { BlueprintSong } from "../types/blueprint";
 import type { LyricsTimelineEntry } from "@music-theory/song-blueprint";
 import { parseSyncedLyrics } from "@music-theory/song-blueprint";
+import { pickLyricsMatch, searchQueries, type LyricsCandidate } from "./lyrics/lrclibMatch";
 export { parseSyncedLyrics };
 
 interface YoutubeMetadata {
@@ -68,38 +69,54 @@ interface LrclibSearchResult {
   syncedLyrics?: string;
 }
 
-/** Search LRCLIB by track + artist. Returns best match with synced lyrics. */
+/**
+ * Find the lyrics for one song.
+ *
+ * Candidates are gathered from the fielded search, then a bare-title search,
+ * and *chosen* by `pickLyricsMatch` — which requires the titles to agree, the
+ * artist when one is known, and a close duration, and which refuses
+ * instrumentals outright. The old version took the first result carrying
+ * `syncedLyrics`, so a Mozart sonata could pick up a stranger's words; on a
+ * corpus of instrumentals that is the common case, not the edge case.
+ */
 export async function searchLrclib(
   trackName: string,
   artistName?: string,
+  duration?: number,
 ): Promise<LrclibResult | null> {
-  try {
-    const params = new URLSearchParams({ track_name: trackName });
-    if (artistName) params.set("artist_name", artistName);
+  const query = { title: trackName, artist: artistName, duration };
+  const candidates: LyricsCandidate[] = [];
 
-    const res = await fetch(`https://lrclib.net/api/search?${params}`);
-    if (!res.ok) return null;
-
-    const results: LrclibSearchResult[] = await res.json();
-    if (results.length === 0) return null;
-
-    // Prefer results with synced lyrics
-    const synced = results.find((r) => r.syncedLyrics);
-    const best = synced ?? results[0];
-
-    return {
-      id: best.id,
-      trackName: best.trackName,
-      artistName: best.artistName,
-      albumName: best.albumName,
-      duration: best.duration,
-      instrumental: best.instrumental,
-      plainLyrics: best.plainLyrics,
-      syncedLyrics: best.syncedLyrics,
-    };
-  } catch {
-    return null;
+  for (const terms of searchQueries(query)) {
+    try {
+      const params = new URLSearchParams({ track_name: terms.trackName });
+      if (terms.artistName) params.set("artist_name", terms.artistName);
+      const res = await fetch(`https://lrclib.net/api/search?${params}`);
+      if (!res.ok) continue;
+      const results = (await res.json()) as LrclibSearchResult[];
+      candidates.push(...results);
+    } catch {
+      // A network hiccup on one query should not lose the other.
+    }
+    if (pickLyricsMatch(query, candidates)) break;
   }
+
+  const best = pickLyricsMatch(query, candidates);
+  if (!best) return null;
+
+  const match = candidates.findIndex((candidate) => candidate.trackName === best.trackName);
+  const source = match >= 0 ? (candidates[match] as LrclibSearchResult) : null;
+
+  return {
+    id: source?.id ?? 0,
+    trackName: best.trackName,
+    artistName: best.artistName ?? "",
+    albumName: source?.albumName,
+    duration: best.duration,
+    instrumental: false,
+    plainLyrics: best.plainLyrics ?? undefined,
+    syncedLyrics: best.syncedLyrics ?? undefined,
+  };
 }
 
 /** Get a specific LRCLIB entry by ID (for fetching synced lyrics after search). */

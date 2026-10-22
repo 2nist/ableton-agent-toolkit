@@ -210,3 +210,49 @@ chord timing, with a warning saying exactly that.
 Verified through the UI: Sonata no. 14 in C minor → key C aeolian 3/4,
 305 chords over 212 bars, opening `i vii° i vii° V7 …`, 82 chromatic chords
 flagged.
+
+## Lyrics lookups: matching, not just searching
+
+LRCLIB is queried on every import (`parseFile → enrichWithLrclib →
+searchLrclib`), and the API is reachable straight from the browser
+(`access-control-allow-origin: *`), so no proxy is involved. What was wrong was
+the *choosing*: the old code took the first result that happened to carry
+`syncedLyrics`, with no check that it was the same song.
+
+On a pop catalogue that mostly works. On the corpora this app imports it is
+actively harmful — "Piano Sonata no. 14 in C minor" matches *something*, and
+attaching a stranger's words is worse than attaching none.
+`lib/lyrics/lrclibMatch.ts` applies the rules the offline scripts already used,
+plus one the app needs:
+
+| Rule | Why |
+|---|---|
+| Normalise both titles (case, punctuation, brackets, accents, "the", "feat.") | `Help` must match `Help - Help!` |
+| Require ≥0.86 title agreement | rejects "Help Me" for "Help" |
+| Require the artist when one is known, ignore it when it reads "Unknown Artist" | corpora ship unknown artists |
+| Require durations within 12 s, preferring the closest | a cover is not the record |
+| **Refuse instrumentals outright** | a Mozart sonata has no words, however good the match |
+
+Measured against the live API:
+
+| Query | Old behaviour | Now |
+|---|---|---|
+| Help / The Beatles | first synced result | `Help - Help!`, synced, 139 s |
+| Dancing Queen / ABBA | first synced result | `Dancing Queen`, synced, 233 s |
+| Piano Sonata no. 14 in C minor | would attach *some* lyrics | **no match** |
+
+### Corpus file names carry the metadata
+
+CoCoPops names files `<Artist>_<TitleInCamelCase>_<Year>.mid`, and the importer
+used to turn that into the title "ABBA DancingQueen 1976" — unfindable by any
+lyrics search. `lib/parsers/corpusFileName.ts` splits it into
+`Al Green / Lets Stay Together Part 2 / 1972` when the last part is a
+four-digit year, and leaves ordinary names (`My Song.mid`) untouched. Combined
+with the matcher, a CoCoPops import now finds its real lyrics: Dancing Queen
+comes in as **ABBA – "Dancing Queen" with 29 timed lines**.
+
+One bug surfaced along the way: attaching lyrics could make
+`autoSectionFromRepeats` carve a one-line "chorus", which left a stray extra
+section beside the original and inflated the song's bar count. The split now
+requires a block of at least four lines, and the arrangement is rebuilt in
+document order so no section can be orphaned from it.
