@@ -3,6 +3,12 @@ import osc from "osc";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  claimOldestCommand,
+  createCommandWaker,
+  writeCommandFile,
+  type QueuedCommand,
+} from "./commandQueue.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,6 +41,24 @@ const BLUEPRINTS_DIR =
   );
 
 const STORAGE_DIR = path.join(BLUEPRINTS_DIR, "queue");
+
+/** Long-poll waiters for `GET /api/command/next`. Notified by every enqueue,
+ *  so a connected extension receives a command immediately instead of on its
+ *  next directory scan. */
+const commandWaker = createCommandWaker();
+
+/** Longest a `next` request may park. A browser request must stay well under
+ *  its own timeout; an extension long-polls far longer (it has nothing else
+ *  to do), which is why the cap is generous. */
+const MAX_WAIT_MS = 30_000;
+const DEFAULT_WAIT_MS = 25_000;
+
+/** Queue a command for the extension and wake any parked long-poll. */
+function enqueueCommand(payload: QueuedCommand): string {
+  const filename = writeCommandFile(STORAGE_DIR, payload);
+  commandWaker.notify();
+  return filename;
+}
 
 // Shared application telemetry state cache
 interface AbletonState {
@@ -134,14 +158,7 @@ app.post("/api/command", (req, res) => {
   }
 
   try {
-    if (!fs.existsSync(STORAGE_DIR)) {
-      fs.mkdirSync(STORAGE_DIR, { recursive: true });
-    }
-
-    const filename = `command_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.json`;
-    const targetPath = path.join(STORAGE_DIR, filename);
-
-    fs.writeFileSync(targetPath, JSON.stringify(commandPayload, null, 2), "utf-8");
+    const filename = enqueueCommand(commandPayload as QueuedCommand);
     console.log(`[OSC-BRIDGE] Written blueprint queue command payload: ${filename}`);
 
     return res.json({ status: "queued", file: filename });
@@ -149,6 +166,32 @@ app.post("/api/command", (req, res) => {
     console.error("[OSC-BRIDGE] Failed writing command to queue directory:", err);
     return res.status(500).json({ error: "File system bridge error" });
   }
+});
+
+// 3b. Long-poll for the next queued command.
+//
+// The extension used to learn about commands only by scanning the queue
+// directory every 2 s, so every browser action paid up to 2 s of latency.
+// Live 12.4.15b5 gave extensions `fetch` and `AbortSignal`, so a modern
+// extension can park on this route instead and be handed the command
+// immediately. The directory stays the single source of truth: this route
+// *claims* a file by renaming it (atomic), so a still-running old extension
+// polling the same directory cannot also execute it.
+//
+// `wait=0` makes it non-blocking (a quick "is anything queued?" probe).
+app.get("/api/command/next", async (req, res) => {
+  const requested = Number(req.query.wait);
+  const waitMs = Number.isFinite(requested)
+    ? Math.max(0, Math.min(MAX_WAIT_MS, requested))
+    : DEFAULT_WAIT_MS;
+
+  let command = claimOldestCommand(STORAGE_DIR);
+  if (!command && waitMs > 0) {
+    await commandWaker.wait(waitMs);
+    command = claimOldestCommand(STORAGE_DIR);
+  }
+
+  res.json({ command: command ?? null });
 });
 
 // 4. Push Song Blueprint -> Writes directly to the extension's blueprints
@@ -179,16 +222,7 @@ app.post("/api/push-song", (req, res) => {
     console.log(`[OSC-BRIDGE] Pushed song blueprint: ${song.title} (${song.id}) → ${blueprintPath}`);
 
     // Also queue a command so the extension applies it automatically
-    if (!fs.existsSync(STORAGE_DIR)) {
-      fs.mkdirSync(STORAGE_DIR, { recursive: true });
-    }
-    const cmdFilename = `command_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.json`;
-    const cmdPath = path.join(STORAGE_DIR, cmdFilename);
-    fs.writeFileSync(
-      cmdPath,
-      JSON.stringify({ action: "applyBlueprint", blueprintId: song.id }, null, 2),
-      "utf-8",
-    );
+    enqueueCommand({ action: "applyBlueprint", blueprintId: song.id });
     console.log(`[OSC-BRIDGE] Queued applyBlueprint command for: ${song.title}`);
 
     return res.json({ status: "pushed", id: song.id, title: song.title });

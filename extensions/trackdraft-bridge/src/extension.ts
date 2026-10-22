@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { initialize, MidiTrack, type ActivationContext, type Handle, type NoteDescription } from "@ableton-extensions/sdk";
 import { applyOutputOffset, cuePointNamesFor, planCuePoints, sectionSpans, type BlueprintSong } from "./blueprint.js";
 import { planChordClips } from "./chordClips.js";
@@ -8,6 +9,16 @@ import { planBassLine } from "./bassLine.js";
 import { planColorClips } from "./colorClips.js";
 import { buildPickerHtml } from "./picker.js";
 import { buildViewerHtml } from "./viewer.js";
+import {
+  canLongPoll,
+  claimQueuedCommandFile,
+  commandUrl,
+  describeRuntime,
+  listQueuedCommandFiles,
+  parseNextResponse,
+  DEFAULT_POLL_WAIT_MS,
+  type QueuedCommand,
+} from "./commandTransport.js";
 import {
   buildProbeHtml,
   CLOSE_SCRIPT,
@@ -26,8 +37,12 @@ const GENERATE_BASS_COMMAND_ID = "trackdraftBridge.generateBassLine";
 const GENERATE_BLANK_COMMAND_ID = "trackdraftBridge.generateBlankClips";
 const PROBE_DRUM_RACK_COMMAND_ID = "trackdraftBridge.probeDrumRack";
 
-/** Polling interval for the file-based command queue (ms). */
+/** Interval for the file-based command queue (ms) — the fallback transport,
+ *  and what an older Live build is stuck with. */
 const COMMAND_POLL_MS = 2000;
+/** Gap before retrying the long-poll after falling back, so a bridge started
+ *  later is picked up without giving up on the fast path forever. */
+const LONG_POLL_RETRY_MS = 30_000;
 
 interface ClipPlanEntry {
   name: string;
@@ -368,92 +383,154 @@ export function activate(activation: ActivationContext) {
     ? path.join(context.environment.storageDirectory, "blueprints", "queue")
     : undefined;
 
-  async function pollCommandQueue() {
-    if (!queueDir || !fs.existsSync(queueDir)) return;
-
-    const files = fs.readdirSync(queueDir).filter((f) => f.endsWith(".json")).sort();
-    if (files.length === 0) return;
-
-    for (const file of files) {
-      const filePath = path.join(queueDir, file);
-      let payload: { action?: string; blueprintId?: string; bpm?: number };
-      try {
-        payload = JSON.parse(fs.readFileSync(filePath, "utf8"));
-        fs.unlinkSync(filePath);
-      } catch {
-        continue; // malformed JSON or already deleted by another process
-      }
-
-      if (!payload.action) continue;
-
-      switch (payload.action) {
-        case "setTempo": {
-          const song = context.application.song;
-          const bpm = typeof payload.bpm === "number" ? payload.bpm : null;
-          if (song && bpm !== null && bpm > 0 && bpm <= 999) {
-            await context.withinTransaction(() => {
-              song.tempo = bpm;
-            });
-            console.log(`[trackdraft-bridge] queue: tempo → ${bpm}`);
-          }
-          break;
-        }
-        case "applyBlueprint": {
-          const song = context.application.song;
-          if (!song || typeof payload.blueprintId !== "string") break;
-          const blueprint = loadBlueprints(context.environment.storageDirectory).find(
-            (b) => b.id === payload.blueprintId,
-          );
-          if (!blueprint) break;
-
-          const cuePlan = planCuePoints(blueprint);
-          const names = cuePointNamesFor(blueprint);
-          const stale = song.cuePoints.filter((c) => names.has(c.name));
-
-          await context.withinTransaction(() =>
-            Promise.all(stale.map((c) => song.deleteCuePoint(c))),
-          );
-          const created = await context.withinTransaction(() =>
-            Promise.all(cuePlan.map((e) => song.createCuePoint(e.beat))),
-          );
+  /** Run one queued command. Shared by both transports, so the fast path and
+   *  the fallback can never drift apart in behaviour. */
+  async function executeQueuedCommand(payload: QueuedCommand) {
+    switch (payload.action) {
+      case "setTempo": {
+        const song = context.application.song;
+        const bpm = typeof payload.bpm === "number" ? payload.bpm : null;
+        if (song && bpm !== null && bpm > 0 && bpm <= 999) {
           await context.withinTransaction(() => {
-            created.forEach((c, i) => (c.name = cuePlan[i].name));
-            song.tempo = blueprint.bpm;
+            song.tempo = bpm;
           });
-
-          // Real playable MIDI, not just markers — the whole point of
-          // triggering this from the browser instead of requiring the user
-          // to right-click three separate tracks inside Live and pick the
-          // blueprint from a dialog each time. Reuses the exact same
-          // generators/clearing logic the manual "Generate X Clips" commands
-          // already use, just aimed at the template set's named tracks
-          // (lowercase `kit`/`crave`/`chord`/`color`) instead of whatever
-          // track the user right-clicked — `findOrCreateMidiTrack` matches
-          // case-insensitively, so the template's existing tracks get
-          // reused rather than duplicated.
-          const chordsTrack = await findOrCreateMidiTrack("chord");
-          await applyClipPlan(chordsTrack, planChordClips(blueprint), blueprint.outputOffsetBeats ?? 0);
-
-          const bassTrack = await findOrCreateMidiTrack("crave");
-          await applyClipPlan(bassTrack, planBassLine(blueprint), blueprint.outputOffsetBeats ?? 0);
-
-          const drumsTrack = await findOrCreateMidiTrack("kit");
-          const drumMapping = await resolveTrackPadMapping(drumsTrack);
-          await applyClipPlan(drumsTrack, remapClipPlanPitches(planDrumClips(blueprint), drumMapping), blueprint.outputOffsetBeats ?? 0);
-
-          const colorTrack = await findOrCreateMidiTrack("color");
-          await applyClipPlan(colorTrack, planColorClips(blueprint), blueprint.outputOffsetBeats ?? 0);
-
-          console.log(`[trackdraft-bridge] queue: applied blueprint "${blueprint.title}" (cue points + chord/crave/kit/color)`);
-          break;
+          console.log(`[trackdraft-bridge] queue: tempo → ${bpm}`);
         }
+        break;
+      }
+      case "applyBlueprint": {
+        const song = context.application.song;
+        if (!song || typeof payload.blueprintId !== "string") break;
+        const blueprint = loadBlueprints(context.environment.storageDirectory).find(
+          (b) => b.id === payload.blueprintId,
+        );
+        if (!blueprint) break;
+
+        const cuePlan = planCuePoints(blueprint);
+        const names = cuePointNamesFor(blueprint);
+        const stale = song.cuePoints.filter((c) => names.has(c.name));
+
+        await context.withinTransaction(() =>
+          Promise.all(stale.map((c) => song.deleteCuePoint(c))),
+        );
+        const created = await context.withinTransaction(() =>
+          Promise.all(cuePlan.map((e) => song.createCuePoint(e.beat))),
+        );
+        await context.withinTransaction(() => {
+          created.forEach((c, i) => (c.name = cuePlan[i].name));
+          song.tempo = blueprint.bpm;
+        });
+
+        // Real playable MIDI, not just markers — the whole point of
+        // triggering this from the browser instead of requiring the user
+        // to right-click three separate tracks inside Live and pick the
+        // blueprint from a dialog each time. Reuses the exact same
+        // generators/clearing logic the manual "Generate X Clips" commands
+        // already use, just aimed at the template set's named tracks
+        // (lowercase `kit`/`crave`/`chord`/`color`) instead of whatever
+        // track the user right-clicked — `findOrCreateMidiTrack` matches
+        // case-insensitively, so the template's existing tracks get
+        // reused rather than duplicated.
+        const chordsTrack = await findOrCreateMidiTrack("chord");
+        await applyClipPlan(chordsTrack, planChordClips(blueprint), blueprint.outputOffsetBeats ?? 0);
+
+        const bassTrack = await findOrCreateMidiTrack("crave");
+        await applyClipPlan(bassTrack, planBassLine(blueprint), blueprint.outputOffsetBeats ?? 0);
+
+        const drumsTrack = await findOrCreateMidiTrack("kit");
+        const drumMapping = await resolveTrackPadMapping(drumsTrack);
+        await applyClipPlan(drumsTrack, remapClipPlanPitches(planDrumClips(blueprint), drumMapping), blueprint.outputOffsetBeats ?? 0);
+
+        const colorTrack = await findOrCreateMidiTrack("color");
+        await applyClipPlan(colorTrack, planColorClips(blueprint), blueprint.outputOffsetBeats ?? 0);
+
+        console.log(`[trackdraft-bridge] queue: applied blueprint "${blueprint.title}" (cue points + chord/crave/kit/color)`);
+        break;
       }
     }
   }
 
-  setInterval(() => {
-    guard(async () => {
-      await pollCommandQueue();
-    })();
-  }, COMMAND_POLL_MS);
+  /** Fallback transport: sweep the queue directory. Still the only option on
+   *  a Live older than 12.4.15b5, and the safety net if the bridge is down. */
+  async function drainQueueDirectory() {
+    if (!queueDir) return 0;
+    let executed = 0;
+    for (const file of listQueuedCommandFiles(queueDir)) {
+      const payload = claimQueuedCommandFile(queueDir, file);
+      if (!payload) continue;
+      await executeQueuedCommand(payload);
+      executed += 1;
+    }
+    return executed;
+  }
+
+  /** Fast transport: park on the bridge until it hands over a command. */
+  async function fetchQueuedCommand(): Promise<QueuedCommand | null> {
+    const response = await fetch(commandUrl(undefined, DEFAULT_POLL_WAIT_MS), {
+      signal: AbortSignal.timeout(DEFAULT_POLL_WAIT_MS + 5_000),
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) throw new Error(`bridge returned ${response.status}`);
+    return parseNextResponse(await response.json());
+  }
+
+  const runtime = describeRuntime();
+  console.log(
+    `[trackdraft-bridge] runtime globals: ${Object.entries(runtime)
+      .map(([name, present]) => `${name}=${present ? "yes" : "no"}`)
+      .join(" ")}`,
+  );
+
+  let longPoll = canLongPoll(runtime);
+  if (!longPoll) {
+    console.log(
+      "[trackdraft-bridge] long-poll unavailable (needs fetch + AbortSignal.timeout, Live 12.4.15b5 or newer) — scanning the queue directory every " +
+        `${COMMAND_POLL_MS} ms`,
+    );
+  }
+
+  /** One transport cycle. Never throws: a command handler that rejects must
+   *  not take the loop (or the extension host) with it. */
+  async function pumpCommands(): Promise<void> {
+    if (longPoll) {
+      try {
+        const command = await fetchQueuedCommand();
+        if (command) await executeQueuedCommand(command);
+        return;
+      } catch (error) {
+        console.log(`[trackdraft-bridge] long-poll failed (${String(error)}); scanning the queue directory instead`);
+        longPoll = false;
+        // Commands may have queued up while the bridge was unreachable.
+        await drainQueueDirectory();
+        return;
+      }
+    }
+
+    const executed = await drainQueueDirectory();
+    if (executed > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, COMMAND_POLL_MS));
+  }
+
+  // A single self-scheduling loop rather than setInterval: a long-poll blocks
+  // for ~20 s by design, so a fixed interval would stack overlapping requests.
+  // It runs for the life of the extension host — the SDK has no deactivate
+  // hook — and never throws out of itself, because an unhandled rejection
+  // takes the whole host down.
+  let lastLongPollAttempt = Date.now();
+  void (async function commandLoop() {
+    for (;;) {
+      try {
+        await pumpCommands();
+      } catch (error) {
+        console.error("[trackdraft-bridge] command loop:", error);
+        await sleep(COMMAND_POLL_MS);
+      }
+      // Re-probe the fast path periodically, so a bridge started after Live
+      // is picked up without a relaunch.
+      if (!longPoll && Date.now() - lastLongPollAttempt > LONG_POLL_RETRY_MS) {
+        lastLongPollAttempt = Date.now();
+        longPoll = canLongPoll(runtime);
+      }
+    }
+  })();
 }

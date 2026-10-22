@@ -48,3 +48,45 @@ interface ActivationContext {
 ## Why AbletonOSC, not a new realtime layer
 
 AbletonOSC is already installed and registered (`~/Music/Ableton/User Library/Remote Scripts/AbletonOSC`). Extensions are explicitly not for realtime audio/control (per the SDK's own docs) — AbletonOSC already covers that gap. `osc-bridge` wraps it; it does not reimplement it.
+
+## The browser → Live command path
+
+Browser actions ("set tempo", "apply this blueprint", "send to Ableton")
+travel through a **directory of JSON files** that both the bridge and the
+extension can reach:
+
+```
+TrackDraft app ──POST /api/command──▶ osc-bridge ──writes──▶ <queue>/*.json ──▶ extension ──▶ Live
+```
+
+The folder, rather than a socket, is historical: extensions had no network
+globals, so a shared directory was the only channel. That is why the
+extension used to learn about commands by scanning it every 2 s — a browser
+action could sit for up to two seconds before Live did anything.
+
+**Live 12.4.15b5** changed that: extensions now get `fetch`, `AbortSignal`,
+`Headers`, `Request`, `Response`, `FormData` and `performance` (see
+`extensions/trackdraft-bridge/src/commandTransport.ts`, whose
+`describeRuntime()` reports which of them the running host actually has).
+So the extension can long-poll instead:
+
+| Transport | Needs | Latency |
+|---|---|---|
+| `GET /api/command/next?wait=…` (long-poll) | Live ≥ 12.4.15b5 | **~9 ms** (measured) |
+| Directory scan every 2 s | any Live | 0–2000 ms |
+
+Both remain, and the choice is automatic: the fast path is used when the
+globals are present, and the scan takes over when they are not, when the
+bridge is unreachable, or when the route 404s (an older bridge). The fast
+path is re-probed every 30 s so a bridge started after Live is picked up
+without a relaunch.
+
+**Exactly-once** is the invariant that makes running both safe. A consumer
+"claims" a command by **renaming** the file out of the queue — atomic on one
+filesystem — so a still-running old extension, a new long-polling one, and
+even two Live instances can all look at the same queue without any command
+executing twice. Verified by racing the two paths over 20 commands in each
+order: zero double executions.
+
+The queue stays on disk on purpose: a command survives a bridge restart, and
+the file scan keeps working if the bridge dies mid-session.
