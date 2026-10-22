@@ -31,6 +31,7 @@ const HOME = "/Users/Matthew";
 const LOCAL_CORPORA = [
   { path: `${HOME}/Datasets/bimmuda_dataset`, label: "BiMMuDa (melody)", isDefault: false },
   { path: `${HOME}/Datasets/cocopops`, label: "CoCoPops (melody)", isDefault: false },
+  { path: `${HOME}/Mozart-Sonatas`, label: "Mozart Sonatas (chords)", isDefault: false },
 ];
 
 export default function Dashboard() {

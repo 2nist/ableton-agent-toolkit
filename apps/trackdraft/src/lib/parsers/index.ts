@@ -10,9 +10,24 @@ import type { DirectoryEntry } from "../../store/directoryStore";
 import { parseMidiBytes, midiToBlueprintSong } from "./parseMidi";
 import { audioToBlueprintSong, textToBlueprintSong } from "./parseAudio";
 import { parseMcgillJcrd, parseRockCorpusJcrd } from "./parseJcrd";
+import { parseMozartJcrd } from "./parseMozart";
 import { searchLrclib, parseSyncedLyrics } from "../youtube";
 import { buildLyricDocument, detectRepeatedBlocks, assignLinesToSection, mergeLinesIntoSection } from "../lyrics/sectionize";
 import { alsToBlueprintSong } from "./parseAbleton";
+
+/** The choCo Mozart conversion: Roman-numeral chord labels, a `partition`
+ *  field, and no absolute chord names anywhere. */
+function isMozartJcrd(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  const data = raw as Record<string, unknown>;
+  if (data.partition === "mozart-piano-sonatas") return true;
+  if (!Array.isArray(data.sections) || !data.sections.length) return false;
+  const first = data.sections[0] as Record<string, unknown> | undefined;
+  const labels = Array.isArray(first?.chords) ? (first!.chords as unknown[]) : [];
+  if (labels.length === 0) return false;
+  const romanOnly = labels.every((label) => typeof label === "string" && /^[A-G]?(maj|min)?[#b]?[ivIV%+ItFrGer]/.test(label));
+  return romanOnly && typeof data.time_signature === "string";
+}
 
 export type ParseResult =
   | { ok: true; song: BlueprintSong }
@@ -172,8 +187,14 @@ export async function parseFile(dirPath: string, entry: DirectoryEntry): Promise
     switch (entry.type) {
       case "blueprint": {
         const raw = await res.json();
-        // Auto-detect McGill JCRD format (has source + sections with chord labels, no arrangement)
-        if (raw && typeof raw === "object" && "source" in raw && "sections" in raw && !("arrangement" in raw)) {
+        // Three JSON flavours share the same .json extension and all have
+        // `source` + `sections` with no `arrangement`, so they are told apart
+        // by their chord vocabulary: the choCo/Mozart files label chords with
+        // Roman numerals only (and carry `partition`/`time_signature`), while
+        // McGill names absolute chords.
+        if (isMozartJcrd(raw)) {
+          song = parseMozartJcrd(raw);
+        } else if (raw && typeof raw === "object" && "source" in raw && "sections" in raw && !("arrangement" in raw)) {
           song = parseMcgillJcrd(raw);
         } else {
           const { parseImportedSong } = await import("../exportImport");

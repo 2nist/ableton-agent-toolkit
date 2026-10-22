@@ -160,3 +160,53 @@ Verified through the UI on the real corpora (ABBA – Dancing Queen, 76 bars):
 same way. Both corpora are registered as **browse-only** dashboard
 directories, each probed once against the dev server so a machine without the
 datasets never sees a broken entry.
+
+## Mozart sonatas: Roman numerals, and what the format does not contain
+
+The choCo conversion of the Mozart piano sonatas is the mirror image of
+BiMMuDa/CoCoPops: **harmony only**, no melody, no drums, and no barlines. Each
+`.jcrd.json` is one sonata whose `sections[]` holds one entry per *chord span*
+(730 in Sonata no. 10), labelled in DCML Roman-numeral notation.
+`lib/parsers/parseMozart.ts` reads that grammar:
+
+| Written | Means |
+|---|---|
+| `I`, `vi`, `viio7` | triads / sevenths by degree |
+| `V65`, `V43`, `V2` | figured bass → `voicing.inversion` (1, 2, 3) |
+| `ii%65` | half-diminished |
+| `CI(97)` | key C, chord I — the parenthesised part is decoration, **not** figures |
+| `FV(64)` | local key F (so its V is C) |
+| `AV/ii` | key A, then V of ii |
+| `V/V/ii` | slash chains read right to left |
+| `It6`, `Fr43`, `Ger6` | augmented sixths (chromatic) |
+| `Cnan` | Neapolitan (♭II) |
+| `F#viio7/vi` | leading tone a semitone under the target (C#dim7 → Dm) |
+
+Two rules the notation forces, both found by checking the corpus's own context
+rather than guessing:
+
+- **A parenthesised qualifier is not a figure.** `CI(97)` is a plain C major
+  triad; reading "97" as figures turned it into a dominant seventh.
+- **A leading-tone chord is a semitone below its target, whatever the scale.**
+  Minor keys need this (their diatonic seventh is a whole tone down), and DCML
+  writes the raised leading tone as `#viio` only when the diatonic seventh
+  would be natural. `degreeRelativeTo`'s flat preference turned B in C minor
+  into "♭I", a degree that does not exist, so diminished chords a semitone
+  under the tonic are written `vii` instead.
+
+Every chord keeps its original annotation in `extendedSuffix` (so a performer
+can see `FV65/V` even though the app stores the root and degree), and the
+chromatic ones are marked `isSubstitution`. All 553 distinct labels in the
+17-sonata corpus now parse; none are skipped.
+
+What the format does **not** give us, and the parser therefore refuses to
+invent: **barlines** (a chord's length comes from the next onset, because the
+converted spans overlap) and **section structure** (the key prefixes are
+per-chord interpretations — a cadential `CV(64)` lasts 0.05 s — so treating
+them as regions would produce hundreds of one-chord sections). Each sonata
+imports as one `Full Sonata` section whose bar count is computed from the
+chord timing, with a warning saying exactly that.
+
+Verified through the UI: Sonata no. 14 in C minor → key C aeolian 3/4,
+305 chords over 212 bars, opening `i vii° i vii° V7 …`, 82 chromatic chords
+flagged.
