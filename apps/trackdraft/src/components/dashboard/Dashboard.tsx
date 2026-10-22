@@ -24,6 +24,15 @@ const TYPE_BADGES: Record<string, { label: string; color: string }> = {
 
 type ActiveView = "songs" | "templates";
 
+/** Research corpora outside the repo, registered only when present.
+ *  `/Users/Matthew/...` on purpose: these are local datasets, and the probe
+ *  above makes them harmless anywhere else. */
+const HOME = "/Users/Matthew";
+const LOCAL_CORPORA = [
+  { path: `${HOME}/Datasets/bimmuda_dataset`, label: "BiMMuDa (melody)", isDefault: false },
+  { path: `${HOME}/Datasets/cocopops`, label: "CoCoPops (melody)", isDefault: false },
+];
+
 export default function Dashboard() {
   const songs = useSongStore((s) => s.songs);
   const importSong = useSongStore((s) => s.importSong);
@@ -58,6 +67,23 @@ export default function Dashboard() {
       if (!dirs.some((d) => d.path === dir.path)) store.addDirectory(dir);
     }
     // Add your own local directories via the DirSetupModal (gear icon in sidebar).
+
+    // Research corpora that live outside the repo. They are absolute paths on
+    // one machine, so each is probed once and only registered when the dev
+    // server can actually list it — a missing corpus stays invisible instead
+    // of showing up as a broken directory. Both are MIDI-only: BiMMuDa and
+    // CoCoPops are monophonic melody annotations (no harmony, no drums), which
+    // is exactly what the MIDI importer now classifies rather than guesses.
+    for (const dir of LOCAL_CORPORA) {
+      if (dirs.some((d) => d.path === dir.path)) continue;
+      void fetch(`/__local-browse?dir=${encodeURIComponent(dir.path)}`)
+        .then((res) => {
+          if (res.ok) store.addDirectory(dir);
+        })
+        .catch(() => {
+          /* corpus not on this machine — nothing to register */
+        });
+    }
   }, [dirs]);
 
   // When a directory is selected, load its listing

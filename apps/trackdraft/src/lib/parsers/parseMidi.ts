@@ -7,6 +7,12 @@
 import type { BlueprintSong, BlueprintSection } from "../../types/blueprint";
 import type { NoteName } from "@music-theory/core";
 import { detectMidiChords, parserNotesToTimed } from "./midiChordDetect";
+import {
+  classifyTracks,
+  drumsToBlocks,
+  melodyFromTrack,
+  type TrackRole,
+} from "./midiTracks";
 
 interface MidiEvent {
   tick: number;
@@ -35,7 +41,7 @@ interface ParsedMidi {
   scale: string;
   timeSigNum: number;
   timeSigDen: number;
-  notes: Array<{ note: number; velocity: number; startTick: number; endTick: number; track: number }>;
+  notes: Array<{ note: number; velocity: number; startTick: number; endTick: number; track: number; channel: number }>;
 }
 
 /** Maps a MIDI key signature to a note name. */
@@ -259,6 +265,7 @@ export function parseMidiBytes(bytes: Uint8Array): ParsedMidi {
             startTick: on.startTick,
             endTick: event.tick,
             track: on.track,
+            channel: on.channel,
           });
           if (queue!.length === 0) noteOns.delete(key);
         }
@@ -288,6 +295,23 @@ export function parseMidiBytes(bytes: Uint8Array): ParsedMidi {
 /** Convert a parsed MIDI file into a BlueprintSong. */
 export function midiToBlueprintSong(midi: ParsedMidi, title: string): BlueprintSong {
   const now = new Date().toISOString();
+  const beatsPerBar = (midi.timeSigNum * 4) / midi.timeSigDen;
+  const ticksPerBar = Math.max(1, Math.round(midi.ticksPerQuarter * beatsPerBar));
+  const maxTick = midi.notes.reduce((max, n) => Math.max(max, n.endTick), 0);
+  const bars = Math.max(1, Math.ceil(maxTick / ticksPerBar));
+  const sectionBeats = bars * beatsPerBar;
+
+  // Which track is which. This is the difference between importing a song and
+  // inventing one: a melody-only file has no harmony to detect, and stacking
+  // its line with other tracks used to manufacture chords that were never
+  // written. See midiTracks.ts.
+  const trackNames = Object.fromEntries(midi.tracks.map((track, index) => [index, track.name]));
+  const profiles = classifyTracks(midi.notes, trackNames);
+  const rolesOf = (role: TrackRole) => profiles.filter((p) => p.role === role);
+  const harmonyTracks = new Set(rolesOf("harmony").map((p) => p.track));
+  const melodyTrack = rolesOf("melody")[0] ?? null;
+  const drumTrack = rolesOf("drums")[0] ?? null;
+
   const song: BlueprintSong = {
     id: crypto.randomUUID(),
     title,
@@ -307,94 +331,81 @@ export function midiToBlueprintSong(midi: ParsedMidi, title: string): BlueprintS
     updatedAt: now,
   };
 
-  // Simple section detection: divide by note density changes
-  if (midi.notes.length > 0 && midi.ticksPerQuarter > 0) {
-    // Group notes into bars
-    const beatsPerBar = midi.timeSigNum;
-    const ticksPerBar = midi.ticksPerQuarter * beatsPerBar;
-    const maxTick = midi.notes.reduce((max, n) => Math.max(max, n.endTick), 0);
-    const numBars = Math.ceil(maxTick / ticksPerBar);
+  const warnings: string[] = [];
 
-    // Count notes per bar for density-based sectioning
-    const bars: number[][] = new Array(numBars).fill(null).map(() => []);
-    for (const n of midi.notes) {
-      const bar = Math.floor(n.startTick / ticksPerBar);
-      if (bar < numBars) bars[bar].push(n.note);
+  // One honest section covering the real length of the file. Section
+  // structure is not recoverable from a monophonic line, and the previous
+  // "every 12 bars is a section" carving named invented sections A, B, C…
+  // A single full-song section says what we actually know.
+  const section: BlueprintSection = {
+    id: crypto.randomUUID(),
+    name: "Full Song",
+    role: "verse",
+    bars,
+    chords: [],
+    beatsPerChord: midi.timeSigNum,
+    velocity: "mf",
+    timeSignatureNumerator: midi.timeSigNum,
+    timeSignatureDenPower: Math.log2(midi.timeSigDen),
+  };
+
+  // Harmony: only from polyphonic tracks. A melody-only file keeps an empty
+  // progression rather than a fabricated one.
+  if (harmonyTracks.size > 0) {
+    const harmonyNotes = midi.notes.filter((n) => harmonyTracks.has(n.track));
+    section.chords = detectMidiChords(
+      parserNotesToTimed(harmonyNotes, midi.ticksPerQuarter, 0),
+      0,
+      sectionBeats,
+      midi.timeSigNum,
+      midi.key,
+    );
+    if (section.chords.length === 0) {
+      warnings.push(`harmony track(s) ${[...harmonyTracks].join(", ")} produced no chords`);
     }
-
-    // Rough section detection: group consecutive bars
-    let sectionIdx = 0;
-    let currentSection: BlueprintSection | null = null;
-    const MIN_BARS_PER_SECTION = 4;
-
-    // Track the start bar of each detected section so we can slice notes for chord detection
-    const sectionBarRanges: Array<{ startBar: number; endBar: number }> = [];
-
-    for (let b = 0; b < bars.length; b++) {
-      if (bars[b].length === 0 && currentSection && currentSection.bars >= MIN_BARS_PER_SECTION) {
-        // End section on empty bar
-        sectionBarRanges[sectionIdx] = { startBar: b - currentSection.bars, endBar: b };
-        song.sections.push({ ...currentSection, name: `Section ${String.fromCharCode(65 + sectionIdx)}` });
-        currentSection = null;
-        sectionIdx++;
-        continue;
-      }
-      if (bars[b].length === 0) continue;
-
-      if (!currentSection) {
-        currentSection = {
-          id: crypto.randomUUID(),
-          name: `Section ${String.fromCharCode(65 + sectionIdx)}`,
-          role: sectionIdx === 0 ? "verse" : sectionIdx === 1 ? "chorus" : "bridge",
-          bars: MIN_BARS_PER_SECTION,
-          chords: [],
-          beatsPerChord: 4,
-          velocity: "mf",
-          timeSignatureNumerator: midi.timeSigNum,
-          timeSignatureDenPower: Math.log2(midi.timeSigDen),
-        };
-      } else {
-        currentSection.bars += 1;
-      }
-
-      if (currentSection.bars >= MIN_BARS_PER_SECTION * 3) {
-        sectionBarRanges[sectionIdx] = { startBar: b - currentSection.bars + 1, endBar: b + 1 };
-        song.sections.push({ ...currentSection, name: `Section ${String.fromCharCode(65 + sectionIdx)}` });
-        currentSection = null;
-        sectionIdx++;
-      }
-    }
-    if (currentSection) {
-      sectionBarRanges[sectionIdx] = { startBar: numBars - currentSection.bars, endBar: numBars };
-      song.sections.push({ ...currentSection, name: `Section ${String.fromCharCode(65 + sectionIdx)}` });
-    }
-
-    // Now detect chords for each section by slicing the notes that fall
-    // within that section's bar range and running the chord detector.
-    for (let i = 0; i < song.sections.length && i < sectionBarRanges.length; i++) {
-      const { startBar, endBar } = sectionBarRanges[i];
-      const sectionStartTick = startBar * ticksPerBar;
-      const sectionEndTick = endBar * ticksPerBar;
-      const sectionDurationBeats = (sectionEndTick - sectionStartTick) / midi.ticksPerQuarter;
-
-      // Collect notes that fall within this section's tick range
-      const sectionNotes: ParsedMidi["notes"] = [];
-      for (const n of midi.notes) {
-        if (n.endTick > sectionStartTick && n.startTick < sectionEndTick) {
-          sectionNotes.push(n);
-        }
-      }
-
-      if (sectionNotes.length > 0 && sectionDurationBeats > 0) {
-        const timedNotes = parserNotesToTimed(sectionNotes, midi.ticksPerQuarter, sectionStartTick);
-        const chords = detectMidiChords(timedNotes, 0, sectionDurationBeats, midi.timeSigNum, midi.key);
-        song.sections[i] = { ...song.sections[i], chords };
-      }
-    }
-
-    // Add arrangement entries
-    song.arrangement = song.sections.map((s) => ({ sectionId: s.id, repeats: 1 }));
+  } else {
+    warnings.push("no polyphonic track — chords left empty rather than guessed from a melody");
   }
+
+  if (melodyTrack) {
+    const melodyNotes = midi.notes.filter((n) => n.track === melodyTrack.track);
+    const notes = melodyFromTrack(melodyNotes, midi.ticksPerQuarter, 0);
+    if (notes.length > 0) {
+      section.melody = { notes, source: "recorded" };
+    }
+  } else {
+    warnings.push("no monophonic track — no melody imported");
+  }
+
+  if (drumTrack) {
+    const { blocks, unmapped } = drumsToBlocks(
+      midi.notes.filter((n) => n.track === drumTrack.track),
+      midi.ticksPerQuarter,
+      0,
+      sectionBeats,
+    );
+    if (blocks.length > 0) section.drumBlocks = blocks;
+    if (unmapped > 0) warnings.push(`${unmapped} percussion hit(s) had no GM voice mapping`);
+  }
+
+  const skipped = rolesOf("ignored");
+  if (skipped.length > 0) {
+    warnings.push(
+      `track(s) ${skipped.map((p) => p.track).join(", ")} ignored (${skipped[0].reason})`,
+    );
+  }
+
+  song.sections = [section];
+  song.arrangement = [{ sectionId: section.id, repeats: 1 }];
+  song.provenance = {
+    ...song.provenance,
+    source: "midi-import",
+    extractedAt: now,
+    warnings: [
+      ...warnings,
+      `tracks: ${profiles.map((p) => `${p.track}=${p.role}`).join(", ") || "none"}`,
+    ],
+  };
 
   return song;
 }

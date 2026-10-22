@@ -90,3 +90,40 @@ order: zero double executions.
 
 The queue stays on disk on purpose: a command survives a bridge restart, and
 the file scan keeps working if the bridge dies mid-session.
+
+## MIDI import: classify the tracks, then use each for what it is
+
+MIDI import used to treat every note as evidence of harmony — it stacked all
+tracks together and ran chord detection on the result. That is right for a
+full arrangement and wrong for the corpora we import most: **BiMMuDa and
+CoCoPops are monophonic melody annotations**, so a single melodic line was
+"detected" as chords that were never written (`D#aug, C#…` for Dancing
+Queen, which has neither), while the melody itself was dropped — the importer
+never populated `melody` at all.
+
+`lib/parsers/midiTracks.ts` classifies first:
+
+| Signal | Role |
+|---|---|
+| channel 9 | `drums` (GM percussion) |
+| ≥ 20 % of onsets sound more than one note | `harmony` |
+| monophonic, mean pitch < 52 | `bass` |
+| monophonic | `melody` |
+
+Then each track is used for what it is: harmony feeds chord detection (and
+nothing else does — a melody-only file keeps an **empty** progression rather
+than a fabricated one), the melody track becomes a `MelodyTrack`, and a
+percussion track becomes one `steps` `DrumBlock` per lane, which stores the
+notes verbatim rather than guessing a groove.
+
+Sections: one **honest** section spanning the file's real bar count. Structure
+is not recoverable from a monophonic line, and the old "every 12 bars is a
+section" carving invented section names A, B, C… A single `Full Song` section
+says what is actually known, and the import's `provenance.warnings` spell out
+what was found, what was skipped, and why.
+
+Verified through the UI on the real corpora (ABBA – Dancing Queen, 76 bars):
+0 fabricated chords, 301 melody notes imported (A4–C#5). BiMMuDa resolves the
+same way. Both corpora are registered as **browse-only** dashboard
+directories, each probed once against the dev server so a machine without the
+datasets never sees a broken entry.
