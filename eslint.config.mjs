@@ -13,6 +13,7 @@ export default tseslint.config(
     ignores: [
       "**/node_modules/**",
       "**/dist/**",
+      "**/release/**",
       "**/*.d.ts",
       "**/puck.generated.tsx",
       "**/generated/**",

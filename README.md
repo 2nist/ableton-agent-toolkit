@@ -10,6 +10,31 @@ See `docs/architecture.md` for the design, `docs/design/workspace.md` for the cu
 
 Node **24** is required (`engines` + `.npmrc` enforce it; `.nvmrc` pins 24.18.0). `npm run lint` is the ESLint gate.
 
+## Fresh machine (start here)
+
+```bash
+nvm use                        # Node 24 per .nvmrc — install it first if nvm says "not installed"
+npm ci                         # at the repo root; the workspaces link from here
+npm run dev --workspace=trackdraft
+```
+
+`npm run dev --workspace=trackdraft` serves the app at <http://localhost:5183>.
+For the full experience (Ableton transport sync + Send to Ableton), use the launcher instead — it also starts `osc-bridge` and opens the browser:
+
+```bash
+bash apps/trackdraft/start-all.sh
+```
+
+`npm run build` builds every workspace; `npm run build --workspace=trackdraft` builds just the app. `npm run verify` is the typecheck + test gate (also run by the pre-push hook).
+
+### Checking MIDI out on a new machine
+
+Live MIDI out needs **desktop Chrome** (Web MIDI isn't exposed in Safari or Firefox) and a virtual MIDI bus — on macOS: Audio MIDI Setup → IAC Driver → tick *Device is online*. Then in TrackDraft: **Settings → MIDI & sync** → pick the bus → **Run loopback**.
+
+A returned probe ("✓ returned from IAC Driver Bus 1 in Nms") means the OS route works, so any remaining silence is the *DAW's* MIDI input or channel filter — not TrackDraft. A timeout means the bus isn't online.
+
+In any DAW, give each stem its own track pointed at that port on the stem's channel (the panel shows both the channel and the instrument it expects). **Export MIDI** writes the same routing plus General MIDI program changes and instrument names, so a GM-compatible DAW assigns the sounds on import; drums go to channel 10 there, where GM expects percussion.
+
 - [x] **Phase 0** — repo scaffold, `extensions/hello-world` dev-loop validation
 - [x] **Phase 1** — `packages/test-harness`: fakes only `initializeExtensionHost`, real SDK does the rest
 - [x] **Phase 2** — `@music-theory/core` + `@music-theory/song-structure` ported verbatim (with baseline tests — none existed upstream), `ui-kit` bridge + design tokens

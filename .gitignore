@@ -26,3 +26,6 @@ packages/drum-library/e-gmd-v1.0.0/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Portable build bundles (regenerate with scripts/serve-dist.mjs)
+apps/trackdraft/release/
