@@ -120,7 +120,7 @@
      colour. */
   --pencil-red: #a03a31;
   --ink-hand: #2b4c9b; /* biro blue — 7.2:1 on the card stock */
-  --hand-pen: "Kalam", "Segoe Script", "Bradley Hand", cursive;
+  --hand-pen: "Reenie Beanie", "Segoe Script", "Bradley Hand", cursive;
   /* A printed sticker: whiter than the card, with its own hairline. */
   --sticker-bg: #fbf7ec;
   --sticker-edge: #b9ae95;
@@ -381,22 +381,26 @@ body {
    which is how a 10px section name once came out at 20px and clipped. */
 [data-theme="logsheet"] .hand-value {
   font-family: var(--hand-pen);
-  font-size: 16px;
-  line-height: 1.25;
-  letter-spacing: 0.005em;
+  /* A fine ballpoint has a small x-height and thin strokes, so it needs ~1px
+     more than a heavier hand to match the same optical size. */
+  font-size: 17px;
+  line-height: 1.22;
+  letter-spacing: 0.01em;
   font-weight: 400;
   color: var(--ink-hand);
 }
-/* A page identity — the app brand. Kalam's 700 is a real bold, not synthesised. */
+/* A page identity — the song title. Reenie Beanie ships one weight, so the
+   hierarchy here is size alone: 700 would be a synthetic bold that smears a
+   fine nib. */
 [data-theme="logsheet"] .hand-value--title {
-  font-size: 19px;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1.15;
 }
 /* A written value in a slot designed for 9–10px type: the pen still has to
-   reach 16px, or it stops reading as a pen. */
+   reach 17px, or it stops reading as a pen. */
 [data-theme="logsheet"] .hand-value--up {
-  font-size: 16px;
+  font-size: 17px;
 }
 /* The pen on a dark instrument plate would lose its contrast — lift the ink. */
 [data-theme="logsheet"] .on-deep .hand-value {

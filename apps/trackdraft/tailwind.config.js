@@ -51,11 +51,11 @@ export default {
         // IBM Plex Mono, which the mock uses for mechanical readouts.
         mono: ["'IBM Plex Mono'", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
         type: ["'Courier Prime'", "'Courier New'", "Courier", "monospace"],
-        // Handwriting voice. Kalam is the one pen in the stack with real
-        // weights (300/400/700), so the written hierarchy can be carried by
-        // weight instead of by size alone — the mock had to rely on size
-        // because Caveat has no bold.
-        hand: ["Kalam", "'Segoe Script'", "'Bradley Hand'", "cursive"],
+        // Handwriting voice: a fine ballpoint. One weight (400), so the
+        // written hierarchy is carried by SIZE only — see .hand-value in
+        // theme/themes.css, which is why the values sit at 17px rather than
+        // the 16px a heavier hand could hold.
+        hand: ["'Reenie Beanie'", "'Segoe Script'", "'Bradley Hand'", "cursive"],
         marker: ["'Permanent Marker'", "Caveat", "cursive"],
       },
       // Tightened from Tailwind's defaults (sm 2px/DEFAULT 4px/md 6px/lg 8px)
