@@ -18,6 +18,7 @@ const TYPE_BADGES: Record<string, { label: string; color: string }> = {
   midi: { label: "MIDI", color: "bg-emerald-400/20 text-emerald-400" },
   lyrics: { label: "Lyrics", color: "bg-blue-400/20 text-blue-400" },
   ableton: { label: "Ableton", color: "bg-purple-400/20 text-purple-400" },
+  musicxml: { label: "MusicXML", color: "bg-rose-400/20 text-rose-400" },
   directory: { label: "Folder", color: "bg-inkMuted/20 text-inkMuted" },
   unknown: { label: "File", color: "bg-inkMuted/10 text-inkMuted" },
 };
@@ -163,7 +164,7 @@ export default function Dashboard() {
     if (!selectedDir) return;
     setImportingBulk(true);
     const importable = filteredDirEntries.filter(
-      (e) => e.type === "blueprint" || e.type === "jcrd" || e.type === "midi" || e.type === "audio" || e.type === "lyrics",
+      (e) => e.type === "blueprint" || e.type === "jcrd" || e.type === "midi" || e.type === "audio" || e.type === "lyrics" || e.type === "musicxml",
     );
     let imported = 0;
     let skipped = 0;
@@ -284,7 +285,7 @@ export default function Dashboard() {
                   <tbody className="divide-y divide-edge">
                     {filteredDirEntries.map((entry) => {
                       const typeBadge = TYPE_BADGES[entry.type ?? "unknown"] ?? TYPE_BADGES.unknown;
-                      const hasParser = entry.type === "blueprint" || entry.type === "jcrd" || entry.type === "midi" || entry.type === "audio" || entry.type === "lyrics";
+                      const hasParser = entry.type === "blueprint" || entry.type === "jcrd" || entry.type === "midi" || entry.type === "audio" || entry.type === "lyrics" || entry.type === "musicxml";
                       const isDir = entry.type === "directory";
                       return (
                         <tr

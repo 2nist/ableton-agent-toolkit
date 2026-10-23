@@ -15,6 +15,7 @@ import { parseCorpusFileName } from "./corpusFileName";
 import { searchLrclib, parseSyncedLyrics } from "../youtube";
 import { buildLyricDocument, detectRepeatedBlocks, assignLinesToSection, mergeLinesIntoSection } from "../lyrics/sectionize";
 import { alsToBlueprintSong } from "./parseAbleton";
+import { musicXmlToBlueprintSong } from "./parseMusicXml";
 
 /** The choCo Mozart conversion: Roman-numeral chord labels, a `partition`
  *  field, and no absolute chord names anywhere. */
@@ -243,6 +244,10 @@ export async function parseFile(dirPath: string, entry: DirectoryEntry): Promise
       }
       case "ableton": {
         song = await alsToBlueprintSong(await res.arrayBuffer(), title);
+        break;
+      }
+      case "musicxml": {
+        song = musicXmlToBlueprintSong(await res.text(), title);
         break;
       }
       default: {

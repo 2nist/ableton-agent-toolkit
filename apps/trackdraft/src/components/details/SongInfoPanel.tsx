@@ -7,6 +7,7 @@ const SOURCE_LABEL: Record<Provenance["source"], string> = {
   "audio-extract": "Extracted from audio",
   "midi-import": "Imported from MIDI",
   "catalog-lookup": "Matched from a known-song chord/lyric catalog",
+  "musicxml-import": "Imported from a MusicXML chord chart",
 };
 
 function ProvenanceBanner({ provenance }: { provenance: Provenance }) {

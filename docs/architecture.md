@@ -284,6 +284,60 @@ always visible, and 9·11·13 plus the altered dominants sit behind a
 selected chord is already one of them, in which case that group renders so the
 row never hides its own state.
 
+## MusicXML import: iReal Pro charts
+
+The iReal Pro *MusicXML* export — not its native `irealb://` string — is the
+import path, because it carries three things the compact format makes you
+reconstruct: real barlines (so a chord's length is measured, not inferred),
+the exact symbol in `<kind text="7b9">`, and per-bar meter changes. The trade
+is bulk and the fact that iReal writes **rests instead of notes**: an export
+is a chord chart, so there is no melody to extract, only harmony and form.
+
+Two structural facts decide the whole parser
+(`lib/parsers/parseMusicXml.ts`):
+
+- **A `<harmony>` is a label at a position, not a duration.** The rest or note
+  after it advances the bar's clock, so a chord runs until the next harmony or
+  the bar line. The file is therefore walked in document order — `preserveOrder`
+  in fast-xml-parser exists precisely for this, since a key/value parse loses
+  the interleaving of `<harmony>` and `<note>` and with it every chord length.
+- **The written chart is not the played form.** iReal writes "D.S. al Coda"
+  as text and expects the reader to jump. A timeline cannot leave that to the
+  reader, so `planMeasureOrder` expands the marks into the order the bars
+  actually sound: play to the D.S. bar, jump to the segno, come out at the coda
+  sign, then play the coda. Barline repeats and 1st/2nd endings are expanded
+  the same way (the bracket after the repeat bar belongs to the *second* pass).
+
+A second pass over a section is an `ArrangementRepeat` with `overrides`
+(`bars` + `chords`), never a duplicated section — the same reasoning that
+made `arrangement` key by `sectionId` in the first place. A pass is "exact"
+only when it covers the section's own bars *in order*; a 1st/2nd ending can be
+the same length as its sibling and still be different bars, so length alone
+never decides whether an override is needed.
+
+Sections come from `<rehearsal>`, plus a coda sign *after* the D.S. (iReal
+writes the coda as its own passage but doesn't always name it). Chords map
+through the same `parseChordQuality` as everything else, so `<kind text="7b9">`
+lands on a real `7b9` quality and `<degree>` alterations fold into the symbol
+(`add9`). A `<bass>` that is one of the chord's own tones becomes an
+**inversion** — `Dm/A` really is D minor's second inversion — and one that
+isn't (`G7/A`) stays a label with a warning, because the model has no
+walking-bass note.
+
+Verified against a real export (24 bars, 35 harmonies, four chords in one
+2/4 bar, meter changing 4/4 → 2/4 → 4/4 twice, `D.S. al Coda`, segno on bar 2,
+coda sign on bar 11, coda bars 23–24): four sections `intro · A · B · Coda`,
+and the played form `intro, A, B, A (bars 1–9), Coda`.
+
+What it refuses to invent, and says so in `provenance.warnings`:
+
+- **Tempo** — iReal stores none (it practises at a global tempo), so 120 BPM is
+  a default, not an extraction.
+- **One meter per section** — the model has no per-bar meter map, so a section
+  that changes meter keeps its first and reports every change by bar.
+- **Melody** — the export is rests.
+- **`.mxl`** (zipped MusicXML) is not read; only plain `.musicxml`/`.xml`.
+
 ## Lyrics lookups: matching, not just searching
 
 LRCLIB is queried on every import (`parseFile → enrichWithLrclib →

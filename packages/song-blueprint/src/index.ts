@@ -727,7 +727,7 @@ export interface ProductionStatus {
  *  "audio-extract" (inferred from a raw waveform) — conflating the two
  *  would misrepresent real ground-truth data as lower-confidence guesswork. */
 export interface Provenance {
-  source: "manual" | "docx-ingest" | "audio-extract" | "midi-import" | "catalog-lookup";
+  source: "manual" | "docx-ingest" | "audio-extract" | "midi-import" | "catalog-lookup" | "musicxml-import";
   extractedAt: string;
   warnings?: string[];
 }

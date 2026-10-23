@@ -11,7 +11,7 @@ export interface DirectoryEntry {
   file: string;
   title: string;
   sections: number;
-  type?: "blueprint" | "jcrd" | "audio" | "midi" | "lyrics" | "ableton" | "directory" | "unknown";
+  type?: "blueprint" | "jcrd" | "audio" | "midi" | "lyrics" | "ableton" | "musicxml" | "directory" | "unknown";
   loadable: boolean;
 }
 

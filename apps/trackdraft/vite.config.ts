@@ -46,6 +46,9 @@ function fileTypeInfo(file: string): { category: string; loadable: boolean } {
     case ".mid":
     case ".midi":
       return { category: "midi", loadable: true };
+    case ".musicxml":
+    case ".xml":
+      return { category: "musicxml", loadable: true };
     case ".txt":
     case ".lrc":
     case ".md":
