@@ -52,13 +52,13 @@ function TextField({
       <span className="text-3xs text-inkMuted uppercase tracking-wide">{label}</span>
       {multiline ? (
         <textarea
-          className="ledger w-full bg-panelAlt border border-edge rounded px-1.5 py-1 text-2xs resize-y min-h-[40px]"
+          className="hand-value ledger w-full bg-panelAlt border border-edge rounded px-1.5 py-1 text-2xs resize-y min-h-[40px]"
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
       ) : (
         <input
-          className="w-full bg-panelAlt border border-edge rounded px-1.5 py-1 text-2xs"
+          className="hand-value w-full bg-panelAlt border border-edge rounded px-1.5 py-1 text-2xs"
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -134,7 +134,7 @@ function AlternatesEditor({
             </button>
           </div>
           <textarea
-            className="ledger w-full bg-panelAlt border border-edge rounded px-1.5 py-0.5 text-3xs resize-y"
+            className="hand-value ledger w-full bg-panelAlt border border-edge rounded px-1.5 py-0.5 text-3xs resize-y"
             placeholder="What was the idea?"
             value={alt.note}
             onChange={(e) => onChange(alternates.map((a, j) => (j === i ? { ...a, note: e.target.value } : a)))}

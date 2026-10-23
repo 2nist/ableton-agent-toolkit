@@ -98,7 +98,10 @@ export function StepView({ outline, color }: { outline: MeterOutline; color?: st
         <div
           key={i}
           className={`h-3 w-3 rounded-[2px] ${P.handDrawn ? "hand-cell" : ""}${on && P.handDrawn ? " hand-cell--on" : ""}`}
-          style={{ background: on ? accent : withAlpha(P.grid, 0.28), ...(P.handDrawn ? handCell(i + 3) : null) }}
+          style={{
+            background: on ? accent : withAlpha(P.grid, 0.28),
+            ...(P.handDrawn ? { ...handCell(i + 3), "--hatch": `${40 + (i % 4) * 3}deg` } : null),
+          } as React.CSSProperties}
         />
       ))}
     </div>

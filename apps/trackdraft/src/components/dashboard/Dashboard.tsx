@@ -360,7 +360,10 @@ export default function Dashboard() {
           <>
             <div className="shrink-0">
               <header className="flex items-center justify-between px-4 py-2 border-b border-edge">
-                <h1 className="text-sm font-semibold">TrackDraft</h1>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <h1 className="tape-label text-sm font-semibold">TrackDraft</h1>
+                  {handDrawn && <span className="stamp stamp--tight">Studio log</span>}
+                </div>
                 <div className="flex items-center gap-3 text-[10px] text-inkMuted">
                   <ThemeToggle />
                   <span>{songs.length} songs</span>

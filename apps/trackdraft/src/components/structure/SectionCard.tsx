@@ -49,7 +49,7 @@ export default function SectionCard({ section, repeats, onChange, onChangeRepeat
           ⠿
         </button>
         <input
-          className="bg-transparent font-medium flex-1 outline-none"
+          className="hand-value bg-transparent font-medium flex-1 outline-none"
           value={section.name}
           onChange={(e) => onChange((s) => ({ ...s, name: e.target.value }))}
         />

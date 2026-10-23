@@ -1305,7 +1305,12 @@ export default function DrumBlocksView() {
               <line
                 key={`g-${si}-${gi}`}
                 x1={g.x} y1={TOP_PAD} x2={g.x} y2={STACK_BOTTOM}
-                stroke="#fff" strokeOpacity={g.bar ? 0.14 : 0.06} strokeWidth={1}
+                stroke={P.handDrawn ? P.grid : "#fff"}
+                strokeOpacity={(g.bar ? 0.14 : 0.06) * (P.handDrawn ? 2.6 : 1)}
+                strokeWidth={1}
+                // Hand-ruled bars lean a hair — rotated about their top point so
+                // the grid stays aligned where the cells are.
+                transform={P.handDrawn && g.bar ? `rotate(${((gi % 3) - 1) * 0.45} ${g.x} ${TOP_PAD})` : undefined}
                 pointerEvents="none"
               />
             ));
@@ -1317,8 +1322,9 @@ export default function DrumBlocksView() {
             return (
               <text
                 key={`lb-${lane.key}`}
-                x={X0 - 14} y={cellCy(li, labelR) + 4} textAnchor="end" fontSize={12} fontWeight={600}
-                fontFamily="'IBM Plex Mono', monospace" fill={laneColor(lane, P)} pointerEvents="none"
+                x={X0 - 14} y={cellCy(li, labelR) + 4} textAnchor="end"
+                fontSize={P.handDrawn ? 15 : 12} fontWeight={600}
+                fontFamily={P.drawnFont} fill={laneColor(lane, P)} pointerEvents="none"
               >
                 {lane.label}
               </text>

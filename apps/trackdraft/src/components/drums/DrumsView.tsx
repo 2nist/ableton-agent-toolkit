@@ -711,7 +711,7 @@ export default function DrumsView({
             const outline = r.section.drumMeterOutline;
             return (
               <g key={`sec-${i}`} pointerEvents="none">
-                <text x={x + w / 2} y={12} textAnchor="middle" fontSize={12} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill={col}>
+                <text x={x + w / 2} y={12} textAnchor="middle" fontSize={P.handDrawn ? 15 : 12} fontFamily={P.drawnFont} fontWeight={600} fill={col}>
                   {r.span.section.name}
                   {r.span.occurrenceIndex > 0 ? ` ·${r.span.occurrenceIndex + 1}` : ""}
                   {outline && (
@@ -749,7 +749,7 @@ export default function DrumsView({
                       stroke={color}
                       strokeWidth={1.2}
                     />
-                    <text x={x + 9} y={STACK_BOTTOM + 16} fontSize={10} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill={color}>
+                    <text x={x + 9} y={STACK_BOTTOM + 16} fontSize={P.handDrawn ? 13 : 10} fontFamily={P.drawnFont} fontWeight={600} fill={color}>
                       {model ? TRANSITION_LABEL[model].toUpperCase() : "FILL"}
                       {model && !manual ? " ·AUTO" : ""}
                     </text>
@@ -775,7 +775,7 @@ export default function DrumsView({
               y={TOP_PAD - 8}
               textAnchor="middle"
               fontSize={10}
-              fontFamily="'IBM Plex Mono', monospace"
+              fontFamily={P.drawnFont}
               fill={P.grid}
               pointerEvents="none"
             >
@@ -806,7 +806,7 @@ export default function DrumsView({
                   strokeDasharray={g.cell ? "1 4" : undefined}
                 />
               ))}
-              <text x={X0 - 14} y={laneY(li) + 4} textAnchor="end" fontSize={12} fontFamily="'IBM Plex Mono', monospace" fill={laneColor(lane, P)} fontWeight={600}>
+              <text x={X0 - 14} y={laneY(li) + 4} textAnchor="end" fontSize={P.handDrawn ? 15 : 12} fontFamily={P.drawnFont} fill={laneColor(lane, P)} fontWeight={600}>
                 {lane.label}
               </text>
               <line
@@ -956,7 +956,7 @@ export default function DrumsView({
               height={TRACK_H}
               fill={P.deep}
             />
-            <text x={X0 - 14} y={DETOUR_Y + 4} textAnchor="end" fontSize={12} fontFamily="'IBM Plex Mono', monospace" fill={P.grid} fontWeight={600}>
+            <text x={X0 - 14} y={DETOUR_Y + 4} textAnchor="end" fontSize={P.handDrawn ? 13 : 12} fontFamily={P.drawnFont} fill={P.grid} fontWeight={600}>
               DETOUR
             </text>
             <line x1={barX(0)} y1={DETOUR_Y} x2={barX(bars)} y2={DETOUR_Y} stroke={P.grid} strokeWidth={1.4} strokeOpacity={0.5} />

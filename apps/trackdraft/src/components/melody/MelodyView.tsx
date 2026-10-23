@@ -452,7 +452,7 @@ export default function MelodyView() {
           piano roll (pitch on the Y axis, time on X), via a small toggle. */}
       <div>
         <div className="flex items-center justify-between mb-1">
-          <div className="text-3xs text-inkMuted uppercase tracking-wide font-mono">Melody · {activeSection?.name}</div>
+          <div className="tape-label text-3xs text-inkMuted uppercase tracking-wide font-mono">Melody · {activeSection?.name}</div>
           <div className="flex gap-1 border border-edge rounded p-0.5">
             <button
               className={`text-[10px] px-1.5 py-0.5 rounded ${viewMode === "staff" ? "bg-accent text-accentInk" : "text-inkMuted hover:text-ink"}`}

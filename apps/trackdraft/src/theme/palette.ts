@@ -55,6 +55,9 @@ export interface Palette {
   /** True for themes where marks are drawn by hand: hexes wobble, step cells
    *  lean. False keeps the dark theme's machined grid exactly as it was. */
   handDrawn: boolean;
+  /** Font stack for lettering drawn inside an instrument (lane names, tick
+   *  numerals) — monospace when machined, pencil when drawn. */
+  drawnFont: string;
   voices: VoiceColors;
   hues: HueSet[];
 }
@@ -69,6 +72,7 @@ const DARK: Palette = {
   select: "#8FD3FF",
   cream: "#F5E7C8",
   handDrawn: false,
+  drawnFont: "'IBM Plex Mono', ui-monospace, monospace",
   voices: {
     kick: "#D96459",
     snare: "#8B94A1",
@@ -101,6 +105,7 @@ const LOGSHEET: Palette = {
   select: "#1F5FA8",
   cream: "#26221B",
   handDrawn: true,
+  drawnFont: "Caveat, 'Segoe Script', cursive",
   voices: {
     kick: "#A03A31",
     snare: "#5E6672",

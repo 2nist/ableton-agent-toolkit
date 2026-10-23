@@ -28,6 +28,7 @@ import { useTimeViewportStore } from "../../store/timeViewportStore";
 import { usePinchToZoom } from "../../hooks/usePinchToZoom";
 import type { BlueprintSection, BlueprintSong, SectionRole } from "../../types/blueprint";
 import { beatsPerBarOf } from "../../lib/timeline/beatMap";
+import { barAtBeat } from "../../types/blueprint";
 import { usePalette } from "../../theme/palette";
 
 /** Zoom presets in px per BAR. Bar-linear on purpose: every bar is the
@@ -67,6 +68,7 @@ const ROLES: SectionRole[] = ["intro", "verse", "pre_chorus", "chorus", "bridge"
  */
 export default function Spine({ song, hint }: { song: BlueprintSong; hint?: string }) {
   const P = usePalette();
+  const handDrawn = P.handDrawn;
   const roleStyle = useRoleStyle();
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
@@ -170,6 +172,19 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
       playheadPx = (span.startBar + frac * span.bars) * barPx;
     }
   }
+
+  // Bar · beat readout for the log sheet's tape counter. Derived from the same
+  // absolute beat the playhead uses, through the section's meter map, so a
+  // mixed-meter song counts 6/8 bars as 6 beats rather than assuming 4.
+  const counter = useMemo(() => {
+    if (!tick) return null;
+    const span =
+      spans.find((s) => tick.beat >= s.startBeat && tick.beat < s.startBeat + s.durationBeats) ?? null;
+    if (!span) return { bar: 0, beat: 0 };
+    const local = Math.max(0, tick.beat - span.startBeat);
+    const at = barAtBeat(span.section, local);
+    return { bar: span.startBar + at.bar, beat: at.beatInBar };
+  }, [tick, spans]);
 
   // Auto-follow: keep the playhead inside a comfort band while playing.
   useEffect(() => {
@@ -616,11 +631,16 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           }\nClick to go back to the dashboard`}
         >
           <span className="text-inkMuted group-hover:text-ink text-sm shrink-0">←</span>
-          <span className="truncate text-xs text-ink/90">{song.title}</span>
-          <span className="hidden md:inline text-[9px] font-mono text-inkMuted/60 tabular-nums shrink-0">
+          <span className="tape-label truncate text-xs text-ink/90">{song.title}</span>
+          <span className="plabel hidden md:inline text-[9px] font-mono text-inkMuted/60 tabular-nums shrink-0">
             {song.key} {song.scale} · {song.bpm}
           </span>
         </button>
+        {handDrawn && song.provenance && song.provenance.source !== "manual" && (
+          <span className="stamp stamp--tight shrink-0" title={song.provenance.warnings?.length ? `Imported — ${song.provenance.warnings.length} thing(s) to review` : "Imported"}>
+            Imported
+          </span>
+        )}
         <span className="w-px h-3.5 bg-edge/80 mx-1 shrink-0" />
         <IconBtn title="Play" disabled={tick?.isPlaying === true} onClick={() => void togglePlay()} icon="play" />
         <IconBtn title="Pause" disabled={tick?.isPlaying !== true} onClick={pausePlayback} icon="pause" />
@@ -632,6 +652,27 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           onClick={() => void toggleLoop()}
           icon="loop"
         />
+        {handDrawn && (
+          <>
+            <span className="w-px h-3.5 bg-edge/80 mx-1 shrink-0" />
+            <span className="counter shrink-0" title="Bar · beat — the tape counter">
+              <i>{String((counter?.bar ?? 0) + 1).padStart(3, "0")}</i>
+              <i className="dim">.</i>
+              <i>{String(Math.floor(counter?.beat ?? 0) + 1).padStart(2, "0")}</i>
+            </span>
+            <svg
+              className={`reel shrink-0 ${tick?.isPlaying ? "spinning" : ""}`}
+              width={14}
+              height={14}
+              viewBox="0 0 14 14"
+              aria-hidden
+            >
+              <circle cx={7} cy={7} r={6} fill="none" stroke="currentColor" strokeWidth={1.2} />
+              <circle cx={7} cy={7} r={1.6} fill="currentColor" />
+              <path d="M7 1.4v3.2M12.6 7H9.4M7 12.6v-3.2M1.4 7h3.2" stroke="currentColor" strokeWidth={0.9} />
+            </svg>
+          </>
+        )}
         <span className="w-px h-3.5 bg-edge/80 mx-1" />
         <IconBtn title="Undo" disabled={!canUndo} onClick={() => undo()} icon="undo" />
         <IconBtn title="Redo" disabled={!canRedo} onClick={() => redo()} icon="redo" />
@@ -1087,7 +1128,7 @@ function SpineBlock({
           <span key={d.label} className={`flex-1 ${d.present ? "bg-current opacity-60" : "bg-current opacity-15"}`} />
         ))}
       </span>
-      <span className="w-full truncate px-1.5 text-[10px] leading-tight font-medium">
+      <span className="hand-value w-full truncate px-1.5 text-[10px] leading-tight font-medium">
         {showName ? span.section.name : ""}
         {showName && span.variation ? <span className="opacity-60"> ({span.variation})</span> : null}
       </span>

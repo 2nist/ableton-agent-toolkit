@@ -57,7 +57,9 @@ export default function NavRail() {
                   title={`Go to ${v.label}`}
                   className={({ isActive }) =>
                     `flex items-center gap-1.5 px-1.5 py-1 rounded text-xs ${
-                      isActive ? "bg-panelAlt text-ink" : "text-inkMuted hover:text-ink hover:bg-panelAlt/60"
+                      isActive
+                        ? "nav-on bg-panelAlt text-ink"
+                        : "text-inkMuted hover:text-ink hover:bg-panelAlt/60"
                     }`
                   }
                 >
