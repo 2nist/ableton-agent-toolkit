@@ -1,4 +1,5 @@
 import { useSongStore } from "../../store/songStore";
+import { usePalette } from "../../theme/palette";
 import type { AlternateDraft, ProductionStatus, Provenance } from "../../types/blueprint";
 
 const SOURCE_LABEL: Record<Provenance["source"], string> = {
@@ -11,12 +12,19 @@ const SOURCE_LABEL: Record<Provenance["source"], string> = {
 };
 
 function ProvenanceBanner({ provenance }: { provenance: Provenance }) {
+  const handDrawn = usePalette().handDrawn;
   if (provenance.source === "manual") return null;
   return (
     <div className="border border-warn/40 bg-amber-950/20 rounded p-2 space-y-1">
       <p className="text-2xs font-medium text-warn">
         {SOURCE_LABEL[provenance.source]} — draft, review before finalizing
       </p>
+      {handDrawn && (
+        <div className="flex items-center gap-2 pt-0.5">
+          <span className="stamp stamp--tight">Draft</span>
+          <span className="stamp stamp--tight stamp--pencil">Inferred</span>
+        </div>
+      )}
       {provenance.warnings && provenance.warnings.length > 0 && (
         <ul className="text-3xs text-warn/80 list-disc list-inside space-y-0.5">
           {provenance.warnings.map((w, i) => (
