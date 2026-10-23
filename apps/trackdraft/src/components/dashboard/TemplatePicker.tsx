@@ -4,6 +4,7 @@ import { GENRE_CATALOG } from "../../data/genre-catalog";
 import { SONG_MAPS } from "../../data/songMaps";
 import type { SongMap } from "../../data/songMaps";
 import { applySongMap } from "../../lib/sections";
+import { ArcSparkline } from "../structure/mapPreview";
 
 /** All templates from both the genre catalog and built-in song maps, deduplicated by id. */
 const ALL_TEMPLATES: SongMap[] = (() => {
@@ -37,7 +38,13 @@ export default function TemplatePicker() {
     // Before this, create wrote the four defaults only and left sections
     // empty, so users had to re-pick the same template in Structure's map
     // picker to get the slots the card advertised.
-    useSongStore.getState().updateCurrentSong((s) => applySongMap(s, template));
+    // …including the arc. The archetypes' whole identity is their shape, so a
+    // card that builds their sections without it would deliver a different
+    // song from the one it drew. Genre maps carry no arc, so this is a no-op
+    // for them.
+    useSongStore.getState().updateCurrentSong((s) =>
+      applySongMap(s, template, { seedNarrative: template.slots.some((slot) => slot.narrative) }),
+    );
     // Navigate directly to Structure so user can immediately see the template slots
     navigate(`/song/${song.id}/structure`);
   }
@@ -61,6 +68,11 @@ export default function TemplatePicker() {
             <div className="text-[10px] text-inkMuted line-clamp-2 mb-2">
               {template.description}
             </div>
+            {template.slots.some((slot) => slot.narrative) && (
+              <div className="-mx-0.5 mb-1.5">
+                <ArcSparkline slots={template.slots} />
+              </div>
+            )}
             {template.defaults && (
               <div className="flex flex-wrap gap-1">
                 {template.defaults.bpm && (
