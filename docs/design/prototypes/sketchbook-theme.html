@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrackDraft · Studio-log theme — prototype v2</title>
+
+<!-- Four voices, each with one job:
+       Permanent Marker — masking-tape labels (big, hand, few)
+       Caveat           — anything a person would write by hand (entries, names)
+       Courier Prime    — the printed form: labels, headings, buttons, captions
+       IBM Plex Mono    — machine readouts only (position, counters, values)
+     The photo's log sheet is exactly this: printed fields, typed headings,
+     handwritten entries in pencil. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Permanent+Marker&display=swap" rel="stylesheet">
+
+<style>
+/* ======================================================================
+   STUDIO-LOG THEME — PROTOTYPE v2 (not wired into the app)
+   ----------------------------------------------------------------------
+   The v1 sketch idea kept: masking tape, hand-drawn hexes, pencil-shaded
+   sequencer. What changed is the *world* around them — a tape log sheet
+   rather than a sketchbook:
+
+     · printed form  (typewriter) — labels, captions, buttons, headings
+     · handwritten   (pencil)     — entries, names, values
+     · tape          (marker)     — panel headers, take labels
+     · machine       (mono)       — counters and numeric readouts
+     · rubber stamp  (ink)        — provenance: DRAFT / TAKEN / INFERRED
+
+   Same token shape as before: one [data-theme] swap on #app, so this can
+   become real CSS variables without touching a component.
+   ====================================================================== */
+
+:root{
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --type:'Courier Prime','Courier New',Courier,monospace;
+  --hand:'Caveat','Segoe Script','Bradley Hand',cursive;
+  --marker:'Permanent Marker','Caveat',cursive;
+  /* Static grain — an inline feTurbulence rect used as a background image.
+     Deliberately NOT a live CSS filter: it must never repaint with the
+     transport. */
+  --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:radial-gradient(120% 90% at 50% 0%, #2b2721 0%, #1a1815 60%, #131210 100%);
+  min-height:100vh;display:flex;justify-content:center;
+  padding:26px 18px 64px;font-family:var(--type);
+}
+.page{width:100%;max-width:1180px}
+
+/* ------------------------------ prototype banner ------------------------------ */
+.banner{
+  margin:0 0 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:11.5px;color:#cfcabb;
+  border:1px dashed #565044;border-radius:3px;padding:8px 12px;background:#211e19;
+}
+.banner b{color:#f0ead9;letter-spacing:.04em}
+.banner span{color:#a09883}
+.banner .spacer{flex:1}
+.seg{display:flex;border:1px solid #565044;border-radius:3px;overflow:hidden}
+.seg button{border:0;background:transparent;color:#a89f8b;font-family:var(--mono);font-size:11px;padding:4px 12px;cursor:pointer}
+.seg button.on{background:#3b362d;color:#f5efe0}
+
+/* ================================ THE FRAME ================================ */
+#app{
+  position:relative;isolation:isolate;overflow:hidden;
+  width:100%;background:var(--paper);color:var(--ink);
+  font-family:var(--type);
+  border:1px solid var(--edge);border-radius:6px;
+  box-shadow:0 20px 60px rgba(0,0,0,.55);
+}
+#app::before{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:0;
+  background-image:var(--grain);opacity:.055;mix-blend-mode:multiply;
+}
+#app > *{position:relative;z-index:1}
+
+/* ---- shared coloured-pencil palette (kept in both themes) ---- */
+#app{
+  --kick:#A03A31; --snare:#5E6672; --rim:#2E7375;
+  --hat:#8A6A12;  --cym:#8F5E22;   --tom:#6A4F96;
+  --ghost:#8A6516;
+}
+
+/* ---------------------------- DARK = today's app ---------------------------- */
+#app[data-theme="dark"]{
+  --paper:#383838; --paper2:#4E4E4E; --panel:#5C5C5C;
+  --edge:#2C2C2C; --rule:rgba(255,255,255,.06); --margin:#FFA500;
+  --ink:#FFFFFF; --muted:#B0B0B0;
+  --accent:#FFA500; --accentHover:#FFB733; --onAccent:#000;
+  --tapeA:#3d3d3d; --tapeB:#4a4a4a;
+  --r:4px; --lineW:1px; --base:12.5px;
+  --hd:'-apple-system',BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --handInk:#fff;
+  --stamp:#ffd08a;
+}
+#app[data-theme="dark"]::before{opacity:0}
+
+/* ------------------- LOG SHEET = the studio-log theme ------------------- */
+#app[data-theme="logsheet"]{
+  --paper:#efe7d6;      /* the sheet */
+  --paper2:#f8f3e7;     /* cards, lighter stock */
+  --panel:#e7ddc8;      /* recessed wells */
+  --edge:#7d7160;       /* pencil edge */
+  --rule:rgba(107,122,96,.28);
+  --margin:rgba(163,63,54,.55);
+  --ink:#26221b;
+  --muted:#5c5346;
+  --accent:#26221b; --accentHover:#4a4238; --onAccent:#f8f3e7;
+  --tapeA:#e3d9bd; --tapeB:#cfc3a1;
+  --r:2px; --lineW:1px; --base:13.5px;
+  --hd:var(--marker);
+  --handInk:#2b2621;
+  --stamp:rgba(163,63,54,.62);
+}
+
+/* ------------------------------- appbar ------------------------------- */
+.appbar{
+  display:flex;align-items:center;gap:10px;flex-wrap:nowrap;
+  padding:7px 12px;border-bottom:var(--lineW) solid var(--edge);
+  background:linear-gradient(180deg,var(--paper2),var(--paper));
+}
+.brand{display:flex;align-items:center;gap:8px;flex:0 1 auto;min-width:0}
+.logo{
+  font-family:var(--hd);font-size:.95em;letter-spacing:.03em;line-height:1.5;
+  padding:.26em .6em .3em;transform:rotate(-1.2deg);
+  background:linear-gradient(180deg,var(--tapeA),var(--tapeB));
+  color:var(--handInk);
+  clip-path:polygon(1% 6%,28% 1%,63% 6%,99% 2%,100% 32%,97% 56%,100% 79%,98% 97%,60% 100%,30% 96%,2% 99%,0 73%,3% 49%,0 26%);
+  filter:drop-shadow(1px 2px 1px rgba(0,0,0,.18));
+  white-space:nowrap;
+}
+/* the printed white label beside the taped one — both exist on a real reel */
+.plabel{
+  font-family:var(--type);font-size:.68em;text-transform:uppercase;letter-spacing:.1em;
+  color:#3a352c;background:#fbf7ec;border:1px solid #b9ae95;border-radius:1px;
+  padding:3px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52ch;flex:0 1 auto;min-width:0;
+  box-shadow:0 1px 0 rgba(0,0,0,.10);
+}
+.reel{width:22px;height:22px;flex:0 0 22px}
+.reel.spinning{animation:spin 4.5s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.appbar .right{margin-left:auto;display:flex;align-items:center;gap:9px;flex:0 0 auto}
+.transport{display:flex;align-items:center;gap:4px}
+.tbtn{
+  min-width:26px;height:22px;display:flex;align-items:center;justify-content:center;
+  border:var(--lineW) solid var(--edge);border-radius:var(--r);color:var(--muted);
+  font-family:var(--mono);font-size:11px;cursor:pointer;background:var(--paper2);
+}
+.tbtn:hover{color:var(--ink);border-color:var(--ink)}
+.tbtn.live{color:var(--kick);border-color:var(--kick);background:rgba(163,63,54,.08)}
+#app[data-theme="dark"] .tbtn.live{color:var(--accent);border-color:var(--accent);background:rgba(255,165,0,.1)}
+
+/* mechanical tape counter */
+.counter{
+  display:flex;align-items:center;gap:1px;padding:2px 5px;
+  background:var(--panel);border:var(--lineW) solid var(--edge);border-radius:var(--r);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.18);
+}
+.counter i{
+  font-family:var(--mono);font-size:10.5px;font-style:normal;letter-spacing:.08em;
+  color:#4a4238;background:#efe9da;border-radius:1px;padding:1px 3px;font-variant-numeric:tabular-nums;
+}
+.counter i.dim{color:#8d8471;background:transparent}
+#app[data-theme="dark"] .counter i{color:#e8e8e8;background:#2c2c2c}
+#app[data-theme="dark"] .counter i.dim{color:#9a9a9a;background:transparent}
+.send{
+  border:var(--lineW) solid var(--ink);color:var(--ink);background:transparent;
+  border-radius:var(--r);padding:3px 11px;font-family:var(--type);font-size:.76em;
+  text-transform:uppercase;letter-spacing:.1em;cursor:pointer;white-space:nowrap;
+}
+.send:hover{background:rgba(0,0,0,.07)}
+#app[data-theme="dark"] .send{border-color:var(--accent);color:var(--accent)}
+
+/* ------------------------------- navbar ------------------------------- */
+.navbar{
+  display:flex;gap:2px;padding:0 10px;border-bottom:var(--lineW) solid var(--edge);
+  background:var(--paper);overflow:hidden;
+}
+.navbar span{
+  padding:7px 11px;font-family:var(--type);font-size:.78em;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--muted);cursor:pointer;white-space:nowrap;
+}
+.navbar span:hover{color:var(--ink)}
+#app[data-theme="logsheet"] .navbar span.on{
+  color:var(--ink);
+  text-decoration:underline wavy var(--kick) 1.6px;text-underline-offset:5px;
+  text-decoration-skip-ink:none;
+}
+#app[data-theme="dark"] .navbar span.on{color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}
+
+/* ------------------------------- viewbar ------------------------------- */
+.viewbar{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:6px 12px 6px 14px;border-bottom:var(--lineW) solid var(--edge);
+  background:var(--paper2);box-shadow:inset 2px 0 0 var(--margin);
+}
+.viewbar .printed{font-family:var(--type);font-size:.72em;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.viewbar .hint{font-family:var(--mono);font-size:.7em;color:var(--muted)}
+
+/* ------------------------------- layout ------------------------------- */
+.body{padding:14px 14px 26px;display:flex;flex-direction:column;gap:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:900px){.grid2{grid-template-columns:1fr}}
+
+.card{
+  background:var(--paper2);border:var(--lineW) solid var(--edge);border-radius:var(--r);
+  padding:11px 13px 12px;position:relative;
+}
+#app[data-theme="logsheet"] .card{box-shadow:0 1px 0 rgba(0,0,0,.10)}
+
+/* ---- the tape header: kept from v1, now with a printed sub-label ---- */
+.card .hdrow{display:flex;align-items:center;gap:9px;margin-bottom:10px;min-width:0}
+.card .hd{
+  font-family:var(--hd);font-size:.82em;letter-spacing:.05em;color:var(--handInk);
+  padding:.1em .55em .02em;transform:rotate(-.7deg);
+  background:linear-gradient(180deg,var(--tapeA),var(--tapeB));
+  clip-path:polygon(2% 7%,30% 0,61% 5%,98% 2%,100% 27%,97.5% 52%,100% 76%,98% 96%,64% 100%,31% 95%,3% 99%,0 73%,2.5% 49%,0 25%);
+  filter:drop-shadow(1px 1.5px 1px rgba(0,0,0,.16));
+  white-space:nowrap;
+}
+#app[data-theme="dark"] .card .hd{background:none;filter:none;transform:none;padding:0;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-family:var(--hd)}
+.card .hdrow .sub{font-family:var(--mono);font-size:.63em;color:var(--muted);flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .hdrow .spacer{flex:1 1 auto;min-width:4px}
+
+/* ============================ the log sheet ============================ */
+.sheet{
+  background-image:repeating-linear-gradient(to bottom, transparent 0 21px, var(--rule) 21px 22px);
+  background-position:0 3px;
+  box-shadow:inset 26px 0 0 -25px var(--margin);
+  padding-left:8px;
+}
+.sheet-row{display:flex;align-items:baseline;gap:10px;height:22px;white-space:nowrap;overflow:hidden}
+.sheet-row .k{
+  font-family:var(--type);font-size:.66em;text-transform:uppercase;letter-spacing:.11em;
+  color:var(--muted);width:88px;flex:0 0 88px;
+}
+.sheet-row .v{font-family:var(--hand);font-size:1.14em;color:var(--handInk);letter-spacing:.01em;overflow:hidden;text-overflow:ellipsis}
+.sheet-row .v .num{font-family:var(--mono);font-size:.68em;letter-spacing:.03em}
+#app[data-theme="dark"] .sheet-row .v{font-family:var(--mono);font-size:.8em}
+
+/* rubber stamp — provenance lives here */
+.stamp{
+  font-family:var(--type);font-size:.64em;text-transform:uppercase;letter-spacing:.18em;
+  color:var(--stamp);border:1.5px solid var(--stamp);border-radius:2px;
+  padding:3px 9px;transform:rotate(-3.2deg);opacity:.85;mix-blend-mode:multiply;
+  white-space:nowrap;
+}
+.stamp.blue{color:rgba(58,86,128,.66);border-color:rgba(58,86,128,.66)}
+.stamp.pencil{color:rgba(92,83,70,.72);border-color:rgba(92,83,70,.55);border-style:dashed}
+#app[data-theme="dark"] .stamp{mix-blend-mode:normal}
+#app[data-theme="dark"] .stamp.blue{color:#9dc0ea;border-color:#9dc0ea}
+#app[data-theme="dark"] .stamp.pencil{color:#c9c9c9;border-color:#c9c9c9}
+
+/* ------------------------------- controls ------------------------------- */
+.row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.btn{
+  font-family:var(--type);font-size:.78em;text-transform:uppercase;letter-spacing:.08em;
+  cursor:pointer;border:var(--lineW) solid var(--edge);border-radius:var(--r);
+  background:var(--paper2);color:var(--ink);padding:4px 12px;
+}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--paper2)}
+.btn.primary:hover{background:var(--accentHover);border-color:var(--accentHover)}
+.btn.ghost{background:transparent;color:var(--muted)}
+.btn.danger{color:var(--kick);border-color:var(--kick);background:transparent}
+
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chip{
+  font-family:var(--hand);font-size:1.02em;cursor:pointer;line-height:1.6;
+  border:var(--lineW) solid var(--edge);border-radius:var(--r);
+  background:var(--paper);color:var(--muted);padding:0 10px;
+}
+.chip.on{color:var(--handInk);border-color:var(--ink);box-shadow:inset 0 -2px 0 var(--kick)}
+#app[data-theme="dark"] .chip{font-family:var(--type);font-size:.78em}
+#app[data-theme="dark"] .chip.on{box-shadow:none;background:rgba(255,165,0,.12);border-color:var(--accent);color:var(--accent)}
+
+.field{display:flex;flex-direction:column;gap:2px}
+.field label{font-family:var(--type);font-size:.58em;text-transform:uppercase;letter-spacing:.13em;color:var(--muted)}
+.field input{
+  width:78px;font-family:var(--hand);font-size:1.12em;color:var(--handInk);
+  background:transparent;border:0;border-bottom:1px dashed var(--edge);
+  border-radius:0;padding:1px 3px;outline:none;
+}
+.field input:focus{border-bottom-color:var(--ink);background:rgba(255,255,255,.35)}
+#app[data-theme="dark"] .field input{font-family:var(--mono);font-size:.78em;background:var(--panel);border:1px solid var(--edge);padding:3px 6px}
+
+.slider{position:relative;height:18px;flex:1;min-width:130px}
+.slider .track{position:absolute;left:0;right:0;top:8px;height:1.5px;background:var(--edge);opacity:.6}
+.slider .fill{position:absolute;left:0;top:7.5px;height:2.5px;background:var(--ink)}
+.slider .thumb{
+  position:absolute;top:2px;width:11px;height:13px;margin-left:-6px;
+  background:var(--paper2);border:1.5px solid var(--ink);
+  border-radius:40% 60% 55% 45% / 55% 45% 60% 40%;
+}
+
+.knobs{display:flex;gap:16px;align-items:flex-end}
+.knob{display:flex;flex-direction:column;align-items:center;gap:2px}
+.knob .lbl{font-family:var(--type);font-size:.56em;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.knob .val{font-family:var(--mono);font-size:.64em;color:var(--ink)}
+
+/* ---------------------------- harmony ring ---------------------------- */
+.ringwrap{display:flex;justify-content:center;padding:2px 0 4px}
+.chordlabel{font-family:var(--hand);font-size:16px;font-weight:700;fill:var(--ink)}
+.ringsub{font-family:var(--hand);font-size:1.06em;color:var(--muted);text-align:center;margin:0 0 2px}
+.ringsub b{color:var(--ghost);font-weight:700}
+
+/* ------------------------------ sequencer ------------------------------
+   Hand-drawn cells WITHOUT a displacement filter — the wobble is baked into
+   each cell's corner radii, its rotation and a second, offset outline. That
+   matters because a `filter: url(#wobble)` on a step cell re-rasterises the
+   filter region every time the cell turns on or off: at 16th notes across six
+   voices that is dozens of filtered repaints per second. Rotations, radii and
+   a static second border cost nothing to repaint, so the playhead and the
+   active step stay 60fps-cheap while the grid still looks drawn by hand.
+   Each irregularity is seeded per cell, so it never jitters between frames. */
+.seq{
+  position:relative;
+  display:grid;grid-template-columns:62px 1fr;gap:5px 5px;align-items:center;
+  background-image:repeating-linear-gradient(to bottom, transparent 0 21px, var(--rule) 21px 22px);
+  background-position:0 6px;padding:4px 0 4px 6px;
+  box-shadow:inset 20px 0 0 -19px var(--margin);
+}
+.vlabel{font-family:var(--hand);font-size:1.02em;font-weight:600;text-align:right;white-space:nowrap;overflow:hidden}
+#app[data-theme="dark"] .vlabel{font-family:var(--mono);font-size:.72em}
+
+.cells{display:grid;grid-template-columns:repeat(16,1fr);gap:3px;transform:translateX(var(--rowShift,0))}
+.cell{
+  position:relative;aspect-ratio:1;
+  border:1.3px solid rgba(62,54,42,.55);
+  /* --r1..--r4 / --s1..--s4 and --rot are set per cell from its index */
+  border-radius:var(--r1) var(--r2) var(--r3) var(--r4) / var(--s1) var(--s2) var(--s3) var(--s4);
+  transform:rotate(var(--rot)) scale(var(--sc));
+  background:rgba(255,255,255,.42);
+}
+/* the "drawn twice with a pencil" edge: a second, offset outline */
+.cell::before{
+  content:'';position:absolute;inset:-1.5px;pointer-events:none;
+  border:1px solid rgba(62,54,42,.26);border-radius:inherit;
+  transform:rotate(.9deg);
+}
+.cell.on{border-color:rgba(34,29,22,.62)}
+/* pencil hatch, only on played steps */
+.cell.on::after{
+  content:'';position:absolute;inset:0;border-radius:inherit;
+  background-image:repeating-linear-gradient(var(--hatch,45deg), rgba(0,0,0,.26) 0 1.2px, transparent 1.2px 3.8px);
+}
+/* the active step during playback: a second pass over the cell, cheap */
+.cell.hit{box-shadow:inset 0 0 0 2px rgba(34,29,22,.5)}
+
+/* barlines drawn as strokes over the grid, so they can lean without
+   re-tessellating the cells */
+.brules{position:absolute;top:2px;bottom:2px;pointer-events:none}
+.brules i{
+  position:absolute;top:0;bottom:0;width:2px;border-radius:1px;
+  background:linear-gradient(180deg, rgba(163,63,54,.12), rgba(163,63,54,.8) 14%, rgba(163,63,54,.72) 86%, rgba(163,63,54,.12));
+}
+.brules i:nth-child(1){transform:rotate(.7deg)}
+.brules i:nth-child(2){transform:rotate(-.5deg)}
+.brules i:nth-child(3){transform:rotate(.4deg)}
+
+/* the playhead: one element, moved with transform only */
+.playhead{
+  position:absolute;top:1px;bottom:1px;left:0;width:2.5px;pointer-events:none;
+  background:linear-gradient(180deg, rgba(34,29,22,0), rgba(34,29,22,.85) 10%, rgba(34,29,22,.85) 90%, rgba(34,29,22,0));
+  transform:translateX(-99px);
+  will-change:transform;
+}
+
+#app[data-theme="dark"] .cell{background:#2f2f2f;border-color:#4a4a4a;transform:none}
+#app[data-theme="dark"] .cell::before{display:none}
+#app[data-theme="dark"] .cell.hit{box-shadow:inset 0 0 0 2px #FFA500}
+#app[data-theme="dark"] .brules i{background:#FFA500;opacity:.5;transform:none}
+#app[data-theme="dark"] .playhead{background:#FFA500}
+.legend{font-family:var(--type);font-size:.64em;color:var(--muted);margin-top:7px}
+
+/* ------------------------- tabs + collapsible ------------------------- */
+.flattabs{display:flex;gap:14px;border-bottom:var(--lineW) solid var(--edge);margin-bottom:8px;flex-wrap:wrap}
+.flattabs span{
+  padding-bottom:5px;font-family:var(--type);font-size:.7em;text-transform:uppercase;
+  letter-spacing:.1em;color:var(--muted);cursor:pointer;
+}
+#app[data-theme="logsheet"] .flattabs span.on{color:var(--ink);text-decoration:underline wavy var(--kick) 1.5px;text-underline-offset:5px}
+#app[data-theme="dark"] .flattabs span.on{color:var(--ink);border-bottom:2px solid var(--accent);margin-bottom:calc(-1 * var(--lineW))}
+details.group{border:var(--lineW) solid var(--edge);border-radius:var(--r);margin-top:7px}
+details.group summary{
+  list-style:none;cursor:pointer;padding:6px 10px;display:flex;justify-content:space-between;
+  font-family:var(--type);font-size:.7em;text-transform:uppercase;letter-spacing:.09em;color:var(--ink);
+}
+details.group summary::-webkit-details-marker{display:none}
+details.group summary .caret{color:var(--muted)}
+details.group .inner{
+  padding:8px 10px;border-top:var(--lineW) solid var(--edge);
+  font-family:var(--hand);font-size:1.02em;color:var(--muted);
+}
+#app[data-theme="dark"] details.group .inner{font-family:var(--type);font-size:.76em}
+
+/* ------------------------------- footer ------------------------------- */
+.foot{
+  border-top:var(--lineW) solid var(--edge);padding:7px 12px;
+  font-family:var(--mono);font-size:.62em;color:var(--muted);
+  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  background:var(--paper2);
+}
+.foot .taped{
+  font-family:var(--hd);color:var(--handInk);background:linear-gradient(180deg,var(--tapeA),var(--tapeB));
+  padding:0 .5em;transform:rotate(-.5deg);
+}
+</style>
+</head>
+<body>
+
+<!-- Wobble for the hand-drawn hexes only. Static SVG, never on live DOM:
+     a displacement filter on the hex wheel would repaint with the transport. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <filter id="wobble" x="-8%" y="-8%" width="116%" height="116%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.018 0.021" numOctaves="3" seed="4" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/>
+    </filter>
+  </defs>
+</svg>
+
+<div class="page">
+  <div class="banner">
+    <b>▣ Studio-log theme — prototype v2</b>
+    <span>printed form + pencil entries + masking tape + rubber stamps · sequencer and hexes kept</span>
+    <span class="spacer"></span>
+    <div class="seg" id="themeSeg">
+      <button data-theme="dark">Dark (current)</button>
+      <button data-theme="logsheet" class="on">Log sheet</button>
+    </div>
+  </div>
+
+  <div id="app" data-theme="logsheet">
+
+    <div class="appbar">
+      <div class="brand">
+        <span class="logo">✎ TrackDraft</span>
+        <svg class="reel spinning" id="reel" viewBox="-12 -12 24 24" aria-hidden="true">
+          <circle r="11" fill="#cfcabf" stroke="#6f6a5c" stroke-width="1"/>
+          <circle r="7.6" fill="#8c8574" stroke="#6f6a5c" stroke-width=".7"/>
+          <circle r="2" fill="#4a453b"/>
+          <g fill="#3a352c">
+            <rect x="-6.6" y="-1.6" width="3.8" height="3.2" rx=".5"/>
+            <rect x="-6.6" y="-1.6" width="3.8" height="3.2" rx=".5" transform="rotate(120)"/>
+            <rect x="-6.6" y="-1.6" width="3.8" height="3.2" rx=".5" transform="rotate(240)"/>
+          </g>
+        </svg>
+        <span class="plabel">A Hard Day's Night — Studio</span>
+      </div>
+      <div class="right">
+        <div class="transport">
+          <span class="tbtn">⏮</span><span class="tbtn live">▶</span><span class="tbtn">⏸</span><span class="tbtn">⏹</span><span class="tbtn">⟳</span>
+        </div>
+        <span class="counter" title="Tape counter — bars . beats . ticks">
+          <i>017</i><i class="dim">·</i><i>03</i><i class="dim">·</i><i>01</i>
+        </span>
+        <button class="send">Send to Live</button>
+      </div>
+    </div>
+
+    <div class="navbar">
+      <span>Studio</span><span>Structure</span><span class="on">Harmony</span><span>Drums</span><span>Lyrics</span><span>Melody</span>
+    </div>
+
+    <div class="viewbar">
+      <div class="printed">Circle of fifths · 4 chords selected · key of C</div>
+      <div class="hint">bars 1–16 · 4/4 · 128 bpm</div>
+    </div>
+
+    <div class="body">
+
+      <div class="grid2">
+        <div class="card">
+          <div class="hdrow">
+            <span class="hd">Take sheet</span>
+            <span class="sub">TAKE 3 · 12 FEB</span>
+            <span style="flex:1"></span>
+            <span class="stamp">Draft</span>
+          </div>
+          <div class="sheet">
+            <div class="sheet-row"><span class="k">Title</span><span class="v">Golden Slumbers</span></div>
+            <div class="sheet-row"><span class="k">Artist</span><span class="v">Lennon–McCartney</span></div>
+            <div class="sheet-row"><span class="k">Key / tempo</span><span class="v"><span class="num">C ionian</span> · <span class="num">120 bpm</span></span></div>
+            <div class="sheet-row"><span class="k">Form</span><span class="v">intro · A · B · A · coda</span></div>
+            <div class="sheet-row"><span class="k">Meter</span><span class="v">4/4 with two <span class="num">2/4</span> bars in A</span></div>
+            <div class="sheet-row"><span class="k">Notes</span><span class="v">D.S. al coda at bar 22 — coda from 23</span></div>
+            <div class="sheet-row"><span class="k">Source</span><span class="v"><span class="num">iReal Pro</span> chart, 24 bars</span></div>
+          </div>
+          <div class="row" style="margin-top:9px;justify-content:flex-end">
+            <span class="stamp blue">Chords inferred</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hdrow">
+            <span class="hd">Controls</span>
+            <span class="sub">printed labels · written values</span>
+          </div>
+          <div class="row" style="margin-bottom:11px">
+            <button class="btn primary">Apply</button>
+            <button class="btn">Default</button>
+            <button class="btn ghost">Ghost</button>
+            <button class="btn danger">Reset</button>
+          </div>
+          <div class="chips" style="margin-bottom:12px">
+            <span class="chip on">Ionian</span><span class="chip">Dorian</span><span class="chip">Phrygian</span>
+            <span class="chip">Lydian</span><span class="chip">Mixolydian</span>
+          </div>
+          <div class="row" style="margin-bottom:10px">
+            <div class="field"><label>Start</label><input value="1.1.1" readonly></div>
+            <div class="field"><label>End</label><input value="17.1.1" readonly></div>
+            <div class="field"><label>Position</label><input value="9.3.1" readonly></div>
+            <div class="field"><label>Length</label><input value="16.0.0" readonly></div>
+          </div>
+          <div class="row" style="margin-bottom:4px">
+            <div class="slider"><div class="track"></div><div class="fill" style="width:64%"></div><div class="thumb" style="left:64%"></div></div>
+          </div>
+          <div class="knobs" style="margin-top:8px">
+            <div class="knob"><svg width="34" height="34" viewBox="-17 -17 34 34"><circle r="13" fill="var(--paper)" stroke="var(--edge)" stroke-width="1.4"/><circle r="9.5" fill="none" stroke="var(--edge)" stroke-width=".6" stroke-dasharray="1 3" opacity=".7"/><line x1="0" y1="0" x2="7" y2="-9" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/><circle r="1.6" fill="var(--ink)"/></svg><span class="lbl">Drive</span><span class="val">64</span></div>
+            <div class="knob"><svg width="34" height="34" viewBox="-17 -17 34 34"><circle r="13" fill="var(--paper)" stroke="var(--edge)" stroke-width="1.4"/><circle r="9.5" fill="none" stroke="var(--edge)" stroke-width=".6" stroke-dasharray="1 3" opacity=".7"/><line x1="0" y1="0" x2="0" y2="-10" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/><circle r="1.6" fill="var(--ink)"/></svg><span class="lbl">Tone</span><span class="val">50</span></div>
+            <div class="knob"><svg width="34" height="34" viewBox="-17 -17 34 34"><circle r="13" fill="var(--paper)" stroke="var(--edge)" stroke-width="1.4"/><circle r="9.5" fill="none" stroke="var(--edge)" stroke-width=".6" stroke-dasharray="1 3" opacity=".7"/><line x1="0" y1="0" x2="-8" y2="-6" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/><circle r="1.6" fill="var(--ink)"/></svg><span class="lbl">Space</span><span class="val">32</span></div>
+            <div class="knob" style="margin-left:6px"><span class="stamp pencil" style="font-size:.56em">neutral</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hdrow">
+          <span class="hd">Harmony — circle of fifths</span>
+          <span class="sub">hand-drawn · pencil hues</span>
+        </div>
+        <p class="ringsub">Tonic <b>C</b> · ◆ marks a borrowed chord — suggest, don't impose</p>
+        <div class="ringwrap"><svg id="ring" viewBox="-118 -118 236 236" width="400"></svg></div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="hdrow">
+            <span class="hd">Drums — 16 steps</span>
+            <span class="sub">4/4 · bar rules in red</span>
+          </div>
+          <div id="seq"></div>
+          <div class="legend">Hand-drawn cells — radii and lean seeded per step, no filters · bar rules in red pencil · hatch = played</div>
+        </div>
+
+        <div class="card">
+          <div class="hdrow">
+            <span class="hd">Clip details</span>
+            <span class="sub">printed tabs</span>
+          </div>
+          <div class="flattabs"><span class="on">Clip</span><span>Fold</span><span>Scale</span><span>Notes</span><span>Env</span></div>
+          <details class="group" open>
+            <summary>Pitch &amp; time <span class="caret">▾</span></summary>
+            <div class="inner">Transpose ± · detune · warp — secondary controls collapse to keep the cockpit dense.</div>
+          </details>
+          <details class="group">
+            <summary>Transform <span class="caret">▸</span></summary>
+            <div class="inner">Humanize · ramp · alternate — velocity ops.</div>
+          </details>
+          <details class="group">
+            <summary>Bend axes <span class="caret">▸</span></summary>
+            <div class="inner">Energy · density · backbeat · feel · kit · harmony · tempo.</div>
+          </details>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="hdrow"><span class="hd">Session notes</span><span style="flex:1"></span><span class="stamp pencil">unfiled</span></div>
+          <div class="sheet">
+            <div class="sheet-row"><span class="k">Todo</span><span class="v">bar 9 — check the 2/4, it reads fast</span></div>
+            <div class="sheet-row"><span class="k">Idea</span><span class="v">try IVm6 in the coda</span></div>
+            <div class="sheet-row"><span class="k">Recall</span><span class="v">drum bus was hot on take 2</span></div>
+            <div class="sheet-row"><span class="k"> </span><span class="v">&nbsp;</span></div>
+            <div class="sheet-row"><span class="k"> </span><span class="v">&nbsp;</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hdrow"><span class="hd">Tapes &amp; takes</span><span class="sub">provenance</span></div>
+          <div class="row" style="gap:8px;margin-bottom:9px">
+            <span class="stamp">Draft</span>
+            <span class="stamp blue">Imported</span>
+            <span class="stamp pencil">Inferred</span>
+          </div>
+          <div class="sheet">
+            <div class="sheet-row"><span class="k">Take 1</span><span class="v">guitar, no click</span></div>
+            <div class="sheet-row"><span class="k">Take 2</span><span class="v">full band — keep the coda</span></div>
+            <div class="sheet-row"><span class="k">Take 3</span><span class="v">current</span></div>
+          </div>
+          <div class="legend" style="margin-top:8px">
+            Stamps carry meaning the UI already has: provenance.source, INFERRED, and
+            “draft, review before finalizing”.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <span>▣ STUDIO-LOG THEME v2 · docs/design/prototypes/sketchbook-theme.html</span>
+      <span class="taped">type · pencil · tape · stamp</span>
+      <span>Permanent Marker + Caveat + Courier Prime + IBM Plex Mono</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const app = document.getElementById('app');
+const seg = document.getElementById('themeSeg');
+seg.addEventListener('click', (e) => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  app.dataset.theme = btn.dataset.theme;
+  [...seg.children].forEach(b => b.classList.toggle('on', b === btn));
+});
+
+/* hand-drawn hexes: wobble the shapes, keep the letters crisp */
+(function buildRing(){
+  const svg = document.getElementById('ring');
+  const NS = 'http://www.w3.org/2000/svg';
+  const chords = ['C','G','D','A','E','B','F#','C#','G#','D#','A#','F'];
+  const R = 84, HEX = 18;
+  const el = (t,a)=>{const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);return n;};
+
+  const defs = el('defs');
+  const hatch = el('pattern',{id:'pencil',width:5,height:5,patternUnits:'userSpaceOnUse',patternTransform:'rotate(45)'});
+  hatch.appendChild(el('rect',{width:5,height:5,fill:'transparent'}));
+  hatch.appendChild(el('line',{x1:0,y1:0,x2:0,y2:5,stroke:'rgba(0,0,0,.3)','stroke-width':1.2}));
+  defs.appendChild(hatch); svg.appendChild(defs);
+
+  const guide = el('circle',{r:R,fill:'none',stroke:'var(--edge)','stroke-width':1,'stroke-dasharray':'1 5','stroke-linecap':'round',opacity:.55});
+  guide.setAttribute('filter','url(#wobble)');
+  svg.appendChild(guide);
+
+  const g = el('g',{filter:'url(#wobble)'});
+  chords.forEach((name,i)=>{
+    const ang = (-90 + i*30) * Math.PI/180;
+    const cx = Math.cos(ang)*R, cy = Math.sin(ang)*R;
+    const hue = (i*30 + 190) % 360;
+    const pts = [];
+    for(let k=0;k<6;k++){
+      const a = k*Math.PI/3 - Math.PI/6 + (i%3)*0.035;
+      const rad = HEX * (0.96 + ((i*7+k*3)%5)*0.02);
+      pts.push((cx+Math.cos(a)*rad).toFixed(1)+','+(cy+Math.sin(a)*rad).toFixed(1));
+    }
+    g.appendChild(el('polygon',{points:pts.join(' '),fill:'hsl('+hue+' 42% 75%)',stroke:'var(--edge)','stroke-width':name==='C'?2.1:1.35,'stroke-linejoin':'round'}));
+    g.appendChild(el('polygon',{points:pts.join(' '),fill:'url(#pencil)','fill-opacity':.62,stroke:'none'}));
+  });
+  svg.appendChild(g);
+
+  chords.forEach((name,i)=>{
+    const ang = (-90 + i*30) * Math.PI/180;
+    const cx = Math.cos(ang)*R, cy = Math.sin(ang)*R;
+    const t = el('text',{x:cx,y:cy+5.5,'text-anchor':'middle',class:'chordlabel'});
+    t.textContent = name; svg.appendChild(t);
+  });
+  const tonic = el('text',{x:0,y:4,'text-anchor':'middle','font-family':'var(--mono)','font-size':'10',fill:'var(--muted)'});
+  tonic.textContent = 'I'; svg.appendChild(tonic);
+})();
+
+/* ---- the sequencer: hand-drawn, no filters, animated cheaply ----
+   Each cell's corner radii, lean and outline offset come from a hash of
+   (voice, step), so the grid looks drawn by hand but is *identical* every
+   frame — nothing is re-randomised, nothing is filtered. The only per-frame
+   work is one `transform` on the playhead and a couple of class flips. */
+(function buildSeq(){
+  const voices = [
+    {name:'Kick',  color:'var(--kick)',  steps:'1000100010001000'},
+    {name:'Snare', color:'var(--snare)', steps:'0000100000001000'},
+    {name:'Rim',   color:'var(--rim)',   steps:'0010001000100010'},
+    {name:'Hat',   color:'var(--hat)',   steps:'1011101010111010'},
+    {name:'Cym',   color:'var(--cym)',   steps:'1000000000001000'},
+    {name:'Tom',   color:'var(--tom)',   steps:'0000000000100001'},
+  ];
+  const STEPS = 16;
+  const seq = document.getElementById('seq');
+  const hash = (a,b) => { let h = (a*73856093) ^ (b*19349663); h = (h ^ (h>>>13)) >>> 0; return h; };
+  const pick = (h, i, lo, hi) => lo + (h >>> (i*5)) % (hi - lo + 1);
+
+  const rows = [];
+  voices.forEach((v, vi) => {
+    const lab = document.createElement('span');
+    lab.className = 'vlabel'; lab.textContent = v.name; lab.style.color = v.color;
+    const cells = document.createElement('div');
+    cells.className = 'cells';
+    const made = [];
+    [...v.steps].forEach((on, i) => {
+      const h = hash(vi + 1, i + 1);
+      const c = document.createElement('div');
+      c.className = 'cell' + (on === '1' ? ' on' : '');
+      c.style.setProperty('--r1', pick(h,0,1,4)+'px');
+      c.style.setProperty('--r2', pick(h,1,1,4)+'px');
+      c.style.setProperty('--r3', pick(h,2,1,4)+'px');
+      c.style.setProperty('--r4', pick(h,3,1,4)+'px');
+      c.style.setProperty('--s1', pick(h,4,1,4)+'px');
+      c.style.setProperty('--s2', pick(h,5,1,4)+'px');
+      c.style.setProperty('--s3', pick(h,6,1,4)+'px');
+      c.style.setProperty('--s4', pick(h,7,1,4)+'px');
+      c.style.setProperty('--rot', (pick(h,8,0,6) - 3) * 0.22 + 'deg');
+      c.style.setProperty('--sc', (0.955 + pick(h,9,0,9) * 0.008).toFixed(3));
+      if (on === '1') c.style.background = v.color;
+      cells.appendChild(c);
+      made.push(c);
+    });
+    cells.style.setProperty('--rowShift', ((vi % 3) - 1) * 0.4 + 'px');
+    cells.style.setProperty('--hatch', (40 + (vi % 4) * 3) + 'deg');
+    seq.appendChild(lab); seq.appendChild(cells);
+    rows.push(made);
+  });
+
+  /* bar rules, measured from the first row so they sit on the real grid */
+  requestAnimationFrame(() => {
+    const first = rows[0][0];
+    if (!first) return;
+    const seqBox = seq.getBoundingClientRect();
+    const c0 = first.getBoundingClientRect();
+    const c1 = rows[0][1].getBoundingClientRect();
+    const pitch = c1.left - c0.left;
+    const left = c0.left - seqBox.left;
+    const right = rows[0][STEPS-1].getBoundingClientRect().right - seqBox.left;
+
+    const rules = document.createElement('div');
+    rules.className = 'brules';
+    rules.style.left = left + 'px';
+    rules.style.width = (right - left) + 'px';
+    for (let b = 1; b < 4; b++) {
+      const i = document.createElement('i');
+      i.style.left = (pitch * 4 * b) + 'px';
+      rules.appendChild(i);
+    }
+    seq.appendChild(rules);
+
+    /* the playhead crosses the grid by transform only */
+    const play = document.createElement('div');
+    play.className = 'playhead';
+    seq.appendChild(play);
+
+    let step = 0;
+    const tick = () => {
+      play.style.transform = 'translateX(' + (left + pitch * step + 1) + 'px)';
+      rows.forEach((cells) => cells.forEach((c, i) => c.classList.toggle('hit', i === step)));
+      step = (step + 1) % STEPS;
+    };
+    tick();
+    setInterval(tick, 125);   // 120bpm sixteenths
+  });
+})();
+</script>
+</body>
+</html>

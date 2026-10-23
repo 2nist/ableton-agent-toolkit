@@ -27,7 +27,7 @@ export default function DirectoryTree({ selectedDir, onSelectDir, onManageDirs }
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-semibold text-inkMuted uppercase tracking-wider">
+        <span className="tape-label tape-label--flat text-xs font-semibold text-inkMuted uppercase tracking-wider">
           Directories
         </span>
         <button

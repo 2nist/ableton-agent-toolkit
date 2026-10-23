@@ -31,6 +31,7 @@ import { DRUM_LANES, laneColor } from "../laneStyle";
 import { useSectionRoleColors } from "../sectionRoleStyle";
 import { useTransitionColors, TRANSITION_LABEL } from "../transitionStyle";
 import { usePalette } from "../../../theme/palette";
+import { handRadius } from "../../../theme/handDrawn";
 import SelectionPad, { PAD_PANEL_H, PAD_PANEL_W, PAD_SCALE } from "./SelectionPad";
 import SelectionEditorModal from "./SelectionEditorModal";
 import SelectionWorkbench from "./SelectionWorkbench";
@@ -1360,10 +1361,13 @@ export default function DrumBlocksView() {
                 // brighter on filled steps + barline accents so the grid
                 // reads at a glance.
                 const sw = Math.min(2.6, Math.max(1.1, r * 0.25));
+                const hand = P.handDrawn ? handRadius(li * 97 + q, r) : null;
                 dots.push(
                   <circle
                     key={`c-${q}`}
-                    cx={x} cy={y} r={r}
+                    cx={x} cy={y}
+                    r={hand ? hand.rx : r}
+                    transform={hand ? `rotate(${hand.rotate} ${x} ${y})` : undefined}
                     fill={hit ? laneColor(lane, P) : P.scene}
                     fillOpacity={hit ? 0.45 + 0.55 * (hit.velocity / 127) : 1}
                     stroke={P.label}

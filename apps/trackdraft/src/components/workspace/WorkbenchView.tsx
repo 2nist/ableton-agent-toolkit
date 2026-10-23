@@ -179,7 +179,7 @@ function ElementRow({
             <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={12} />
           </button>
         )}
-        <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">{title}</span>
+        <span className="tape-label text-3xs font-mono uppercase tracking-widest text-inkMuted">{title}</span>
         <span className="text-[9px] font-mono text-inkMuted/50 truncate flex-1" title={hint}>
           {hint}
         </span>

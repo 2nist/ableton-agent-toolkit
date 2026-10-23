@@ -2,6 +2,7 @@ import { twoThreeCellCounts, euclidOnsetSteps, numerator as outlineNumerator } f
 import type { MeterOutline } from "../../types/blueprint";
 import Knob from "../common/Knob";
 import { usePalette, withAlpha } from "../../theme/palette";
+import { handCell } from "../../theme/handDrawn";
 
 /** Shared Euclidean rhythm primitives — the same Length/Density/Offset
  *  sliders + step strips used by the Drums editor's outline authoring, so
@@ -96,8 +97,8 @@ export function StepView({ outline, color }: { outline: MeterOutline; color?: st
       {onsets.map((on, i) => (
         <div
           key={i}
-          className="h-3 w-3 rounded-[2px]"
-          style={{ background: on ? accent : withAlpha(P.grid, 0.28) }}
+          className={`h-3 w-3 rounded-[2px] ${P.handDrawn ? "hand-cell" : ""}${on && P.handDrawn ? " hand-cell--on" : ""}`}
+          style={{ background: on ? accent : withAlpha(P.grid, 0.28), ...(P.handDrawn ? handCell(i + 3) : null) }}
         />
       ))}
     </div>
@@ -115,8 +116,11 @@ export function EuclidStepView({ k, n, rotation, color, large }: { k: number; n:
       {Array.from({ length: n }).map((_, i) => (
         <div
           key={i}
-          className={box}
-          style={{ background: onsets.includes(i) ? color ?? P.track : withAlpha(P.grid, 0.28) }}
+          className={`${box} ${P.handDrawn ? "hand-cell" : ""}${onsets.includes(i) && P.handDrawn ? " hand-cell--on" : ""}`}
+          style={{
+            background: onsets.includes(i) ? color ?? P.track : withAlpha(P.grid, 0.28),
+            ...(P.handDrawn ? handCell(i + 11) : null),
+          }}
         />
       ))}
     </div>

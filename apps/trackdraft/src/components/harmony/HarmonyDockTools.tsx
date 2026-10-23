@@ -155,7 +155,7 @@ export function HarmonyTools() {
       {/* Tools header — the progression preview's play button lives here,
           keeping the strip a single compact row. */}
       <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-edge shrink-0">
-        <span className="text-[11px] font-mono uppercase tracking-wider text-inkMuted">Tools</span>
+        <span className="tape-label text-[11px] font-mono uppercase tracking-wider text-inkMuted">Tools</span>
         <button
           className="border border-edge text-inkMuted hover:text-ink rounded px-2 py-0.5 text-xs font-mono"
           onClick={() => {

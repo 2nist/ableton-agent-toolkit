@@ -101,6 +101,19 @@
   --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E");
   --scroll-thumb: rgba(38, 34, 27, 0.22);
   --scroll-thumb-hover: rgba(38, 34, 27, 0.38);
+
+  /* Masking tape, rubber stamp, ledger rule, red margin. */
+  --tape-a: #e3d9bd;
+  --tape-b: #cfc3a1;
+  --tape-ink: #26221b;
+  /* Stamp inks read through `mix-blend-mode: multiply`, so the printed
+     contrast is lower than the raw colour: at 62% the red measured 2.9:1 on
+     the card stock. These values land ~5:1 after the blend. */
+  --stamp-ink: rgba(146, 43, 33, 0.88);
+  --stamp-pencil: rgba(74, 66, 56, 0.9);
+  --stamp-pencil-edge: rgba(74, 66, 56, 0.7);
+  --ledger-rule: rgba(38, 34, 27, 0.13);
+  --ledger-margin: rgba(163, 63, 54, 0.38);
 }
 
 body {
@@ -127,4 +140,103 @@ body {
 [data-theme="logsheet"] .tabular-nums,
 [data-theme="logsheet"] .font-mono {
   letter-spacing: 0.01em;
+}
+
+/* ==========================================================================
+   LOG-SHEET OBJECTS
+   --------------------------------------------------------------------------
+   Three physical things, all static: a strip of masking tape, a rubber stamp,
+   and ruled paper. Nothing here animates and nothing uses a filter on live
+   content — the tape's drop-shadow sits on a fixed label, not on a cell that
+   repaints with the transport.
+   ========================================================================== */
+
+/* Masking tape. The clip-path's ragged polygon is what makes the ends read as
+   torn rather than cut; `end` shifts the lean so a row of labels doesn't look
+   machine-stamped. */
+[data-theme="logsheet"] .tape-label {
+  display: inline-block;
+  font-family: "Permanent Marker", Caveat, cursive;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--tape-ink);
+  padding: 0.06em 0.6em 0.02em;
+  background: linear-gradient(180deg, var(--tape-a), var(--tape-b));
+  clip-path: polygon(
+    2% 7%, 30% 0, 61% 5%, 98% 2%, 100% 27%, 97.5% 52%, 100% 76%,
+    98% 96%, 64% 100%, 31% 95%, 3% 99%, 0 73%, 2.5% 49%, 0 25%
+  );
+  filter: drop-shadow(1px 1.5px 1px rgba(0, 0, 0, 0.16));
+  transform: rotate(-0.7deg);
+  white-space: nowrap;
+}
+[data-theme="logsheet"] .tape-label--end {
+  transform: rotate(0.9deg);
+}
+[data-theme="logsheet"] .tape-label--flat {
+  transform: rotate(0.2deg) translateY(-1px);
+}
+
+/* Rubber stamp — provenance, not decoration: DRAFT / TAKEN / INFERRED. */
+[data-theme="logsheet"] .stamp {
+  display: inline-block;
+  font-family: "Courier Prime", "Courier New", monospace;
+  font-size: 0.64em;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--stamp-ink);
+  border: 1.5px solid var(--stamp-ink);
+  border-radius: 2px;
+  padding: 2px 7px;
+  transform: rotate(-3.2deg);
+  opacity: 0.85;
+  mix-blend-mode: multiply;
+  white-space: nowrap;
+}
+[data-theme="logsheet"] .stamp--pencil {
+  color: var(--stamp-pencil);
+  border-color: var(--stamp-pencil-edge);
+  border-style: dashed;
+}
+[data-theme="logsheet"] .stamp--tight {
+  letter-spacing: 0.1em;
+  padding: 1px 5px;
+}
+
+/* Ruled writing paper. The gradient is a static background image, so it costs
+   nothing per frame; `--ledger-rule` is barely visible at 13% ink and reads as
+   a feint rule rather than a grid. */
+[data-theme="logsheet"] .ledger {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 21px,
+    var(--ledger-rule) 21px 22px
+  );
+  background-position: 0 3px;
+}
+[data-theme="logsheet"] .ledger--margin {
+  box-shadow: inset 20px 0 0 -19px var(--ledger-margin);
+  padding-left: 8px;
+}
+
+/* A hand-drawn step cell: uneven corners, a sub-degree lean, and a second
+   pass of the pencil as an offset outline. All static per cell — the only
+   per-frame change is the `on`/hit state, which flips two colours. */
+[data-theme="logsheet"] .hand-cell {
+  border-radius: var(--r1, 2px) var(--r2, 2px) var(--r3, 2px) var(--r4, 2px) /
+    var(--s1, 2px) var(--s2, 2px) var(--s3, 2px) var(--s4, 2px);
+  transform: rotate(var(--lean, 0deg)) scale(var(--grow, 1));
+  position: relative;
+}
+[data-theme="logsheet"] .hand-cell::before {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border: 1px solid var(--ledger-rule);
+  border-radius: inherit;
+  transform: rotate(0.9deg);
+  pointer-events: none;
+}
+[data-theme="logsheet"] .hand-cell--on {
+  box-shadow: inset 0 0 0 0.5px rgba(38, 34, 27, 0.35);
 }

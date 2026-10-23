@@ -100,10 +100,15 @@ export function hexToPixel(q: number, r: number, size = HEX_SIZE): Vec2 {
 }
 
 /** SVG polygon points for a pointy-top hex centred at (0,0). */
-export function hexPoints(size = HEX_SIZE - 2.5): string {
+export function hexPoints(size = HEX_SIZE - 2.5, seed?: number): string {
   return Array.from({ length: 6 }, (_, i) => {
     const a = (Math.PI / 180) * (60 * i - 30);
-    return `${(size * Math.cos(a)).toFixed(2)},${(size * Math.sin(a)).toFixed(2)}`;
+    // A seed nudges each corner by a fraction of a pixel, deterministically, so
+    // the cell reads as drawn by hand — and is identical on every render and
+    // every frame, because it is a function of the seed and nothing else.
+    const wobble = seed === undefined ? 0 : (((seed * 2654435761 + i * 40503) >>> 12) % 100) / 100 - 0.5;
+    const r = size + wobble * 1.6;
+    return `${(r * Math.cos(a)).toFixed(2)},${(r * Math.sin(a)).toFixed(2)}`;
   }).join(" ");
 }
 

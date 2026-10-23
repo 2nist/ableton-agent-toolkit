@@ -11,6 +11,7 @@ import FilterBar, { type Filters, defaultFilters } from "./FilterBar";
 import SongTable, { type SortKey, type SortDir } from "./SongTable";
 import TemplatePicker from "./TemplatePicker";
 import ThemeToggle from "../common/ThemeToggle";
+import { usePalette } from "../../theme/palette";
 import DirSetupModal from "./DirSetupModal";
 
 const TYPE_BADGES: Record<string, { label: string; color: string }> = {
@@ -41,6 +42,7 @@ const LOCAL_CORPORA = [
 ];
 
 export default function Dashboard() {
+  const handDrawn = usePalette().handDrawn;
   const songs = useSongStore((s) => s.songs);
   const importSong = useSongStore((s) => s.importSong);
   const dirs = useDirectoryStore((s) => s.dirs);
@@ -317,7 +319,16 @@ export default function Dashboard() {
                             <span className="text-[10px] text-inkMuted ml-2">{entry.file}</span>
                           </td>
                           <td className="px-3 py-1.5">
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded ${typeBadge.color}`}>
+                            {/* Provenance, so the log sheet stamps it rather than
+                                tinting it: a rubber stamp says where a file came
+                                from, a coloured chip only says "this is a kind". */}
+                            <span
+                              className={
+                                handDrawn
+                                  ? "stamp stamp--tight"
+                                  : `text-[9px] px-1.5 py-0.5 rounded ${typeBadge.color}`
+                              }
+                            >
                               {typeBadge.label}
                             </span>
                           </td>

@@ -67,7 +67,7 @@ function ImportZoneSidebar() {
 
   return (
     <div className="px-2 py-2 space-y-1">
-      <span className="text-[9px] font-semibold text-inkMuted uppercase tracking-wider block">
+      <span className="tape-label tape-label--end text-[9px] font-semibold text-inkMuted uppercase tracking-wider block">
         Import (drop)
       </span>
       <div className="grid grid-cols-2 gap-1">

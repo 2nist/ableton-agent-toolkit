@@ -141,6 +141,7 @@ export default function HexReadout({ chords, keyName, activeChordId }: HexReadou
         const cy = hexToPixel(q, r, S).y;
         const chord = chords[firstChordIndex];
         const hue = palette.hues[d] ?? palette.hues[0];
+        const handSeed = palette.handDrawn ? q * 31 + r * 17 + d + 1 : undefined;
         const isActive = geometry.activeCell?.q === q && geometry.activeCell?.r === r;
         const roman = chord?.romanNumeral ?? "";
         const letter = chord ? chordDisplayName(pitchClass(chord.root), chord.quality, keyName) : "";
@@ -149,7 +150,7 @@ export default function HexReadout({ chords, keyName, activeChordId }: HexReadou
         return (
           <g key={`${q},${r}`} transform={`translate(${cx}, ${cy})`}>
             <polygon
-              points={hexPoints(S - 2)}
+              points={hexPoints(S - 2, handSeed)}
               fill={hue.fill}
               fillOpacity={isActive ? 1 : 0.9}
               stroke={hue.rim}
@@ -159,7 +160,7 @@ export default function HexReadout({ chords, keyName, activeChordId }: HexReadou
             />
             {isActive && (
               <polygon
-                points={hexPoints(S + 3)}
+                points={hexPoints(S + 3, handSeed)}
                 fill="none"
                 stroke={palette.track}
                 strokeWidth={1.8}

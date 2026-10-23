@@ -634,6 +634,8 @@ export default function HoneycombWheel({
                 home.key,
               );
           const hue = P.hues[d];
+          // Same cell → same wobble, in both the fill and its outline rings.
+          const handSeed = P.handDrawn ? q * 31 + r * 17 + d + 1 : undefined;
 
           // Chords that share this degree (Em → E, VI → bVI) stack as chips
           // instead of silently reusing the cell.
@@ -651,7 +653,7 @@ export default function HoneycombWheel({
               onClick={() => handleCellClick(cell)}
               onContextMenu={(e) => { e.preventDefault(); handleCellClick(cell); }}
             >
-              <polygon points={hexPoints(S - 2)}
+              <polygon points={hexPoints(S - 2, handSeed)}
                 fill={isChoice ? P.well : hue.fill}
                 fillOpacity={isChoice ? 0.5 : 1}
                 stroke={isCurrent ? hue.rim : isChoice ? hue.rim + "66" : hue.rim + "AA"}
@@ -660,10 +662,10 @@ export default function HoneycombWheel({
                 style={isCurrent ? { filter: "url(#hw-glow)" } : undefined}
               />
               {isPlaying && (
-                <polygon points={hexPoints(S + 4)} fill="none" stroke={P.select} strokeWidth={2.4} style={{ pointerEvents: "none" }} />
+                <polygon points={hexPoints(S + 4, handSeed)} fill="none" stroke={P.select} strokeWidth={2.4} style={{ pointerEvents: "none" }} />
               )}
               {isSelected && (
-                <polygon points={hexPoints(S + 2)} fill="none" stroke={P.track} strokeWidth={2} strokeDasharray="3 2" style={{ pointerEvents: "none" }} />
+                <polygon points={hexPoints(S + 2, handSeed)} fill="none" stroke={P.track} strokeWidth={2} strokeDasharray="3 2" style={{ pointerEvents: "none" }} />
               )}
               <text x={0} y={hasVariants ? -S * 0.24 : 1} textAnchor="middle" dominantBaseline="middle"
                 fontFamily="'IBM Plex Mono', monospace" fontSize={labelSize} fontWeight={600}
