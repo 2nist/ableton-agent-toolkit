@@ -240,11 +240,14 @@ function extractInfo(filePath: string): ComponentInfo | null {
   };
 }
 
+/** True only for `export default function Name()`. A plain `export function`
+ *  is a *named* export: the registry emits a lazy `import()` typed as
+ *  `{ default: unknown }`, which such a module can't satisfy — accepting
+ *  `ExportKeyword` here registered named-export functions as components and
+ *  broke `tsc` in every consumer of the generated registry. */
 function isDefaultExport(node: ts.FunctionDeclaration): boolean {
   if (!node.modifiers) return false;
-  return node.modifiers.some(
-    (m) => m.kind === ts.SyntaxKind.DefaultKeyword || m.kind === ts.SyntaxKind.ExportKeyword,
-  );
+  return node.modifiers.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword);
 }
 
 function resolveDeps(infos: ComponentInfo[]): ComponentInfo[] {
