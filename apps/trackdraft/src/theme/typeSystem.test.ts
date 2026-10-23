@@ -110,19 +110,15 @@ describe("type system — app and prototype agree", () => {
     expect(tapeInput).toBeGreaterThan(pen);
   });
 
-  it("sets a lane name in the printed face, not the marker", () => {
-    // KICK / SNR / … label the machine, so on paper they take the same
-    // typewriter face as the rest of the sheet's printed labels.
+  it("draws the two kinds of canvas text in their own voices", () => {
+    // A drawing surface can't carry a tape background, so its lettering has to
+    // state the voice itself:
+    //   labelFont — printed on the machine (KICK, SNR, BUILD ·AUTO)
+    //   penFont   — a section name, which the person wrote
     expect(firstFamily(PALETTES.logsheet.labelFont)).toBe(firstFamily(mockToken("type")));
-    // …and the dark theme is untouched: the lane face is still the one it
-    // always drew with.
-    expect(PALETTES.dark.labelFont).toBe(PALETTES.dark.drawnFont);
-  });
-
-  it("names things in the marker face, not the pen", () => {
-    // The drum ruler and the lane names are drawing-surface text (they cannot
-    // carry a tape background), so they take the marker's FACE from the
-    // palette. Pen there would contradict the headers above them.
-    expect(firstFamily(PALETTES.logsheet.drawnFont)).toBe(firstFamily(mockToken("marker")));
+    expect(firstFamily(PALETTES.logsheet.penFont)).toBe(firstFamily(mockToken("hand")));
+    // The dark theme is untouched: both faces are the mono it always drew in,
+    // which is why one palette entry used to be enough.
+    expect(PALETTES.dark.labelFont).toBe(PALETTES.dark.penFont);
   });
 });

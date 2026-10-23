@@ -695,7 +695,7 @@ export default function DrumsView({
             const outline = r.section.drumMeterOutline;
             return (
               <g key={`sec-${i}`} pointerEvents="none">
-                <text x={x + w / 2} y={12} textAnchor="middle" fontSize={P.handDrawn ? 15 : 12} fontFamily={P.drawnFont} fontWeight={600} fill={col}>
+                <text x={x + w / 2} y={12} textAnchor="middle" fontSize={P.handDrawn ? 16 : 12} fontFamily={P.penFont} fontWeight={600} fill={col}>
                   {r.span.section.name}
                   {r.span.occurrenceIndex > 0 ? ` ·${r.span.occurrenceIndex + 1}` : ""}
                   {outline && (
@@ -733,7 +733,7 @@ export default function DrumsView({
                       stroke={color}
                       strokeWidth={1.2}
                     />
-                    <text x={x + 9} y={STACK_BOTTOM + 16} fontSize={P.handDrawn ? 13 : 10} fontFamily={P.drawnFont} fontWeight={600} fill={color}>
+                    <text x={x + 9} y={STACK_BOTTOM + 16} fontSize={P.handDrawn ? 11 : 10} letterSpacing={P.handDrawn ? "0.04em" : undefined} fontFamily={P.labelFont} fontWeight={600} fill={color}>
                       {model ? TRANSITION_LABEL[model].toUpperCase() : "FILL"}
                       {model && !manual ? " ·AUTO" : ""}
                     </text>

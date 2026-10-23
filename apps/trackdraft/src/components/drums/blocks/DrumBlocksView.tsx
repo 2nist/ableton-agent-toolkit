@@ -1188,7 +1188,7 @@ export default function DrumBlocksView() {
             const x2 = barX(span.startBar + span.bars, zoom);
             return (
               <g key={`sec-${si}`} pointerEvents="none">
-                <text x={(x1 + x2) / 2} y={12} textAnchor="middle" fontSize={12} fontWeight={600} fontFamily="'IBM Plex Mono', monospace" fill={color}>
+                <text x={(x1 + x2) / 2} y={12} textAnchor="middle" fontSize={P.handDrawn ? 16 : 12} fontWeight={600} fontFamily={P.penFont} fill={color}>
                   {span.section.name}
                   {span.occurrenceIndex > 0 ? ` ·${span.occurrenceIndex + 1}` : ""}
                 </text>

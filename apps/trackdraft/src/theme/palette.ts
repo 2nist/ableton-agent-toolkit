@@ -55,14 +55,15 @@ export interface Palette {
   /** True for themes where marks are drawn by hand: hexes wobble, step cells
    *  lean. False keeps the dark theme's machined grid exactly as it was. */
   handDrawn: boolean;
-  /** Font stack for lettering drawn inside an instrument (lane names, tick
-   *  numerals) — monospace when machined, pencil when drawn. */
-  drawnFont: string;
-  /** The face for a LANE NAME (KICK, SNR, …). Separate from `drawnFont`
-   *  because a lane name is a printed label on the machine rather than a note
-   *  someone wrote: on paper it takes the same typewriter face as the rest of
-   *  the sheet's labels. */
+  /** The face for a LANE NAME and any other printed label on the chart
+   *  (KICK, SNR, BUILD ·AUTO): on paper it takes the same typewriter face as
+   *  the rest of the sheet's labels. */
   labelFont: string;
+  /** The face for a SECTION NAME drawn over a grid. A section name is written
+   *  by the person, not printed on the machine — the same voice the spine,
+   *  the lyric tabs and the console lanes use. Colour still comes from the
+   *  caller (a role's tint, or "this one is selected"). */
+  penFont: string;
   voices: VoiceColors;
   hues: HueSet[];
 }
@@ -77,8 +78,8 @@ const DARK: Palette = {
   select: "#8FD3FF",
   cream: "#F5E7C8",
   handDrawn: false,
-  drawnFont: "'IBM Plex Mono', ui-monospace, monospace",
   labelFont: "'IBM Plex Mono', ui-monospace, monospace",
+  penFont: "'IBM Plex Mono', ui-monospace, monospace",
   voices: {
     kick: "#D96459",
     snare: "#8B94A1",
@@ -111,11 +112,8 @@ const LOGSHEET: Palette = {
   select: "#1F5FA8",
   cream: "#26221B",
   handDrawn: true,
-  /* The drum ruler and lane names are MARKER, not pen: they name a thing
-   * (a voice, a section) rather than record a value, and the marker voice is
-   * what the rest of the app uses for a name stuck onto the page. */
-  drawnFont: "'Permanent Marker', 'Nothing You Could Do', cursive",
   labelFont: "'Courier Prime', 'Courier New', monospace",
+  penFont: "'Reenie Beanie', 'Segoe Script', cursive",
   voices: {
     kick: "#A03A31",
     snare: "#5E6672",
