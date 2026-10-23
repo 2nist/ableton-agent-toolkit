@@ -68,6 +68,25 @@ describe("claimCommandFile", () => {
 });
 
 describe("claimOldestCommand", () => {
+  it("keeps write order when two commands land in the same millisecond", () => {
+    // The filename used to be `command_<ms>_<random>`, so same-millisecond
+    // writes sorted by the random suffix — a "set tempo" followed by "apply
+    // blueprint" could be claimed in reverse. Freeze the clock to prove the
+    // sequence, not luck, decides.
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    try {
+      writeCommandFile(dir, { action: "setTempo", bpm: 11 });
+      writeCommandFile(dir, { action: "setTempo", bpm: 22 });
+      writeCommandFile(dir, { action: "setTempo", bpm: 33 });
+    } finally {
+      clock.mockRestore();
+    }
+    expect(claimOldestCommand(dir)?.bpm).toBe(11);
+    expect(claimOldestCommand(dir)?.bpm).toBe(22);
+    expect(claimOldestCommand(dir)?.bpm).toBe(33);
+    expect(claimOldestCommand(dir)).toBeNull();
+  });
+
   it("drains in name order and then reports empty", () => {
     writeCommandFile(dir, { action: "setTempo", bpm: 1 });
     writeCommandFile(dir, { action: "setTempo", bpm: 2 });

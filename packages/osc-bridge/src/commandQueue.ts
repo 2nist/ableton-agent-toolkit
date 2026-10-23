@@ -35,8 +35,10 @@ function ensureDir(dir: string): void {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-/** Queue files, oldest first. The name carries a timestamp, and the sweep is
- *  a plain lexicographic sort, so ordering survives a bridge restart. */
+/** Queue files, oldest first. The name carries a timestamp *and a sequence*,
+ *  and the sweep is a plain lexicographic sort, so ordering survives a bridge
+ *  restart and two commands enqueued in the same millisecond still run in the
+ *  order they were written. */
 export function listQueuedCommands(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   return fs
@@ -45,10 +47,30 @@ export function listQueuedCommands(dir: string): string[] {
     .sort();
 }
 
+/** Monotonic sub-millisecond counter.
+ *
+ *  `Date.now()` alone is not enough to order a queue: two commands written in
+ *  the same millisecond used to sort by their random suffix, so a "set tempo"
+ *  followed immediately by "apply blueprint" could be claimed in reverse — and
+ *  the queue's whole contract is that the oldest command runs first. Resetting
+ *  the counter whenever the clock ticks keeps the names short and readable. */
+let lastStamp = 0;
+let seqInStamp = 0;
+
+function nextStamp(now: number): string {
+  if (now === lastStamp) {
+    seqInStamp += 1;
+  } else {
+    lastStamp = now;
+    seqInStamp = 0;
+  }
+  return `${now}_${String(seqInStamp).padStart(4, "0")}`;
+}
+
 /** Write one command and return its filename. */
 export function writeCommandFile(dir: string, payload: QueuedCommand): string {
   ensureDir(dir);
-  const filename = `command_${Date.now()}_${randomBytes(3).toString("hex")}.json`;
+  const filename = `command_${nextStamp(Date.now())}_${randomBytes(3).toString("hex")}.json`;
   fs.writeFileSync(path.join(dir, filename), JSON.stringify(payload, null, 2), "utf-8");
   return filename;
 }
