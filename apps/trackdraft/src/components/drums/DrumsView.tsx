@@ -19,13 +19,26 @@ import { useTransitionColors, TRANSITION_LABEL } from "./transitionStyle";
 import { useSectionRoleColors } from "./sectionRoleStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
 import DrumBlocksView from "./blocks/DrumBlocksView";
+import DrumStepsView from "./steps/DrumStepsView";
 import { planSectionHandoffFills, planSectionTransitions, FILL_DATA, outlineBeatsPerBar, numerator as outlineNumerator, hashSeed, occurrenceSeed, buildEuclideanOutline, twoThreeCellCounts, type HandoffSectionInput } from "@drum/library";
 import { parseAnalysisFile } from "../../lib/drumImport/analysisFile";
 import { applySectionPatch, planSectionImport } from "../../lib/drumImport/runner";
 
-/** The Drums tab's two surfaces: the classic whole-song canvas and the
- *  Drum Blocks (beta) authoring view. */
-const VIEW_MODES = ["classic", "blocks"] as const;
+/** The Drums tab's three surfaces: the classic whole-song canvas, the Drum
+ *  Blocks (beta) authoring view, and the plain 16-box Steps sequencer. */
+const VIEW_MODES = ["classic", "steps", "blocks"] as const;
+
+const VIEW_LABEL: Record<(typeof VIEW_MODES)[number], string> = {
+  classic: "Classic",
+  steps: "Steps",
+  blocks: "Blocks (beta)",
+};
+
+const VIEW_HINT: Record<(typeof VIEW_MODES)[number], string> = {
+  classic: "necklaces · detours · transitions",
+  steps: "sixteen boxes · one bar at a time",
+  blocks: "step dots + marquee → XY pad",
+};
 type DrumsViewMode = (typeof VIEW_MODES)[number];
 
 /** A stable identity for a section's *resolved* drum content — same
@@ -307,7 +320,8 @@ export default function DrumsView({
   // Blocks reaches parity; the choice persists per browser, not per song.
   const [viewMode, setViewMode] = useState<DrumsViewMode>(() => {
     try {
-      return localStorage.getItem("trackdraft-drums-view") === "blocks" ? "blocks" : "classic";
+      const raw = localStorage.getItem("trackdraft-drums-view");
+      return raw === "blocks" || raw === "steps" ? raw : "classic";
     } catch {
       return "classic";
     }
@@ -620,14 +634,10 @@ export default function DrumsView({
                 : "border-edge text-inkMuted hover:text-ink"
             }`}
           >
-            {m === "classic" ? "Classic" : "Blocks (beta)"}
+            {VIEW_LABEL[m]}
           </button>
         ))}
-        <span className="text-2xs text-inkMuted ml-1">
-          {viewMode === "blocks"
-            ? "step dots + marquee → XY pad"
-            : "necklaces · detours · transitions"}
-        </span>
+        <span className="text-2xs text-inkMuted ml-1">{VIEW_HINT[viewMode]}</span>
         <span className="flex-1" />
         <input
           ref={analysisInputRef}
@@ -656,6 +666,8 @@ export default function DrumsView({
       )}
       {!embedded && viewMode === "blocks" ? (
         <DrumBlocksView />
+      ) : !embedded && viewMode === "steps" ? (
+        <DrumStepsView />
       ) : (
       <div
         ref={scrollRef}
@@ -777,9 +789,15 @@ export default function DrumsView({
                 <line
                   key={`g-${lane.key}-${gi}`}
                   x1={g.x} y1={TOP_PAD + li * TRACK_H} x2={g.x} y2={trackBottom(li)}
-                  stroke="#fff"
-                  strokeOpacity={g.bar ? 0.14 : 0.06}
+                  /* Paper has no white: a #fff rule at 6–14% is invisible on
+                     cream, which is why the classic grid had no bar lines in
+                     the log-sheet theme at all. Dark is untouched. */
+                  stroke={P.handDrawn ? P.grid : "#fff"}
+                  strokeOpacity={(g.bar ? 0.14 : 0.06) * (P.handDrawn ? 2.6 : 1)}
                   strokeWidth={1}
+                  /* Hand-ruled bars lean a hair — rotated about the grid's top
+                     so every lane's segment lies on the same leaning rule. */
+                  transform={P.handDrawn && g.bar ? `rotate(${((gi % 3) - 1) * 0.45} ${g.x} ${TOP_PAD})` : undefined}
                 />
               ))}
               {/* The drum's own meter, amber so it reads as a separate ruler: */}

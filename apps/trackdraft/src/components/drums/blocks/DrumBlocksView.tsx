@@ -35,6 +35,7 @@ import { handRadius } from "../../../theme/handDrawn";
 import SelectionPad, { PAD_PANEL_H, PAD_PANEL_W, PAD_SCALE } from "./SelectionPad";
 import SelectionEditorModal from "./SelectionEditorModal";
 import SelectionWorkbench from "./SelectionWorkbench";
+import { withToggledStep } from "./stepToggle";
 import { boxMetrics, CELL_TOP_PAD, copyBlocksToRange, euclidBlocksFor, motionBlockFor, motionLabelFor, replaceRangeBlocks, stripFxCarriers, upsertBlocks, upsertModeBlocks } from "./selectionMath";
 import { clampParam, cycleValue, PARAM_SPECS, STEP_PARAMS, type ParamDraftNote, type StepParam } from "./stepParams";
 import { scaleVelocity, velocityOpFactor, type VelocityOp } from "./velocityOps";
@@ -521,41 +522,9 @@ export default function DrumBlocksView() {
   const toggleStep = useCallback(
     (span: SectionSpan, laneKey: DrumLaneId, beat: number, stepSize: number) => {
       const sec = effectiveSection(span);
-      const hits = resolveSectionLaneHits(sec, song ?? undefined, span.occurrenceIndex);
-      const laneHits = hits.get(laneKey) ?? [];
-      const existing = (sec.drumBlocks ?? []).find(
-        (b) => b.mode === "steps" && b.lane === laneKey && beat >= b.startBeat - 1e-9 && beat < b.endBeat - 1e-9,
+      writeSection(span.section.id, span.section, (s) =>
+        withToggledStep(s, { section: sec, song: song ?? undefined, occurrenceIndex: span.occurrenceIndex, laneKey, beat, stepSize }),
       );
-      const start = existing ? existing.startBeat : beat;
-      const end = existing ? existing.endBeat : round4(beat + stepSize);
-      const tol = Math.max(0.02, stepSize * 0.35);
-      const inRange = laneHits.filter((h) => h.beat >= start - 1e-9 && h.beat < end - 1e-9);
-      const hasHit = inRange.some((h) => Math.abs(h.beat - beat) < tol);
-
-      // The authored notes mirror what's currently audible in the range,
-      // with the clicked step flipped (every voice on that step drops when
-      // toggling off — that's the delete gesture).
-      const notes: DrumBlockNote[] = [];
-      for (const h of inRange) {
-        if (Math.abs(h.beat - beat) < tol) continue;
-        notes.push({ beat: round4(h.beat - start), voice: h.voice as DrumVoiceName, velocity: h.velocity });
-      }
-      if (!hasHit) {
-        const avg = inRange.length > 0
-          ? Math.round(inRange.reduce((sum, h) => sum + h.velocity, 0) / inRange.length)
-          : 100;
-        notes.push({ beat: round4(beat - start), voice: DRUM_LANE_PRIMARY[laneKey] as DrumVoiceName, velocity: avg });
-      }
-
-      const block: DrumBlock = {
-        id: existing?.id ?? `blk-${laneKey}-${round4(start)}-${round4(end)}-steps`,
-        lane: laneKey,
-        startBeat: start,
-        endBeat: end,
-        mode: "steps",
-        notes,
-      };
-      writeSection(span.section.id, span.section, (s) => ({ ...s, drumBlocks: upsertModeBlocks(s.drumBlocks, start, end, [block]) }));
       setSelectedSectionId(span.section.id);
     },
     [effectiveSection, song, writeSection, setSelectedSectionId],
@@ -1181,6 +1150,15 @@ export default function DrumBlocksView() {
           onPointerUp={onCanvasUp}
           onPointerCancel={onCanvasCancel}
         >
+          <defs>
+            {/* One hatch, two passes of the pencil. `userSpaceOnUse` keeps the
+                lines the same weight at every zoom; the cells rotate it with
+                their own lean, so the angles never line up across a row. */}
+            <pattern id="pencil-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(44)">
+              <line x1="0" y1="0" x2="0" y2="5" stroke="rgba(38,34,27,0.30)" strokeWidth="1.15" />
+            </pattern>
+          </defs>
+
           {/* section labels + brackets + bar numbers */}
           {spans.map((span, si) => {
             const color = SECTION_ROLE_COLOR[span.section.role]?.rim ?? P.grid;
@@ -1337,20 +1315,47 @@ export default function DrumBlocksView() {
                 // reads at a glance.
                 const sw = Math.min(2.6, Math.max(1.1, r * 0.25));
                 const hand = P.handDrawn ? handRadius(li * 97 + q, r) : null;
-                dots.push(
-                  <circle
-                    key={`c-${q}`}
-                    cx={x} cy={y}
-                    r={hand ? hand.rx : r}
-                    transform={hand ? `rotate(${hand.rotate} ${x} ${y})` : undefined}
-                    fill={hit ? laneColor(lane, P) : P.scene}
-                    fillOpacity={hit ? 0.45 + 0.55 * (hit.velocity / 127) : 1}
-                    stroke={P.label}
-                    strokeOpacity={hit ? (accent ? 0.9 : 0.72) : accent ? 0.72 : 0.5}
-                    strokeWidth={accent ? sw + 0.3 : sw}
-                    pointerEvents="none"
-                  />,
+                const glyph = (
+                  <>
+                    {/* the second pass of the pencil: a slightly larger, offset
+                        outline under every filled cell, as if drawn twice */}
+                    {hit && P.handDrawn && (
+                      <ellipse
+                        cx={x + 0.7} cy={y - 0.6}
+                        rx={(hand ? hand.rx : r) + 1.2} ry={(hand ? hand.ry : r) + 1.2}
+                        fill="none" stroke={P.label} strokeOpacity={0.26} strokeWidth={1}
+                        pointerEvents="none"
+                      />
+                    )}
+                    <ellipse
+                      cx={x} cy={y}
+                      rx={hand ? hand.rx : r} ry={hand ? hand.ry : r}
+                      transform={hand ? `rotate(${hand.rotate} ${x} ${y})` : undefined}
+                      fill={hit ? laneColor(lane, P) : P.scene}
+                      /* A hit is a PENCIL mark, not a wash: solid colour, with
+                         only a touch of translucency left to carry velocity.
+                         0.45–1.0 over cream is what read as pastel. The dark
+                         theme keeps the soft dots it has always had. */
+                      fillOpacity={hit ? (P.handDrawn ? 0.82 : 0.45) + (P.handDrawn ? 0.18 : 0.55) * (hit.velocity / 127) : 1}
+                      stroke={P.label}
+                      strokeOpacity={hit ? (accent ? 0.9 : 0.72) : accent ? 0.72 : 0.5}
+                      strokeWidth={accent ? sw + 0.3 : sw}
+                      pointerEvents="none"
+                    />
+                    {/* pencil hatch over the fill — the same 0.26 black at a
+                        per-cell angle the prototype uses for a played step */}
+                    {hit && P.handDrawn && (
+                      <ellipse
+                        cx={x} cy={y}
+                        rx={hand ? hand.rx : r} ry={hand ? hand.ry : r}
+                        transform={hand ? `rotate(${hand.rotate} ${x} ${y})` : undefined}
+                        fill="url(#pencil-hatch)" fillOpacity={0.55}
+                        pointerEvents="none"
+                      />
+                    )}
+                  </>
                 );
+                dots.push(<g key={`c-${q}`}>{glyph}</g>);
               }
               const hh = Math.max(2.6, r * 0.62);
               const marks = diamonds.map((hit, i) => {
@@ -1394,8 +1399,14 @@ export default function DrumBlocksView() {
                       <g key={`vb-${q}`}>
                         <rect
                           x={x - bm.w / 2} y={bm.top} width={bm.w} height={bm.h} rx={2.5}
-                          fill={hit ? laneColor(lane, P) : P.scene} fillOpacity={hit ? (dim ? 0.08 : 0.14) : 0.6}
-                          stroke={hit ? laneColor(lane, P) : P.grid} strokeOpacity={hit ? (dim ? 0.32 : 0.55) : 1} strokeWidth={1}
+                          /* The value strip is a PRINTED slot, so it sits on the
+                             recessed well rather than near-white paper — a row of
+                             16 pale boxes per lane was the pastel haze on screen. */
+                          fill={hit ? laneColor(lane, P) : P.handDrawn ? P.well : P.scene}
+                          fillOpacity={hit ? (P.handDrawn ? (dim ? 0.22 : 0.38) : (dim ? 0.08 : 0.14)) : P.handDrawn ? 1 : 0.6}
+                          stroke={hit ? laneColor(lane, P) : P.grid}
+                          strokeOpacity={hit ? (P.handDrawn ? (dim ? 0.55 : 0.85) : (dim ? 0.32 : 0.55)) : P.handDrawn ? 0.75 : 1}
+                          strokeWidth={1}
                           pointerEvents="none"
                         />
                         {label !== null && bm.w >= (spec.short.length > 3 ? 16 : 12) && (
