@@ -226,6 +226,12 @@ export interface Chord {
    *  needs to know major/minor/dominant-ish). Optional — when absent,
    *  quality is the single source of truth, exactly as before. */
   extendedSuffix?: string;
+  /** The label this chord was imported with, verbatim — e.g. a DCML
+   *  "FV65/V" from the Mozart corpus, or a corpus chord symbol the
+   *  parser had to reduce. Display only: nothing derives harmony from
+   *  it, and it is deliberately NOT `extendedSuffix`, which means "a
+   *  quality suffix" and feeds hex placement and voicing. */
+  annotation?: string;
   /** Optional per-step articulation effect (strum/pulse/legato). When
    *  absent the chord plays as a plain block chord — no change from
    *  current behaviour. */

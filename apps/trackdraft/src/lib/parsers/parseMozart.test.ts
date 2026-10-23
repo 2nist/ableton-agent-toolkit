@@ -178,7 +178,10 @@ describe("parseMozartJcrd", () => {
 
   it("keeps the original annotation on every chord", () => {
     const song = parseMozartJcrd(raw);
-    expect(song.sections[0].chords.map((chord) => chord.extendedSuffix)).toEqual(["I", "V", "I", "IV"]);
+    expect(song.sections[0].chords.map((chord) => chord.annotation)).toEqual(["I", "V", "I", "IV"]);
+    // The DCML label must never land in `extendedSuffix`, which is a quality
+    // suffix that the hex wheel and the voicing planner both read.
+    expect(song.sections[0].chords.every((chord) => chord.extendedSuffix === undefined)).toBe(true);
     expect(song.sections[0].chords.map((chord) => chord.romanNumeral)).toEqual(["I", "V", "I", "IV"]);
   });
 

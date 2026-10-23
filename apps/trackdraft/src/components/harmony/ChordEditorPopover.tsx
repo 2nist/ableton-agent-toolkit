@@ -92,6 +92,18 @@ export default function ChordEditorPopover({
         </div>
       </div>
 
+      {/* The label this chord was imported with, when the source used its own
+          notation (the Mozart corpus writes DCML: "FV65/V"). Display only —
+          the app's harmony comes from the root, quality and voicing. */}
+      {chord.annotation && (
+        <p
+          className="shrink-0 text-3xs font-mono text-inkMuted/70"
+          title="The label this chord came in with, verbatim"
+        >
+          source label: <span className="text-inkMuted">{chord.annotation}</span>
+        </p>
+      )}
+
       <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto">
         {/* Beats */}
         <div>

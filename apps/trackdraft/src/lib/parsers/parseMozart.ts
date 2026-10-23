@@ -389,7 +389,10 @@ export function parseMozartJcrd(raw: unknown): BlueprintSong {
       quality: parsed.quality,
       beats: Math.round(beats * 4) / 4,
       voicing: parsed.inversion > 0 ? { inversion: parsed.inversion } : undefined,
-      extendedSuffix: span.label,
+      // The original DCML label lives in `annotation`, NOT `extendedSuffix`:
+      // that field means "a quality suffix" and feeds hex placement, so a
+      // label like "FV65/V" there produced honeycomb text such as "iviv".
+      annotation: span.label,
       isSubstitution: parsed.chromatic || undefined,
     });
     cursor = startBeat + beats;
