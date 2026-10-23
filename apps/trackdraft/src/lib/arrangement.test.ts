@@ -85,3 +85,45 @@ describe("sectionSpans", () => {
     expect(totalBars(spans)).toBe(0);
   });
 });
+
+describe("sectionSpans — meter map", () => {
+  it("gives a mixed-meter section its real beat length", () => {
+    // 4/4 4/4 4/4 then 7/8: 4+4+4+3.5 = 15.5 beats, not 4 × 4.
+    const mixed = makeSection({
+      id: "a",
+      bars: 4,
+      meterMap: [
+        { bar: 0, numerator: 4, denominator: 4 },
+        { bar: 3, numerator: 7, denominator: 8 },
+      ],
+    });
+    const [span] = sectionSpans(makeSong([mixed], []));
+    expect(span.durationBeats).toBe(15.5);
+  });
+
+  it("accumulates bars across spans instead of dividing beats by one meter", () => {
+    // A 3/4 section followed by a 4/4 one: the second section starts at bar 4,
+    // which beats-per-bar division would have put at bar 3.
+    const threeFour = makeSection({ id: "a", bars: 4, timeSignatureNumerator: 3 });
+    const fourFour = makeSection({ id: "b", bars: 4 });
+    const spans = sectionSpans(makeSong([threeFour, fourFour], []));
+    expect(spans.map((s) => s.startBar)).toEqual([0, 4]);
+    expect(spans.map((s) => s.startBeat)).toEqual([0, 12]);
+  });
+
+  it("keeps startBar and startBeat consistent for a repeated mixed-meter section", () => {
+    const mixed = makeSection({
+      id: "a",
+      bars: 2,
+      meterMap: [
+        { bar: 0, numerator: 4, denominator: 4 },
+        { bar: 1, numerator: 5, denominator: 4 },
+      ],
+    });
+    const spans = sectionSpans(makeSong([mixed], [{ sectionId: "a", repeats: 2 }]));
+    expect(spans.map((s) => [s.startBar, s.startBeat])).toEqual([
+      [0, 0],
+      [2, 9],
+    ]);
+  });
+});

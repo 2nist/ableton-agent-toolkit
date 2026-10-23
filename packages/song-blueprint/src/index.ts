@@ -545,6 +545,22 @@ export interface BlueprintSection {
    *  note, section-relative. Authored entries win over inference, so a
    *  correction sticks. Empty/absent → one home for the whole section. */
   tonicRegions?: TonicRegion[];
+  /** Meter changes *inside* this section, by 0-based bar. Absent (or empty)
+   *  → one meter for the whole section, its `timeSignatureNumerator` /
+   *  `timeSignatureDenPower`, which is what every song written before this
+   *  field existed still means. Present → those two fields describe the
+   *  section's *opening* meter (what the editor shows and what a new chord
+   *  defaults to); the map decides how long each bar actually is. */
+  meterMap?: MeterChange[];
+}
+
+/** A meter change at a 0-based bar inside a section. `denominator` is the
+ *  written lower number (8 for 7/8), not its power — a bar is
+ *  `numerator * (4 / denominator)` quarter-note beats. */
+export interface MeterChange {
+  bar: number;
+  numerator: number;
+  denominator: number;
 }
 
 /** Where a tonal-centre region came from: proposed by the key finder, or
@@ -649,8 +665,69 @@ export function beatsPerBar(section: Pick<BlueprintSection, "timeSignatureNumera
   return section.timeSignatureNumerator * (4 / 2 ** section.timeSignatureDenPower);
 }
 
+/** Beats in each of a section's bars, in order — one entry per bar. With no
+ *  `meterMap` every entry is the declared meter, so this is just `bars`
+ *  copies of `beatsPerBar` and every existing song is unaffected. */
+export function barLengths(
+  section: Pick<BlueprintSection, "bars" | "timeSignatureNumerator" | "timeSignatureDenPower" | "meterMap">,
+): number[] {
+  const count = Math.max(0, Math.floor(section.bars));
+  const declared = beatsPerBar(section);
+  const lengths = new Array<number>(count).fill(declared);
+  const map = section.meterMap;
+  if (!map || map.length === 0) return lengths;
+
+  const sorted = [...map].sort((a, b) => a.bar - b.bar);
+  for (let i = 0; i < sorted.length; i += 1) {
+    const change = sorted[i];
+    if (!(change.numerator > 0) || !(change.denominator > 0)) continue;
+    const from = Math.max(0, Math.min(count, Math.floor(change.bar)));
+    const to = Math.min(count, i + 1 < sorted.length ? Math.floor(sorted[i + 1].bar) : count);
+    const length = change.numerator * (4 / change.denominator);
+    for (let bar = from; bar < to; bar += 1) lengths[bar] = length;
+  }
+  return lengths;
+}
+
+/** Total length in quarter-note beats — the sum of the actual bars when a
+ *  meter map is present, `bars × beatsPerBar` otherwise. */
 export function sectionDurationBeats(section: BlueprintSection): number {
-  return section.bars * beatsPerBar(section);
+  if (!section.meterMap || section.meterMap.length === 0) {
+    return section.bars * beatsPerBar(section);
+  }
+  return barLengths(section).reduce((sum, length) => sum + length, 0);
+}
+
+/** Which bar a section-relative beat falls in, and how far into it. */
+export function barAtBeat(
+  section: Pick<BlueprintSection, "bars" | "timeSignatureNumerator" | "timeSignatureDenPower" | "meterMap">,
+  beat: number,
+): { bar: number; beatInBar: number } {
+  const bpb = beatsPerBar(section);
+  if (!section.meterMap || section.meterMap.length === 0) {
+    const bar = Math.max(0, Math.floor(beat / bpb));
+    return { bar, beatInBar: Math.max(0, beat - bar * bpb) };
+  }
+  const lengths = barLengths(section);
+  let remaining = Math.max(0, beat);
+  for (let bar = 0; bar < lengths.length; bar += 1) {
+    if (remaining < lengths[bar]) return { bar, beatInBar: remaining };
+    remaining -= lengths[bar];
+  }
+  return { bar: Math.max(0, lengths.length - 1), beatInBar: 0 };
+}
+
+/** Section-relative beat where a bar starts. */
+export function beatAtBar(
+  section: Pick<BlueprintSection, "bars" | "timeSignatureNumerator" | "timeSignatureDenPower" | "meterMap">,
+  bar: number,
+): number {
+  const bpb = beatsPerBar(section);
+  if (!section.meterMap || section.meterMap.length === 0) return bar * bpb;
+  const lengths = barLengths(section);
+  let total = 0;
+  for (let i = 0; i < Math.min(bar, lengths.length); i += 1) total += lengths[i];
+  return total;
 }
 
 /** How a section's chords[] (one pass through its progression) relates to

@@ -445,6 +445,21 @@ describe("planChordStem — chord voicing", () => {
     expect(first.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([60, 64, 67, 70, 74, 81]);
   });
 
+  it("fills a meter-mapped section to its real length, not bars × one meter", () => {
+    // 4/4, 4/4, 7/8 → 11.5 beats. The old math would have filled 12.
+    const song = testSong();
+    const section = song.sections[0];
+    section.bars = 3;
+    section.chords = [{ id: "c1", romanNumeral: "I", root: "C", quality: "maj", beats: 4 }];
+    section.meterMap = [
+      { bar: 0, numerator: 4, denominator: 4 },
+      { bar: 2, numerator: 7, denominator: 8 },
+    ];
+    const notes = planChordStem(sectionSpans(song));
+    const end = notes.reduce((max, n) => Math.max(max, n.startTime + n.duration), 0);
+    expect(end).toBeCloseTo(11.5, 5);
+  });
+
   it("still honours an authored extendedSuffix the vocabulary cannot hold", () => {
     // Unmapped suffixes keep the base quality's intervals — documented
     // limitation, not a regression: the suffix is display-only by design.

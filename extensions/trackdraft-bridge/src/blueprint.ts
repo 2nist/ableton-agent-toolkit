@@ -6,7 +6,7 @@ export type {
   ArrangementRepeat,
 } from "@music-theory/song-blueprint";
 
-import { resolveArrangement, type BlueprintSong, type BlueprintSection } from "@music-theory/song-blueprint";
+import { resolveArrangement, sectionDurationBeats, type BlueprintSong, type BlueprintSection } from "@music-theory/song-blueprint";
 
 export interface SectionSpan {
   section: BlueprintSection;
@@ -47,8 +47,10 @@ export function sectionSpans(song: BlueprintSong): SectionSpan[] {
     // denominator matters: a 7/8 bar is 3.5 beats, not 7. `bars *
     // numerator` alone doubled every x/8 section's span — first caught
     // when an 8-bar 7/8 template produced a 56-beat drum clip.
-    const denominator = 2 ** section.timeSignatureDenPower;
-    const durationBeats = section.bars * section.timeSignatureNumerator * (4 / denominator);
+    // The shared helper also honours `meterMap`, so a section that changes
+    // meter mid-way is the same length here as it is in the app — parity by
+    // construction instead of by a duplicated formula.
+    const durationBeats = sectionDurationBeats(section);
 
     const repeats = Math.max(0, Math.floor(entry.repeats));
     for (let occurrenceIndex = 0; occurrenceIndex < repeats; occurrenceIndex++) {

@@ -1,4 +1,4 @@
-import { resolveArrangement, sectionDurationBeats, beatsPerBar } from "../types/blueprint";
+import { resolveArrangement, sectionDurationBeats } from "../types/blueprint";
 import type { BlueprintSong, BlueprintSection } from "../types/blueprint";
 
 export interface SectionSpan {
@@ -30,13 +30,16 @@ export function sectionSpans(song: BlueprintSong): SectionSpan[] {
   const sectionsById = new Map(song.sections.map((section) => [section.id, section]));
   const spans: SectionSpan[] = [];
   let startBeat = 0;
+  // Bars are accumulated, not derived from beats: a section with a meter map
+  // (or a song whose sections use different meters) has no single
+  // beats-per-bar to divide by.
+  let startBar = 0;
 
   for (const entry of resolveArrangement(song)) {
     const base = sectionsById.get(entry.sectionId);
     if (!base) continue; // stale reference (section since deleted) — skip rather than crash
     const section: BlueprintSection = entry.overrides ? { ...base, ...entry.overrides } : base;
     const durationBeats = sectionDurationBeats(section);
-    const bpb = beatsPerBar(section);
 
     const repeats = Math.max(0, Math.floor(entry.repeats));
     for (let occurrenceIndex = 0; occurrenceIndex < repeats; occurrenceIndex++) {
@@ -47,10 +50,11 @@ export function sectionSpans(song: BlueprintSong): SectionSpan[] {
         variation: entry.variation,
         startBeat,
         durationBeats,
-        startBar: startBeat / bpb,
+        startBar,
         bars: section.bars,
       });
       startBeat += durationBeats;
+      startBar += section.bars;
     }
   }
   return spans;
