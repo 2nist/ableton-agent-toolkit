@@ -33,7 +33,7 @@ export default function LyricsView() {
           {song.sections.map((section) => (
             <button
               key={section.id}
-              className={`hand-value text-sm px-3 py-1 rounded border ${
+              className={`marker-label text-sm px-3 py-1 rounded border ${
                 activeSection?.id === section.id
                   ? "nav-on border-accent text-accent"
                   : "border-edge text-inkMuted hover:text-ink"

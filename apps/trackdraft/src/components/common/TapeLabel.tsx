@@ -27,6 +27,7 @@ export default function TapeLabel({
   tilt = "left",
   className = "",
   title,
+  onClick,
   as: Tag = "span",
 }: {
   children: ReactNode;
@@ -34,19 +35,22 @@ export default function TapeLabel({
   tilt?: TapeTilt;
   /** The element to render. Kept as a prop so a call site that replaces a
    *  block-level `<p>` or `<div>` keeps its dark-theme layout — an inline
-   *  `<span>` would silently drop `mb-1` and the line break. */
-  as?: "span" | "p" | "div";
+   *  `<span>` would silently drop `mb-1` and the line break. Headings are
+   *  allowed because a section's own name is a header in both themes. */
+  as?: "span" | "p" | "div" | "h2" | "h3";
   /** Layout + dark-theme typography. Ignored in the paper theme wherever the
    *  tape recipe sets the same property (size, colour, letter-spacing). */
   className?: string;
   title?: string;
+  /** Headers that are also controls (the workbench's rename-on-click title). */
+  onClick?: () => void;
 }) {
   const handDrawn = usePalette().handDrawn;
   const tape = handDrawn
     ? `tape-label tape-label--${size}${tilt === "right" ? " tape-label--end" : tilt === "none" ? " tape-label--flat" : ""}`
     : "";
   return (
-    <Tag className={`${tape} ${className}`.trim() || undefined} title={title}>
+    <Tag className={`${tape} ${className}`.trim() || undefined} title={title} onClick={onClick}>
       {children}
     </Tag>
   );

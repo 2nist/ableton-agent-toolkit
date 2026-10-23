@@ -164,7 +164,7 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
                   onDoubleClick={() => jump("harmony")}
                   title="Click to target its mix · double-click to edit"
                 >
-                  <span className="text-[10.5px] font-medium leading-tight truncate w-full">{section.name}</span>
+                  <span className="marker-label marker-label--tight text-[10.5px] font-medium leading-tight truncate w-full">{section.name}</span>
                   <span className="text-[9px] opacity-80 font-mono leading-tight">{Math.round(span.bars)} bars</span>
                 </button>
                 {/* readout strip — harmony / drums / melody, each row jumps

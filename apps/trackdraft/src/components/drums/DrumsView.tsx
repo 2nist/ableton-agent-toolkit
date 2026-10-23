@@ -775,7 +775,10 @@ export default function DrumsView({
               y={TOP_PAD - 8}
               textAnchor="middle"
               fontSize={10}
-              fontFamily={P.drawnFont}
+              /* A bar NUMBER is a machine readout, so it stays in the mono
+                 voice in both themes — the hand face is for names, and one
+                 bar apart there is no room for the marker's weight. */
+              fontFamily="'IBM Plex Mono', monospace"
               fill={P.grid}
               pointerEvents="none"
             >

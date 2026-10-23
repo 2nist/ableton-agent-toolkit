@@ -110,8 +110,11 @@ export default function SectionCard({ section, repeats, onChange, onChangeRepeat
         >
           ⠿
         </button>
+        {/* `size` is only read in the paper theme, where the tape is torn to
+            the name's length; in the dark theme the field stays `flex-1`. */}
         <input
-          className="hand-value bg-transparent font-medium flex-1 outline-none"
+          className="tape-input bg-transparent font-medium flex-1 outline-none"
+          size={Math.max(4, section.name.length + 1)}
           value={section.name}
           onChange={(e) => onChange((s) => ({ ...s, name: e.target.value }))}
         />

@@ -171,12 +171,14 @@ body {
    its own `text-3xs` / `text-[11px]` / `text-xs`, so one row of panels could
    show the same kind of label at 9px, 10px, 11px and 12px. Three steps now,
    and the component picks one:
-     --sm  12px  dense dock sub-labels
-     --md  14px  panel and view headers (the default)
-     --lg  19px  page identity, e.g. the app brand
-   `line-height` is set with the size so the tape's padding can't collapse. */
+     --sm  13px  dense dock sub-labels
+     --md  17px  panel and section headers (the default)
+     --lg  22px  page identity / a section's own header
+   `line-height` is set with the size so the tape's padding can't collapse.
+   Bumped once the whole app was taped: 14px read fine on four labels and
+   vanished on twenty. */
 [data-theme="logsheet"] .tape-label {
-  --tape-size: 14px;
+  --tape-size: 17px;
   display: inline-block;
   font-family: "Permanent Marker", "Nothing You Could Do", cursive;
   font-size: var(--tape-size);
@@ -196,14 +198,14 @@ body {
   white-space: nowrap;
 }
 [data-theme="logsheet"] .tape-label--sm {
-  --tape-size: 12px;
+  --tape-size: 13px;
   padding: 0.12em 0.55em 0.06em;
 }
 [data-theme="logsheet"] .tape-label--md {
-  --tape-size: 14px;
+  --tape-size: 17px;
 }
 [data-theme="logsheet"] .tape-label--lg {
-  --tape-size: 19px;
+  --tape-size: 22px;
   padding: 0.14em 0.7em 0.08em;
   filter: drop-shadow(1.5px 2px 1.5px rgba(0, 0, 0, 0.2));
 }
@@ -367,9 +369,10 @@ body {
    Voice = who produced the datum, not where it is shown:
 
      printed     the template   labels, table heads, hints        Courier
-     written     the person     authored values and prose         Kalam, blue
+     written     the person     authored values and prose         Reenie, blue
      mechanical  the machine    counters, %, bar·beat             Plex Mono
-     marker      a label stuck  panel headers, view names         Marker on tape
+     marker      a label stuck  panel headers, view names,        Marker on tape
+                                and every section's name
 
    The discriminator is input vs readout: you write the inputs, the machine
    prints the readouts. Hierarchy is carried by size — 16px pen against a
@@ -405,6 +408,65 @@ body {
 /* The pen on a dark instrument plate would lose its contrast — lift the ink. */
 [data-theme="logsheet"] .on-deep .hand-value {
   color: #9db6ef;
+}
+
+/* --------------------------------------------------------------------------
+   THE NAMING VOICE. Declared BELOW `.hand-value` on purpose: these two classes
+   are the same specificity, so source order is the only thing that decides —
+   a `.marker-label hand-value` call site once rendered in the pen because
+   `.hand-value` came later in this file.
+   -------------------------------------------------------------------------- */
+
+/* Marker WITHOUT tape — a name inside a surface that is already decorated
+   (a spine block, a card header bar, a drum lane in the ruler). Colour is
+   inherited on purpose: the spine's block colour is the section's role, and
+   the drum ruler's lane colour is the voice. */
+[data-theme="logsheet"] .marker-label {
+  font-family: "Permanent Marker", "Nothing You Could Do", cursive;
+  font-weight: 400;
+  letter-spacing: 0.015em;
+  line-height: 1.15;
+  color: inherit;
+  /* No font-size, for the same reason `.hand-value` has none: `themes.css`
+     loads after the Tailwind layer, so a size declared here would beat the
+     call site's `text-[10px]` / `text-xs` and resolve against the PARENT
+     instead. Every marker label keeps whatever size its site already used. */
+}
+
+/* A name in a slot that was sized for 10px mono (the spine's blocks, the
+   arrangement's section blocks): the marker has to go up a step to read, but
+   only in the paper theme, so the dark theme keeps the size it always had. */
+[data-theme="logsheet"] .marker-label--tight {
+  font-size: 12px;
+}
+
+/* A section's name IS a header, so the field that holds it is tape too. The
+   tape recipe goes on the input itself rather than a wrapper: the input is a
+   flex child with `flex-1`, and wrapping it in an inline-block collapses the
+   row. */
+[data-theme="logsheet"] .tape-input {
+  font-family: "Permanent Marker", "Nothing You Could Do", cursive;
+  font-weight: 400;
+  font-size: var(--tape-size, 17px);
+  letter-spacing: 0.02em;
+  color: var(--tape-ink);
+  padding: 0.16em 0.62em 0.1em;
+  background: linear-gradient(180deg, var(--tape-a), var(--tape-b));
+  clip-path: polygon(
+    2% 7%, 30% 0, 61% 5%, 98% 2%, 100% 27%, 97.5% 52%, 100% 76%,
+    98% 96%, 64% 100%, 31% 95%, 3% 99%, 0 73%, 2.5% 49%, 0 25%
+  );
+  transform: rotate(-0.6deg);
+  border: 0;
+  outline: none;
+  /* A strip of tape is torn to the length of what is written on it, not
+     stretched across the whole row — so the input stops being a `flex-1`
+     child here and takes its width from its own `size` attribute (set from
+     the name's length at the call site; `field-sizing` is not everywhere). */
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 4ch;
+  max-width: 100%;
 }
 
 /* A printed card has crisp corners, not soft ones. Only the radius changes —

@@ -105,7 +105,10 @@ const LOGSHEET: Palette = {
   select: "#1F5FA8",
   cream: "#26221B",
   handDrawn: true,
-  drawnFont: "'Reenie Beanie', 'Segoe Script', cursive",
+  /* The drum ruler and lane names are MARKER, not pen: they name a thing
+   * (a voice, a section) rather than record a value, and the marker voice is
+   * what the rest of the app uses for a name stuck onto the page. */
+  drawnFont: "'Permanent Marker', 'Nothing You Could Do', cursive",
   voices: {
     kick: "#A03A31",
     snare: "#5E6672",

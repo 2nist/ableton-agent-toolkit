@@ -430,7 +430,10 @@ function SectionWorkspace({
             aria-label="Section name"
           />
         ) : (
-          <h2
+          <TapeLabel
+            as="h2"
+            size="lg"
+            tilt="none"
             className="text-sm font-medium text-ink truncate cursor-text hover:text-accent/90"
             title="Click to rename"
             onClick={() => {
@@ -439,7 +442,7 @@ function SectionWorkspace({
             }}
           >
             {section.name}
-          </h2>
+          </TapeLabel>
         )}
         <div className="flex items-center gap-0.5 shrink-0" title="Section length — one undo step per click">
           <button
