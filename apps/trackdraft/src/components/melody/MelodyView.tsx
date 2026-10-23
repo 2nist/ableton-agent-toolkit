@@ -454,7 +454,7 @@ export default function MelodyView() {
       <div>
         <div className="flex items-center justify-between mb-1">
           <TapeLabel size="md" className="text-3xs text-inkMuted uppercase tracking-wide font-mono">
-            Melody · {activeSection?.name}
+            Melody
           </TapeLabel>
           <div className="flex gap-1 border border-edge rounded p-0.5">
             <button

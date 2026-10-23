@@ -114,8 +114,13 @@
   --stamp-pencil-edge: rgba(74, 66, 56, 0.7);
   --ledger-rule: rgba(38, 34, 27, 0.13);
   --ledger-margin: rgba(163, 63, 54, 0.38);
-  /* Red pencil — the margin line, the active-tab underline, the pencil hatch. */
+  /* Three inks, exactly like the session sheet this theme imitates: the form
+     is printed in black, the person writes in blue biro, and red is reserved
+     for the margin, stamps and the active-tab underline. Nothing else gets a
+     colour. */
   --pencil-red: #a03a31;
+  --ink-hand: #2b4c9b; /* biro blue — 7.2:1 on the card stock */
+  --hand-pen: "Kalam", "Segoe Script", "Bradley Hand", cursive;
   /* A printed sticker: whiter than the card, with its own hairline. */
   --sticker-bg: #fbf7ec;
   --sticker-edge: #b9ae95;
@@ -356,28 +361,46 @@ body {
   text-decoration-skip-ink: none;
 }
 
-/* A written value: pencil, never bold. "Nothing You Could Do" ships one weight,
-   so anything above 400 would be a synthetic bold that smears the pen stroke.
-   
-   The size is INHERITED on purpose. It used to be a 1.25em multiplier, which
-   resolves against the *parent's* size and therefore overrode any `text-[10px]`
-   the call site set on the same element — a 10px section name came out at 20px
-   and clipped. Each call site now states its own size (12px in the spine band,
-   15px for titles, 12.5px in the inspector); this class only changes the hand. */
+/* ==========================================================================
+   THE WRITTEN VOICE
+   --------------------------------------------------------------------------
+   Voice = who produced the datum, not where it is shown:
+
+     printed     the template   labels, table heads, hints        Courier
+     written     the person     authored values and prose         Kalam, blue
+     mechanical  the machine    counters, %, bar·beat             Plex Mono
+     marker      a label stuck  panel headers, view names         Marker on tape
+
+   The discriminator is input vs readout: you write the inputs, the machine
+   prints the readouts. Hierarchy is carried by size — 16px pen against a
+   10.5px label is ~1.5×, which is what makes the mock read as annotated
+   rather than restyled (it used 18.2px against 10.6px).
+
+   The size is declared here rather than inherited: a multiplier (even `1em`)
+   resolves against the PARENT and beats the call site's own `text-[10px]`,
+   which is how a 10px section name once came out at 20px and clipped. */
 [data-theme="logsheet"] .hand-value {
-  font-family: "Nothing You Could Do", "Segoe Script", "Bradley Hand", cursive;
-  /* No `font-size` on purpose — see above. Declaring even `1em` here wins the
-     cascade over the call site's own `text-[12px]`/`text-2xs` and resolves
-     against the PARENT, which is exactly how a 10px section name came out at
-     20px and clipped inside the spine band. */
-  letter-spacing: 0.015em;
+  font-family: var(--hand-pen);
+  font-size: 16px;
+  line-height: 1.25;
+  letter-spacing: 0.005em;
   font-weight: 400;
+  color: var(--ink-hand);
 }
-/* A hand-written value in a slot designed for 9–10px type. The pen needs a
-   little more room than mono to stay legible, but only on paper — the dark
-   theme keeps the call site's own utility, untouched. */
+/* A page identity — the app brand. Kalam's 700 is a real bold, not synthesised. */
+[data-theme="logsheet"] .hand-value--title {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+/* A written value in a slot designed for 9–10px type: the pen still has to
+   reach 16px, or it stops reading as a pen. */
 [data-theme="logsheet"] .hand-value--up {
-  font-size: 12px;
+  font-size: 16px;
+}
+/* The pen on a dark instrument plate would lose its contrast — lift the ink. */
+[data-theme="logsheet"] .on-deep .hand-value {
+  color: #9db6ef;
 }
 
 /* A printed card has crisp corners, not soft ones. Only the radius changes —

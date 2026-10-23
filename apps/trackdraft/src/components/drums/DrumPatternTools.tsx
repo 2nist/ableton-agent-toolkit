@@ -534,8 +534,8 @@ export default function DrumPatternTools() {
     <div className="p-2.5 space-y-2.5">
       <div className="flex items-center justify-between">
         <TapeLabel size="md" className="font-mono text-3xs uppercase tracking-wider text-inkMuted">
-            Pattern · {section.name}
-          </TapeLabel>
+          Pattern
+        </TapeLabel>
         {isDraft && (
           <span className="font-mono text-3xs uppercase tracking-wider text-track">● preview</span>
         )}

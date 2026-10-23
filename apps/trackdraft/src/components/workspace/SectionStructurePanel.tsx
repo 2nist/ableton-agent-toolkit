@@ -94,7 +94,7 @@ export default function SectionStructurePanel() {
       {/* Numbers: time sig · bars · beats/chord · repeats */}
       <div className="flex items-center flex-wrap gap-x-2 gap-y-1.5 text-2xs text-inkMuted font-mono">
         <label className="flex items-center gap-1" title="Time signature">
-          <span className="uppercase tracking-wide text-3xs">TS</span>
+          <span className="uppercase tracking-wide text-[10.5px]">TS</span>
           <input
             type="number"
             min={1}
@@ -115,7 +115,7 @@ export default function SectionStructurePanel() {
           </select>
         </label>
         <label className="flex items-center gap-1" title="Section length in bars">
-          <span className="uppercase tracking-wide text-3xs">Bars</span>
+          <span className="uppercase tracking-wide text-[10.5px]">Bars</span>
           <input
             type="number"
             min={1}
@@ -128,7 +128,7 @@ export default function SectionStructurePanel() {
           className="flex items-center gap-1"
           title="The default chord rhythm used when BUILDING or importing chords — each chord also carries its own length, and an existing chord's length wins wherever set (edit per-chord timing in the harmony editor)"
         >
-          <span className="uppercase tracking-wide text-3xs">Bts/ch</span>
+          <span className="uppercase tracking-wide text-[10.5px]">Bts/ch</span>
           <input
             type="number"
             min={1}
@@ -138,7 +138,7 @@ export default function SectionStructurePanel() {
           />
         </label>
         <label className="flex items-center gap-1" title="How many times this section plays in a row here — 0 skips it without deleting">
-          <span className="uppercase tracking-wide text-3xs">Rpt</span>
+          <span className="uppercase tracking-wide text-[10.5px]">Rpt</span>
           <input
             type="number"
             min={0}
@@ -214,7 +214,7 @@ export default function SectionStructurePanel() {
 
       {/* Velocity */}
       <label className="flex items-center gap-1 text-2xs text-inkMuted font-mono">
-        <span className="uppercase tracking-wide text-3xs">Velocity</span>
+        <span className="uppercase tracking-wide text-[10.5px]">Velocity</span>
         <select
           className="flex-1 bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink"
           value={section.velocity}

@@ -9,7 +9,6 @@ import { resolveChordOccurrences } from "@drum/library";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import IconBtn from "../common/IconBtn";
 import ThemeToggle from "../common/ThemeToggle";
-import TapeLabel from "../common/TapeLabel";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
 import { useSongStore } from "../../store/songStore";
@@ -625,14 +624,14 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
             dissolve the top tabs, gain two rows). Click = dashboard. */}
         <button
           type="button"
-          className={`flex items-center gap-1.5 min-w-0 shrink group text-left ${handDrawn ? "max-w-[480px]" : "max-w-[260px]"}`}
+          className={`flex items-center gap-1.5 min-w-0 shrink group text-left ${handDrawn ? "max-w-[420px]" : "max-w-[260px]"}`}
           onClick={() => navigate("/")}
           title={`${song.title} — ${song.key} ${song.scale} · ${song.bpm} BPM${
             song.sections.length > 0 ? ` · ${classifySong(song).label}` : ""
           }\nClick to go back to the dashboard`}
         >
           <span className="text-inkMuted group-hover:text-ink text-sm shrink-0">←</span>
-          <TapeLabel size="md" className="truncate text-xs text-ink/90">{song.title}</TapeLabel>
+          <span className="hand-value hand-value--title truncate text-xs text-ink/90">{song.title}</span>
           <span className="plabel hidden md:inline text-[9px] font-mono text-inkMuted/60 tabular-nums shrink-0">
             {song.key} {song.scale} · {song.bpm}
           </span>

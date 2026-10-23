@@ -45,14 +45,17 @@ export default {
         cream: "rgb(var(--c-cream) / <alpha-value>)",
       },
       fontFamily: {
-        // Two more voices for the studio-log theme. `sans`/`mono` are the
-        // dark theme's; `type` (typewriter) and `hand` (pencil) are what the
-        // log sheet substitutes for labels and written values.
+        // The log sheet has exactly four voices and `font-mono` is one of them:
+        // it used to fall through to Tailwind's `ui-monospace` stack, a face
+        // the prototype never uses, so labels read as OS chrome. Pointed at
+        // IBM Plex Mono, which the mock uses for mechanical readouts.
+        mono: ["'IBM Plex Mono'", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
         type: ["'Courier Prime'", "'Courier New'", "Courier", "monospace"],
-        // Handwriting voice. "Nothing You Could Do" replaced Caveat: Caveat's
-        // narrow, upright forms read as a UI font at 11–13px, while this one
-        // keeps a pen's slant and thick/thin at the sizes values actually use.
-        hand: ["'Nothing You Could Do'", "'Segoe Script'", "'Bradley Hand'", "cursive"],
+        // Handwriting voice. Kalam is the one pen in the stack with real
+        // weights (300/400/700), so the written hierarchy can be carried by
+        // weight instead of by size alone — the mock had to rely on size
+        // because Caveat has no bold.
+        hand: ["Kalam", "'Segoe Script'", "'Bradley Hand'", "cursive"],
         marker: ["'Permanent Marker'", "Caveat", "cursive"],
       },
       // Tightened from Tailwind's defaults (sm 2px/DEFAULT 4px/md 6px/lg 8px)

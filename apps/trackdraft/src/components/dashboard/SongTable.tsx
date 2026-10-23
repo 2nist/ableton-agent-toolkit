@@ -120,7 +120,7 @@ export default function SongTable({ songs, sortKey, sortDir, onSort }: SongTable
                   />
                 </td>
                 <td className="px-2 py-1.5">
-                  <div className="hand-value font-medium truncate max-w-[300px]">{song.title}</div>
+                  <div className="hand-value truncate max-w-[300px] font-medium">{song.title}</div>
                   <div className="text-[10px] text-inkMuted">
                     {song.key} {song.scale}
                     {song.sections.length > 0 && <> · {classifySong(song).label}</>}

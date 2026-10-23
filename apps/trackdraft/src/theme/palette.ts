@@ -105,7 +105,7 @@ const LOGSHEET: Palette = {
   select: "#1F5FA8",
   cream: "#26221B",
   handDrawn: true,
-  drawnFont: "'Nothing You Could Do', 'Segoe Script', cursive",
+  drawnFont: "Kalam, 'Segoe Script', cursive",
   voices: {
     kick: "#A03A31",
     snare: "#5E6672",
