@@ -352,3 +352,81 @@ body {
 [data-theme="logsheet"] main {
   box-shadow: inset 2px 0 0 var(--ledger-margin);
 }
+
+/* ==========================================================================
+   FADER — a range input with a handle you can actually see and grab.
+   --------------------------------------------------------------------------
+   The app's range inputs are `appearance-none` (so the native thumb is
+   suppressed), and nothing drew a replacement: a 1px bar with no thumb is an
+   invisible control. This recipe is theme-neutral — it themes through the
+   palette variables — and it is applied with the `.fader` class.
+   ========================================================================== */
+.fader {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+.fader:focus-visible {
+  outline: 1px solid rgb(var(--c-accent) / 0.7);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+/* Track: one hairline rule through the middle of the control. */
+.fader::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 1px;
+  background: rgb(var(--c-edge) / 0.85);
+}
+.fader::-moz-range-track {
+  height: 2px;
+  border-radius: 1px;
+  background: rgb(var(--c-edge) / 0.85);
+}
+.fader::-moz-range-progress {
+  height: 2px;
+  background: rgb(var(--c-accent) / 0.9);
+}
+/* Thumb: a small block, not a dot — it reads as a fader cap at 10px. */
+.fader::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 12px;
+  margin-top: -5px;
+  border-radius: 2px;
+  background: rgb(var(--c-panelAlt));
+  border: 1px solid rgb(var(--c-ink) / 0.75);
+  box-shadow: inset 0 0 0 1px rgb(var(--c-ink) / 0.18);
+}
+.fader::-moz-range-thumb {
+  width: 10px;
+  height: 12px;
+  border-radius: 2px;
+  background: rgb(var(--c-panelAlt));
+  border: 1px solid rgb(var(--c-ink) / 0.75);
+}
+.fader:hover::-webkit-slider-thumb,
+.fader:focus-visible::-webkit-slider-thumb {
+  border-color: rgb(var(--c-accent));
+}
+
+/* On paper the thumb is a strip of tape with a pencil mark down its middle. */
+[data-theme="logsheet"] .fader::-webkit-slider-runnable-track {
+  background: var(--ledger-rule);
+}
+[data-theme="logsheet"] .fader::-webkit-slider-thumb {
+  background: linear-gradient(180deg, var(--tape-a), var(--tape-b));
+  border: 1px solid var(--counter-ink);
+  border-radius: 1px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+}
+[data-theme="logsheet"] .fader::-moz-range-thumb {
+  background: var(--tape-a);
+  border: 1px solid var(--counter-ink);
+  border-radius: 1px;
+}
+[data-theme="logsheet"] .fader::-moz-range-track {
+  background: var(--ledger-rule);
+}

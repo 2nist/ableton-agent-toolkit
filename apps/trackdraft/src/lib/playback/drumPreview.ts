@@ -13,7 +13,8 @@ import {
   pickVariantIndexFor,
   songSignalsFor,
   hasBend,
-  resolveStyleProfile,
+  resolveEffectiveStyle,
+  hasNarrative,
   styleSeed,
   type DrumPattern,
   type PackedVariant,
@@ -236,9 +237,13 @@ export function seededVariantIndex(pattern: DrumPattern, section: BlueprintSecti
   // A bend re-seeds the variant deterministically ("controls, not dice" —
   // the same slider positions always pick the same groove); no bend → the
   // classic occurrence seed, so existing songs keep their exact output.
-  const seed = hasBend(section, song)
-    ? styleSeed(resolveStyleProfile(section, song), section.id, occurrenceIndex)
-    : occurrenceSeed(section.id, occurrenceIndex);
+  // A bend OR a narrative re-seeds the pick ("controls, not dice") — a
+  // narrative that raises energy should also change which groove is drawn,
+  // not just how it is styled.
+  const seed =
+    hasBend(section, song) || hasNarrative(section, song)
+      ? styleSeed(resolveEffectiveStyle(section, song), section.id, occurrenceIndex)
+      : occurrenceSeed(section.id, occurrenceIndex);
   // Meter-aware: a section in an odd meter draws the mined variants that
   // are actually in that meter (the Zappa material) instead of corpus 4/4
   // grooves that would drift against the barline. 4/4 sections are

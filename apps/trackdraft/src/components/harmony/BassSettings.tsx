@@ -93,7 +93,7 @@ export default function BassSettings({ section, onChange }: BassSettingsProps) {
             min={1}
             max={127}
             value={velocity}
-            className="w-28 accent-inkMuted"
+            className="fader w-28"
             title="Bass note velocity"
             onChange={(e) => patch({ velocity: Number(e.target.value) })}
           />

@@ -11,7 +11,7 @@
  * Ableton. A section with no `melody` simply contributes nothing.
  */
 
-import { resolveStyleProfile, styleMelodyLine } from "@drum/library";
+import { resolveEffectiveStyle, styleMelodyLine } from "@drum/library";
 import type { SectionSpan } from "../arrangement";
 import type { MidiNote } from "../midiExport";
 import type { BlueprintSong } from "../../types/blueprint";
@@ -30,7 +30,7 @@ export function planMelodyStem(spans: SectionSpan[], song?: BlueprintSong): Midi
     // Bend Melody layer: the Contour axis applies to a captured line here.
     // Generated lines already applied it (and set `contourApplied`), so they
     // are passed through untouched — no double shaping.
-    const profile = resolveStyleProfile(span.section, song);
+    const profile = resolveEffectiveStyle(span.section, song);
     const shaped = melody.contourApplied
       ? melody.notes
       : styleMelodyLine(melody.notes, profile.melodyContour);

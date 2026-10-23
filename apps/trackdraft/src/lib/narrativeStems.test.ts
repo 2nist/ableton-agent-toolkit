@@ -99,6 +99,38 @@ describe("narrative reach across the exported stems", () => {
     expect(onsets(planColorStem(spans, soft))).toHaveLength(2);
   });
 
+  it("re-seeds the drum groove only for a non-neutral arc", () => {
+    // The pick is seeded from the style, so a real arc changes which groove is
+    // drawn; an all-neutral arc must leave the historical pick untouched.
+    const bare = song();
+    const neutralArc = song({ tension_profile: 0.5, rhythmic_energy: 0.5, transition_delta: 0, structural_warp: 0 });
+    const realArc = song({ ...WARPED, structural_warp: 0, rhythmic_energy: 1 });
+    const drums = (s0: BlueprintSong) => planDrumStem(sectionSpans(s0), s0).map((n) => `${n.pitch}@${n.startTime}`);
+    expect(drums(neutralArc)).toEqual(drums(bare));
+    expect(drums(realArc)).not.toEqual(drums(bare));
+  });
+
+  it("scales chord velocity with energy — bend or narrative", () => {
+    // Documents a behaviour change that arrived with the layer: chord velocity
+    // used to be the flat CHORD_VELOCITY constant. It is now
+    // `styleVelocityTarget(CHORD_VELOCITY, profile)`, so the SAME song exported
+    // before a bend is set will differ — neutral energy (0.5) is still exactly
+    // the old constant, which is what keeps un-bent songs byte-identical.
+    const velocity = (songIn: BlueprintSong) => planChordStem(sectionSpans(songIn), songIn)[0]?.velocity ?? 0;
+    const bent = (energy: number) => {
+      const s0 = song();
+      s0.bend = { energy };
+      return s0;
+    };
+    const flat = velocity(song());
+    expect(velocity(bent(0.5))).toBe(flat); // neutral energy → unchanged
+    expect(velocity(bent(1))).toBeGreaterThan(flat);
+    expect(velocity(bent(0))).toBeLessThan(flat);
+    // The narrative's energy axis reaches the same knob with no bend at all.
+    const energetic = song({ ...WARPED, structural_warp: 0, tension_profile: 0.5, rhythmic_energy: 1 });
+    expect(velocity(energetic)).toBeGreaterThan(flat);
+  });
+
   it("a per-section narrative overrides the song master", () => {
     const masterNeutral = song(undefined, WARPED);
     const spans = sectionSpans(masterNeutral);

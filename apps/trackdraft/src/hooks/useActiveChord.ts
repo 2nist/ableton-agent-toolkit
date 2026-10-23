@@ -1,5 +1,11 @@
 import { useMemo } from "react";
-import { resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
+import {
+  resolveChordOccurrences,
+  resolveEffectiveStyle,
+  resolveNarrativeProfile,
+  narrativeHarmonySection,
+  styleSpacing,
+} from "@drum/library";
 import { activeChordIdAt } from "../lib/harmony/activeChord";
 import type { BlueprintSection, BlueprintSong } from "../types/blueprint";
 
@@ -16,9 +22,12 @@ export function useActiveChord(
 ): string | null {
   return useMemo(() => {
     if (!section || !song || sectionBeats <= 0) return null;
-    const profile = resolveStyleProfile(section, song);
+    // Effective style + the narrative's warped grid: the highlight must sit on
+    // the same chord boundaries the export writes, or the app lights one chord
+    // while the file plays another.
+    const profile = resolveEffectiveStyle(section, song);
     const occurrences = resolveChordOccurrences(
-      section,
+      narrativeHarmonySection(section, resolveNarrativeProfile(section, song)),
       sectionBeats,
       styleSpacing(profile.density),
     );

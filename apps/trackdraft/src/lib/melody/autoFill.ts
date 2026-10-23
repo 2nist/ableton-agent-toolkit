@@ -3,7 +3,9 @@ import type { MelodyChord } from "@platform/progression-engine";
 import {
   hashSeed,
   resolveChordOccurrences,
-  resolveStyleProfile,
+  resolveEffectiveStyle,
+  resolveNarrativeProfile,
+  narrativeHarmonySection,
   styleMelodyLine,
   type StyleProfile,
 } from "@drum/library";
@@ -130,12 +132,17 @@ export function generateSectionMelody({
 }: GenerateMelodyOptions): MelodyTrack | null {
   if (!canAutoFill(section)) return null;
 
-  const profile = resolveStyleProfile(section, song);
+  // Narrative's melody axes (density, contour) only exist if the generator
+  // reads the EFFECTIVE profile — this is one of their two consumers.
+  const profile = resolveEffectiveStyle(section, song);
   const params = melodyParamsFromProfile(profile);
   const bpb = beatsPerBarOf(section);
   const duration = durationBeats ?? section.bars * bpb;
 
-  const occurrences = resolveChordOccurrences(section, duration);
+  const occurrences = resolveChordOccurrences(
+    narrativeHarmonySection(section, resolveNarrativeProfile(section, song)),
+    duration,
+  );
   if (occurrences.length === 0) return null;
 
   const chords: MelodyChord[] = occurrences.map((occurrence) => ({

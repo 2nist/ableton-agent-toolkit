@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
-import { resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
+import {
+  resolveChordOccurrences,
+  resolveEffectiveStyle,
+  resolveNarrativeProfile,
+  narrativeHarmonySection,
+  styleSpacing,
+} from "@drum/library";
 import { effectiveTonicRegions } from "../../lib/harmony/tonic";
 import { useSongStore } from "../../store/songStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
@@ -337,8 +343,12 @@ function SectionWorkspace({
 
   const activeChordId = useMemo(() => {
     if (beatInSection == null) return null;
-    const profile = resolveStyleProfile(section, song);
-    const occurrences = resolveChordOccurrences(section, span.durationBeats, styleSpacing(profile.density));
+    const profile = resolveEffectiveStyle(section, song);
+    const occurrences = resolveChordOccurrences(
+      narrativeHarmonySection(section, resolveNarrativeProfile(section, song)),
+      span.durationBeats,
+      styleSpacing(profile.density),
+    );
     let active: string | null = null;
     for (let i = occurrences.length - 1; i >= 0; i--) {
       if (occurrences[i].startTime <= beatInSection) {

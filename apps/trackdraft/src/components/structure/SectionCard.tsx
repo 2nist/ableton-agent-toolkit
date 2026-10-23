@@ -22,6 +22,67 @@ interface SectionCardProps {
   onDelete: () => void;
 }
 
+/** A narrative axis as a real fader.
+ *
+ *  `appearance-none` used to strip the browser's thumb with nothing drawn in
+ *  its place, so the control was a 1px bar you could neither see nor grab. The
+ *  `.fader` recipe in theme/themes.css draws the track AND the thumb in both
+ *  themes. Each axis also states what it currently does, because two of them
+ *  only act past a threshold — a slider whose upper half does nothing is a
+ *  trap unless the label says so.
+ *
+ *  Deliberately not a wrapping <label> around other labels: nesting labels is
+ *  invalid HTML whose activation behaviour browsers disagree about. Each input
+ *  is wrapped by its own label instead. */
+function NarrativeFader({
+  label,
+  value,
+  readout,
+  hint,
+  signed = false,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  readout: string;
+  hint: string;
+  signed?: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-0.5 w-full">
+      <span className="flex justify-between">
+        <span>{label}</span>
+        <span className="text-inkMuted/60 tabular-nums">{readout}</span>
+      </span>
+      <input
+        type="range"
+        min={signed ? -100 : 0}
+        max={100}
+        step={5}
+        className="fader w-full"
+        value={Math.round(value * 100)}
+        onChange={(e) => onChange(Number(e.target.value) / 100)}
+      />
+      <span className="text-3xs text-inkMuted/50 truncate" title={hint}>
+        {hint}
+      </span>
+    </label>
+  );
+}
+
+/** Mirrors `narrativeTransitionModel`'s thresholds so the label can't lie. */
+function boundaryHint(delta: number): string {
+  if (delta > 0.35) return "builds into the next section";
+  if (delta < -0.35) return "drains out of this one";
+  return "neutral — role decides";
+}
+
+/** Mirrors `NARRATIVE_STRUCTURAL_WARP_THRESHOLD`. */
+function warpHint(warp: number): string {
+  return warp > 0.5 ? "warped 2s/3s harmony grid" : "flat — no warp below 50%";
+}
+
 export default function SectionCard({ section, repeats, onChange, onChangeRepeats, onDelete }: SectionCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: section.id,
@@ -216,75 +277,54 @@ export default function SectionCard({ section, repeats, onChange, onChangeRepeat
           </select>
         </label>
         {section.narrative ? (
-          <>
-            <label className="flex flex-col gap-1 text-xs text-inkMuted pt-1 border-t border-edge/30">
-              Narrative arc (tints subgenre vocabulary)
-              <div className="flex gap-2">
-                <label className="flex flex-col gap-0.5 w-full">
-                  <span className="flex justify-between">
-                    <span>Tension</span>
-                    <span className="text-inkMuted/60">{Math.round(section.narrative.tension_profile * 100)}%</span>
-                  </span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    className="w-full h-1 bg-panelAlt border border-edge rounded-lg appearance-none cursor-pointer accent-accent"
-                    value={Math.round(section.narrative.tension_profile * 100)}
-                    onChange={(e) => onChange((s) => ({ ...s, narrative: { ...s.narrative!, tension_profile: Number(e.target.value) / 100 } }))}
-                  />
-                </label>
-                <label className="flex flex-col gap-0.5 w-full">
-                  <span className="flex justify-between">
-                    <span>Energy</span>
-                    <span className="text-inkMuted/60">{Math.round(section.narrative.rhythmic_energy * 100)}%</span>
-                  </span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    className="w-full h-1 bg-panelAlt border border-edge rounded-lg appearance-none cursor-pointer accent-accent"
-                    value={Math.round(section.narrative.rhythmic_energy * 100)}
-                    onChange={(e) => onChange((s) => ({ ...s, narrative: { ...s.narrative!, rhythmic_energy: Number(e.target.value) / 100 } }))}
-                  />
-                </label>
-              </div>
-              <div className="flex gap-2">
-                <label className="flex flex-col gap-0.5 w-full">
-                  <span className="flex justify-between">
-                    <span>Boundary</span>
-                    <span className="text-inkMuted/60">{section.narrative.transition_delta >= 0 ? "+" : ""}{section.narrative.transition_delta.toFixed(2)}</span>
-                  </span>
-                  <input
-                    type="range"
-                    min="-100"
-                    max="100"
-                    step="5"
-                    className="w-full h-1 bg-panelAlt border border-edge rounded-lg appearance-none cursor-pointer accent-accent"
-                    value={Math.round(section.narrative.transition_delta * 100)}
-                    onChange={(e) => onChange((s) => ({ ...s, narrative: { ...s.narrative!, transition_delta: Number(e.target.value) / 100 } }))}
-                  />
-                </label>
-                <label className="flex flex-col gap-0.5 w-full">
-                  <span className="flex justify-between">
-                    <span>Warp</span>
-                    <span className="text-inkMuted/60">{Math.round(section.narrative.structural_warp * 100)}%</span>
-                  </span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    className="w-full h-1 bg-panelAlt border border-edge rounded-lg appearance-none cursor-pointer accent-accent"
-                    value={Math.round(section.narrative.structural_warp * 100)}
-                    onChange={(e) => onChange((s) => ({ ...s, narrative: { ...s.narrative!, structural_warp: Number(e.target.value) / 100 } }))}
-                  />
-                </label>
-              </div>
-            </label>
-          </>
+          <div className="flex flex-col gap-1 text-xs text-inkMuted pt-1 border-t border-edge/30">
+            <div className="flex items-center justify-between gap-2">
+              <span className="tape-label font-mono text-3xs uppercase tracking-wider">
+                Narrative arc
+              </span>
+              <button
+                type="button"
+                className="text-3xs text-inkMuted hover:text-danger px-1 shrink-0"
+                title="Remove this section's narrative arc — it goes back to following the song master"
+                onClick={() => onChange((s) => ({ ...s, narrative: undefined }))}
+              >
+                remove
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <NarrativeFader
+                label="Tension"
+                value={section.narrative.tension_profile}
+                readout={`${Math.round(section.narrative.tension_profile * 100)}%`}
+                hint="harmony · dissonance"
+                onChange={(v) => onChange((s) => ({ ...s, narrative: { ...s.narrative!, tension_profile: v } }))}
+              />
+              <NarrativeFader
+                label="Energy"
+                value={section.narrative.rhythmic_energy}
+                readout={`${Math.round(section.narrative.rhythmic_energy * 100)}%`}
+                hint="density · velocities"
+                onChange={(v) => onChange((s) => ({ ...s, narrative: { ...s.narrative!, rhythmic_energy: v } }))}
+              />
+            </div>
+            <div className="flex gap-2">
+              <NarrativeFader
+                label="Boundary"
+                value={section.narrative.transition_delta}
+                signed
+                readout={`${section.narrative.transition_delta > 0 ? "+" : ""}${section.narrative.transition_delta.toFixed(2)}`}
+                hint={boundaryHint(section.narrative.transition_delta)}
+                onChange={(v) => onChange((s) => ({ ...s, narrative: { ...s.narrative!, transition_delta: v } }))}
+              />
+              <NarrativeFader
+                label="Warp"
+                value={section.narrative.structural_warp}
+                readout={`${Math.round(section.narrative.structural_warp * 100)}%`}
+                hint={warpHint(section.narrative.structural_warp)}
+                onChange={(v) => onChange((s) => ({ ...s, narrative: { ...s.narrative!, structural_warp: v } }))}
+              />
+            </div>
+          </div>
         ) : (
           <button
             type="button"

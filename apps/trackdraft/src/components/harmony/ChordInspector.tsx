@@ -197,7 +197,7 @@ function ParamSlider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-2 flex-1 accent-accent"
+        className="fader flex-1"
       />
       <span className="font-mono text-[10px] text-inkMuted w-10 text-right">{value}</span>
     </div>

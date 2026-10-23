@@ -14,10 +14,10 @@ import {
   pickVariantIndexFor,
   applyStyleToVariant,
   hasBend,
+  hasNarrative,
   narrativeTransitionModel,
   resolveEffectiveStyle,
   resolveNarrativeProfile,
-  resolveStyleProfile,
   styleSeed,
   styleVelocityTarget,
   type DrumPattern,
@@ -140,8 +140,8 @@ function resolveBaseVariant(
     ? Math.max(0, Math.min(section.drumVariantIndex, preset.variants.length - 1))
     : pickVariantIndexFor(
         hashSeed(
-          hasBend(section, song)
-            ? styleSeed(resolveStyleProfile(section, song), section.id, occurrenceIndex)
+          hasBend(section, song) || hasNarrative(section, song)
+            ? styleSeed(resolveEffectiveStyle(section, song), section.id, occurrenceIndex)
             : occurrenceSeed(section.id, occurrenceIndex),
         ),
         preset.variants,

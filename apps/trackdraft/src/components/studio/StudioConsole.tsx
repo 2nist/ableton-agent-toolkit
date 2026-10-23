@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
-import { resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
+import {
+  resolveChordOccurrences,
+  resolveEffectiveStyle,
+  resolveNarrativeProfile,
+  narrativeHarmonySection,
+  styleSpacing,
+} from "@drum/library";
 import { sectionSpans } from "../../lib/arrangement";
 import { useRoleStyle } from "../../lib/roleColors";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
@@ -80,8 +86,12 @@ export default function StudioConsole({ song }: { song: BlueprintSong }) {
   const { activeChordId, chordTimeline } = useMemo(() => {
     if (activeSpan == null || beatInSection == null) return { activeChordId: null as string | null, chordTimeline: [] as { start: number; duration: number }[] };
     const section = activeSpan.section;
-    const profile = resolveStyleProfile(section, song);
-    const occurrences = resolveChordOccurrences(section, activeSpan.durationBeats, styleSpacing(profile.density));
+    const profile = resolveEffectiveStyle(section, song);
+    const occurrences = resolveChordOccurrences(
+      narrativeHarmonySection(section, resolveNarrativeProfile(section, song)),
+      activeSpan.durationBeats,
+      styleSpacing(profile.density),
+    );
     const timeline = occurrences.map((o) => ({ start: o.startTime, duration: o.duration }));
     let active: string | null = null;
     for (let i = occurrences.length - 1; i >= 0; i--) {

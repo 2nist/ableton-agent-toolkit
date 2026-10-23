@@ -75,6 +75,28 @@ export function resolveNarrativeProfile(
   return { ...DEFAULT_NARRATIVE_PROFILE, ...song?.narrative, ...section?.narrative };
 }
 
+/** Does the resolved arc actually tint anything? Call sites use this exactly
+ *  where they use `hasBend` — to decide whether the arc may re-seed a
+ *  deterministic choice (the drum variant pick).
+ *
+ *  A narrative that resolves to all-neutral counts as ABSENT: the layer's
+ *  contract is that a neutral arc is byte-identical to no arc at all, and
+ *  re-seeding on the mere presence of the object would break that (the
+ *  variant pick would change without any axis being moved). */
+export function hasNarrative(
+  section: NarrativeSource | undefined,
+  song: NarrativeSource | undefined,
+): boolean {
+  if (!section?.narrative && !song?.narrative) return false;
+  const n = resolveNarrativeProfile(section, song);
+  return (
+    n.tension_profile !== DEFAULT_NARRATIVE_PROFILE.tension_profile ||
+    n.rhythmic_energy !== DEFAULT_NARRATIVE_PROFILE.rhythmic_energy ||
+    n.transition_delta !== DEFAULT_NARRATIVE_PROFILE.transition_delta ||
+    n.structural_warp !== DEFAULT_NARRATIVE_PROFILE.structural_warp
+  );
+}
+
 /** How strongly each narrative axis pushes its style axes. Sub-unity gains
  *  keep a full narrative swing from slamming an axis to its extreme. */
 const RHYTHMIC_ENERGY_GAIN = 0.8;
@@ -172,6 +194,22 @@ export function narrativeTransitionModel(transitionDelta: number): TransitionMod
   return null;
 }
 
+/** Distinct bar lengths a section spends time in, in beats — from its meter
+ *  map when it has one, else its single declared meter. */
+function mixedMeterLengths(section: {
+  timeSignatureNumerator?: number;
+  timeSignatureDenPower?: number;
+  meterMap?: readonly { numerator: number; denominator: number }[] | null;
+}): Set<number> {
+  const map = section.meterMap;
+  if (map && map.length > 0) {
+    return new Set(map.map((m) => (m.numerator * 4) / m.denominator));
+  }
+  const numerator = section.timeSignatureNumerator ?? 4;
+  const denominator = 2 ** (section.timeSignatureDenPower ?? 2);
+  return new Set([(numerator * 4) / denominator]);
+}
+
 /** structural_warp above this value re-grids the harmony onto a 2s/3s
  *  Euclidean outline instead of flat beatsPerChord. */
 export const NARRATIVE_STRUCTURAL_WARP_THRESHOLD = 0.5;
@@ -211,10 +249,20 @@ export function narrativeHarmonyOutline(
  * section — the Euclidean grid is then honored exactly like an authored one.
  */
 export function narrativeHarmonySection<C extends { beats: number }>(
-  section: ChordResolutionSource<C> & { timeSignatureNumerator?: number; timeSignatureDenPower?: number },
+  section: ChordResolutionSource<C> & {
+    timeSignatureNumerator?: number;
+    timeSignatureDenPower?: number;
+    meterMap?: readonly { numerator: number; denominator: number }[] | null;
+  },
   narrative: NarrativeProfile,
 ): ChordResolutionSource<C> {
-  if (section.harmonyMeterOutline) return section; // authored outline wins
+  if (section.harmonyMeterOutline || section.drumMeterOutline) return section; // authored wins
+  // A single `harmonyMeterOutline` is one repeating cycle, so it can only
+  // describe a section whose bars are all the same length. Warping a
+  // mixed-meter section would apply the headline bar's 2s/3s across the
+  // others and land chord changes mid-bar, so the warp stands down and the
+  // authored meter wins. (Per-bar outlines would need a per-bar resolver.)
+  if (mixedMeterLengths(section).size > 1) return section;
   const outline = narrativeHarmonyOutline(
     narrative.structural_warp,
     section.timeSignatureNumerator ?? 4,

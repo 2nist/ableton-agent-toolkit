@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_NARRATIVE_PROFILE,
+  hasNarrative,
   NARRATIVE_STRUCTURAL_WARP_THRESHOLD,
   NARRATIVE_TRANSITION_BUILD_THRESHOLD,
   NARRATIVE_TRANSITION_DRAIN_THRESHOLD,
@@ -43,6 +44,24 @@ describe("resolveNarrativeProfile — song master + section override", () => {
 
   it("treats an explicit null as absent", () => {
     expect(resolveNarrativeProfile({ narrative: null }, { narrative: null })).toEqual(DEFAULT_NARRATIVE_PROFILE);
+  });
+});
+
+describe("hasNarrative — only a non-neutral arc counts", () => {
+  it("is false when nobody carries one", () => {
+    expect(hasNarrative({}, {})).toBe(false);
+    expect(hasNarrative(undefined, undefined)).toBe(false);
+  });
+
+  it("is false for an explicit all-neutral arc (the no-op contract)", () => {
+    expect(hasNarrative({ narrative: neutral() }, {})).toBe(false);
+    expect(hasNarrative({}, { narrative: neutral() })).toBe(false);
+  });
+
+  it("is true as soon as any axis leaves neutral", () => {
+    expect(hasNarrative({ narrative: arc({ structural_warp: 0.9 }) }, {})).toBe(true);
+    expect(hasNarrative({}, { narrative: arc({ rhythmic_energy: 0.6 }) })).toBe(true);
+    expect(hasNarrative({ narrative: arc({ transition_delta: -0.5 }) }, {})).toBe(true);
   });
 });
 
@@ -153,6 +172,32 @@ describe("narrativeHarmonySection", () => {
     const warped = narrativeHarmonySection(section, arc({ structural_warp: 1 }));
     expect(warped).not.toBe(section);
     expect(warped.harmonyMeterOutline).toBeTruthy();
+  });
+
+  it("stands down on a mixed-meter section rather than mis-griding it", () => {
+    // One `harmonyMeterOutline` is a single repeating cycle; applying the
+    // headline bar's 2s/3s to a 4/4-then-7/8 section would land changes
+    // mid-bar. The authored meter wins and the warp is a no-op.
+    const mixed = {
+      ...section,
+      timeSignatureNumerator: 4,
+      meterMap: [
+        { bar: 1, numerator: 4, denominator: 4 },
+        { bar: 5, numerator: 7, denominator: 8 },
+      ],
+    };
+    expect(narrativeHarmonySection(mixed, arc({ structural_warp: 1 }))).toBe(mixed);
+  });
+
+  it("still warps a section whose meter map never changes length", () => {
+    const steady = {
+      ...section,
+      meterMap: [
+        { bar: 1, numerator: 4, denominator: 4 },
+        { bar: 5, numerator: 4, denominator: 4 },
+      ],
+    };
+    expect(narrativeHarmonySection(steady, arc({ structural_warp: 1 }))).not.toBe(steady);
   });
 
   it("never overrides an authored outline", () => {

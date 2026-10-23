@@ -1,7 +1,7 @@
 import { useSongStore } from "../../store/songStore";
 import { useInspectorStore } from "../../store/inspectorStore";
 import { updateSection } from "../../lib/sections";
-import { resolveStyleProfile } from "../../lib/style/bend";
+import { resolveEffectiveStyle } from "@drum/library";
 import { askConfirm } from "../../lib/confirm";
 import {
   canAutoFill,
@@ -30,7 +30,7 @@ export default function MelodyGenerateBar({
   compact?: boolean;
 }) {
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const profile = resolveStyleProfile(section, song);
+  const profile = resolveEffectiveStyle(section, song);
   const currentParams = melodyParamsFromProfile(profile);
   const melody = section.melody;
   const generated = melody?.source === "generated";
