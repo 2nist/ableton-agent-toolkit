@@ -11,7 +11,7 @@ import { parseMidiBytes, midiToBlueprintSong } from "./parseMidi";
 import { audioToBlueprintSong, textToBlueprintSong } from "./parseAudio";
 import { parseMcgillJcrd, parseRockCorpusJcrd } from "./parseJcrd";
 import { parseMozartJcrd } from "./parseMozart";
-import { parseCorpusFileName } from "./corpusFileName";
+import { parseChartFileName, parseCorpusFileName } from "./corpusFileName";
 import { searchLrclib, parseSyncedLyrics } from "../youtube";
 import { buildLyricDocument, detectRepeatedBlocks, assignLinesToSection, mergeLinesIntoSection } from "../lyrics/sectionize";
 import { alsToBlueprintSong } from "./parseAbleton";
@@ -200,7 +200,12 @@ export async function parseFile(dirPath: string, entry: DirectoryEntry): Promise
   // else falls back to the file name with separators loosened. The parsed form
   // matters for the lyrics lookup, which cannot find "ABBA DancingQueen 1976".
   const corpus = parseCorpusFileName(baseName);
-  const title = corpus?.title ?? baseName.replace(/[-_]/g, " ");
+  // CoCoPops-style first (`Artist_Title_Year`); otherwise the looser chart
+  // naming — `Title - Artist`, camelCase, kebab-case — so the lyrics lookup
+  // and the library get a real title instead of "EchidnasArf(OfYou)".
+  const chart = corpus ? null : parseChartFileName(baseName);
+  const title = corpus?.title ?? chart?.title ?? baseName.replace(/[-_]/g, " ");
+  const fileNameArtist = corpus?.artist ?? chart?.artist;
   try {
     const res = await fetch(`/__local-file?dir=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(entry.file)}`);
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
@@ -259,7 +264,7 @@ export async function parseFile(dirPath: string, entry: DirectoryEntry): Promise
         }
       }
     }
-    if (corpus?.artist && !song.artist) song.artist = corpus.artist;
+    if (fileNameArtist && !song.artist) song.artist = fileNameArtist;
     return { ok: true, song: await enrichWithLrclib(song) };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Unknown parse error" };

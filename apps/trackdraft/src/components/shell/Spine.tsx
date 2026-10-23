@@ -25,7 +25,8 @@ import {
 } from "../../lib/time/timeMath";
 import { useTimeViewportStore } from "../../store/timeViewportStore";
 import { usePinchToZoom } from "../../hooks/usePinchToZoom";
-import { beatsPerBar, type BlueprintSection, type BlueprintSong, type SectionRole } from "../../types/blueprint";
+import type { BlueprintSection, BlueprintSong, SectionRole } from "../../types/blueprint";
+import { beatsPerBarOf } from "../../lib/timeline/beatMap";
 
 /** Zoom presets in px per BAR. Bar-linear on purpose: every bar is the
  *  same width — 7/8 bars included — because the bars are the axis (a
@@ -462,7 +463,10 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     const span = spans.find((s) => bar >= s.startBar && bar < s.startBar + s.bars);
     if (!span) return;
     setRegion(null); // a plain seek is not the region loop
-    const beat = span.startBeat + (bar - span.startBar) * beatsPerBar(span.section);
+    // Bars are evenly spaced across a span, so the divisor is its *mean* bar
+    // length — equal to the declared meter unless a meter map makes the bars
+    // different lengths.
+    const beat = span.startBeat + (bar - span.startBar) * beatsPerBarOf(span);
     void seekTo(song, clockSource, beat);
   }
 
@@ -471,8 +475,8 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     const startSpan = spans.find((s) => a >= s.startBar && a < s.startBar + s.bars);
     const endSpan = spans.find((s) => b >= s.startBar && b < s.startBar + s.bars);
     if (!startSpan || !endSpan) return;
-    const startBeat = startSpan.startBeat + (a - startSpan.startBar) * beatsPerBar(startSpan.section);
-    const endBeat = endSpan.startBeat + (b + 1 - endSpan.startBar) * beatsPerBar(endSpan.section);
+    const startBeat = startSpan.startBeat + (a - startSpan.startBar) * beatsPerBarOf(startSpan);
+    const endBeat = endSpan.startBeat + (b + 1 - endSpan.startBar) * beatsPerBarOf(endSpan);
     setRegion({ a, b });
     setLoopOn(false);
     void playLoopRegion(song, startBeat, endBeat);
@@ -787,7 +791,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
               {spans.map((span, i) => {
                 const chords = span.section.chords;
                 if (chords.length === 0) return null;
-                const bpb = beatsPerBar(span.section);
+                const bpb = beatsPerBarOf(span);
                 const endX = (span.startBar + span.bars) * barPx;
                 const rawKey = span.section.key ?? song.key;
                 const effKey: NoteName = rawKey in NOTE_TO_PC ? (rawKey as NoteName) : "C";

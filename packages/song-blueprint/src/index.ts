@@ -689,6 +689,16 @@ export function barLengths(
   return lengths;
 }
 
+/** The average bar length: identical to `beatsPerBar` unless a meter map
+ *  makes the bars different lengths. Use this for display maths ("how many
+ *  bars is this cycle?", where to draw bar lines); use `beatsPerBar` for the
+ *  section's *declared* meter, which is what the editor shows and what a new
+ *  chord defaults to. */
+export function meanBeatsPerBar(section: BlueprintSection): number {
+  if (section.bars > 0) return sectionDurationBeats(section) / section.bars;
+  return beatsPerBar(section);
+}
+
 /** Total length in quarter-note beats — the sum of the actual bars when a
  *  meter map is present, `bars × beatsPerBar` otherwise. */
 export function sectionDurationBeats(section: BlueprintSection): number {

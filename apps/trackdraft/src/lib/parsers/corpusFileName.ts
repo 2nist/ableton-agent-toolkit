@@ -44,3 +44,50 @@ export function parseCorpusFileName(stem: string): CorpusFileName | null {
 
   return { artist, title, year: Number(last) };
 }
+
+/** A performer credit as it appears after a dash: two or three capitalised
+ *  words, no digits. */
+const CREDIT_SHAPE = /^[A-Z][\w.'\u2019]*(?:\s+[A-Z][\w.'\u2019]*){1,2}$/;
+
+/** `EchidnasArf(OfYou)` → `Echidnas Arf (Of You)`, `cheap-thrills` →
+ *  `Cheap Thrills`, `Little house I used to live in` left alone. */
+export function prettifyStem(stem: string): string {
+  let out = stem.trim();
+  const separated = /[-_]/.test(out) && !/\s/.test(out);
+  if (separated) {
+    out = out.replace(/[-_]+/g, " ").replace(/\b([a-z])/g, (letter) => letter.toUpperCase());
+  } else {
+    out = splitCamelCase(out);
+  }
+  return out
+    .replace(/\s*\(\s*/g, " (")
+    .replace(/\s*\)/g, ")")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Names that are not the CoCoPops `<Artist>_<Title>_<Year>` shape but still
+ * carry metadata:
+ *
+ *   `Montana - Frank Zappa`      → title + credited artist
+ *   `EchidnasArf(OfYou)`         → title only, camel case split
+ *   `cheap-thrills`              → title only, kebab case title-cased
+ *
+ * The artist credit is only taken when the tail is *name-shaped*, so a title
+ * that merely contains a dash (`Any Way the Wind Blows - Part 2`) keeps its
+ * whole self.
+ */
+export function parseChartFileName(stem: string): { title: string; artist?: string } | null {
+  const trimmed = stem.trim();
+  if (!trimmed) return null;
+
+  const credited = trimmed.match(/^(.*\S)\s+-\s+([^-]+)$/);
+  if (credited) {
+    const [, head, tail] = credited;
+    if (CREDIT_SHAPE.test(tail.trim()) && !/\d/.test(tail)) {
+      return { title: prettifyStem(head), artist: tail.trim() };
+    }
+  }
+  return { title: prettifyStem(trimmed) };
+}

@@ -33,6 +33,10 @@ const LOCAL_CORPORA = [
   { path: `${HOME}/Datasets/bimmuda_dataset`, label: "BiMMuDa (melody)", isDefault: false },
   { path: `${HOME}/Datasets/cocopops`, label: "CoCoPops (melody)", isDefault: false },
   { path: `${HOME}/Mozart-Sonatas`, label: "Mozart Sonatas (chords)", isDefault: false },
+  // Full-score and demo transcriptions: the first corpus with real drums,
+  // and the first whose meter changes inside a song (26 of 57 files), which
+  // is what `BlueprintSection.meterMap` exists for.
+  { path: `${HOME}/AllZappaNoCrappa`, label: "Zappa (scores & demos)", isDefault: false },
 ];
 
 export default function Dashboard() {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
-import { beatsPerBar, sectionDurationBeats, type Chord } from "../../types/blueprint";
+import { meanBeatsPerBar, sectionDurationBeats, type Chord } from "../../types/blueprint";
 import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import TonicStrip from "./TonicStrip";
@@ -254,7 +254,7 @@ export default function HarmonyView() {
               chords={activeSection.chords}
               keyName={effectiveKey}
               scale={effectiveScale}
-              beatsPerBar={beatsPerBar(activeSection)}
+              beatsPerBar={meanBeatsPerBar(activeSection)}
               sectionBeats={sectionDurationBeats(activeSection)}
               selectedChordId={selectedChordId}
               activeChordId={activeChordId}

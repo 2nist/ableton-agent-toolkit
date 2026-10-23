@@ -38,6 +38,19 @@ interface MidiTrack {
   name?: string;
 }
 
+/** A meter change as written in the file, in absolute ticks. */
+export interface MidiTimeSignature {
+  tick: number;
+  numerator: number;
+  denominator: number;
+}
+
+/** A tempo change as written in the file, in absolute ticks. */
+export interface MidiTempoChange {
+  tick: number;
+  bpm: number;
+}
+
 interface ParsedMidi {
   ticksPerQuarter: number;
   tracks: MidiTrack[];
@@ -46,6 +59,11 @@ interface ParsedMidi {
   scale: string;
   timeSigNum: number;
   timeSigDen: number;
+  /** Every distinct meter in the file, by tick — a single `timeSigNum` cannot
+   *  describe a song that changes meter, and these are overwhelmingly the
+   *  files where it matters. */
+  timeSignatures: MidiTimeSignature[];
+  tempoChanges: MidiTempoChange[];
   notes: Array<{ note: number; velocity: number; startTick: number; endTick: number; track: number; channel: number }>;
 }
 
@@ -217,24 +235,41 @@ export function parseMidiBytes(bytes: Uint8Array): ParsedMidi {
   let tempo = 120;   // default BPM
   let keySigSharps = 0;
   let major = true;
-  let timeSigNum = 4;
-  let timeSigDen = 4;
+  // Every meter and tempo in the file, deduped by tick. Several tracks
+  // typically repeat the same meter event; and "last one wins" — the old
+  // behaviour — meant a stray 1/8 bar at the end decided the whole song's
+  // meter (Nanook Rubs It imported as 653 bars instead of 109).
+  const meterByTick = new Map<number, MidiTimeSignature>();
+  const tempoByTick = new Map<number, MidiTempoChange>();
 
   for (const track of tracks) {
     for (const event of track.events) {
       if (event.type === "tempo" && event.tempo) {
-        tempo = Math.round(60000000 / event.tempo);
+        tempoByTick.set(event.tick, { tick: event.tick, bpm: Math.round(60000000 / event.tempo) });
       }
       if (event.type === "keySig") {
         keySigSharps = event.keySigSharps ?? 0;
         major = event.major ?? true;
       }
       if (event.type === "timeSig") {
-        timeSigNum = event.timeSigNum ?? 4;
-        timeSigDen = event.timeSigDen ?? 4;
+        meterByTick.set(event.tick, {
+          tick: event.tick,
+          numerator: event.timeSigNum ?? 4,
+          denominator: event.timeSigDen ?? 4,
+        });
       }
     }
   }
+
+  const timeSignatures = [...meterByTick.values()].sort((a, b) => a.tick - b.tick);
+  const tempoChanges = [...tempoByTick.values()].sort((a, b) => a.tick - b.tick);
+
+  // The song opens at its first tempo and first meter; both are what the
+  // editor shows and what a new chord defaults to.
+  if (tempoChanges.length > 0) tempo = tempoChanges[0].bpm;
+  const opening = timeSignatures[0];
+  const timeSigNum = opening?.numerator ?? 4;
+  const timeSigDen = opening?.denominator ?? 4;
 
   // Collect all notes with on/off pairing. The same pitch can retrigger
   // before its noteOff (flams, ghost-note stacks — common in real drum
@@ -293,18 +328,105 @@ export function parseMidiBytes(bytes: Uint8Array): ParsedMidi {
     scale: midiMode(major),
     timeSigNum,
     timeSigDen,
+    timeSignatures,
+    tempoChanges,
     notes,
   };
+}
+
+/**
+ * The file's meter as a bar map. A song with one meter returns no map at all,
+ * so its import is byte-identical to before; a song that changes meter
+ * returns one entry per *distinct* meter run, plus the average bar length,
+ * which is what the bar-window algorithms (chord inference, section
+ * inference, drum blocks) need when no single bar length exists.
+ */
+function midiTiming(midi: ParsedMidi): {
+  bars: number;
+  sectionBeats: number;
+  beatsPerBar: number;
+  meterMap?: { bar: number; numerator: number; denominator: number }[];
+} {
+  const maxTick = midi.notes.reduce((max, n) => Math.max(max, n.endTick), 0);
+  const declared = { numerator: midi.timeSigNum, denominator: midi.timeSigDen };
+  const declaredBpb = (declared.numerator * 4) / declared.denominator;
+
+  const written = midi.timeSignatures.length > 0 ? midi.timeSignatures : [{ tick: 0, ...declared }];
+  // A file whose first meter event lands after the music starts still opens
+  // in that meter — there is no other information to go on.
+  const changes =
+    written[0].tick > 0
+      ? [{ tick: 0, numerator: written[0].numerator, denominator: written[0].denominator }, ...written]
+      : written;
+
+  const runs: { bar: number; numerator: number; denominator: number; beats: number }[] = [];
+  let barCursor = 0;
+  for (let i = 0; i < changes.length; i += 1) {
+    const start = changes[i].tick;
+    // Meter events can sit past the last note — a stray tail appended to the
+    // file — and must not stretch the song. WildLove is exactly this: its
+    // meters live at tick 1.96M while the music ends at 74k.
+    if (start >= maxTick) break;
+    const end = Math.min(maxTick, i + 1 < changes.length ? changes[i + 1].tick : maxTick);
+    const bpb = (changes[i].numerator * 4) / changes[i].denominator;
+    const beats = Math.max(0, end - start) / midi.ticksPerQuarter;
+    const bar = Math.round(barCursor);
+    const previous = runs[runs.length - 1];
+    // The same meter restated at a later bar is not a change.
+    if (!previous || previous.numerator !== changes[i].numerator || previous.denominator !== changes[i].denominator) {
+      runs.push({ bar, numerator: changes[i].numerator, denominator: changes[i].denominator, beats });
+    } else {
+      previous.beats += beats;
+    }
+    barCursor += beats / bpb;
+  }
+
+  const totalBeats = runs.reduce((sum, run) => sum + run.beats, 0);
+  const bars = Math.max(1, Math.round(barCursor));
+  const distinct = new Set(runs.map((run) => `${run.numerator}/${run.denominator}`)).size;
+  if (distinct <= 1) {
+    return { bars, sectionBeats: bars * declaredBpb, beatsPerBar: declaredBpb };
+  }
+
+  // Trim: a run past the last whole bar would over-extend the section.
+  const meterMap = runs
+    .filter((run) => run.bar < bars)
+    .map(({ bar, numerator, denominator }) => ({ bar, numerator, denominator }));
+  const sectionBeats = bars > 0 ? (totalBeats / barCursor) * bars : totalBeats;
+  return {
+    bars,
+    sectionBeats,
+    beatsPerBar: bars > 0 ? sectionBeats / bars : declaredBpb,
+    meterMap: meterMap.length > 1 ? meterMap : undefined,
+  };
+}
+
+/** Below one chord per four bars, frame matching has clearly missed the
+ *  harmony and the pitch-class fallback is the better read. */
+const CHORD_DENSITY_FLOOR = 0.25;
+
+/** Parser notes (absolute ticks) as beats-from-start — the shape the
+ *  pitch-class inference walks. Overlaps are fine: it accumulates pitch
+ *  classes, so a whole band at once is exactly what it wants. */
+function beatsOf(
+  notes: ParsedMidi["notes"],
+  ticksPerQuarter: number,
+): { pitch: number; startTime: number; duration: number }[] {
+  if (ticksPerQuarter <= 0) return [];
+  return notes.map((note) => ({
+    pitch: note.note,
+    startTime: note.startTick / ticksPerQuarter,
+    duration: Math.max(1 / ticksPerQuarter, (note.endTick - note.startTick) / ticksPerQuarter),
+  }));
 }
 
 /** Convert a parsed MIDI file into a BlueprintSong. */
 export function midiToBlueprintSong(midi: ParsedMidi, title: string): BlueprintSong {
   const now = new Date().toISOString();
-  const beatsPerBar = (midi.timeSigNum * 4) / midi.timeSigDen;
-  const ticksPerBar = Math.max(1, Math.round(midi.ticksPerQuarter * beatsPerBar));
-  const maxTick = midi.notes.reduce((max, n) => Math.max(max, n.endTick), 0);
-  const bars = Math.max(1, Math.ceil(maxTick / ticksPerBar));
-  const sectionBeats = bars * beatsPerBar;
+  const timing = midiTiming(midi);
+  const bars = timing.bars;
+  const sectionBeats = timing.sectionBeats;
+  const beatsPerBar = timing.beatsPerBar;
 
   // Which track is which. This is the difference between importing a song and
   // inventing one: a melody-only file has no harmony to detect, and stacking
@@ -316,6 +438,7 @@ export function midiToBlueprintSong(midi: ParsedMidi, title: string): BlueprintS
   const harmonyTracks = new Set(rolesOf("harmony").map((p) => p.track));
   const melodyTrack = rolesOf("melody")[0] ?? null;
   const drumTrack = rolesOf("drums")[0] ?? null;
+  const bassTrack = rolesOf("bass")[0] ?? null;
 
   const song: BlueprintSong = {
     id: crypto.randomUUID(),
@@ -352,7 +475,27 @@ export function midiToBlueprintSong(midi: ParsedMidi, title: string): BlueprintS
     velocity: "mf",
     timeSignatureNumerator: midi.timeSigNum,
     timeSignatureDenPower: Math.log2(midi.timeSigDen),
+    ...(timing.meterMap ? { meterMap: timing.meterMap } : {}),
   };
+
+  if (timing.meterMap) {
+    const changes = timing.meterMap.map((change, i) => {
+      const next = timing.meterMap?.[i + 1]?.bar;
+      const span = (next ?? bars) - change.bar;
+      return `${change.numerator}/${change.denominator}×${span}`;
+    });
+    warnings.push(
+      `meter CHANGES ${changes.length} time(s) inside the song (${changes.join(" ")}); the section carries a per-bar meter map rather than one meter`,
+    );
+    warnings.push(
+      "generated drum grooves follow the section's opening meter — imported drum blocks keep their exact timing, but a groove the engine generates will drift on the odd bars",
+    );
+  }
+  if (midi.tempoChanges.length > 1) {
+    warnings.push(
+      `tempo changes ${midi.tempoChanges.length} times (${midi.tempoChanges.map((c) => c.bpm).join(" → ")}); the song uses the opening tempo, and the map is not applied to playback`,
+    );
+  }
 
   // Harmony: only from polyphonic tracks. A melody-only file keeps an empty
   // progression rather than a fabricated one.
@@ -365,8 +508,36 @@ export function midiToBlueprintSong(midi: ParsedMidi, title: string): BlueprintS
       midi.timeSigNum,
       midi.key,
     );
-    if (section.chords.length === 0) {
-      warnings.push(`harmony track(s) ${[...harmonyTracks].join(", ")} produced no chords`);
+
+    // Frame matching needs chord tones to sound *together*. A full-score
+    // arrangement spreads them across instruments and time, so it under-reads
+    // badly — DirtyLove has 75 bars and detected one chord. When the frame
+    // pass is that sparse, fall back to a bar-window pitch-class histogram
+    // over every harmonic track plus the bass (which is what actually states
+    // the roots), using the same Viterbi the melody-only path uses.
+    const density = section.chords.length / Math.max(1, bars);
+    if (density < CHORD_DENSITY_FLOOR) {
+      const content = midi.notes.filter(
+        (n) => harmonyTracks.has(n.track) || (bassTrack !== null && n.track === bassTrack.track),
+      );
+      const window = beatsPerBar > 0 ? beatsPerBar : midi.timeSigNum;
+      const inferred = inferChordProgression(beatsOf(content, midi.ticksPerQuarter), {
+        keyName: midi.key,
+        scale: midi.scale as BlueprintSong["scale"],
+        beatsPerBar: window,
+        totalBeats: sectionBeats,
+      });
+      if (inferred.length > 0) {
+        section.chords = inferredChordsToBlueprint(inferred, midi.key, midi.scale as BlueprintSong["scale"]);
+        warnings.push(
+          `chords INFERRED from the harmonic tracks (${section.chords.length} chords over ${bars} bars): frame matching found only ${Math.round(
+            density * 100,
+          ) / 100} chord(s) per bar, so chord tones are spread across instruments rather than struck together — review the progression`,
+        );
+        warnings.push("inferred chords are diatonic to the key plus V7; a chromatic chart will be approximated");
+      } else {
+        warnings.push(`harmony track(s) ${[...harmonyTracks].join(", ")} produced no chords`);
+      }
     }
   } else if (!melodyTrack) {
     warnings.push("no polyphonic track and no melody — chords left empty");

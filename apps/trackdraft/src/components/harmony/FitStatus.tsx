@@ -1,5 +1,5 @@
 import type { BlueprintSection } from "../../types/blueprint";
-import { beatsPerBar, describeProgressionFit } from "../../types/blueprint";
+import { describeProgressionFit, meanBeatsPerBar } from "../../types/blueprint";
 
 /** Trims a beat count to at most 2 decimal places (chord beats can be
  *  half-steps, and non-4/4 time signatures can make beatsPerBar itself
@@ -24,7 +24,7 @@ export default function FitStatus({
   const fit = describeProgressionFit(section);
   if (!fit) return null;
 
-  const fitBars = Math.max(1, Math.ceil(fit.cycleBeats / beatsPerBar(section)));
+  const fitBars = Math.max(1, Math.ceil(fit.cycleBeats / meanBeatsPerBar(section)));
 
   let message: string;
   let showFitButton = false;

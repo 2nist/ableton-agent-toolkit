@@ -181,3 +181,42 @@ describe("drumsToBlocks", () => {
     expect(drumsToBlocks([drum(36, 0)], 0, 0, 4).blocks).toEqual([]);
   });
 });
+
+describe("classifyTracks — named tracks", () => {
+  const note = (track: number, note: number, startTick: number, endTick: number) => ({
+    track,
+    channel: 0,
+    note,
+    velocity: 80,
+    startTick,
+    endTick,
+  });
+
+  it("trusts a name that says what the track is", () => {
+    // A monophonic part named "bass" is a bass line even when another
+    // monophonic track would have won the register contest.
+    const notes = [note(0, 76, 0, 480), note(1, 40, 0, 480)];
+    const profiles = classifyTracks(notes, { 0: "lead vocal", 1: "aj wilkes [bass]" });
+    expect(profiles.find((p) => p.track === 1)?.role).toBe("bass");
+    expect(profiles.find((p) => p.track === 1)?.reason).toContain("named");
+  });
+
+  it("treats a solo as neither the tune nor a written part", () => {
+    const notes = [note(0, 72, 0, 480), note(1, 79, 0, 480)];
+    const profiles = classifyTracks(notes, { 0: "trumpet 1", 1: "phil cremer [trombone solo]" });
+    expect(profiles.find((p) => p.track === 1)?.role).toBe("ignored");
+    expect(profiles.find((p) => p.track === 0)?.role).toBe("melody");
+  });
+
+  it("finds percussion that is not on the GM drum channel", () => {
+    const notes = [note(0, 60, 0, 480), note(1, 45, 0, 480)];
+    const profiles = classifyTracks(notes, { 0: "piano", 1: "congas" });
+    expect(profiles.find((p) => p.track === 1)?.role).toBe("drums");
+  });
+
+  it("falls back to polyphony when a track is unnamed", () => {
+    const notes = [note(0, 60, 0, 480), note(0, 64, 0, 480), note(0, 67, 0, 480), note(1, 72, 480, 960)];
+    const profiles = classifyTracks(notes, {});
+    expect(profiles.find((p) => p.track === 0)?.role).toBe("harmony");
+  });
+});

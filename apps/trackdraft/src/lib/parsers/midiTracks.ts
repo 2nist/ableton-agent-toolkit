@@ -98,6 +98,25 @@ function statsFor(track: number, notes: TrackNote[]): Omit<TrackProfile, "role" 
  * Multiple harmony tracks are all kept — a piano part split across staves is
  * still one harmony.
  */
+/** What a track's own name claims it is, when it claims anything. */
+export type NamedRole = TrackRole | "solo" | null;
+
+const NAME_RULES: { pattern: RegExp; role: NamedRole }[] = [
+  { pattern: /\b(drums?|perc(ussion)?|kit|congas?|bongos?|timbal[es]*|shaker|tambourin[e]?|cymbals?|hi.?hat|snare|kick)\b/i, role: "drums" },
+  { pattern: /\bbass(line)?\b/i, role: "bass" },
+  // A solo is an improvised line: it is neither the written harmony nor the
+  // song's tune, and there are usually several of them.
+  { pattern: /\bsolo\b/i, role: "solo" },
+];
+
+export function roleFromName(name: string | undefined): NamedRole {
+  if (!name) return null;
+  for (const rule of NAME_RULES) {
+    if (rule.pattern.test(name)) return rule.role;
+  }
+  return null;
+}
+
 export function classifyTracks(
   notes: TrackNote[],
   trackNames: Record<number, string | undefined> = {},
@@ -126,6 +145,20 @@ export function classifyTracks(
 
     if (stats.channel === GM_DRUM_CHANNEL) {
       profiles.push({ ...stats, name, role: "drums", reason: "percussion channel" });
+      continue;
+    }
+    // A named track says what it is. Full-score transcriptions name every
+    // part ("aj wilkes [bass]", "phil cremer [trombone solo]"), and the
+    // polyphony heuristic alone put a sax solo in the harmony stack and an
+    // organ solo in the song's melody slot.
+    const named = roleFromName(name);
+    if (named === "solo") {
+      profiles.push({ ...stats, name, role: "ignored", reason: "named as a solo line — not the tune, not a written part" });
+      continue;
+    }
+    if (named) {
+      if (named === "bass") bassAssigned = true;
+      profiles.push({ ...stats, name, role: named, reason: `named "${name}"` });
       continue;
     }
     if (stats.polyphony >= POLYPHONIC_ONSET_SHARE) {
