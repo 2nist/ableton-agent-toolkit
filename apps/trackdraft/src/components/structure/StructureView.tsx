@@ -9,6 +9,7 @@ import {
 import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { useSongStore } from "../../store/songStore";
 import { addSection, removeSection, updateSection, updateRepeats, repeatsFor, applySongMap } from "../../lib/sections";
+import { applyNarrativeArc } from "../../lib/narrativeArc";
 import { getSongMap } from "../../data/songMaps";
 import { getGenreMap } from "../../data/genre-catalog/index";
 import SectionCard from "./SectionCard";
@@ -38,6 +39,10 @@ export default function StructureView() {
         onApply={(mapId, options) => {
           const map = getSongMap(mapId) ?? getGenreMap(mapId);
           if (map) updateCurrentSong((s) => applySongMap(s, map, options));
+        }}
+        onApplyArc={(mapId, options) => {
+          const map = getSongMap(mapId) ?? getGenreMap(mapId);
+          if (map) updateCurrentSong((s) => applyNarrativeArc(s, map, options));
         }}
       />
 

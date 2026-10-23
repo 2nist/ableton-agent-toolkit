@@ -146,11 +146,19 @@ export interface ApplySongMapOptions {
  *    `harmonyFollowsDrums` while `syncopationOffset` passes straight
  *    through — a template programs the harmony arrangement exactly like
  *    it already programs the drums. */
-export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplySongMapOptions): BlueprintSong {
+/** The slots an apply would use: the chosen variant (or the primary form),
+ *  minus optional ones when the caller asked for the short version. Shared by
+ *  the destructive apply and the arc-only one so they can't disagree about
+ *  which form they are reading. */
+export function resolveMapSlots(map: SongMap, options?: ApplySongMapOptions): MapSlot[] {
   const variant = options?.variantName ? map.variants?.find((v) => v.name === options.variantName) : undefined;
-  const slots: MapSlot[] = options?.excludeOptional
+  return options?.excludeOptional
     ? (variant?.slots ?? map.slots).filter((slot) => !slot.optional)
     : (variant?.slots ?? map.slots);
+}
+
+export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplySongMapOptions): BlueprintSong {
+  const slots = resolveMapSlots(map, options);
 
   const defaults = map.defaults ?? {};
   const resolvedKey = defaults.key ?? song.key;

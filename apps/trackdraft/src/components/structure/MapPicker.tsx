@@ -9,12 +9,15 @@ type MapSource = "narrative" | "genre";
 
 interface MapPickerProps {
   onApply: (mapId: string, options?: ApplySongMapOptions) => void;
+  /** Put the template's ARC onto the sections that already exist, without
+   *  replacing them. Only offered when the selected map carries an arc. */
+  onApplyArc: (mapId: string, options?: ApplySongMapOptions) => void;
   hasSections: boolean;
 }
 
 const PRIMARY_FORM = ""; // sentinel for "map.slots" in the variant <select>, vs. a real variant name
 
-export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
+export default function MapPicker({ onApply, onApplyArc, hasSections }: MapPickerProps) {
   const [source, setSource] = useState<MapSource>("narrative");
   const maps = useMemo(() => (source === "narrative" ? SONG_MAPS : GENRE_CATALOG), [source]);
   const [selected, setSelected] = useState(maps[0]?.id ?? "");
@@ -157,17 +160,30 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
          three archetypes) show this; the count is per slot, so the label
          can't promise more than the template delivers. */}
       {narrativeSlotCount > 0 && (
-        <label className="flex items-center gap-1.5 text-xs text-inkMuted">
-          <input
-            type="checkbox"
-            checked={seedNarrative}
-            onChange={(e) => setSeedNarrative(e.target.checked)}
-          />
-          Seed this template&apos;s narrative arc
-          <span className="text-inkMuted/50">
-            · {narrativeSlotCount} section{narrativeSlotCount === 1 ? "" : "s"} carry tension/energy
-          </span>
-        </label>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <label className="flex items-center gap-1.5 text-xs text-inkMuted">
+            <input
+              type="checkbox"
+              checked={seedNarrative}
+              onChange={(e) => setSeedNarrative(e.target.checked)}
+            />
+            Seed this template&apos;s narrative arc
+            <span className="text-inkMuted/50">
+              · {narrativeSlotCount} section{narrativeSlotCount === 1 ? "" : "s"} carry tension/energy
+            </span>
+          </label>
+          {/* Applying a template replaces the sections. Once there is a song
+              worth keeping, the useful gesture is the shape alone. */}
+          {hasSections && map && (
+            <button
+              className="text-xs border border-edge rounded px-2 py-0.5 text-inkMuted hover:text-ink hover:bg-panelAlt"
+              title="Read this template's arc across your own sections — same tension/energy/warp shape, none of your structure, chords, meters or drums replaced."
+              onClick={() => onApplyArc(effectiveId, { variantName: variantName || undefined, excludeOptional })}
+            >
+              Apply arc only
+            </button>
+          )}
+        </div>
       )}
       {/* Variants are alternate full structures a genre map can offer
          (e.g. EBM's instrumental "club loop" vs. a vocal-hook form) —
