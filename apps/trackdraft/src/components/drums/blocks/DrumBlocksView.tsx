@@ -23,7 +23,7 @@ import { sectionSpans, totalBars, type SectionSpan } from "../../../lib/arrangem
 import { resolveSectionLaneHits, type LaneHit, type LaneHits } from "../../../lib/timeline/drumLaneHits";
 import { inferPatternForSection, resolveSectionVariant, seededVariantIndex, velocityNumber } from "../../../lib/playback/drumPreview";
 import {
-  BAR_PX, TOP_PAD, TRACK_H, X0,
+  BAR_PX, GUTTER_INSET, TOP_PAD, TRACK_H, X0,
   barX, beatsPerBarOf, gridStepForZoom, snapBeat, spanBeatToX, spanXToBeat, xToSpanBeat,
 } from "../../../lib/timeline/beatMap";
 import { beatsPerBar, sectionDurationBeats, type BlueprintSection, type DrumBlock, type DrumBlockNote, type DrumVoiceName } from "../../../types/blueprint";
@@ -1169,11 +1169,12 @@ export default function DrumBlocksView() {
             their parameter chips) is a second, sticky SVG laid over its left
             edge, so scrolling the grid never hides which row you are on.
             Same TOP_PAD/TRACK_H maths in both, so the rows line up. */}
-        <div className="relative" style={{ width, height: HEIGHT }}>
+        <div className="relative" style={{ width: width + GUTTER_INSET, height: HEIGHT }}>
         <svg
           ref={svgRef}
           width={width}
           height={HEIGHT}
+          style={{ marginLeft: GUTTER_INSET }}
           className="block touch-none select-none"
           onPointerDown={onCanvasDown}
           onPointerMove={onCanvasMove}

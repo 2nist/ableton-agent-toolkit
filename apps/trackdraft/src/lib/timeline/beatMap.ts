@@ -13,6 +13,10 @@ import type { SectionSpan } from "../arrangement";
  */
 
 export const X0 = 104; // left gutter for lane labels
+/** Clearance between the frozen gutter and the first cell of a lane. A cell is
+ *  centred on its beat, so its left edge falls `r` px BEFORE the first bar
+ *  line — without this the first cell is cut in half behind the gutter. */
+export const GUTTER_INSET = 18;
 /** One 4/4 bar at zoom 1 — 56px is the sequencer's starting scale: 14px
  *  per beat, so the default cells read as real sequencer steps (a step
  *  sequencer that needs zooming-in to be usable is a step sequencer that

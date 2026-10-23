@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  BAR_PX, X0,
+  BAR_PX, GUTTER_INSET, X0,
   barX, beatsPerBarOf, gridStepForZoom, snapBeat, spanBeatToX, spanXToBeat, xToSpanBeat,
 } from "./beatMap";
 import type { SectionSpan } from "../arrangement";
@@ -84,5 +84,15 @@ describe("beatMap — px ↔ beat mapping", () => {
     expect(gridStepForZoom(3.5)).toBe(0.5);
     expect(gridStepForZoom(4.6)).toBe(0.25);
     expect(gridStepForZoom(6)).toBe(0.25);
+  });
+
+  it("leaves room for the first cell in front of the frozen gutter", () => {
+    // The frozen gutter is X0 wide and the grid is pushed GUTTER_INSET to its
+    // right, so the space between the gutter's edge and the first beat's
+    // CENTRE is exactly GUTTER_INSET. A cell is centred on its beat, so it
+    // reaches `r` px to the left of that centre — hence the inset has to be
+    // bigger than the largest radius: 11px in the blocks view, and ~13.5 for
+    // the classic view's necklace ring.
+    expect(GUTTER_INSET).toBeGreaterThan(13.5);
   });
 });

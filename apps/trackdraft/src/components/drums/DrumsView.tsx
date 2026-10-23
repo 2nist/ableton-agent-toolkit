@@ -81,6 +81,7 @@ function defaultDetourFor(sec: BlueprintSection): MeterOutline {
 // six thick voice tracks. Tuned so six voices fit comfortably and each
 // track has room for its internal beat/bar grid.
 const X0 = 104;
+const GUTTER_INSET = 18; // clearance so the first cell of a lane is not clipped
 const BAR_PX = 40;
 /** Exported for the workbench's line-view embed — it fits the zoom so the
  *  focused section + context fills its crop box. */
@@ -664,33 +665,16 @@ export default function DrumsView({
             : "relative overflow-x-auto border border-edge rounded bg-deep"
         }
       >
-        {/* Zoom controls live on the timeline's top row — floating at the
-            top-left corner of the viewport (the empty corner above the lane
-            labels) so they stay put while the timeline scrolls horizontally,
-            no dedicated row above. (Tab only — the embed gets a fitted zoom
-            from its host.) */}
-        {!embedded && (
-        <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-0.5 border border-edge rounded bg-deep/90 px-1 py-0.5 select-none">
-          <button
-            className="w-5 h-5 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
-            onClick={() => setZoom((z) => clampZoom(z / 1.2))}
-            title="Zoom out"
-          >
-            −
-          </button>
-          <span className="font-mono text-2xs text-inkMuted tabular-nums w-9 text-center" title="Timeline zoom">
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            className="w-5 h-5 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
-            onClick={() => setZoom((z) => clampZoom(z * 1.2))}
-            title="Zoom in"
-          >
-            +
-          </button>
-        </div>
-        )}
-        <svg width={width} height={height} className="block">
+        <div
+          className="relative"
+          style={{ width: embedded ? undefined : width + GUTTER_INSET, height }}
+        >
+        <svg
+          width={width}
+          height={height}
+          style={{ marginLeft: embedded ? undefined : GUTTER_INSET }}
+          className="block"
+        >
           <defs>
             <filter id="drums-glow" x="-60%" y="-60%" width="220%" height="220%">
               <feGaussianBlur stdDeviation="3" result="b" />
@@ -809,9 +793,11 @@ export default function DrumsView({
                   strokeDasharray={g.cell ? "1 4" : undefined}
                 />
               ))}
-              <text x={X0 - 14} y={laneY(li) + 4} textAnchor="end" fontSize={P.handDrawn ? 13 : 12} fontFamily={P.labelFont} fill={laneColor(lane, P)} fontWeight={600}>
-                {lane.label}
-              </text>
+              {embedded && (
+                <text x={X0 - 14} y={laneY(li) + 4} textAnchor="end" fontSize={P.handDrawn ? 13 : 12} fontFamily={P.labelFont} fill={laneColor(lane, P)} fontWeight={600}>
+                  {lane.label}
+                </text>
+              )}
               <line
                 x1={barX(0)} y1={laneY(li)} x2={barX(bars)} y2={laneY(li)}
                 stroke={laneColor(lane, P)}
@@ -959,9 +945,11 @@ export default function DrumsView({
               height={TRACK_H}
               fill={P.deep}
             />
-            <text x={X0 - 14} y={DETOUR_Y + 4} textAnchor="end" fontSize={P.handDrawn ? 13 : 12} fontFamily={P.labelFont} fill={P.grid} fontWeight={600}>
-              DETOUR
-            </text>
+            {embedded && (
+              <text x={X0 - 14} y={DETOUR_Y + 4} textAnchor="end" fontSize={P.handDrawn ? 13 : 12} fontFamily={P.labelFont} fill={P.grid} fontWeight={600}>
+                DETOUR
+              </text>
+            )}
             <line x1={barX(0)} y1={DETOUR_Y} x2={barX(bars)} y2={DETOUR_Y} stroke={P.grid} strokeWidth={1.4} strokeOpacity={0.5} />
             {resolved.map((r, i) => {
               const bpb = Math.max(1, Math.round(beatsPerBar(r.span.section)));
@@ -1024,6 +1012,62 @@ export default function DrumsView({
             });
           })}
         </svg>
+
+        {/* the frozen gutter — lane names and the detour row's name, so
+            scrolling the timeline never hides which lane is which. Same
+            TOP_PAD/TRACK_H maths as the lanes above. (The embed is fitted to
+            its host and never scrolls, so it keeps its labels inline.) */}
+        {!embedded && (
+          <div
+            className="sticky left-0 top-0 z-10"
+            style={{ width: X0, height, marginTop: -height }}
+          >
+            <div className="relative h-full w-full bg-deep">
+              <div className="absolute left-0.5 top-0.5 z-20 flex items-center gap-0 border border-edge rounded bg-deep/95 px-0.5 py-0.5 select-none">
+                <button
+                  className="w-4 h-4 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
+                  onClick={() => setZoom((z) => clampZoom(z / 1.2))}
+                  title="Zoom out"
+                >
+                  −
+                </button>
+                <span className="font-mono text-[9px] text-inkMuted tabular-nums w-8 text-center" title="Timeline zoom">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <button
+                  className="w-4 h-4 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
+                  onClick={() => setZoom((z) => clampZoom(z * 1.2))}
+                  title="Zoom in"
+                >
+                  +
+                </button>
+              </div>
+              <svg width={X0} height={height} className="block">
+                {DRUM_LANES.map((lane, li) => (
+                  <text
+                    key={`frozen-${lane.key}`}
+                    x={X0 - 14} y={laneY(li) + 4} textAnchor="end"
+                    fontSize={P.handDrawn ? 13 : 12} fontWeight={600}
+                    letterSpacing={P.handDrawn ? "0.06em" : undefined}
+                    fontFamily={P.labelFont} fill={laneColor(lane, P)}
+                    pointerEvents="none"
+                  >
+                    {lane.label}
+                  </text>
+                ))}
+                <text
+                  x={X0 - 14} y={DETOUR_Y + 4} textAnchor="end"
+                  fontSize={P.handDrawn ? 13 : 12} fontWeight={600}
+                  letterSpacing={P.handDrawn ? "0.06em" : undefined}
+                  fontFamily={P.labelFont} fill={P.grid} pointerEvents="none"
+                >
+                  DETOUR
+                </text>
+              </svg>
+            </div>
+          </div>
+        )}
+        </div>
       </div>
       )}
     </div>
