@@ -212,8 +212,8 @@ Two details that took checking:
   in F is the leading tone of C minor — `♯vii°/V` — and reading it against F
   would have produced `♯iv°`, which means nothing.
 - The DCML label itself goes in `Chord.annotation`, **not** `extendedSuffix`.
-  That field means "a quality suffix" and `chordsToHoneycombText` appends it to
-  the numeral before the hex wheel parses it, so a label there corrupted the
+  That field is a *chord-symbol suffix* and `chordsToHoneycombText` appends it
+  to the numeral before the hex wheel parses it, so a label there corrupted the
   harmony outright: `iv` came out as `iviv`, `I` as `ii`.
 
 Surfaced in the UI: progression cards show `V7/VI`, `vii°/V`, `♯vii°/VI`
@@ -235,6 +235,54 @@ chord timing, with a warning saying exactly that.
 Verified through the UI: Sonata no. 14 in C minor → key C aeolian 3/4,
 305 chords over 212 bars, opening `i vii° i vii° V7 …`, 82 chromatic chords
 flagged.
+
+## Chord qualities carry their intervals
+
+`ChordQuality` used to be ten triads-and-sevenths, and `extendedSuffix` was the
+escape hatch for anything richer. That escape hatch did not work: the export
+path resolves a chord's *intervals* from `chord.quality`
+(`styleQualityFor` → `getChordIntervals`), and `getChordIntervals` knew only
+those ten. A chord authored as `C7#9` therefore displayed as `C7#9` and
+**played as a plain `C7`** — the richer the symbol, the more silently wrong the
+export.
+
+The vocabulary is now 34 qualities, and every one of them is a row in
+`CHORD_INTERVALS`, so a quality name *is* its interval set:
+
+| group | qualities |
+| --- | --- |
+| triads | `maj` `min` `dim` `aug` `5` `sus2` `sus4` |
+| sevenths & sixths | `7` `maj7` `min7` `m7b5` `dim7` `mMaj7` `6` `min6` `69` `add9` |
+| altered dominants | `7b9` `7#9` `7#11` `7b13` `7b5` `7#5` `7sus4` `maj7#5` |
+| extended (9·11·13) | `9` `maj9` `min9` `11` `min11` `13` `maj13` `min13` `9sus4` |
+
+Upper extensions are stored above the octave (14 = 9, 17 = 11, 21 = 13), so the
+stack stays root-anchored and `voiceChord` inverts a `maj13` the same way it
+inverts a triad. The five- and six-note qualities are the point of the
+exercise: `Cmaj9` exports five notes, `C13` six, and `planChordStem`'s tests
+pin both.
+
+Three rules keep this from drifting back apart:
+
+- **`CHORD_INTERVALS`, `CHORD_QUALITY_SUFFIX` and `CHORD_QUALITY_GROUPS` are
+  all `Record<ChordQuality, …>`**, so adding a quality is a compile error until
+  it has intervals, a display symbol (that round-trips through
+  `parseChordQuality`) and a place in the editor's chips.
+- **`parseChordQuality` is the only suffix parser.** `parseChordName`,
+  `honeycombTextToChords` and the importers all delegate to it, so `m7`, `min7`,
+  `-7`, `Δ7`, `M7`, `ø`, `°7`, `+` and `6/9` mean one thing everywhere.
+  `ChordQuality`'s `min`-prefixed keys (`min9`) versus their symbols (`m9`) are
+  deliberately different strings: keys are the model, symbols are what a player
+  writes. `qualityLabel` renders the second from the first.
+- **`extendedSuffix` survives only for suffixes the vocabulary cannot hold**
+  (e.g. `7#9b13`). Those keep the base quality's intervals on export — a
+  documented limitation, not a silent one, and pinned by a test.
+
+In the Harmony view the chips are grouped the same way: triads and sevenths are
+always visible, and 9·11·13 plus the altered dominants sit behind a
+`+ 9 · 11 · 13 · altered` toggle so the dock keeps its height — unless the
+selected chord is already one of them, in which case that group renders so the
+row never hides its own state.
 
 ## Lyrics lookups: matching, not just searching
 

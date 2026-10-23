@@ -70,9 +70,31 @@ describe("parseChordName", () => {
     expect(parseChordName("Cbogus")).toBeNull();
   });
 
-  it("returns null for chord names with unmatched suffixes (e.g. 'C5', 'Cadd9')", () => {
-    expect(parseChordName("C5")).toBeNull();
-    expect(parseChordName("Cadd9")).toBeNull();
+  it("returns null for suffixes no quality can hold", () => {
+    // "C5" and "Cadd9" used to land here before the extended vocabulary
+    // existed — they are real qualities now (see the extended block below).
+    expect(parseChordName("C7#9b13")).toBeNull();
+    expect(parseChordName("Cmaj7sus")).toBeNull();
+    expect(parseChordName("C/E")).toBeNull();
+  });
+
+  // Extended vocabulary — every symbol maps to a quality whose interval set
+  // is what `getChordIntervals` returns, so these chords actually sound.
+  it("parses extended and altered qualities", () => {
+    expect(parseChordName("C5")).toEqual({ root: "C", quality: "5" });
+    expect(parseChordName("Cadd9")).toEqual({ root: "C", quality: "add9" });
+    expect(parseChordName("Cmaj9")).toEqual({ root: "C", quality: "maj9" });
+    expect(parseChordName("Dm9")).toEqual({ root: "D", quality: "min9" });
+    expect(parseChordName("Ebm11")).toEqual({ root: "Eb", quality: "min11" });
+    expect(parseChordName("F13")).toEqual({ root: "F", quality: "13" });
+    expect(parseChordName("G7#9")).toEqual({ root: "G", quality: "7#9" });
+    expect(parseChordName("G7b9")).toEqual({ root: "G", quality: "7b9" });
+    expect(parseChordName("Ab7b13")).toEqual({ root: "Ab", quality: "7b13" });
+    expect(parseChordName("BmMaj7")).toEqual({ root: "B", quality: "mMaj7" });
+    expect(parseChordName("C6/9")).toEqual({ root: "C", quality: "69" });
+    expect(parseChordName("Bø")).toEqual({ root: "B", quality: "m7b5" });
+    expect(parseChordName("CΔ7")).toEqual({ root: "C", quality: "maj7" });
+    expect(parseChordName("CM7")).toEqual({ root: "C", quality: "maj7" });
   });
 });
 

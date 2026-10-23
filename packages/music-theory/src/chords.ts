@@ -21,6 +21,52 @@ export const CHORD_TYPES: ChordType[] = [
   { name: "aug", intervals: [0, 4, 8], display: "aug" },
 ];
 
+/**
+ * Interval sets for every quality. This is the single source of truth for
+ * what a quality *sounds* like — `getChordIntervals` reads it, so adding a
+ * row here is what makes a rich symbol (9/11/13/altered) playable rather
+ * than merely displayable.
+ *
+ * Upper extensions sit above the octave (14 = 9, 17 = 11, 21 = 13) so the
+ * stack stays root-anchored and `voiceChord` can invert it like any triad.
+ */
+export const CHORD_INTERVALS: Record<ChordQuality, number[]> = {
+  maj: [0, 4, 7],
+  min: [0, 3, 7],
+  "7": [0, 4, 7, 10],
+  maj7: [0, 4, 7, 11],
+  min7: [0, 3, 7, 10],
+  m7b5: [0, 3, 6, 10],
+  sus2: [0, 2, 7],
+  sus4: [0, 5, 7],
+  dim: [0, 3, 6],
+  aug: [0, 4, 8],
+  "5": [0, 7],
+  "6": [0, 4, 7, 9],
+  min6: [0, 3, 7, 9],
+  "69": [0, 4, 7, 9, 14],
+  add9: [0, 4, 7, 14],
+  dim7: [0, 3, 6, 9],
+  mMaj7: [0, 3, 7, 11],
+  "maj7#5": [0, 4, 8, 11],
+  "7sus4": [0, 5, 7, 10],
+  "7b5": [0, 4, 6, 10],
+  "7#5": [0, 4, 8, 10],
+  "9": [0, 4, 7, 10, 14],
+  maj9: [0, 4, 7, 11, 14],
+  min9: [0, 3, 7, 10, 14],
+  "9sus4": [0, 5, 7, 10, 14],
+  "7b9": [0, 4, 7, 10, 13],
+  "7#9": [0, 4, 7, 10, 15],
+  "7#11": [0, 4, 7, 10, 18],
+  "7b13": [0, 4, 7, 10, 20],
+  "11": [0, 7, 10, 14, 17],
+  min11: [0, 3, 7, 10, 14, 17],
+  "13": [0, 4, 7, 10, 14, 21],
+  maj13: [0, 4, 7, 11, 14, 21],
+  min13: [0, 3, 7, 10, 14, 21],
+};
+
 /** Chord quality display suffix mapping */
 export const CHORD_QUALITY_SUFFIX: Record<ChordQuality, string> = {
   maj: "",
@@ -33,7 +79,179 @@ export const CHORD_QUALITY_SUFFIX: Record<ChordQuality, string> = {
   sus4: "sus4",
   dim: "dim",
   aug: "aug",
+  "5": "5",
+  "6": "6",
+  min6: "m6",
+  "69": "6/9",
+  add9: "add9",
+  dim7: "dim7",
+  mMaj7: "mMaj7",
+  "maj7#5": "maj7♯5",
+  "7sus4": "7sus4",
+  "7b5": "7♭5",
+  "7#5": "7♯5",
+  "9": "9",
+  maj9: "maj9",
+  min9: "m9",
+  "9sus4": "9sus4",
+  "7b9": "7♭9",
+  "7#9": "7♯9",
+  "7#11": "7♯11",
+  "7b13": "7♭13",
+  "11": "11",
+  min11: "m11",
+  "13": "13",
+  maj13: "maj13",
+  min13: "m13",
 };
+
+/** The picker's grouping of `CHORD_QUALITIES` — triads stay one tap away,
+ *  the extended vocabulary sits below. Order within a group is deliberate
+ *  (plain → altered), so the chips read as a ladder. */
+export const CHORD_QUALITY_GROUPS: { label: string; qualities: ChordQuality[] }[] = [
+  {
+    label: "Triads",
+    qualities: ["maj", "min", "dim", "aug", "5", "sus2", "sus4"],
+  },
+  {
+    label: "Sevenths & sixths",
+    qualities: ["7", "maj7", "min7", "m7b5", "dim7", "mMaj7", "6", "min6", "69", "add9"],
+  },
+  {
+    label: "Altered dominants",
+    qualities: ["7b9", "7#9", "7#11", "7b13", "7b5", "7#5", "7sus4", "maj7#5"],
+  },
+  {
+    label: "Extended (9·11·13)",
+    qualities: ["9", "maj9", "min9", "11", "min11", "13", "maj13", "min13", "9sus4"],
+  },
+];
+
+/** Symbol spellings that mean a quality but aren't a suffix spelling of one. */
+const CHORD_QUALITY_SYMBOLS: Record<string, string> = {
+  "ø": "m7b5",
+  "ø7": "m7b5",
+  "o": "dim",
+  "o7": "dim7",
+  "°": "dim",
+  "°7": "dim7",
+  "+": "aug",
+  "Δ": "maj",
+  "Δ7": "maj7",
+  "dom7": "7",
+  "6/9": "69",
+};
+
+/** Suffix → quality when the chord's third is MAJOR (or absent). */
+const MAJOR_SUFFIX_QUALITY: Record<string, ChordQuality> = {
+  "": "maj",
+  maj: "maj",
+  "5": "5",
+  "6": "6",
+  "69": "69",
+  add9: "add9",
+  "7": "7",
+  maj7: "maj7",
+  "9": "9",
+  maj9: "maj9",
+  "11": "11",
+  "13": "13",
+  maj13: "maj13",
+  "7b5": "7b5",
+  "7#5": "7#5",
+  "7b9": "7b9",
+  "7#9": "7#9",
+  "7#11": "7#11",
+  "7b13": "7b13",
+  "maj7#5": "maj7#5",
+  sus2: "sus2",
+  sus4: "sus4",
+  "7sus4": "7sus4",
+  "9sus4": "9sus4",
+  dim: "dim",
+  dim7: "dim7",
+  aug: "aug",
+};
+
+/** Suffix → quality when the chord's third is MINOR (`min`/`m`/`-` peeled
+ *  off by the caller or by `parseChordQuality` itself). Suspensions ignore
+ *  the third entirely, so they map the same in both directions. */
+const MINOR_SUFFIX_QUALITY: Record<string, ChordQuality> = {
+  "": "min",
+  "6": "min6",
+  "69": "min6",
+  "7": "min7",
+  "9": "min9",
+  "11": "min11",
+  "13": "min13",
+  "7b5": "m7b5",
+  maj7: "mMaj7",
+  dim: "dim",
+  dim7: "dim7",
+  sus2: "sus2",
+  sus4: "sus4",
+};
+
+/**
+ * Normalise a chord-symbol suffix to the closed `ChordQuality` vocabulary.
+ *
+ * `minor` tells the function the chord's third is minor when the caller has
+ * already peeled the `m`/`min`/`-` marker off (the honeycomb token parser
+ * does this); it also peels it itself, so both `parseChordQuality("m7")` and
+ * `parseChordQuality("7", true)` give `min7`.
+ *
+ * Returns `null` when the suffix carries more than one quality can hold
+ * (e.g. `"7#9b13"`). Callers keep those as `Chord.extendedSuffix`.
+ */
+export function parseChordQuality(suffix: string, minor = false): ChordQuality | null {
+  let s = (suffix ?? "").trim().replace(/\s+/g, "");
+  if (s === "") return minor ? "min" : "maj";
+
+  const symbol = CHORD_QUALITY_SYMBOLS[s] ?? CHORD_QUALITY_SYMBOLS[s.replace(/♭/g, "b").replace(/♯/g, "#")];
+  if (symbol) s = symbol;
+
+  // Peel a leading third marker. Order matters: `Maj`/`M7` are the MAJOR
+  // shorthand, `min`/`m`/`-` are minor, and a bare `M` stays whatever the
+  // caller said (chord charts are split on it, and existing importers read
+  // it as minor) — so it is only peeled by the case-insensitive rule below.
+  let isMinor = minor;
+  for (let guard = 0; guard < 3; guard += 1) {
+    if (/^maj/i.test(s)) {
+      s = `maj${s.slice(3)}`;
+      break;
+    }
+    if (/^M(?=[0-9])/.test(s)) {
+      s = `maj${s.slice(1)}`;
+      break;
+    }
+    if (/^min/i.test(s)) {
+      isMinor = true;
+      s = s.slice(3);
+      continue;
+    }
+    if (/^m(?!aj)/i.test(s)) {
+      isMinor = true;
+      s = s.slice(1);
+      continue;
+    }
+    if (s.startsWith("-")) {
+      isMinor = true;
+      s = s.slice(1);
+      continue;
+    }
+    break;
+  }
+
+  // Quality spellings reach us in both ASCII and glyph form.
+  s = s
+    .replace(/♭/g, "b")
+    .replace(/♯/g, "#")
+    .toLowerCase();
+
+  if (s === "") return isMinor ? "min" : "maj";
+  const table = isMinor ? MINOR_SUFFIX_QUALITY : MAJOR_SUFFIX_QUALITY;
+  return table[s] ?? null;
+}
 
 /**
  * Get a chord type by 1-based index (matching APC64 convention)
@@ -66,20 +284,7 @@ export function chordName(
  * Get intervals for a chord quality
  */
 export function getChordIntervals(quality: ChordQuality): number[] {
-  // Map from quality to CHORD_TYPES entry
-  const qualityToIntervals: Record<string, number[]> = {
-    maj: [0, 4, 7],
-    min: [0, 3, 7],
-    "7": [0, 4, 7, 10],
-    maj7: [0, 4, 7, 11],
-    min7: [0, 3, 7, 10],
-    m7b5: [0, 3, 6, 10],
-    sus2: [0, 2, 7],
-    sus4: [0, 5, 7],
-    dim: [0, 3, 6],
-    aug: [0, 4, 8],
-  };
-  return qualityToIntervals[quality] ?? [0, 4, 7];
+  return CHORD_INTERVALS[quality] ?? [0, 4, 7];
 }
 
 /**

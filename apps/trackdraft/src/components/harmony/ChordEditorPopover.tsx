@@ -1,8 +1,10 @@
 import { pitchClass, noteName } from "@music-theory/core";
+import { useState } from "react";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
 import { getSubstitutionMenu } from "../../lib/harmony/substitutions";
-import { chordDisplayName, chordFunctionLabel, CHORD_QUALITIES } from "../../lib/harmony/chordBuilder";
+import { chordDisplayName, chordFunctionLabel, qualityLabel } from "../../lib/harmony/chordBuilder";
+import { CHORD_QUALITY_GROUPS } from "@music-theory/core";
 
 // Chromatic subs (tritone/secondary-dominant) aren't diatonic, so there's no
 // scale degree to label them with — derive a key-relative roman numeral from
@@ -40,6 +42,7 @@ export default function ChordEditorPopover({
   const rootPc = pitchClass(chord.root);
   const menu = getSubstitutionMenu(scale, chord.romanNumeral, rootPc);
   const isNonDiatonic = menu.modeAware.length === 0;
+  const [showExtended, setShowExtended] = useState(false);
 
   return (
     <div className="p-2 text-xs h-full flex flex-col gap-2">
@@ -131,23 +134,48 @@ export default function ChordEditorPopover({
           </div>
         </div>
 
-        {/* Quality */}
+        {/* Quality — triads and sevenths stay visible; the extended
+            vocabulary (9·11·13 and the altered dominants, which are the
+            five- and six-note voicings) sits behind a toggle so the dock
+            keeps its height unless you reach for it. A currently-selected
+            extended quality always renders, so the row never hides its
+            own state. */}
         <div>
           <p className="text-3xs text-inkMuted uppercase tracking-wide mb-1">Quality</p>
-          <div className="flex flex-wrap gap-1">
-            {CHORD_QUALITIES.map((q) => (
-              <button
-                key={q}
-                className={`font-mono text-2xs rounded px-1.5 py-0.5 border ${
-                  chord.quality === q
-                    ? "border-accent text-accent bg-accent/10"
-                    : "border-edge text-inkMuted hover:text-ink"
-                }`}
-                onClick={() => onChange({ ...chord, quality: q, extendedSuffix: undefined })}
-              >
-                {q}
-              </button>
-            ))}
+          <div className="flex flex-col gap-1">
+            {CHORD_QUALITY_GROUPS.map((group, i) => {
+              if (i >= 2 && !showExtended && !group.qualities.includes(chord.quality)) return null;
+              return (
+                <div key={group.label}>
+                  {i >= 2 && (
+                    <p className="text-[9px] text-inkMuted/60 uppercase tracking-wide mb-0.5">
+                      {group.label}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-1">
+                    {group.qualities.map((q) => (
+                      <button
+                        key={q}
+                        className={`font-mono text-2xs rounded px-1.5 py-0.5 border ${
+                          chord.quality === q
+                            ? "border-accent text-accent bg-accent/10"
+                            : "border-edge text-inkMuted hover:text-ink"
+                        }`}
+                        onClick={() => onChange({ ...chord, quality: q, extendedSuffix: undefined })}
+                      >
+                        {qualityLabel(q)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            <button
+              className="self-start text-3xs text-accent/80 hover:text-accent"
+              onClick={() => setShowExtended((v) => !v)}
+            >
+              {showExtended ? "− fewer qualities" : "+ 9 · 11 · 13 · altered"}
+            </button>
           </div>
         </div>
 

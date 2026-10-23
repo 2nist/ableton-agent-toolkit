@@ -92,6 +92,17 @@ describe("labels", () => {
     expect(bassName(3)).toBe("third");
   });
 
+  it("names the tone a five-note chord actually puts in the bass", () => {
+    // Cmaj9 = C E G B D. Its fourth inversion is the ninth, not "fourth".
+    expect(bassName(1, "maj9")).toBe("third");
+    expect(bassName(2, "maj9")).toBe("fifth");
+    expect(bassName(3, "maj9")).toBe("seventh");
+    expect(bassName(4, "maj9")).toBe("ninth");
+    expect(bassName(5, "13")).toBe("thirteenth");
+    expect(bassName(1, "7#9")).toBe("third");
+    expect(bassName(4, "7#9")).toBe("♯9");
+  });
+
   it("reads out the whole voicing", () => {
     expect(voicingLabel(chord())).toBe("root · close");
     expect(voicingLabel({ voicing: { inversion: 1, spread: "open" } })).toBe("first · open");

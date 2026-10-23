@@ -5,6 +5,9 @@ import {
   presetToChords,
   CHORD_QUALITIES,
   chordFromDegree,
+  chordsToHoneycombText,
+  honeycombTextToChords,
+  qualityLabel,
 } from "./chordBuilder";
 import type { Chord } from "../../types/blueprint";
 
@@ -87,5 +90,47 @@ describe("chordFromDegree (regression: id/shape unaffected by new exports)", () 
     expect(chord.quality).toBe("maj");
     expect(chord.beats).toBe(4);
     expect(chord.id).toBeTruthy();
+  });
+});
+
+describe("extended qualities through the honeycomb bridge", () => {
+  /** Build a one-chord progression at a roman numeral we control. */
+  function chordAt(romanNumeral: string, quality: Chord["quality"], root = "C"): Chord {
+    return { id: romanNumeral, romanNumeral, root, quality, beats: 4 };
+  }
+
+  it("labels chips with the player's symbol, not the internal key", () => {
+    expect(qualityLabel("maj")).toBe("maj");
+    expect(qualityLabel("min9")).toBe("m9");
+    expect(qualityLabel("maj13")).toBe("maj13");
+    expect(qualityLabel("m7b5")).toBe("m7♭5");
+  });
+
+  it("round-trips every extended quality through text without losing it", () => {
+    const qualities: Chord["quality"][] = [
+      "5", "6", "min6", "69", "add9", "dim7", "mMaj7", "maj7#5",
+      "7sus4", "7b5", "7#5", "9", "maj9", "min9", "9sus4",
+      "7b9", "7#9", "7#11", "7b13", "11", "min11", "13", "maj13", "min13",
+    ];
+    for (const quality of qualities) {
+      const text = chordsToHoneycombText([chordAt("I", quality, "C")]);
+      const [back] = honeycombTextToChords(text, "C", 4);
+      expect(back?.quality, `${quality} → "${text}"`).toBe(quality);
+      // Fully described by `quality`, so no second source of truth.
+      expect(back?.extendedSuffix, `${quality} keeps no stray suffix`).toBeUndefined();
+      expect(back?.root, `${quality} keeps its root`).toBe("C");
+    }
+  });
+
+  it("keeps a suffix the vocabulary cannot hold as extendedSuffix", () => {
+    const [chord] = honeycombTextToChords("I7#9b13", "C", 4);
+    expect(chord?.quality).toBe("7");
+    expect(chord?.extendedSuffix).toBe("7#9b13");
+  });
+
+  it("offers the five- and six-note qualities to the editor", () => {
+    for (const quality of ["9", "maj9", "min9", "11", "min11", "13", "maj13", "min13"] as const) {
+      expect(CHORD_QUALITIES).toContain(quality);
+    }
   });
 });

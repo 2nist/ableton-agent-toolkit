@@ -34,6 +34,9 @@ import type {
 const MAX_NOTE_BEATS = [8, 6, 4, 2, 1, 0.5] as const;
 
 /** App chord qualities → the model's table keys (the corpus says `m7`). */
+/** The melody model's own (smaller) quality vocabulary — a chord quality
+ *  folds onto the closest member so a `min9` generates a minor-flavoured
+ *  line instead of silently falling through to major. */
 const MODEL_QUALITY: Record<string, string> = {
   maj: "maj",
   min: "min",
@@ -45,6 +48,31 @@ const MODEL_QUALITY: Record<string, string> = {
   m7b5: "m7b5",
   sus2: "sus2",
   sus4: "sus4",
+  // — extended vocabulary —
+  "5": "maj",
+  "6": "maj",
+  min6: "min",
+  "69": "maj",
+  add9: "maj",
+  dim7: "dim",
+  mMaj7: "min",
+  "maj7#5": "maj7",
+  "7sus4": "7",
+  "7b5": "7",
+  "7#5": "7",
+  "9": "7",
+  maj9: "maj7",
+  min9: "m7",
+  "9sus4": "7",
+  "7b9": "7",
+  "7#9": "7",
+  "7#11": "7",
+  "7b13": "7",
+  "11": "7",
+  min11: "m7",
+  "13": "7",
+  maj13: "maj7",
+  min13: "m7",
 };
 
 export function melodyParamsFromProfile(profile: StyleProfile): MelodyGenerationParams {

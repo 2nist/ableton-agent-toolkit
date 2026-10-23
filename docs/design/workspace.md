@@ -659,6 +659,32 @@ jump-open included); the karaoke popout is untouched.
   convert: the hex wheel (re-root the lattice per region), borrowed-chord
   flags and the Bend/colour heuristics, which all still assume one key.
 
+- **Extended chord qualities (2026-10-22)**: the quality lane used to be ten
+  triads and sevenths, with `extendedSuffix` as the catch-all for richer
+  symbols. The catch-all didn't catch anything worth catching: export resolves
+  intervals from `chord.quality` via `getChordIntervals`, so an imported
+  `C7#9` displayed correctly and **exported as a plain `C7`**. Exports now
+  come from a 34-entry `CHORD_INTERVALS` table, so the quality *is* the
+  interval set: `Cmaj9` is five notes (C E G B D), `C13` six, `C5` two. Upper
+  extensions sit above the octave (14 = 9, 17 = 11, 21 = 13) so the stack stays
+  root-anchored and the existing inversion math works untouched — the voicing
+  lane now names the real bass tone (`ninth`, `♯9`, `thirteenth`) instead of
+  counting to "fourth" and stopping.
+  The editor's Quality row groups the vocabulary the same way the table does
+  (Triads · Sevenths & sixths · Altered dominants · Extended). Triads and
+  sevenths stay visible; the last two sit behind `+ 9 · 11 · 13 · altered` so
+  the dock keeps its height — unless the selected chord is already one of
+  them, in which case that group renders, because a picker that hides the
+  current value is a picker you can't trust.
+  Two invariants are now compile-checked rather than remembered:
+  `CHORD_INTERVALS`, `CHORD_QUALITY_SUFFIX` and `CHORD_QUALITY_GROUPS` are all
+  keyed by `ChordQuality`, so a new quality can't exist without intervals, a
+  round-trippable symbol, and a chip to reach it; and `parseChordQuality` is
+  the single suffix parser behind `parseChordName`, `honeycombTextToChords`
+  and the importers. `extendedSuffix` now only holds suffixes the vocabulary
+  cannot (e.g. `7#9b13`), which still export the base quality's intervals —
+  documented, and pinned by a test.
+
 ## 8. Defaults chosen (veto-able)
 
 - Level-1 rows = **rich previews with light actions**, not lite editors

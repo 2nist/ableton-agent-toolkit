@@ -428,4 +428,30 @@ describe("planChordStem — chord voicing", () => {
     const first = planChordStem(sectionSpans(song)).filter((n) => n.startTime === 0);
     expect(first.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([60, 64, 67]);
   });
+
+  it("exports the full five-note stack for an extended quality", () => {
+    // The point of the extended vocabulary: maj9 must reach MIDI as five
+    // notes (C E G B D), not collapse to the plain triad it used to.
+    const song = testSong();
+    song.sections[0].chords[0].quality = "maj9";
+    const first = planChordStem(sectionSpans(song)).filter((n) => n.startTime === 0);
+    expect(first.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([60, 64, 67, 71, 74]);
+  });
+
+  it("exports six notes for a thirteenth", () => {
+    const song = testSong();
+    song.sections[0].chords[0].quality = "13";
+    const first = planChordStem(sectionSpans(song)).filter((n) => n.startTime === 0);
+    expect(first.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([60, 64, 67, 70, 74, 81]);
+  });
+
+  it("still honours an authored extendedSuffix the vocabulary cannot hold", () => {
+    // Unmapped suffixes keep the base quality's intervals — documented
+    // limitation, not a regression: the suffix is display-only by design.
+    const song = testSong();
+    song.sections[0].chords[0].quality = "7";
+    song.sections[0].chords[0].extendedSuffix = "7#9b13";
+    const first = planChordStem(sectionSpans(song)).filter((n) => n.startTime === 0);
+    expect(first.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([60, 64, 67, 70]);
+  });
 });

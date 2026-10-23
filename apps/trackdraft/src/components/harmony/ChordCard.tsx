@@ -3,7 +3,8 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { pitchClass } from "@music-theory/core";
 import type { Chord, ChordPerformanceEffect } from "../../types/blueprint";
-import { chordDisplayName, chordFunction, CHORD_QUALITIES, functionColorHex } from "../../lib/harmony/chordBuilder";
+import { chordDisplayName, chordFunction, qualityLabel, functionColorHex } from "../../lib/harmony/chordBuilder";
+import { CHORD_QUALITY_GROUPS } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 
 type EditProperty = "none" | "quality" | "beats" | "performance";
@@ -112,8 +113,12 @@ export default function ChordCard({
             value={chord.quality}
             onChange={(e) => onChange({ ...chord, quality: e.target.value as Chord["quality"] })}
           >
-            {CHORD_QUALITIES.map((q) => (
-              <option key={q} value={q}>{q}</option>
+            {CHORD_QUALITY_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.qualities.map((q) => (
+                  <option key={q} value={q}>{qualityLabel(q)}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         )}

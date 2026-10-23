@@ -2,7 +2,9 @@ import {
   MODE_DATA,
   FUNCTION_COLORS,
   CHORD_QUALITY_SUFFIX,
+  CHORD_QUALITY_GROUPS,
   PRESET_PROGRESSIONS,
+  parseChordQuality,
   chordName,
   noteName,
   pitchClass,
@@ -87,6 +89,13 @@ export function chordFromDegree(
  *  music-theory suffix table so the two can't drift apart. */
 export const CHORD_QUALITIES = Object.keys(CHORD_QUALITY_SUFFIX) as ChordQuality[];
 
+/** Chip/option label for a quality: the symbol a player writes (`m7`,
+ *  `maj9`), not the internal key (`min7`). `maj` keeps its name because its
+ *  own suffix is the empty string. */
+export function qualityLabel(quality: ChordQuality): string {
+  return quality === "maj" ? "maj" : CHORD_QUALITY_SUFFIX[quality] || quality;
+}
+
 /** `FUNCTION_COLORS` stores numbers (0x34d399), which Tailwind can't JIT
  *  into class names — convert to a CSS hex string for inline styles. */
 export function functionColorHex(func: string | undefined | null): string | null {
@@ -125,37 +134,56 @@ export function presetToChords(presetKey: string, keyName: NoteName, beatsPerCho
    HONEYCOMB BRIDGE — Chord[] ↔ honeycomb text
    ============================================================ */
 
-/** Quality suffix → { minor, suffix } mapping for HoneycombStep.
- *  Covers the ChordQuality union from @music-theory/core as well
- *  as a few compound qualities the honeycomb parser understands. */
+/** Quality → the honeycomb token's { minor, suffix } pair.
+ *
+ *  Two things need saying here. First, the map is total — a `Record` over
+ *  `ChordQuality`, so adding a quality to the vocabulary is a compile error
+ *  until it can be written as a token. Second, the suffix is often shorter
+ *  than the quality's name: `min9` is "minor third + 9", so it emits
+ *  `minor: true, suffix: "9"` and round-trips back through
+ *  `parseChordQuality`. */
+const QUALITY_STEP: Record<ChordQuality, { minor: boolean; suffix: string }> = {
+  maj: { minor: false, suffix: "" },
+  min: { minor: true, suffix: "" },
+  dim: { minor: true, suffix: "°" },
+  aug: { minor: false, suffix: "+" },
+  "7": { minor: false, suffix: "7" },
+  maj7: { minor: false, suffix: "maj7" },
+  min7: { minor: true, suffix: "7" },
+  m7b5: { minor: true, suffix: "7b5" },
+  sus2: { minor: false, suffix: "sus2" },
+  sus4: { minor: false, suffix: "sus4" },
+  "5": { minor: false, suffix: "5" },
+  "6": { minor: false, suffix: "6" },
+  min6: { minor: true, suffix: "6" },
+  "69": { minor: false, suffix: "69" },
+  add9: { minor: false, suffix: "add9" },
+  dim7: { minor: true, suffix: "°7" },
+  mMaj7: { minor: true, suffix: "maj7" },
+  "maj7#5": { minor: false, suffix: "maj7#5" },
+  "7sus4": { minor: false, suffix: "7sus4" },
+  "7b5": { minor: false, suffix: "7b5" },
+  "7#5": { minor: false, suffix: "7#5" },
+  "9": { minor: false, suffix: "9" },
+  maj9: { minor: false, suffix: "maj9" },
+  min9: { minor: true, suffix: "9" },
+  "9sus4": { minor: false, suffix: "9sus4" },
+  "7b9": { minor: false, suffix: "7b9" },
+  "7#9": { minor: false, suffix: "7#9" },
+  "7#11": { minor: false, suffix: "7#11" },
+  "7b13": { minor: false, suffix: "7b13" },
+  "11": { minor: false, suffix: "11" },
+  min11: { minor: true, suffix: "11" },
+  "13": { minor: false, suffix: "13" },
+  maj13: { minor: false, suffix: "maj13" },
+  min13: { minor: true, suffix: "13" },
+};
+
 function qualityToMinorAndSuffix(quality: ChordQuality): {
   minor: boolean;
   suffix: string;
 } {
-  switch (quality) {
-    case "maj":
-      return { minor: false, suffix: "" };
-    case "min":
-      return { minor: true, suffix: "" };
-    case "dim":
-      return { minor: true, suffix: "°" };
-    case "aug":
-      return { minor: false, suffix: "+" };
-    case "7":
-      return { minor: false, suffix: "7" };
-    case "maj7":
-      return { minor: false, suffix: "maj7" };
-    case "min7":
-      return { minor: true, suffix: "7" };
-    case "m7b5":
-      return { minor: true, suffix: "7b5" };
-    case "sus2":
-      return { minor: false, suffix: "sus2" };
-    case "sus4":
-      return { minor: false, suffix: "sus4" };
-    default:
-      return { minor: false, suffix: "" };
-  }
+  return QUALITY_STEP[quality] ?? { minor: false, suffix: "" };
 }
 
 /** Convert the current system's Chord[] into the honeycomb text
@@ -225,21 +253,13 @@ export function honeycombTextToChords(
   const intervals = SCALE_INTERVALS[scaleKey];
   const chords: Chord[] = [];
 
-  const suffixToQuality = (
-    minor: boolean,
-    suffix: string,
-  ): ChordQuality => {
+  /** Suffix → quality, then a closest-fit fallback for tokens the closed
+   *  vocabulary cannot hold (they also stay on the chord as
+   *  `extendedSuffix`, so the fallback only shapes playback). */
+  const suffixToQuality = (minor: boolean, suffix: string): ChordQuality => {
+    const mapped = parseChordQuality(suffix, minor);
+    if (mapped) return mapped;
     const s = (suffix || "").toLowerCase();
-    if (s === "" || s === "maj") return minor ? "min" : "maj";
-    if (s === "maj7") return "maj7";
-    if (s === "7" || s === "dom7") return minor ? "min7" : "7";
-    if (s === "7b5" || s === "ø7" || s === "m7b5") return "m7b5";
-    if (s === "°" || s === "dim" || s === "°7" || s === "dim7")
-      return "dim";
-    if (s === "+" || s === "aug") return "aug";
-    if (s === "sus2") return "sus2";
-    if (s === "sus4") return "sus4";
-    // Extended chords (9, 11, 13, etc.) — fall back to closest triad quality.
     if (minor) return "min7";
     if (s.includes("7")) return "7";
     return "maj";
@@ -248,26 +268,24 @@ export function honeycombTextToChords(
   for (const t of tokens) {
     const step = parseToken(t);
     if (!step) continue;
-    const quality = suffixToQuality(step.minor, step.suffix);
+    const mapped = parseChordQuality(step.suffix, step.minor);
+    const quality = mapped ?? suffixToQuality(step.minor, step.suffix);
     const rm = emitToken(step);
 
     // Resolve root: pitchClass = keyPc + intervals[degree] + accidental.
     const rootPc = intervals[step.deg] + step.acc;
     const root = noteName(((keyPc + rootPc) % 12 + 12) % 12, keyName);
 
-    // Preserve honeycomb suffix as extendedSuffix when it carries more
-    // info than ChordQuality alone (e.g. "maj9", "7b13", "m11").
-    const simpleQuality = suffixToQuality(step.minor, "");
-    const isExtended =
-      step.suffix !== "" && quality !== simpleQuality;
-
     chords.push({
       id: crypto.randomUUID(),
       romanNumeral: rm.replace(/b/g, "♭").replace(/#/g, "♯"),
       root,
       quality,
+      // Only unmapped suffixes survive here: everything the vocabulary can
+      // express is already carried by `quality` (and now sounds correctly),
+      // so duplicating it would just give two sources of truth.
+      extendedSuffix: mapped === null && step.suffix !== "" ? step.suffix : undefined,
       beats: beatsPerChord,
-      extendedSuffix: isExtended ? step.suffix : undefined,
     });
   }
   return chords;

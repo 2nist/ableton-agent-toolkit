@@ -186,35 +186,8 @@ export const HUES: HueSet[] = [
 ];
 
 /* ---------------------------------------------------------------
-   CONSTANTS — quality chips & borrowed chords
+   CONSTANTS — borrowed chords
    --------------------------------------------------------------- */
-export interface QualityChip {
-  label: string;
-  minor: boolean;
-  suffix: string;
-}
-
-export const QUALITY_CHIPS: QualityChip[] = [
-  { label: "maj", minor: false, suffix: "" },
-  { label: "min", minor: true, suffix: "" },
-  { label: "maj7", minor: false, suffix: "maj7" },
-  { label: "maj9", minor: false, suffix: "maj9" },
-  { label: "7", minor: false, suffix: "7" },
-  { label: "9", minor: false, suffix: "9" },
-  { label: "13", minor: false, suffix: "13" },
-  { label: "7♭9", minor: false, suffix: "7b9" },
-  { label: "7♯9", minor: false, suffix: "7#9" },
-  { label: "7♭13", minor: false, suffix: "7b13" },
-  { label: "m7", minor: true, suffix: "7" },
-  { label: "m9", minor: true, suffix: "9" },
-  { label: "m11", minor: true, suffix: "11" },
-  { label: "m7♭5", minor: true, suffix: "7b5" },
-  { label: "dim7", minor: true, suffix: "°7" },
-  { label: "sus4", minor: false, suffix: "sus4" },
-  { label: "add9", minor: false, suffix: "add9" },
-  { label: "6/9", minor: false, suffix: "69" },
-];
-
 export interface BorrowedMove {
   label: string;
   p: Partial<HoneycombStep>;

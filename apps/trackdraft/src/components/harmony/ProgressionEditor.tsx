@@ -600,8 +600,9 @@ export default function ProgressionEditor({
                               : "bg-accent/20 text-accent"
                           }`}
                           onClick={() => replaceChord(cycleInversion(chord))}
-                          title={`Bass: ${bassName(inversion)} — click for ${bassName(
+                          title={`Bass: ${bassName(inversion, chord.quality)} — click for ${bassName(
                             (inversion + 1) % size,
+                            chord.quality,
                           )}${inversion + 1 >= size ? " (root position again)" : ""}`}
                         >
                           {inversion === 0 ? "R" : String(inversion)}

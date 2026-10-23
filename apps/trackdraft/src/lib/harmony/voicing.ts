@@ -21,9 +21,40 @@ export function inversionCount(chord: Pick<Chord, "quality">): number {
   return Math.max(1, getChordIntervals(chord.quality).length);
 }
 
-/** Human name for the tone in the bass (0 = root). */
-export function bassName(inversion: number): string {
+/** Semitone → the chord tone's name, for naming what ends up in the bass. */
+const TONE_NAMES: Record<number, string> = {
+  0: "root",
+  2: "second",
+  3: "third",
+  4: "third",
+  5: "fourth",
+  6: "fifth",
+  7: "fifth",
+  8: "fifth",
+  9: "sixth",
+  10: "seventh",
+  11: "seventh",
+  13: "♭9",
+  14: "ninth",
+  15: "♯9",
+  17: "eleventh",
+  18: "♯11",
+  20: "♭13",
+  21: "thirteenth",
+};
+
+/** Human name for the tone in the bass (0 = root). Pass the quality when
+ *  you have it: a five-note chord's fourth inversion puts its **ninth** in
+ *  the bass, and "fourth" would be a lie. Without a quality this falls back
+ *  to positional names, which is what it always returned. */
+export function bassName(inversion: number, quality?: Chord["quality"]): string {
   if (inversion <= 0) return "root";
+  if (quality) {
+    const intervals = getChordIntervals(quality);
+    const semitones = intervals[inversion % intervals.length];
+    const name = semitones === undefined ? undefined : TONE_NAMES[semitones];
+    if (name) return name;
+  }
   return ["first", "second", "third", "fourth"][inversion - 1] ?? `${inversion}th`;
 }
 

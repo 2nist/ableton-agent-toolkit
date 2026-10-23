@@ -12,6 +12,7 @@
  */
 
 import type { NoteName, ChordQuality } from "@music-theory/core";
+import { parseChordQuality } from "@music-theory/core";
 import type { BlueprintSong, BlueprintSection, LyricsTimelineEntry } from "./index";
 import { SECTION_ROLE_MAP } from "./index";
 
@@ -82,29 +83,24 @@ export interface LrclibData {
 export function parseChordName(chordName: string): { root: NoteName; quality: ChordQuality } | null {
   // Guard against empty/undefined chord names from malformed ChordMiniApp output
   if (!chordName || typeof chordName !== "string" || chordName.trim().length === 0) return null;
-  const match = chordName.match(/^([A-G][#b]?)(maj7|min7|m7b5|maj|min|m|dim|aug|sus2|sus4|7)?$/i);
+
+  const normalized = chordName
+    .trim()
+    .replace(/♭/g, "b")
+    .replace(/♯/g, "#")
+    .replace(/Δ/g, "maj");
+
+  const match = normalized.match(/^([A-Ga-g])([#b]?)(.*)$/);
   if (!match) return null;
 
-  const rawRoot = match[1];
-  const root = (rawRoot.charAt(0).toUpperCase() + rawRoot.slice(1).toLowerCase()) as NoteName;
+  // The suffix carries the whole quality grammar, so delegate rather than
+  // re-listing spellings here — `parseChordQuality` knows 9/11/13, altered
+  // dominants, ø/°/Δ/+ shorthand and the `min`-vs-`M` ambiguity.
+  const quality = parseChordQuality(match[3]);
+  if (!quality) return null;
 
-  const suffix = match[2]?.toLowerCase() ?? "";
-  const qualityMap: Record<string, ChordQuality> = {
-    "": "maj",
-    "maj": "maj",
-    "min": "min",
-    "m": "min",
-    "7": "7",
-    "maj7": "maj7",
-    "min7": "min7",
-    "m7b5": "m7b5",
-    "sus2": "sus2",
-    "sus4": "sus4",
-    "dim": "dim",
-    "aug": "aug",
-  };
-
-  return { root, quality: qualityMap[suffix] ?? "maj" };
+  const root = (match[1].toUpperCase() + match[2]) as NoteName;
+  return { root, quality };
 }
 
 // ---------------------------------------------------------------------------

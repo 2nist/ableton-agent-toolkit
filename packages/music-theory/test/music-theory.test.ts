@@ -13,6 +13,8 @@ import {
   chordName,
   chordToMidiNotes,
   countSubstitutions,
+  getChordIntervals,
+  getChordSuffix,
   getDiatonicChords,
   getPresetKeys,
   getScaleNotes,
@@ -21,6 +23,10 @@ import {
   noteName,
   pitchClass,
   resolveProgression,
+  CHORD_INTERVALS,
+  CHORD_QUALITY_GROUPS,
+  CHORD_QUALITY_SUFFIX,
+  parseChordQuality,
 } from "../src/index.js";
 
 describe("notes", () => {
@@ -111,5 +117,78 @@ describe("progressions", () => {
 
   it("throws for an unknown preset key", () => {
     expect(() => resolveProgression("not_a_real_preset")).toThrow();
+  });
+});
+
+describe("extended chord vocabulary", () => {
+  it("gives every quality an interval set, a suffix and a picker group", () => {
+    const qualities = Object.keys(CHORD_INTERVALS) as (keyof typeof CHORD_INTERVALS)[];
+    for (const quality of qualities) {
+      expect(CHORD_QUALITY_SUFFIX[quality], `${quality} suffix`).toBeDefined();
+      expect(CHORD_INTERVALS[quality].length, `${quality} has tones`).toBeGreaterThanOrEqual(2);
+    }
+    // Every picker chip must be a real quality, and the groups must cover
+    // the vocabulary exactly once — a quality with no chip is unreachable
+    // in the Harmony view.
+    const grouped = CHORD_QUALITY_GROUPS.flatMap((g) => g.qualities);
+    expect(new Set(grouped).size).toBe(grouped.length);
+    expect(new Set(grouped)).toEqual(new Set(qualities));
+  });
+
+  it("stacks upper extensions above the octave so they voice like any chord", () => {
+    expect(getChordIntervals("9")).toEqual([0, 4, 7, 10, 14]);
+    expect(getChordIntervals("maj13")).toEqual([0, 4, 7, 11, 14, 21]);
+    expect(getChordIntervals("7b9")).toEqual([0, 4, 7, 10, 13]);
+    expect(getChordIntervals("7#9")).toEqual([0, 4, 7, 10, 15]);
+  });
+
+  it("has five- and six-note qualities", () => {
+    // The five-note chords (root, third, fifth, seventh, ninth).
+    for (const quality of ["9", "maj9", "min9", "69", "7b9", "7#9", "7#11", "7b13", "9sus4"] as const) {
+      expect(getChordIntervals(quality), quality).toHaveLength(5);
+    }
+    // A plain "11" omits the third the way an eleventh chord actually does
+    // (the 3rd and 11th clash), which leaves it five tones; the minor
+    // eleventh keeps its third, so it is six.
+    expect(getChordIntervals("11")).toEqual([0, 7, 10, 14, 17]);
+    for (const quality of ["min11", "13", "maj13", "min13"] as const) {
+      expect(getChordIntervals(quality), quality).toHaveLength(6);
+    }
+    expect(getChordIntervals("5")).toEqual([0, 7]);
+  });
+
+  it("sounds the new qualities through chordToMidiNotes", () => {
+    // Cmaj9 at octave 4 = C4 E4 G4 B4 D5 — five notes, not a plain triad.
+    expect(chordToMidiNotes(0, "maj9", 4)).toEqual([48, 52, 55, 59, 62]);
+  });
+
+  it("round-trips every quality through its display suffix", () => {
+    for (const quality of Object.keys(CHORD_INTERVALS) as (keyof typeof CHORD_INTERVALS)[]) {
+      const suffix = getChordSuffix(quality);
+      expect(parseChordQuality(suffix), `${quality} → "${suffix}"`).toBe(quality);
+    }
+  });
+
+  it("resolves the lead-sheet shorthand", () => {
+    expect(parseChordQuality("")).toBe("maj");
+    expect(parseChordQuality("", true)).toBe("min");
+    expect(parseChordQuality("m7")).toBe("min7");
+    expect(parseChordQuality("7", true)).toBe("min7");
+    expect(parseChordQuality("min7")).toBe("min7");
+    expect(parseChordQuality("M7")).toBe("maj7");
+    expect(parseChordQuality("Maj9")).toBe("maj9");
+    expect(parseChordQuality("mMaj7")).toBe("mMaj7");
+    expect(parseChordQuality("Δ7")).toBe("maj7");
+    expect(parseChordQuality("ø")).toBe("m7b5");
+    expect(parseChordQuality("°7")).toBe("dim7");
+    expect(parseChordQuality("+")).toBe("aug");
+    expect(parseChordQuality("6/9")).toBe("69");
+    expect(parseChordQuality("dom7")).toBe("7");
+    expect(parseChordQuality("sus4", true)).toBe("sus4");
+  });
+
+  it("returns null when a symbol holds more than one quality's worth of info", () => {
+    expect(parseChordQuality("7#9b13")).toBeNull();
+    expect(parseChordQuality("nonsense")).toBeNull();
   });
 });
