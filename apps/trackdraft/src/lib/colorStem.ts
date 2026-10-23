@@ -20,7 +20,14 @@ import {
   type BiTonalChord,
   type BiTonalOptions,
 } from "@platform/progression-engine";
-import { resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
+import {
+  resolveChordOccurrences,
+  resolveEffectiveStyle,
+  resolveNarrativeProfile,
+  narrativeHarmonySection,
+  styleSpacing,
+  type ChordResolutionSource,
+} from "@drum/library";
 import type { SectionSpan } from "./arrangement";
 import type { MidiNote } from "./midiExport";
 import type { BlueprintSong } from "../types/blueprint";
@@ -44,8 +51,12 @@ function chordToBiTonal(chord: { root: string; quality: string; beats: number })
  *  occurrence math as the Chords/Bass stems (including Euclidean harmony
  *  when the section carries a `harmonyMeterOutline`), so the Color layer
  *  spans the whole section rather than just one pass through its cycle. */
-function sectionChordsFilled(span: SectionSpan, spacing: number): BiTonalChord[] {
-  return resolveChordOccurrences(span.section, span.durationBeats, spacing).map((occ) => ({
+function sectionChordsFilled(
+  span: SectionSpan,
+  section: ChordResolutionSource<{ root: string; quality: string; beats: number }>,
+  spacing: number,
+): BiTonalChord[] {
+  return resolveChordOccurrences(section, span.durationBeats, spacing).map((occ) => ({
     ...chordToBiTonal(occ.chord),
     durationBeats: occ.duration,
   }));
@@ -59,8 +70,16 @@ function sectionChordsFilled(span: SectionSpan, spacing: number): BiTonalChord[]
 export function planColorStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
-    const profile = resolveStyleProfile(span.section, song);
-    const chords = sectionChordsFilled(span, styleSpacing(profile.density));
+    // The Color layer rides the SAME chord grid as the Chords and Bass stems,
+    // including the narrative's warped grid — otherwise its notes reference
+    // chord boundaries that no longer exist.
+    const profile = resolveEffectiveStyle(span.section, song);
+    const narrative = resolveNarrativeProfile(span.section, song);
+    const chords = sectionChordsFilled(
+      span,
+      narrativeHarmonySection(span.section, narrative),
+      styleSpacing(profile.density),
+    );
     if (chords.length === 0) continue;
     const opts: BiTonalOptions = {
       anchorOctave: COLOR_ANCHOR_OCTAVE,

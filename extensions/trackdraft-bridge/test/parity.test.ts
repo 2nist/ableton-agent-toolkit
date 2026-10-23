@@ -256,6 +256,37 @@ const meterMapSong: BlueprintSong = makeSong({
   arrangement: [{ sectionId: "mm", repeats: 1 }],
 });
 
+/** Narrative arc — the abstract layer must tint BOTH sides identically, and
+ *  `structural_warp` has to re-grid chords, bass AND color together. The song
+ *  master carries the arc; the chorus overrides two axes so the merge order
+ *  (song master → section override) is exercised too. */
+const narrativeSong: BlueprintSong = makeSong({
+  id: "parity-narrative",
+  title: "Parity Narrative",
+  bpm: 120,
+  concept: "pop",
+  genre: "pop",
+  bend: { energy: 0.62, tension: 0.4 },
+  narrative: { tension_profile: 0.85, rhythmic_energy: 0.7, transition_delta: 0.9, structural_warp: 0.9 },
+  sections: [
+    makeSection({ id: "v", name: "Verse", role: "verse", bars: 4, timeSignatureNumerator: 4, velocity: "mf", chords: [CHORDS[0], CHORDS[1]] }),
+    makeSection({
+      id: "c",
+      name: "Chorus",
+      role: "chorus",
+      bars: 4,
+      timeSignatureNumerator: 4,
+      velocity: "f",
+      chords: [CHORDS[2], CHORDS[3]],
+      narrative: { tension_profile: 0.3, rhythmic_energy: 0.95, transition_delta: -0.8, structural_warp: 0.75 },
+    }),
+  ],
+  arrangement: [
+    { sectionId: "v", repeats: 1 },
+    { sectionId: "c", repeats: 1 },
+  ],
+});
+
 const SONGS: Record<string, BlueprintSong> = {
   acoustic: acousticSong,
   dnb: dnbSong,
@@ -265,6 +296,7 @@ const SONGS: Record<string, BlueprintSong> = {
   override: overrideSong,
   blocks: blocksSong,
   meterMap: meterMapSong,
+  narrative: narrativeSong,
 };
 
 // ---------------------------------------------------------------------------

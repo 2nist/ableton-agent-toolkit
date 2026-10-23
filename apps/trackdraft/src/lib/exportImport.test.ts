@@ -26,6 +26,7 @@ const RAW = {
   outputOffsetBeats: -1,
   genre: "math-rock",
   bend: { energy: 0.66, backbeat: 0.72 },
+  narrative: { tension_profile: 0.9, rhythmic_energy: 0.2, transition_delta: 0.6, structural_warp: 0.8 },
   detected: { harmony: 0.99, tension: 0.08 },
   provenance: { source: "audio-extract", extractedAt: "2026-09-21T00:00:00Z", warnings: ["low confidence"] },
   blueprintAcks: { "sec-1:candidate": true },
@@ -36,6 +37,12 @@ describe("parseImportedSong — whitelist rebuild", () => {
   it("preserves every style + suggestion field across the rebuild", () => {
     const song = parseImportedSong(RAW);
     expect(song.bend).toEqual({ energy: 0.66, backbeat: 0.72 });
+    expect(song.narrative).toEqual({
+      tension_profile: 0.9,
+      rhythmic_energy: 0.2,
+      transition_delta: 0.6,
+      structural_warp: 0.8,
+    });
     expect(song.detected).toEqual({ harmony: 0.99, tension: 0.08 });
     expect(song.genre).toBe("math-rock");
     expect(song.beatOffset).toBe(2);
@@ -50,6 +57,7 @@ describe("parseImportedSong — whitelist rebuild", () => {
     const minimal = parseImportedSong({ title: "x", sections: [], arrangement: [] });
     expect(minimal.key).toBe("C");
     expect(minimal.bend).toBeUndefined();
+    expect(minimal.narrative).toBeUndefined();
     expect(minimal.detected).toBeUndefined();
     expect(minimal.blueprintAcks).toBeUndefined();
   });

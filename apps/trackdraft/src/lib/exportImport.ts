@@ -185,6 +185,10 @@ export function parseImportedSong(
     // clearly bent (caught live when `detected` ratings didn't show up
     // after re-import; same rebuild path dropped both).
     bend: (obj.bend as BlueprintSong["bend"]) ?? undefined,
+    // The narrative master is the abstract half of the style layer — without
+    // this line a re-imported song loses the arc every section is tinted by,
+    // while section-level `narrative` survives (sections pass through whole).
+    narrative: (obj.narrative as BlueprintSong["narrative"]) ?? undefined,
     detected: (obj.detected as BlueprintSong["detected"]) ?? undefined,
     provenance: (obj.provenance as BlueprintSong["provenance"]) ?? undefined,
     // Suggestion acknowledgments (mode-inference / one-shot cards) must

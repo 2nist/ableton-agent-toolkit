@@ -1,5 +1,13 @@
 import { pitchClass } from "@music-theory/core";
-import { planSectionBass, resolveBassProfile, resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
+import {
+  planSectionBass,
+  resolveBassProfile,
+  resolveChordOccurrences,
+  resolveEffectiveStyle,
+  resolveNarrativeProfile,
+  narrativeHarmonySection,
+  styleSpacing,
+} from "@drum/library";
 import type { NoteDescription } from "@ableton-extensions/sdk";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
 
@@ -30,8 +38,13 @@ export const DEFAULT_OCTAVE = 3;
  */
 export function planBassLine(song: BlueprintSong, octave: number = DEFAULT_OCTAVE): BassLinePlan[] {
   return sectionSpans(song).map(({ section, startBeat, durationBeats }) => {
-    const profile = resolveStyleProfile(section, song);
-    const occurrences = resolveChordOccurrences(section, durationBeats, styleSpacing(profile.density)).map((occ) => ({
+    // Effective style = Bend base ⊕ narrative tint; the harmony grid is the
+    // warped one when `structural_warp` asks for it. Same two calls the app's
+    // `planBassStem` makes, so Live and the .mid cannot disagree.
+    const profile = resolveEffectiveStyle(section, song);
+    const narrative = resolveNarrativeProfile(section, song);
+    const harmonySection = narrativeHarmonySection(section, narrative);
+    const occurrences = resolveChordOccurrences(harmonySection, durationBeats, styleSpacing(profile.density)).map((occ) => ({
       rootPc: pitchClass(occ.chord.root),
       startTime: occ.startTime,
       duration: occ.duration,
