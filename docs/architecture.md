@@ -333,10 +333,66 @@ What it refuses to invent, and says so in `provenance.warnings`:
 
 - **Tempo** — iReal stores none (it practises at a global tempo), so 120 BPM is
   a default, not an extraction.
-- **One meter per section** — the model has no per-bar meter map, so a section
-  that changes meter keeps its first and reports every change by bar.
+- **One meter per section, declared** — a section that changes meter carries
+  the opening meter in `timeSignatureNumerator/DenPower` plus a `meterMap`
+  of the changes (see *Per-bar meter* below), so its length is right and
+  every change is reported by bar.
 - **Melody** — the export is rests.
 - **`.mxl`** (zipped MusicXML) is not read; only plain `.musicxml`/`.xml`.
+
+## Per-bar meter
+
+`BlueprintSection.meterMap` is a list of `{ bar, numerator, denominator }`
+changes. Absent — every song written before the field — the section is
+`bars × beatsPerBar` exactly as it always was; present, the map decides how
+long each bar is and the declared meter only describes the opening bar.
+
+Why it exists: the MIDI importer used to take the *last* time signature in a
+file for the whole song, which misread bar counts by up to 500 % on the Zappa
+corpus (`Nanook Rubs It` imported as 653 bars instead of 109). Even
+"most common meter" misses by 96 %, so no single-meter heuristic is good
+enough for a chart that changes meter — the map is the only honest answer.
+
+The helpers in `@music-theory/song-blueprint` are the whole API:
+
+- `barLengths(section)` — one entry per bar.
+- `sectionDurationBeats(section)` — the sum, so everything downstream (chord
+  occurrences, section spans, both export paths) inherits the right length.
+- `barAtBeat` / `beatAtBar` — convert across a change.
+- `meanBeatsPerBar(section)` — the *average* bar, for display maths where the
+  bars are drawn evenly (the Harmony cycle readout, the spine's bar↔beat seek).
+- `meterForLength(beats)` — 3.5 → 7/8, so anything that only knows a bar's
+  length can get its meter back.
+
+Three consumers needed real work rather than a formula swap:
+
+- **Section spans** accumulate `startBar` instead of dividing beats by one
+  meter — a 3/4 section followed by a 4/4 one used to misplace the second
+  section's bar origin.
+- **The bridge** no longer duplicates the duration formula; it imports the
+  shared helper, so app == bridge by construction. `parity.test.ts` carries a
+  mixed-meter fixture so a drift shows up as notes a beat apart.
+- **Drums**: `planSectionDrumNotes` takes `barBeats` plus a `meterVariants`
+  map keyed by bar length, and restarts the groove at each new bar length
+  with that length's own variant — a 4/4 pattern is not chopped at 3.5 beats
+  when the chart drops to 7/8. Absent `barBeats`, the tiling path is the old
+  one, unchanged.
+
+It is editable: **Meter** in the Harmony dock lists the changes with their bar
+spans and a numerator/denominator stepper each, adds a change one bar after
+the last, and drops the map back to a single meter. A map that ends up with
+one change is cleared rather than stored, because one change is just the
+declared meter said twice.
+
+Both importers write it: MusicXML from its per-measure `<time>` changes, MIDI
+from its deduped time-signature events (ignoring events that sit past the last
+note — a stray tail, as in `WildLove`, must not stretch the song).
+
+Still open: the bars inside a mapped section are drawn evenly, so the ruler
+shows the right bar *count* and total width but not the exact per-bar
+spacing; and `drumBlocks` an importer wrote are absolute and exact, while a
+generated groove follows the map only bar-by-bar (its fills and transitions
+still treat the section as one gesture).
 
 ## Lyrics lookups: matching, not just searching
 

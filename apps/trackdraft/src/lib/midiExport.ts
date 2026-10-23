@@ -22,7 +22,7 @@ import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
 import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, applyStyleToVariant, resolveStyleProfile, styleArticulation, styleQualityFor, styleSpacing, styleVelocityTarget, type SectionDrumInput } from "@drum/library";
 import { planColorStem } from "./colorStem";
 import { planMelodyStem } from "./melody/melodyStem";
-import { beatsPerBar, type BlueprintSong, type BlueprintSection } from "../types/blueprint";
+import { barLengths, beatsPerBar, meterForLength, type BlueprintSong, type BlueprintSection } from "../types/blueprint";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -159,11 +159,33 @@ export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
     if (variant) {
       variant = applyStyleToVariant(variant, profile);
     }
+    // A section that changes meter gets one groove per bar length, so a 4/4
+    // pattern is not chopped at 3.5 beats when the chart drops to 7/8.
+    const barBeats = barLengths(section);
+    const distinctBars = [...new Set(barBeats)];
+    const meterVariants =
+      distinctBars.length > 1
+        ? Object.fromEntries(
+            distinctBars.flatMap((length) => {
+              const meter = meterForLength(length);
+              const probe: BlueprintSection = {
+                ...section,
+                timeSignatureNumerator: meter.numerator,
+                timeSignatureDenPower: Math.log2(meter.denominator),
+              };
+              const resolved = resolveSectionVariant(probe, song, span.occurrenceIndex);
+              const styled = resolved ? applyStyleToVariant(resolved, profile) : null;
+              return styled ? [[String(length), styled] as const] : [];
+            }),
+          )
+        : undefined;
+
     return {
       sectionId: section.id,
       occurrenceIndex: span.occurrenceIndex,
       role: section.role ?? null,
       beatsPerBar: beatsPerBar(section),
+      ...(meterVariants ? { barBeats, meterVariants } : {}),
       variant,
       outline: section.drumMeterOutline ?? null,
       voiceOverrides: section.drumVoicePatterns,

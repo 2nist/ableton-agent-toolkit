@@ -31,7 +31,7 @@
 import { XMLParser } from "fast-xml-parser";
 import { getChordIntervals, parseChordQuality } from "@music-theory/core";
 import type { ChordQuality, NoteName, ScaleType } from "@music-theory/core";
-import type { BlueprintSong, BlueprintSection, ArrangementRepeat, Chord, SectionRole } from "../../types/blueprint";
+import type { BlueprintSong, BlueprintSection, ArrangementRepeat, Chord, MeterChange, SectionRole } from "../../types/blueprint";
 import { degreeRelativeTo } from "../harmony/tonic";
 
 // ---------------------------------------------------------------------------
@@ -765,10 +765,21 @@ export function musicXmlToBlueprintSong(xml: string, fallbackTitle = "Imported c
     for (const chord of chords) counts.set(chord.beats, (counts.get(chord.beats) ?? 0) + 1);
     const beatsPerChord =
       [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? 4;
-    const meters = new Set(run.measures.map((m) => `${m.time.beats}/${m.time.beatType}`));
-    if (meters.size > 1) {
+    // Meter changes inside the section become a per-bar map, so the section
+    // is its real length instead of `bars × the first meter`.
+    const meterMap: MeterChange[] = [];
+    run.measures.forEach((measure, bar) => {
+      const previous = meterMap[meterMap.length - 1];
+      const { beats, beatType } = measure.time;
+      if (!previous || previous.numerator !== beats || previous.denominator !== beatType) {
+        meterMap.push({ bar, numerator: beats, denominator: beatType });
+      }
+    });
+    if (meterMap.length > 1) {
       warnings.push(
-        `Section "${run.name}" changes meter (${[...meters].join(" → ")}); the model holds one meter per section, so ${first.time.beats}/${first.time.beatType} is used and the bar count is the written one`,
+        `Section "${run.name}" changes meter ${meterMap.length} time(s) (${meterMap
+          .map((change) => `${change.numerator}/${change.denominator}@bar${change.bar + 1}`)
+          .join(" ")}) — carried as a per-bar meter map`,
       );
     }
     return {
@@ -781,6 +792,7 @@ export function musicXmlToBlueprintSong(xml: string, fallbackTitle = "Imported c
       velocity: "mf",
       timeSignatureNumerator: first.time.beats,
       timeSignatureDenPower: Math.log2(first.time.beatType),
+      ...(meterMap.length > 1 ? { meterMap } : {}),
     };
   });
 

@@ -407,6 +407,40 @@ describe("planBassStem", () => {
   });
 });
 
+describe("planDrumStem — meter map", () => {
+  it("realigns the groove to the bar line when the meter changes", () => {
+    const song = testSong();
+    const section = song.sections[0];
+    // One 1/2 bar (2 beats) then two 4/4 bars: bars start at 0, 2 and 6.
+    // A single 4/4 tiling puts its own downbeats at 0, 4 and 8 — off the bar
+    // line from the second bar onwards.
+    section.bars = 3;
+    section.drumPattern = "standard";
+    section.meterMap = [
+      { bar: 0, numerator: 1, denominator: 2 },
+      { bar: 1, numerator: 4, denominator: 4 },
+    ];
+    const kicks = planDrumStem(sectionSpans(song))
+      .filter((n) => n.pitch === 36)
+      .map((n) => n.startTime);
+    // Humanized grooves sit a few thousandths off the grid.
+    const onBeat = (beat: number) => kicks.some((kick) => Math.abs(kick - beat) < 0.05);
+    for (const barStart of [0, 2, 6]) {
+      expect(onBeat(barStart), `kick on the downbeat of the bar at ${barStart} (kicks: ${kicks.join(", ")})`).toBe(true);
+    }
+  });
+
+  it("leaves a single-meter section's groove exactly as it was", () => {
+    const song = testSong();
+    song.sections[0].drumPattern = "standard";
+    const plain = planDrumStem(sectionSpans(song));
+    const withEmptyMap = testSong();
+    withEmptyMap.sections[0].drumPattern = "standard";
+    withEmptyMap.sections[0].meterMap = [{ bar: 0, numerator: 4, denominator: 4 }];
+    expect(planDrumStem(sectionSpans(withEmptyMap))).toEqual(plain);
+  });
+});
+
 describe("planChordStem — chord voicing", () => {
   it("puts the third in the bass for a first inversion, keeping every tone", () => {
     const song = testSong();

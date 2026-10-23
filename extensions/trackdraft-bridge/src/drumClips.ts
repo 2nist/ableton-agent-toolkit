@@ -24,7 +24,7 @@ import {
   type SectionDrumInput,
 } from "@drum/library";
 import { getVelocity } from "@music-theory/song-structure";
-import { beatsPerBar, type MeterOutline } from "@music-theory/song-blueprint";
+import { barLengths, beatsPerBar, meterForLength, type BlueprintSection, type MeterOutline } from "@music-theory/song-blueprint";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
 
 export interface DrumClipPlan {
@@ -102,6 +102,52 @@ function outlineVariant(outline: MeterOutline, presetData: Partial<Record<DrumPa
  * against actual baked content — that content legitimately changes shape
  * when the pipeline is re-run.
  */
+/** A section's own base groove — pattern (or meter outline) → variant, with
+ *  the same meter-aware pick the app uses. Factored out so a section with a
+ *  meter map can also ask for the groove at each of its other bar lengths. */
+function resolveBaseVariant(
+  section: BlueprintSection,
+  durationBeats: number,
+  occurrenceIndex: number,
+  song: BlueprintSong,
+  songSignals: ReturnType<typeof songSignalsFor>,
+  presetData: Partial<Record<DrumPattern, PackedPreset>>,
+): PackedVariant | null {
+  if (section.drumMeterOutline) return outlineVariant(section.drumMeterOutline, presetData);
+
+  const pattern = section.drumPattern ?? inferPatternForGenre(
+    {
+      role: section.role,
+      velocity: section.velocity,
+      name: section.name,
+      timeSignatureNumerator: section.timeSignatureNumerator,
+      timeSignatureDenominator: 2 ** section.timeSignatureDenPower,
+    },
+    songSignals,
+    song.genre,
+  );
+  const preset = presetData[pattern];
+  if (!preset || preset.variants.length === 0) return null;
+
+  // Explicit variant index when the user chose one (clamped to valid range);
+  // otherwise the deterministic meter-aware pick that defaults to the clean
+  // downbeat groove (variant 0) most of the time, with the corpus/mined
+  // variants as seeded variation — matches the app's preview/export.
+  const variantIndex = section.drumVariantIndex !== undefined
+    ? Math.max(0, Math.min(section.drumVariantIndex, preset.variants.length - 1))
+    : pickVariantIndexFor(
+        hashSeed(
+          hasBend(section, song)
+            ? styleSeed(resolveStyleProfile(section, song), section.id, occurrenceIndex)
+            : occurrenceSeed(section.id, occurrenceIndex),
+        ),
+        preset.variants,
+        durationBeats,
+        beatsPerBar(section),
+      );
+  return preset.variants[variantIndex];
+}
+
 export function planDrumClips(
   song: BlueprintSong,
   presetData: Partial<Record<DrumPattern, PackedPreset>> = PRESET_DATA,
@@ -115,46 +161,35 @@ export function planDrumClips(
 
   // First pass: choose the base pattern + variant per section, so the
   // handoff planner can look at the *next* section's resolved target too.
-  const resolved: (PackedVariant | null)[] = spans.map(({ section, occurrenceIndex, durationBeats }) => {
-    if (section.drumMeterOutline) return outlineVariant(section.drumMeterOutline, presetData);
-
-    const pattern = section.drumPattern ?? inferPatternForGenre(
-      {
-        role: section.role,
-        velocity: section.velocity,
-        name: section.name,
-        timeSignatureNumerator: section.timeSignatureNumerator,
-        timeSignatureDenominator: 2 ** section.timeSignatureDenPower,
-      },
-      songSignals,
-      song.genre,
-    );
-    const preset = presetData[pattern];
-    if (!preset || preset.variants.length === 0) return null;
-
-    // Explicit variant index when the user chose one (clamped to valid range);
-    // otherwise the deterministic meter-aware pick that defaults to the clean
-    // downbeat groove (variant 0) most of the time, with the corpus/mined
-    // variants as seeded variation — matches the app's preview/export.
-    const variantIndex = section.drumVariantIndex !== undefined
-      ? Math.max(0, Math.min(section.drumVariantIndex, preset.variants.length - 1))
-      : pickVariantIndexFor(
-          hashSeed(
-            hasBend(section, song)
-              ? styleSeed(resolveStyleProfile(section, song), section.id, occurrenceIndex)
-              : occurrenceSeed(section.id, occurrenceIndex),
-          ),
-          preset.variants,
-          durationBeats,
-          beatsPerBar(section),
-        );
-    return preset.variants[variantIndex];
-  });
+  const resolved: (PackedVariant | null)[] = spans.map(({ section, occurrenceIndex, durationBeats }) =>
+    resolveBaseVariant(section, durationBeats, occurrenceIndex, song, songSignals, presetData),
+  );
 
   // Map each span into the library's shared per-section pipeline — voice
   // overrides, detour, transition, and the outline fill are all carried
   // here, so the app's MIDI export and this Ableton plan can't drift.
   const inputs: SectionDrumInput[] = spans.map(({ section, durationBeats, occurrenceIndex }, i) => {
+    // A section that changes meter gets one groove per bar length, so a 4/4
+    // pattern is not chopped at 3.5 beats when the chart drops to 7/8. Mirrors
+    // the app's `planDrumStem`, so app == bridge.
+    const barBeats = barLengths(section);
+    const distinctBars = [...new Set(barBeats)];
+    const meterVariants =
+      distinctBars.length > 1
+        ? Object.fromEntries(
+            distinctBars.flatMap((length) => {
+              const meter = meterForLength(length);
+              const probe: BlueprintSection = {
+                ...section,
+                timeSignatureNumerator: meter.numerator,
+                timeSignatureDenPower: Math.log2(meter.denominator),
+              };
+              const runVariant = resolveBaseVariant(probe, durationBeats, occurrenceIndex, song, songSignals, presetData);
+              const styled = runVariant ? applyStyleToVariant(runVariant, resolveStyleProfile(section, song)) : null;
+              return styled ? [[String(length), styled] as const] : [];
+            }),
+          )
+        : undefined;
     // The Bend note transforms (Feel + Backbeat) apply after the outline
     // humanization baked into `resolved[i]` — the same relative point the
     // app applies them, so app == bridge. Neutral profile = no-op.
@@ -165,6 +200,7 @@ export function planDrumClips(
       occurrenceIndex,
       role: section.role ?? null,
       beatsPerBar: beatsPerBar(section),
+      ...(meterVariants ? { barBeats, meterVariants } : {}),
       variant,
       outline: section.drumMeterOutline ?? null,
       voiceOverrides: section.drumVoicePatterns,

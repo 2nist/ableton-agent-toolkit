@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { musicXmlToBlueprintSong } from "./parseMusicXml";
+import { sectionDurationBeats } from "../../types/blueprint";
 import { scoreXml, type MeasureSpec } from "./musicXmlFixture";
 
 const Cmaj7: MeasureSpec["chords"][number] = { symbol: "Cmaj7", kind: "major-seventh", beats: 4 };
@@ -73,14 +74,22 @@ describe("musicXmlToBlueprintSong — sections", () => {
     expect(song.sections[0].name).toBe("Chart");
   });
 
-  it("warns when a section changes meter, and keeps the first one", () => {
+  it("carries a mid-section meter change as a per-bar map", () => {
     const song = musicXmlToBlueprintSong(
       scoreXml([
         { time: [4, 4], rehearsal: "A", chords: [Cmaj7] },
         { time: [2, 4], chords: [{ symbol: "G7", kind: "dominant", beats: 2 }] },
       ]),
     );
-    expect(song.sections[0].timeSignatureNumerator).toBe(4);
+    const section = song.sections[0];
+    // The declared meter stays the opening one; the map says how long each
+    // bar actually is.
+    expect(section.timeSignatureNumerator).toBe(4);
+    expect(section.meterMap).toEqual([
+      { bar: 0, numerator: 4, denominator: 4 },
+      { bar: 1, numerator: 2, denominator: 4 },
+    ]);
+    expect(sectionDurationBeats(section)).toBe(6); // 4 + 2, not 2 × 4
     expect(song.provenance?.warnings?.some((w) => /changes meter/.test(w))).toBe(true);
   });
 });

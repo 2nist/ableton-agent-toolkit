@@ -222,6 +222,40 @@ const blocksSong: BlueprintSong = makeSong({
   arrangement: [{ sectionId: "v", repeats: 1 }],
 });
 
+/** A section whose meter changes mid-way — 2/4, then two 4/4 bars. The
+ *  groove has to restart at each bar length on BOTH sides, so a drift here
+ *  would show as notes a beat apart. */
+const meterMapSong: BlueprintSong = makeSong({
+  id: "parity-meter-map",
+  title: "Mixed Meter",
+  bpm: 120,
+  concept: "odd-meter art rock",
+  sections: [
+    makeSection({
+      id: "mm",
+      name: "Mixed",
+      role: "verse",
+      bars: 5,
+      timeSignatureNumerator: 4,
+      velocity: "mf",
+      chords: [CHORDS[0], CHORDS[1]],
+      // Explicit pattern + variant: this fixture is about the meter tiling,
+      // not about the two heuristic pattern pickers agreeing on a 2/4 probe.
+      drumPattern: "standard",
+      drumVariantIndex: 0,
+      // Two 2/4 bars then three 4/4 — bar lengths 2,2,4,4,4. Deliberately
+      // stays in x/4: the x/8 grooves carry percussion outside the app's
+      // GM_DRUM_PITCHES set, a known app-vs-bridge divergence this fixture
+      // is not about.
+      meterMap: [
+        { bar: 0, numerator: 2, denominator: 4 },
+        { bar: 2, numerator: 4, denominator: 4 },
+      ],
+    }),
+  ],
+  arrangement: [{ sectionId: "mm", repeats: 1 }],
+});
+
 const SONGS: Record<string, BlueprintSong> = {
   acoustic: acousticSong,
   dnb: dnbSong,
@@ -230,6 +264,7 @@ const SONGS: Record<string, BlueprintSong> = {
   bent: bentSong,
   override: overrideSong,
   blocks: blocksSong,
+  meterMap: meterMapSong,
 };
 
 // ---------------------------------------------------------------------------

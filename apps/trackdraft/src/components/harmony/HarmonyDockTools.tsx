@@ -16,6 +16,7 @@ import PresetPicker from "./PresetPicker";
 import ChordEditorPopover from "./ChordEditorPopover";
 import BassSettings from "./BassSettings";
 import ColorSettings from "./ColorSettings";
+import MeterMapPanel from "./MeterMapPanel";
 
 /** Which rotation (if any) of `buildEuclideanOutline(n, d, k, r)` matches
  *  the outline's cells — so the Offset slider shows a real number rather
@@ -196,6 +197,18 @@ export function HarmonyTools() {
             onDeselect={() => setSelectedChordId(null)}
           />
         </div>
+      )}
+
+      {/* Meter — one meter, or a map of changes when the chart moves. */}
+      {activeSection && (
+        <MeterMapPanel
+          section={activeSection}
+          onChange={(map) =>
+            updateCurrentSong((song) =>
+              updateSection(song, activeSection.id, (section) => ({ ...section, meterMap: map })),
+            )
+          }
+        />
       )}
 
       {/* Rhythm — how the chord progression advances across the section:

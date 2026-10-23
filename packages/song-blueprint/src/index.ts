@@ -689,6 +689,18 @@ export function barLengths(
   return lengths;
 }
 
+/** The simplest written meter for a bar of this many quarter-note beats:
+ *  3.5 → 7/8, 5 → 5/4, 4 → 4/4. Used when something that only knows a beam
+ *  length (a groove, a probe section) needs the meter back. */
+export function meterForLength(beats: number): { numerator: number; denominator: number } {
+  for (const denominator of [4, 8, 16, 2]) {
+    const numerator = (beats * denominator) / 4;
+    const rounded = Math.round(numerator);
+    if (rounded > 0 && Math.abs(numerator - rounded) < 1e-9) return { numerator: rounded, denominator };
+  }
+  return { numerator: Math.max(1, Math.round(beats)), denominator: 4 };
+}
+
 /** The average bar length: identical to `beatsPerBar` unless a meter map
  *  makes the bars different lengths. Use this for display maths ("how many
  *  bars is this cycle?", where to draw bar lines); use `beatsPerBar` for the

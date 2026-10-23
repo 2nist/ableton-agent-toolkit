@@ -382,6 +382,27 @@ export interface SectionDrumInput {
   gridBeats?: number;
   durationBeats: number;
   velocityTarget: number;
+  /** Beat length of each bar, in order, when the section changes meter.
+   *  Absent → every bar is `beatsPerBar`, which is what every section
+   *  without a `meterMap` means, and the tiling is untouched. */
+  barBeats?: number[];
+  /** Grooves for the *other* bar lengths in `barBeats`, keyed by bar length
+   *  ("3.5"). `variant` covers the opening meter; a run of 7/8 bars gets the
+   *  7/8 groove instead of a 4/4 one chopped at 3.5 beats. */
+  meterVariants?: Record<string, PackedVariant>;
+}
+
+/** Consecutive bars of equal length, as `{ beatsPerBar, lengthBeats }` runs.
+ *  A section with one meter is a single run covering the whole thing. */
+export function meterRuns(barBeats: number[] | undefined, fallbackBeatsPerBar: number, durationBeats: number): { beatsPerBar: number; lengthBeats: number }[] {
+  if (!barBeats || barBeats.length === 0) return [{ beatsPerBar: fallbackBeatsPerBar, lengthBeats: durationBeats }];
+  const runs: { beatsPerBar: number; lengthBeats: number }[] = [];
+  for (const length of barBeats) {
+    const last = runs[runs.length - 1];
+    if (last && Math.abs(last.beatsPerBar - length) < 1e-9) last.lengthBeats += length;
+    else runs.push({ beatsPerBar: length, lengthBeats: length });
+  }
+  return runs;
 }
 
 export interface SectionDrumPlan {
@@ -515,12 +536,34 @@ export function planSectionDrumNotes(
     const velocityTarget = input.velocityTarget;
     const scaled = scaleToVelocityPreset(variant.notes, velocityTarget);
 
-    let tiled: TiledNote[] = tileGrooveVaried(
-      scaled.map(([beat, pitch, velocity]) => ({ beat, pitch, velocity })),
-      variant.lengthBeats,
-      input.durationBeats,
-      { seed: occurrenceSeed(input.sectionId, input.occurrenceIndex) },
-    );
+    const seed = occurrenceSeed(input.sectionId, input.occurrenceIndex);
+    const runs = meterRuns(input.barBeats, variant.beatsPerBar, input.durationBeats);
+    let tiled: TiledNote[];
+    if (runs.length <= 1) {
+      tiled = tileGrooveVaried(
+        scaled.map(([beat, pitch, velocity]) => ({ beat, pitch, velocity })),
+        variant.lengthBeats,
+        input.durationBeats,
+        { seed },
+      );
+    } else {
+      // Meter change inside the section: restart the groove at each new bar
+      // length with that length's own variant, so the downbeat keeps landing
+      // on the bar line instead of a 4/4 groove being chopped at 3.5.
+      tiled = [];
+      let cursor = 0;
+      runs.forEach((run, runIndex) => {
+        const runVariant = input.meterVariants?.[String(run.beatsPerBar)] ?? variant;
+        const body = tileGrooveVaried(
+          scaleToVelocityPreset(runVariant.notes, velocityTarget).map(([beat, pitch, velocity]) => ({ beat, pitch, velocity })),
+          runVariant.lengthBeats,
+          run.lengthBeats,
+          { seed: `${seed}:meter${runIndex}` },
+        );
+        for (const note of body) tiled.push({ ...note, beat: note.beat + cursor });
+        cursor += run.lengthBeats;
+      });
+    }
 
     const plan = handoffPlans[i];
     if (fillApplied[i] && plan.fillStart !== null) {
