@@ -4,6 +4,7 @@ import MidiSetupPanel from "../studio/MidiSetupPanel";
 import MidiTemplateGuide from "../studio/MidiTemplateGuide";
 import ExportMenu from "../studio/ExportMenu";
 import DirSetupModal from "../dashboard/DirSetupModal";
+import TapeLabel from "../common/TapeLabel";
 
 /**
  * Settings — the song-adjacent controls that used to hide behind one-off
@@ -58,7 +59,7 @@ export default function SettingsView() {
       {/* MIDI & sync */}
       <section className="border border-edge rounded-lg bg-panel overflow-hidden">
         <header className="flex items-center gap-2 px-3 py-2 border-b border-edge/70">
-          <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">MIDI &amp; sync</span>
+          <TapeLabel size="md" className="text-3xs font-mono uppercase tracking-widest text-inkMuted">MIDI &amp; sync</TapeLabel>
           <span className="flex-1" />
           <button
             type="button"
@@ -87,7 +88,7 @@ export default function SettingsView() {
       {/* Export & windows */}
       <section className="border border-edge rounded-lg bg-panel overflow-hidden">
         <header className="flex items-center gap-2 px-3 py-2 border-b border-edge/70">
-          <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">Export &amp; windows</span>
+          <TapeLabel size="md" className="text-3xs font-mono uppercase tracking-widest text-inkMuted">Export &amp; windows</TapeLabel>
           <span className="text-[9px] font-mono text-inkMuted/40 truncate flex-1" title="These act on the open song">
             acts on {currentSong?.title ?? "—"}
           </span>
@@ -118,7 +119,7 @@ export default function SettingsView() {
       {/* Files */}
       <section className="border border-edge rounded-lg bg-panel overflow-hidden">
         <header className="flex items-center gap-2 px-3 py-2 border-b border-edge/70">
-          <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">Files</span>
+          <TapeLabel size="md" className="text-3xs font-mono uppercase tracking-widest text-inkMuted">Files</TapeLabel>
         </header>
         <div className="p-3 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-ink">Local directories</span>
@@ -137,7 +138,7 @@ export default function SettingsView() {
       {/* Labs & tools — developed surfaces outside the song editor */}
       <section className="border border-edge rounded-lg bg-panel overflow-hidden">
         <header className="flex items-center gap-2 px-3 py-2 border-b border-edge/70">
-          <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">Labs &amp; tools</span>
+          <TapeLabel size="md" className="text-3xs font-mono uppercase tracking-widest text-inkMuted">Labs &amp; tools</TapeLabel>
           <span className="text-[9px] font-mono text-inkMuted/40 flex-1">open in a new tab — playback keeps running here</span>
         </header>
         <div className="p-3 space-y-1.5">

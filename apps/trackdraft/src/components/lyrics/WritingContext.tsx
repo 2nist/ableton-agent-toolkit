@@ -1,4 +1,5 @@
 import type { BlueprintSong } from "../../types/blueprint";
+import TapeLabel from "../common/TapeLabel";
 
 interface WritingContextProps {
   song: BlueprintSong;
@@ -33,7 +34,7 @@ export default function WritingContext({ song }: WritingContextProps) {
 
   return (
     <div className="border border-edge rounded bg-panel p-3 space-y-2">
-      <p className="text-xs text-inkMuted uppercase tracking-wide">Writing context</p>
+      <TapeLabel as="p" size="md" className="text-xs text-inkMuted uppercase tracking-wide">Writing context</TapeLabel>
       <Field label="Concept" value={song.concept} />
       <Field label="Vocal delivery" value={song.notes?.vocalDelivery} />
       <Field label="Lyrical content" value={song.notes?.lyricalContent} />

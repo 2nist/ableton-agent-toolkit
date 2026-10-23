@@ -11,6 +11,7 @@ import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { drumFamilyLabel } from "../../lib/playback/drumPreview";
 import type { BlueprintSong } from "../../types/blueprint";
 import { usePalette } from "../../theme/palette";
+import TapeLabel from "../common/TapeLabel";
 
 const PX_PER_BEAT = 2;
 // Wide enough for the per-section readout strip (harmony/drums/melody)
@@ -122,7 +123,7 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
   return (
     <div className="border border-edge rounded-lg bg-panel p-3 space-y-1.5">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[11px] text-inkMuted uppercase tracking-wide">Arrangement</p>
+        <TapeLabel as="p" size="md" tilt="none" className="text-[11px] text-inkMuted uppercase tracking-wide">Arrangement</TapeLabel>
         <FormDisclosure song={song} />
       </div>
       <div className="overflow-x-auto">

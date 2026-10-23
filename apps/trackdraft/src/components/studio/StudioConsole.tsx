@@ -19,6 +19,7 @@ import HexReadout from "../harmony/HexReadout";
 import NecklaceRow from "../drums/NecklaceRow";
 import MelodyStaff from "../melody/MelodyStaff";
 import type { BlueprintSong } from "../../types/blueprint";
+import TapeLabel from "../common/TapeLabel";
 
 /** A single stem readout card — title, hint, jump-open, and centered content.
  *  Module scope (not nested) so transport-tick re-renders of the console
@@ -27,7 +28,7 @@ function Pane({ title, hint, onOpen, children }: { title: string; hint: string; 
   return (
     <section className="flex flex-col min-h-0 border border-edge rounded-lg bg-panelAlt/40 overflow-hidden">
       <header className="shrink-0 flex items-center gap-2 px-2.5 py-1.5 border-b border-edge/70">
-        <span className="text-3xs font-mono uppercase tracking-widest text-inkMuted">{title}</span>
+        <TapeLabel size="sm" className="text-3xs font-mono uppercase tracking-widest text-inkMuted">{title}</TapeLabel>
         <span className="text-[9px] font-mono text-inkMuted/50 truncate flex-1" title={hint}>{hint}</span>
         <button
           className="shrink-0 text-[9px] font-mono text-accent/80 hover:text-accent border border-edge/70 rounded px-1.5 py-0.5"

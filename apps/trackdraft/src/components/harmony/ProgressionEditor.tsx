@@ -23,6 +23,7 @@
  */
 
 import { uuid } from "../../lib/uuid";
+import TapeLabel from "../common/TapeLabel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
@@ -336,7 +337,7 @@ export default function ProgressionEditor({
   return (
     <div className="select-none">
       <div className="flex items-center gap-2 flex-wrap pb-1">
-        <span className="text-3xs font-mono uppercase tracking-wide text-inkMuted">Progression</span>
+        <TapeLabel size="md" className="text-3xs font-mono uppercase tracking-wide text-inkMuted">Progression</TapeLabel>
         <span className={`text-[9px] font-mono ${even ? "text-inkMuted/70" : "text-accent/80"}`}>
           {formatBars(bars)} cycle · ↻ ×{repeats}
           {even ? "" : " (last pass truncated)"}

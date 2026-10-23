@@ -3,6 +3,7 @@ import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord, ChordPerformanceEffect } from "../../types/blueprint";
 import { getSubstitutionMenu } from "../../lib/harmony/substitutions";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
+import TapeLabel from "../common/TapeLabel";
 
 const PERFORMANCE_STYLES: ChordPerformanceEffect["style"][] = ["strum", "pulse", "arp"];
 
@@ -34,7 +35,7 @@ export default function ChordInspector({ chord, keyName, scale, onChange }: Chor
   if (!chord) {
     return (
       <div className="border border-edge rounded bg-panel p-3">
-        <p className="text-xs text-inkMuted uppercase tracking-wide mb-1">Substitutions</p>
+        <TapeLabel as="p" size="md" className="text-xs text-inkMuted uppercase tracking-wide mb-1">Substitutions</TapeLabel>
         <p className="text-sm text-inkMuted">Select a chord to see substitutions.</p>
       </div>
     );
@@ -48,7 +49,7 @@ export default function ChordInspector({ chord, keyName, scale, onChange }: Chor
   return (
     <div className="border border-edge rounded bg-panel p-3 space-y-3">
       <div>
-        <p className="text-xs text-inkMuted uppercase tracking-wide">Substitutions for</p>
+        <TapeLabel as="p" size="md" tilt="right" className="text-xs text-inkMuted uppercase tracking-wide">Substitutions for</TapeLabel>
         <p className="font-medium">{chord.romanNumeral} · {chordDisplayName(rootPc, chord.quality, keyName)}</p>
       </div>
 

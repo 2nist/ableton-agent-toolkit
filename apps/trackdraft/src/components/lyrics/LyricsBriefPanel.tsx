@@ -13,6 +13,7 @@ import {
 } from "../../lib/lyrics/melodyPhrases";
 import type { BlueprintSection } from "../../types/blueprint";
 import { usePronouncer } from "./usePronouncer";
+import TapeLabel from "../common/TapeLabel";
 
 /**
  * The prompt-kind → label map. Deliberately covers the CURRENT union — the
@@ -182,7 +183,7 @@ export default function LyricsBriefPanel() {
     <div className="space-y-3">
       <div className="border border-edge rounded bg-panel p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-xs text-inkMuted uppercase tracking-wide">Lyric brief</p>
+          <TapeLabel as="p" size="md" className="text-xs text-inkMuted uppercase tracking-wide">Lyric brief</TapeLabel>
           <button
             className="text-xs border border-edge rounded px-2 py-0.5 text-inkMuted hover:text-ink hover:bg-panelAlt"
             onClick={() => bumpBriefReroll(activeSection.id)}
@@ -205,7 +206,7 @@ export default function LyricsBriefPanel() {
 
       <div className="border border-edge rounded bg-panel p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-xs text-inkMuted uppercase tracking-wide">Spark</p>
+          <TapeLabel as="p" size="md" tilt="right" className="text-xs text-inkMuted uppercase tracking-wide">Spark</TapeLabel>
           <button
             className="text-xs border border-edge rounded px-2 py-0.5 text-inkMuted hover:text-ink hover:bg-panelAlt"
             onClick={() => bumpSparkRoll(activeSection.id)}
@@ -254,7 +255,7 @@ export default function LyricsBriefPanel() {
 
       <div className="border border-edge rounded bg-panel p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-xs text-inkMuted uppercase tracking-wide">Line check</p>
+          <TapeLabel as="p" size="md" className="text-xs text-inkMuted uppercase tracking-wide">Line check</TapeLabel>
           {schemeText && <span className="font-mono text-[10px] text-inkMuted" title="Rhyme scheme">{schemeText}</span>}
         </div>
         {sung.length === 0 ? (

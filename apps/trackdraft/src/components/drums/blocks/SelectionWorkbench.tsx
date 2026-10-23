@@ -8,6 +8,7 @@ import { usePalette } from "../../../theme/palette";
 import { EuclidRing, FxPanel, MotionRing, VelocityPanel } from "./SelectionDisplays";
 import { euclidBlocksFor, fxBlocksFor, fxForLanes, motionBlockFor, motionLabelFor, upsertModeBlocks } from "./selectionMath";
 import type { VelocityOp } from "./velocityOps";
+import TapeLabel from "../../common/TapeLabel";
 
 /**
  * The Selection Workbench — the working area that comes up WITH a
@@ -144,7 +145,7 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
     <aside className="w-[340px] shrink-0 sticky top-2 self-start max-h-[calc(100vh-140px)] overflow-y-auto border border-edge rounded bg-deep/40">
       {/* header */}
       <div className="px-3 pt-2.5 pb-2 border-b border-edge">
-        <div className="font-mono text-2xs uppercase tracking-wider text-track">Selection workbench</div>
+        <TapeLabel as="div" size="md" className="font-mono text-2xs uppercase tracking-wider text-track">Selection workbench</TapeLabel>
         <div className="font-mono text-xs text-ink mt-1">{section.name}</div>
         <div className="font-mono text-2xs text-inkMuted mt-0.5">
           bars {barOf(range.startBeat)}–{barOf(Math.max(range.startBeat, range.endBeat - 1e-6))} ·

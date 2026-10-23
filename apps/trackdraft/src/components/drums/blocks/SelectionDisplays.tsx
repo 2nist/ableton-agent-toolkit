@@ -6,6 +6,7 @@ import { usePalette } from "../../../theme/palette";
 import { FX_PARAMS, FX_SPECS, type FxParam } from "./fxParams";
 import { euclidFromRing, ringHand } from "./selectionMath";
 import type { VelocityOp } from "./velocityOps";
+import TapeLabel from "../../common/TapeLabel";
 
 /**
  * The big control displays — shared by the docked Selection Workbench and
@@ -202,7 +203,7 @@ export function FxPanel({ values, onChange }: {
   return (
     <div className="px-3 py-2.5">
       <div className="flex items-center gap-2">
-        <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Range FX</span>
+        <TapeLabel size="md" className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Range FX</TapeLabel>
         <span className="flex-1" />
         {anyActive && (
           <button
@@ -288,7 +289,7 @@ export function VelocityPanel({ onOp }: { onOp: (op: VelocityOp) => void }) {
   const active = "border-track text-track bg-track/10";
   return (
     <div className="px-3 py-2.5">
-      <div className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Velocity patterns</div>
+      <TapeLabel as="div" size="md" tilt="right" className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Velocity patterns</TapeLabel>
       <div className="mt-2 flex flex-col gap-1.5">
         <div className="flex items-center gap-1.5">
           <span className="font-mono text-2xs w-[62px] shrink-0 text-inkMuted">RAMP</span>

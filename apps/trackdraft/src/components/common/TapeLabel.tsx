@@ -27,10 +27,15 @@ export default function TapeLabel({
   tilt = "left",
   className = "",
   title,
+  as: Tag = "span",
 }: {
   children: ReactNode;
   size?: TapeSize;
   tilt?: TapeTilt;
+  /** The element to render. Kept as a prop so a call site that replaces a
+   *  block-level `<p>` or `<div>` keeps its dark-theme layout — an inline
+   *  `<span>` would silently drop `mb-1` and the line break. */
+  as?: "span" | "p" | "div";
   /** Layout + dark-theme typography. Ignored in the paper theme wherever the
    *  tape recipe sets the same property (size, colour, letter-spacing). */
   className?: string;
@@ -41,8 +46,8 @@ export default function TapeLabel({
     ? `tape-label tape-label--${size}${tilt === "right" ? " tape-label--end" : tilt === "none" ? " tape-label--flat" : ""}`
     : "";
   return (
-    <span className={`${tape} ${className}`.trim() || undefined} title={title}>
+    <Tag className={`${tape} ${className}`.trim() || undefined} title={title}>
       {children}
-    </span>
+    </Tag>
   );
 }

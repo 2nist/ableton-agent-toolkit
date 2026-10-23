@@ -3,6 +3,7 @@ import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { STYLE_RECIPES, resolveStyleProfile } from "../../lib/style/bend";
 import type { BlueprintSection } from "../../types/blueprint";
 import Knob from "../common/Knob";
+import TapeLabel from "../common/TapeLabel";
 
 /**
  * Mix/Bend — the whole-song style station (Phase D).
@@ -200,7 +201,7 @@ export default function BendPanel() {
   return (
     <div className="border border-edge rounded-lg bg-panel p-3 h-full overflow-y-auto">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] text-inkMuted uppercase tracking-wide">Mix / Bend</p>
+        <TapeLabel as="p" size="md" className="text-[11px] text-inkMuted uppercase tracking-wide">Mix / Bend</TapeLabel>
         <span className="font-mono text-[9px] text-inkMuted/60">
           {song.bend ? "bent" : "neutral"}
           {song.detected ? " · ◆ detected" : ""}

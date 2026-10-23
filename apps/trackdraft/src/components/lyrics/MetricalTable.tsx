@@ -1,4 +1,5 @@
 import type { LyricMetricalRow } from "../../types/blueprint";
+import TapeLabel from "../common/TapeLabel";
 
 const COLUMNS: { key: Exclude<keyof LyricMetricalRow, "notes">; label: string; width: string }[] = [
   { key: "chordProgression", label: "Chord Progression", width: "w-40" },
@@ -34,7 +35,7 @@ export default function MetricalTable({ rows, onChange }: MetricalTableProps) {
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-inkMuted uppercase tracking-wide">Metrical / rhyme table</p>
+      <TapeLabel as="p" size="md" className="text-xs text-inkMuted uppercase tracking-wide">Metrical / rhyme table</TapeLabel>
       <div className="border border-edge rounded overflow-hidden">
         <div className="flex bg-panelAlt text-xs text-inkMuted px-2 py-1">
           {COLUMNS.map((col) => (

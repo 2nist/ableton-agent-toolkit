@@ -6,6 +6,7 @@ import { GENRE_CATALOG } from "../../data/genre-catalog/index";
 import { applySongMap } from "../../lib/sections";
 import { STYLE_RECIPES } from "../../lib/style/bend";
 import { askConfirm } from "../../lib/confirm";
+import TapeLabel from "../common/TapeLabel";
 
 /**
  * The Library — a VIEW now (user decision 2026-09-21: "make the library a
@@ -121,7 +122,7 @@ export default function LibraryView() {
 
       {tab === "recipes" && (
         <div className="mt-3">
-          <p className="text-3xs font-mono uppercase tracking-widest text-inkMuted/60">Genre recipes · the mix tint</p>
+          <TapeLabel as="p" size="md" className="text-3xs font-mono uppercase tracking-widest text-inkMuted/60">Genre recipes · the mix tint</TapeLabel>
           <div className="mt-1.5 grid grid-cols-2 gap-1.5">
             {Object.keys(STYLE_RECIPES).map((name) => {
               const recipe = STYLE_RECIPES[name];

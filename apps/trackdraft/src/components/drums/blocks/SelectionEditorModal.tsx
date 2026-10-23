@@ -9,6 +9,7 @@ import { usePalette } from "../../../theme/palette";
 import { EuclidRing, FxPanel, MotionRing, VelocityPanel } from "./SelectionDisplays";
 import { euclidBlocksFor, fxBlocksFor, fxForLanes, motionBlockFor, motionLabelFor, upsertModeBlocks } from "./selectionMath";
 import type { VelocityOp } from "./velocityOps";
+import TapeLabel from "../../common/TapeLabel";
 
 /**
  * The exploded selection editor — the docked pad opened into a workbench.
@@ -217,7 +218,7 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
       <div className="flex flex-col bg-deep border border-edge rounded-lg shadow-2xl w-[min(1180px,94vw)] h-[min(680px,92vh)]">
         {/* header */}
         <div className="flex items-center gap-3 px-4 h-10 border-b border-edge shrink-0">
-          <span className="font-mono text-xs uppercase tracking-wider text-track">Selection editor</span>
+          <TapeLabel size="md" className="font-mono text-xs uppercase tracking-wider text-track">Selection editor</TapeLabel>
           <span className="font-mono text-xs text-ink">{section.name}</span>
           <span className="font-mono text-2xs text-inkMuted">
             bars {barOf(range.startBeat)}–{barOf(Math.max(range.startBeat, range.endBeat - 1e-6))} ·

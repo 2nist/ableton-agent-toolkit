@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { fetchRhymes, localRhymeGuess, type RhymeSuggestion } from "../../lib/lyrics/rhymes";
+import TapeLabel from "../common/TapeLabel";
 
 interface RhymeSuggestionsProps {
   vocabulary: string[];
@@ -31,7 +32,7 @@ export default function RhymeSuggestions({ vocabulary }: RhymeSuggestionsProps) 
 
   return (
     <div className="border border-edge rounded bg-panel p-3 space-y-2">
-      <p className="text-xs text-inkMuted uppercase tracking-wide">Rhyme suggestions</p>
+      <TapeLabel as="p" size="md" className="text-xs text-inkMuted uppercase tracking-wide">Rhyme suggestions</TapeLabel>
       <form
         className="flex gap-2"
         onSubmit={(e) => {
