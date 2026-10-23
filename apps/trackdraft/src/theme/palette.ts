@@ -58,6 +58,11 @@ export interface Palette {
   /** Font stack for lettering drawn inside an instrument (lane names, tick
    *  numerals) — monospace when machined, pencil when drawn. */
   drawnFont: string;
+  /** The face for a LANE NAME (KICK, SNR, …). Separate from `drawnFont`
+   *  because a lane name is a printed label on the machine rather than a note
+   *  someone wrote: on paper it takes the same typewriter face as the rest of
+   *  the sheet's labels. */
+  labelFont: string;
   voices: VoiceColors;
   hues: HueSet[];
 }
@@ -73,6 +78,7 @@ const DARK: Palette = {
   cream: "#F5E7C8",
   handDrawn: false,
   drawnFont: "'IBM Plex Mono', ui-monospace, monospace",
+  labelFont: "'IBM Plex Mono', ui-monospace, monospace",
   voices: {
     kick: "#D96459",
     snare: "#8B94A1",
@@ -109,6 +115,7 @@ const LOGSHEET: Palette = {
    * (a voice, a section) rather than record a value, and the marker voice is
    * what the rest of the app uses for a name stuck onto the page. */
   drawnFont: "'Permanent Marker', 'Nothing You Could Do', cursive",
+  labelFont: "'Courier Prime', 'Courier New', monospace",
   voices: {
     kick: "#A03A31",
     snare: "#5E6672",

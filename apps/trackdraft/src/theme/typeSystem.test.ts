@@ -110,6 +110,15 @@ describe("type system — app and prototype agree", () => {
     expect(tapeInput).toBeGreaterThan(pen);
   });
 
+  it("sets a lane name in the printed face, not the marker", () => {
+    // KICK / SNR / … label the machine, so on paper they take the same
+    // typewriter face as the rest of the sheet's printed labels.
+    expect(firstFamily(PALETTES.logsheet.labelFont)).toBe(firstFamily(mockToken("type")));
+    // …and the dark theme is untouched: the lane face is still the one it
+    // always drew with.
+    expect(PALETTES.dark.labelFont).toBe(PALETTES.dark.drawnFont);
+  });
+
   it("names things in the marker face, not the pen", () => {
     // The drum ruler and the lane names are drawing-surface text (they cannot
     // carry a tape background), so they take the marker's FACE from the

@@ -809,7 +809,7 @@ export default function DrumsView({
                   strokeDasharray={g.cell ? "1 4" : undefined}
                 />
               ))}
-              <text x={X0 - 14} y={laneY(li) + 4} textAnchor="end" fontSize={P.handDrawn ? 15 : 12} fontFamily={P.drawnFont} fill={laneColor(lane, P)} fontWeight={600}>
+              <text x={X0 - 14} y={laneY(li) + 4} textAnchor="end" fontSize={P.handDrawn ? 13 : 12} fontFamily={P.labelFont} fill={laneColor(lane, P)} fontWeight={600}>
                 {lane.label}
               </text>
               <line
@@ -959,7 +959,7 @@ export default function DrumsView({
               height={TRACK_H}
               fill={P.deep}
             />
-            <text x={X0 - 14} y={DETOUR_Y + 4} textAnchor="end" fontSize={P.handDrawn ? 13 : 12} fontFamily={P.drawnFont} fill={P.grid} fontWeight={600}>
+            <text x={X0 - 14} y={DETOUR_Y + 4} textAnchor="end" fontSize={P.handDrawn ? 13 : 12} fontFamily={P.labelFont} fill={P.grid} fontWeight={600}>
               DETOUR
             </text>
             <line x1={barX(0)} y1={DETOUR_Y} x2={barX(bars)} y2={DETOUR_Y} stroke={P.grid} strokeWidth={1.4} strokeOpacity={0.5} />

@@ -1165,28 +1165,11 @@ export default function DrumBlocksView() {
       </div>
 
       <div ref={scrollRef} className="relative overflow-x-auto border border-edge rounded bg-deep">
-        <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-0.5 border border-edge rounded bg-deep/90 px-1 py-0.5 select-none">
-          <button
-            onClick={() =>
-              useTimeViewportStore.getState().setScale("section", clampBarPx("section", barPx / 1.1))
-            }
-            className="w-5 h-5 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
-          >
-            −
-          </button>
-          <span className="font-mono text-2xs text-inkMuted tabular-nums w-9 text-center" title="Timeline zoom">
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            onClick={() =>
-              useTimeViewportStore.getState().setScale("section", clampBarPx("section", barPx * 1.1))
-            }
-            className="w-5 h-5 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
-          >
-            +
-          </button>
-        </div>
-
+        {/* The scroll content is one wide SVG; the gutter (lane names and
+            their parameter chips) is a second, sticky SVG laid over its left
+            edge, so scrolling the grid never hides which row you are on.
+            Same TOP_PAD/TRACK_H maths in both, so the rows line up. */}
+        <div className="relative" style={{ width, height: HEIGHT }}>
         <svg
           ref={svgRef}
           width={width}
@@ -1316,21 +1299,6 @@ export default function DrumBlocksView() {
             ));
           })}
 
-          {/* lane labels — aligned with the top-aligned cell row */}
-          {DRUM_LANES.map((lane, li) => {
-            const { r: labelR } = cellMetrics(zoom, 4, gridStepForZoom(zoom));
-            return (
-              <text
-                key={`lb-${lane.key}`}
-                x={X0 - 14} y={cellCy(li, labelR) + 4} textAnchor="end"
-                fontSize={P.handDrawn ? 15 : 12} fontWeight={600}
-                fontFamily={P.drawnFont} fill={laneColor(lane, P)} pointerEvents="none"
-              >
-                {lane.label}
-              </text>
-            );
-          })}
-
           {/* step lanes — packed circular cells; the grid subdivides with
               zoom (see gridStepForZoom), and the strip below each cell row
               shows authored velocity as a bar */}
@@ -1442,29 +1410,7 @@ export default function DrumBlocksView() {
                     );
                   })
                 : [];
-              // Gutter chip — the lane's parameter picker (the "effects
-              // lane" dropdown).
-              const chipY = TOP_PAD + li * TRACK_H + 3;
-              const chip = (
-                <g
-                  key={`pchip-${lane.key}`}
-                  onClick={() => setParamMenu(paramMenu === lane.key ? null : lane.key)}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  style={{ cursor: "pointer" }}
-                >
-                  <rect
-                    x={8} y={chipY} width={46} height={13} rx={3}
-                    fill={P.deep} stroke={param !== "vel" ? P.track : P.grid} strokeOpacity={param !== "vel" ? 0.8 : 1}
-                  />
-                  <text
-                    x={31} y={chipY + 9.5} textAnchor="middle" fontSize={7.5} fontWeight={600}
-                    fontFamily="'IBM Plex Mono', monospace" fill={param !== "vel" ? P.track : P.voices.snare}
-                  >
-                    {spec.short}
-                  </text>
-                </g>
-              );
-              return <g key={`dots-${si}-${li}`}>{chip}{boxes}{dots}{marks}</g>;
+              return <g key={`dots-${si}-${li}`}>{boxes}{dots}{marks}</g>;
             });
           })}
 
@@ -1567,45 +1513,6 @@ export default function DrumBlocksView() {
             </g>
           )}
 
-          {/* the parameter dropdown — a lane's chip opens the picker; the
-              full-canvas catcher closes it on any outside press */}
-          {paramMenu && (() => {
-            const li = DRUM_LANES.findIndex((l) => l.key === paramMenu);
-            if (li < 0) return null;
-            const laneTop = TOP_PAD + li * TRACK_H;
-            const menuH = STEP_PARAMS.length * 17 + 8;
-            const menuY = laneTop + 18 + menuH <= HEIGHT - 6 ? laneTop + 18 : Math.max(2, laneTop - menuH - 2);
-            const active = paramFor(paramMenu);
-            return (
-              <g>
-                <rect
-                  x={0} y={0} width={width} height={HEIGHT} fill="transparent"
-                  onPointerDown={(e) => { e.stopPropagation(); setParamMenu(null); }}
-                />
-                <rect x={8} y={menuY} width={104} height={menuH} rx={4} fill={P.deep} stroke={P.grid} />
-                {STEP_PARAMS.map((p, i) => (
-                  <g
-                    key={p}
-                    onClick={() => setLaneParam(paramMenu, p)}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <rect
-                      x={11} y={menuY + 4 + i * 17} width={98} height={16} rx={3}
-                      fill={p === active ? "rgba(232,181,74,0.14)" : "transparent"}
-                    />
-                    <text
-                      x={17} y={menuY + 15.5 + i * 17} fontSize={9} fontFamily="'IBM Plex Mono', monospace"
-                      fill={p === active ? P.track : P.label}
-                    >
-                      {PARAM_SPECS[p].label}
-                    </text>
-                  </g>
-                ))}
-              </g>
-            );
-          })()}
-
           {/* the XY pad cluster, docked right of the selection */}
           {range && padRect && (
             <SelectionPad
@@ -1628,6 +1535,134 @@ export default function DrumBlocksView() {
             />
           )}
         </svg>
+
+        {/* the frozen gutter */}
+        <div
+          className="sticky left-0 top-0 z-10"
+          style={{ width: X0, height: HEIGHT, marginTop: -HEIGHT }}
+        >
+          <div className="relative h-full w-full bg-deep">
+            <div className="absolute left-0.5 top-0.5 z-20 flex items-center gap-0 border border-edge rounded bg-deep/95 px-0.5 py-0.5 select-none">
+          <button
+            onClick={() =>
+              useTimeViewportStore.getState().setScale("section", clampBarPx("section", barPx / 1.1))
+            }
+            className="w-4 h-4 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
+          >
+            −
+          </button>
+          <span className="font-mono text-[9px] text-inkMuted tabular-nums w-8 text-center" title="Timeline zoom">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            onClick={() =>
+              useTimeViewportStore.getState().setScale("section", clampBarPx("section", barPx * 1.1))
+            }
+            className="w-4 h-4 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
+          >
+            +
+          </button>
+        </div>
+
+            {/* the parameter picker — HTML, not SVG: the chip that opens it
+                lives in this sticky strip, so the menu has to paint above the
+                grid rather than under the strip that owns it */}
+            {paramMenu && (() => {
+              const li = DRUM_LANES.findIndex((l) => l.key === paramMenu);
+              if (li < 0) return null;
+              // one 16px row + a 4px gap each, plus the 4px inset
+              const menuH = STEP_PARAMS.length * 20 + 4;
+              const laneTop = TOP_PAD + li * TRACK_H;
+              const menuY = laneTop + 18 + menuH <= HEIGHT - 6 ? laneTop + 18 : Math.max(2, laneTop - menuH - 2);
+              const active = paramFor(paramMenu);
+              return (
+                <>
+                  <div className="fixed inset-0 z-20" onPointerDown={() => setParamMenu(null)} />
+                  <div
+                    className="absolute z-30 flex flex-col gap-1 rounded border p-0.5"
+                    style={{ left: X0 + 2, top: menuY, width: 108, background: P.deep, borderColor: P.grid }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    {STEP_PARAMS.map((pm) => (
+                      <button
+                        key={pm}
+                        onClick={() => setLaneParam(paramMenu, pm)}
+                        className="block w-full rounded-sm px-1.5 text-left"
+                        style={{
+                          height: 16,
+                          fontSize: 9,
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          color: pm === active ? P.track : P.label,
+                          background: pm === active ? "rgba(232,181,74,0.14)" : "transparent",
+                        }}
+                      >
+                        {PARAM_SPECS[pm].label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
+
+            <svg width={X0} height={HEIGHT} className="block">
+              {(() => {
+                const stepBeats = gridStepForZoom(zoom);
+                const { r: labelR, spacing: labelSpacing } = cellMetrics(zoom, 4, stepBeats);
+                return DRUM_LANES.map((lane, li) => {
+                  const color = laneColor(lane, P);
+                  const param = paramFor(lane.key);
+                  const spec = PARAM_SPECS[param];
+                  const bm = boxMetrics(li, labelR, labelSpacing);
+                  // The chip sits in the lane's PARAMETER row — the strip of
+                  // value boxes under the steps — so the dropdown names what
+                  // the numbers beside it mean.
+                  const chipH = 13;
+                  const chipY = bm ? bm.top + (bm.h - chipH) / 2 : cellCy(li, labelR) + 2;
+                  return (
+                    <g key={`gutter-${lane.key}`}>
+                      <text
+                        x={X0 - 14} y={cellCy(li, labelR) + 4} textAnchor="end"
+                        fontSize={P.handDrawn ? 13 : 12} fontWeight={600}
+                        letterSpacing={P.handDrawn ? "0.06em" : undefined}
+                        fontFamily={P.labelFont} fill={color} pointerEvents="none"
+                      >
+                        {lane.label}
+                      </text>
+                      <g
+                        onClick={() => setParamMenu(paramMenu === lane.key ? null : lane.key)}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <rect
+                          x={8} y={chipY} width={46} height={chipH} rx={3}
+                          fill={P.deep}
+                          stroke={param !== "vel" ? P.track : P.grid}
+                          strokeOpacity={param !== "vel" ? 0.8 : 1}
+                        />
+                        <text
+                          x={31} y={chipY + 9.5} textAnchor="middle" fontSize={7.5} fontWeight={600}
+                          fontFamily="'IBM Plex Mono', monospace"
+                          fill={param !== "vel" ? P.track : P.voices.snare}
+                        >
+                          {spec.short}
+                        </text>
+                      </g>
+                    </g>
+                  );
+                });
+              })()}
+              {/* the gutter's own edge — a ruled margin line on paper, the
+                  panel edge in the dark theme (where it draws nothing) */}
+              {P.handDrawn && (
+                <line
+                  x1={X0 - 1} y1={TOP_PAD - 6} x2={X0 - 1} y2={HEIGHT - 6}
+                  stroke={P.grid} strokeOpacity={0.45} strokeWidth={1}
+                />
+              )}
+            </svg>
+          </div>
+        </div>
+        </div>
       </div>
 
       {/* the exploded selection editor — opened from the pad's ⤢ chip; the
