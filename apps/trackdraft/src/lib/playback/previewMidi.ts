@@ -49,11 +49,11 @@ export function cancelPreview(): void {
  *  (defaults to the chords channel). Null when no port is selected — the
  *  preview just stays silent rather than erroring. */
 async function previewOutput(channel?: number): Promise<{ output: MIDIOutput; ch: number } | null> {
-  const { midiOutputId, channels } = useMidiSettingsStore.getState();
+  const { midiOutputId, routing } = useMidiSettingsStore.getState();
   if (!midiOutputId) return null;
   const output = await getMidiOutput(midiOutputId);
   if (!output) return null;
-  return { output, ch: Math.max(0, Math.min(15, (channel ?? channels.chords) - 1)) };
+  return { output, ch: Math.max(0, Math.min(15, (channel ?? routing.chords.channel) - 1)) };
 }
 
 function chordPitches(chord: { root: string; quality: string }): number[] {
@@ -185,11 +185,11 @@ export async function previewProgression(
 ): Promise<void> {
   cancelPreview();
   if (chords.length === 0) return;
-  const { channels } = useMidiSettingsStore.getState();
-  const chordsCtx = await previewOutput(channels.chords);
+  const { routing } = useMidiSettingsStore.getState();
+  const chordsCtx = await previewOutput(routing.chords.channel);
   if (!chordsCtx) return; // no port selected — nothing to preview
-  const bassCtx = layers.bass ? await previewOutput(channels.bass) : null;
-  const colorCtx = layers.color ? await previewOutput(channels.color) : null;
+  const bassCtx = layers.bass ? await previewOutput(routing.bass.channel) : null;
+  const colorCtx = layers.color ? await previewOutput(routing.color.channel) : null;
 
   const beatMs = 60000 / Math.max(1, bpm);
   const colorNotes = colorCtx ? colorNotesFor(chords, colorFlavor) : [];

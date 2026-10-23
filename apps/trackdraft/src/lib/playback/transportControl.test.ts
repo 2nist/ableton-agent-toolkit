@@ -50,8 +50,33 @@ vi.mock("./abletonSyncClock", () => ({
     return abletonSync.clock;
   },
 }));
+/** The bridge connection: only its "am I connected" answer and the tempo
+ *  command matter here. */
+const ableton = vi.hoisted(() => ({
+  connected: false,
+  sendCommand: vi.fn(),
+}));
+vi.mock("./abletonClock", () => ({
+  getAbletonClock: () => ({
+    connect: vi.fn(),
+    getState: () => ({ connected: ableton.connected, abletonBeat: null, isPlaying: false }),
+    sendCommand: ableton.sendCommand,
+  }),
+}));
 vi.mock("../../store/midiSettingsStore", () => ({
-  useMidiSettingsStore: { getState: () => ({ midiOutputId: midiState.midiOutputId, channels: { drums: 1, bass: 2, chords: 3, color: 4, melody: 5 } }) },
+  useMidiSettingsStore: {
+    getState: () => ({
+      midiOutputId: midiState.midiOutputId,
+      latencyMs: 25,
+      routing: {
+        drums: { channel: 1 },
+        bass: { channel: 2 },
+        chords: { channel: 3 },
+        color: { channel: 4 },
+        melody: { channel: 5 },
+      },
+    }),
+  },
 }));
 vi.mock("../../store/drumsDraftStore", () => ({
   useDrumsDraftStore: { getState: () => ({ sectionId: draftState.sectionId, section: draftState.section }) },
@@ -86,14 +111,15 @@ describe("playSong under the Ableton clock", () => {
   });
 
   it("streams the song's parts locked to Live's own transport", async () => {
-    const started = await playSong(song(), "ableton");
+    const started = await playSong(song(), "live");
 
     expect(started).toBe(true);
     expect(transport.syncToAbleton).toHaveBeenCalledTimes(1);
     expect(scheduler.start).toHaveBeenCalledTimes(1);
-    const [, out, channels, opts] = scheduler.start.mock.calls[0];
+    const [, out, routing, opts] = scheduler.start.mock.calls[0];
     expect(out).toBe(output);
-    expect(channels).toEqual({ drums: 1, bass: 2, chords: 3, color: 4, melody: 5 });
+    expect(routing.drums.channel).toBe(1);
+    expect(routing.melody.channel).toBe(5);
     // The clock is what makes the take land on Live's grid — without it the
     // stream would free-run against Live's transport again.
     expect(opts.clock).toBe(abletonSync.clock);
@@ -103,7 +129,7 @@ describe("playSong under the Ableton clock", () => {
 
   it("follows Live without streaming when no MIDI port is selected", async () => {
     midiState.midiOutputId = "";
-    const started = await playSong(song(), "ableton");
+    const started = await playSong(song(), "live");
 
     expect(started).toBe(true);
     expect(transport.syncToAbleton).toHaveBeenCalledTimes(1);
@@ -112,9 +138,51 @@ describe("playSong under the Ableton clock", () => {
 
   it("reports a stale port instead of pretending the stream started", async () => {
     midiState.outputAvailable = false; // the saved port id no longer resolves
-    expect(await playSong(song(), "ableton")).toBe(false);
+    expect(await playSong(song(), "live")).toBe(false);
     expect(scheduler.start).not.toHaveBeenCalled();
     midiState.outputAvailable = true;
+  });
+
+  it("never retunes Live — under this target Live's tempo is the master", async () => {
+    ableton.connected = true;
+    await playSong(song(), "live");
+
+    expect(ableton.sendCommand).not.toHaveBeenCalled();
+  });
+});
+
+describe("playSong into another DAW", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    midiState.midiOutputId = "port";
+    midiState.outputAvailable = true;
+    ableton.connected = false;
+  });
+
+  it("matches Live's tempo to the song's before streaming", async () => {
+    // The app's clock places notes by the song's bpm, so a Live set at some
+    // other tempo gets every part on a different beat each pass — 104bpm
+    // notes against a 143bpm set reads as the clock being off.
+    ableton.connected = true;
+    await playSong(song(), "other");
+
+    expect(ableton.sendCommand).toHaveBeenCalledWith("/live/song/set/tempo", [120]);
+  });
+
+  it("leaves the tempo alone when there's no bridge to send it to", async () => {
+    ableton.connected = false;
+    await playSong(song(), "other");
+
+    expect(scheduler.start).toHaveBeenCalledTimes(1);
+    expect(ableton.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing at all for File only", async () => {
+    ableton.connected = true;
+    await playSong(song(), "file");
+
+    expect(scheduler.start).not.toHaveBeenCalled();
+    expect(ableton.sendCommand).not.toHaveBeenCalled();
   });
 });
 
@@ -143,10 +211,11 @@ describe("liveRefresh", () => {
     const cb = transport.onNextBar.mock.calls[0][0];
     cb();
     expect(scheduler.start).toHaveBeenCalledTimes(1);
-    const [effective, out, channels, opts] = scheduler.start.mock.calls[0];
-    expect(opts).toEqual({ startBeat: 16 });
+    const [effective, out, routing, opts] = scheduler.start.mock.calls[0];
+    expect(opts).toMatchObject({ startBeat: 16 });
     expect(out).toBe(output);
-    expect(channels).toEqual({ drums: 1, bass: 2, chords: 3, color: 4, melody: 5 });
+    expect(routing.drums.channel).toBe(1);
+    expect(routing.color.channel).toBe(4);
     expect((effective as BlueprintSong).id).toBe("x");
   });
 
@@ -182,7 +251,7 @@ describe("liveRefresh", () => {
     await liveRefresh(song());
     transport.onNextBar.mock.calls[0][0]();
     const [, , , opts] = scheduler.start.mock.calls[0];
-    expect(opts).toEqual({ startBeat: 16, loopStart: 0, loopEnd: 16 });
+    expect(opts).toMatchObject({ startBeat: 16, loopStart: 0, loopEnd: 16 });
   });
 
   it("keeps following Live when the re-plan lands (clock carried over)", async () => {
@@ -238,7 +307,7 @@ describe("playSectionLoop", () => {
     // Scheduler mirrors the same loop region (no transport-only flag).
     expect(scheduler.start).toHaveBeenCalledTimes(1);
     const [, , , opts] = scheduler.start.mock.calls[0];
-    expect(opts).toEqual({ startBeat: 0, loopStart: 0, loopEnd: 16 });
+    expect(opts).toMatchObject({ startBeat: 0, loopStart: 0, loopEnd: 16 });
   });
 
   it("falls back to the first section when the id is unknown", async () => {

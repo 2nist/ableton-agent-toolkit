@@ -44,7 +44,7 @@ export default function MelodyView() {
   const canUndo = useSongStore((s) => s.canUndo());
   const writeNotes = useWriteMelodyNotes();
   const midiOutputId = useMidiSettingsStore((s) => s.midiOutputId);
-  const midiChannels = useMidiSettingsStore((s) => s.channels);
+  const midiRouting = useMidiSettingsStore((s) => s.routing);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -135,7 +135,7 @@ export default function MelodyView() {
         getLiveMidiScheduler().start(
           song,
           output,
-          midiChannels,
+          midiRouting,
           loop ? { startBeat, loopStart: loop.start, loopEnd: loop.end } : { startBeat },
         );
       }

@@ -3,6 +3,7 @@ import { songToMidi, planChordStem, planDrumStem, planBassStem } from "./midiExp
 import { resolveChordOccurrences } from "@drum/library";
 import { sectionSpans } from "./arrangement";
 import { parseMidiBytes } from "./parsers/parseMidi";
+import { GM_ROUTING, routingFromProfile } from "./stems";
 import { createEmptySong, type BlueprintSong, type BlueprintSection, type Chord } from "../types/blueprint";
 
 describe("resolveChordOccurrences — follow-drums default", () => {
@@ -502,5 +503,65 @@ describe("planChordStem — chord voicing", () => {
     song.sections[0].chords[0].extendedSuffix = "7#9b13";
     const first = planChordStem(sectionSpans(song)).filter((n) => n.startTime === 0);
     expect(first.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([60, 64, 67, 70]);
+  });
+});
+
+describe("songToMidi — stem routing and instrument metadata", () => {
+  /** Track order in the file: conductor, chords, bass, drums, color, melody. */
+  const CHORDS = 1;
+  const BASS = 2;
+  const DRUMS = 3;
+
+  it("keeps drums on channel 10 by default — a .mid is opened by any DAW", () => {
+    const parsed = parseMidiBytes(songToMidi(testSong()));
+    const noteOn = parsed.tracks[DRUMS]!.events.find((e) => e.type === "noteOn");
+    expect(noteOn).toBeDefined();
+    // 0-based in the file: 9 → channel 10, where GM expects percussion.
+    expect(noteOn!.channel).toBe(9);
+  });
+
+  it("routes a stem to whatever channel its routing names", () => {
+    const routing = routingFromProfile(GM_ROUTING);
+    routing.bass = { channel: 11 };
+    const parsed = parseMidiBytes(songToMidi(testSong(), routing));
+    const bassOn = parsed.tracks[BASS]!.events.find((e) => e.type === "noteOn");
+    expect(bassOn!.channel).toBe(10); // channel 11
+  });
+
+  it("writes the profile's GM program as a program change", () => {
+    const parsed = parseMidiBytes(songToMidi(testSong()));
+    const pc = parsed.tracks[CHORDS]!.events.find((e) => e.type === "programChange");
+    // GM program 1 (Acoustic Grand Piano) → 0 on the wire.
+    expect(pc?.program).toBe(0);
+    expect(pc?.channel).toBe(0); // channel 1
+  });
+
+  it("names the instrument each track wants", () => {
+    const parsed = parseMidiBytes(songToMidi(testSong()));
+    const names = parsed.tracks.map((t) => t.events.find((e) => e.type === "instrumentName")?.name);
+    expect(names[CHORDS]).toBe("Acoustic Grand Piano");
+    expect(names[DRUMS]).toBe("Drums (GM kit)");
+  });
+
+  it("lets the song's instrument override the profile's program and name", () => {
+    const song = testSong();
+    song.instruments = { chords: { name: "Rhodes MkI", gmProgram: 5 }, bass: { gmProgram: 33 } };
+    const parsed = parseMidiBytes(songToMidi(song));
+    const chords = parsed.tracks[CHORDS]!;
+    expect(chords.events.find((e) => e.type === "programChange")?.program).toBe(4); // GM 5
+    expect(chords.events.find((e) => e.type === "instrumentName")?.name).toBe("Rhodes MkI");
+    expect(parsed.tracks[BASS]!.events.find((e) => e.type === "programChange")?.program).toBe(32);
+  });
+
+  it("never writes a program change for drums", () => {
+    const song = testSong();
+    song.instruments = { drums: { gmProgram: 25 } };
+    const parsed = parseMidiBytes(songToMidi(song));
+    expect(parsed.tracks[DRUMS]!.events.some((e) => e.type === "programChange")).toBe(false);
+  });
+
+  it("names each stem track for the DAW lane", () => {
+    const parsed = parseMidiBytes(songToMidi(testSong()));
+    expect(parsed.tracks.slice(1).map((t) => t.name)).toEqual(["Chords", "Bass", "Drums", "Color", "Melody"]);
   });
 });

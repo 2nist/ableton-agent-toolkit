@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { KEY_ROOTS } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
-import { useSongStore, type ClockSource } from "../../store/songStore";
+import { useSongStore } from "../../store/songStore";
+import { DAW_TARGETS, DAW_TARGET_DESCRIPTIONS, DAW_TARGET_SHORT, useDawTargetStore } from "../../store/dawTargetStore";
 import { getSongTransport } from "../../lib/playback/songTransport";
 import { getAbletonClock } from "../../lib/playback/abletonClock";
 import { playSong, stopSong } from "../../lib/playback/transportControl";
@@ -20,8 +21,8 @@ const SCALES: ScaleType[] = ["ionian", "dorian", "phrygian", "lydian", "mixolydi
 export default function StudioView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const clockSource = useSongStore((s) => s.clockSource);
-  const setClockSource = useSongStore((s) => s.setClockSource);
+  const target = useDawTargetStore((s) => s.target);
+  const setTarget = useDawTargetStore((s) => s.setTarget);
   const [isPlaying, setIsPlaying] = useState(false);
   const [abletonConnected, setAbletonConnected] = useState(false);
   /** Whether Live's own transport is rolling — the streamed parts only
@@ -56,17 +57,18 @@ export default function StudioView() {
     return () => unsubscribe();
   }, []);
 
-  // Keep the transport's clockSource in sync with the persisted store
-  // so play() no-ops and syncToAbleton() fires when appropriate.
+  // Keep the transport's clock in sync with the target, so play() no-ops
+  // and syncToAbleton() fires when appropriate. The target store is the only
+  // owner of this decision (see `dawTargetStore`) — nothing else writes it.
   useEffect(() => {
-    getSongTransport().clockSource = clockSource;
-  }, [clockSource]);
+    getSongTransport().clockSource = target === "live" ? "ableton" : "internal";
+  }, [target]);
 
   // Only connects once the user actually picks Ableton sync — no reason to
   // open a WebSocket to a bridge that's probably not running for anyone
   // using the app's own playback.
   useEffect(() => {
-    if (clockSource !== "ableton") return;
+    if (target !== "live") return;
     const clock = getAbletonClock();
     clock.connect();
     return clock.onChange((state) => {
@@ -78,7 +80,7 @@ export default function StudioView() {
         rootNote: state.abletonRootNote,
       });
     });
-  }, [clockSource]);
+  }, [target]);
 
   if (!currentSong) return null;
   const song = currentSong;
@@ -90,7 +92,7 @@ export default function StudioView() {
     }
     // Shared with the header's global Play — same clock-source handling and
     // live MIDI out, so the two controls can't drift.
-    const started = await playSong(song, clockSource);
+    const started = await playSong(song, target);
     if (!started) {
       // The saved port id is stale (Web MIDI ids change between browser
       // restarts) — don't fail silently; re-picking in the panel fixes it.
@@ -166,29 +168,25 @@ export default function StudioView() {
 
         {/* Right: clock source + transport + actions */}
         <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1" title="Which clock drives playback position — the app's own player, or Ableton's transport over osc-bridge">
-            {(["internal", "ableton"] as const).map((mode) => (
+          <div className="flex items-center gap-1" title="Where playback goes — Live follows its transport over osc-bridge; Other DAW streams over MIDI on the app's own clock; File only is a silent playhead">
+            {DAW_TARGETS.map((mode) => (
               <button
                 key={mode}
                 className={`text-xs px-2 py-1 rounded border ${
-                  clockSource === mode
+                  target === mode
                     ? "border-accent text-accent bg-accent/10"
                     : "border-edge text-inkMuted hover:text-ink"
                 }`}
-                title={
-                  mode === "internal"
-                    ? "App clock — TrackDraft runs its own timeline, so MIDI streamed into Live free-runs against Live's grid"
-                    : "Ableton clock — takes Live's position as the master, so the parts streamed into Live land on Live's grid and stay there"
-                }
+                title={DAW_TARGET_DESCRIPTIONS[mode]}
                 onClick={() => {
                   if (isPlaying) getSongTransport().stop();
-                  setClockSource(mode);
+                  setTarget(mode);
                 }}
               >
-                {mode === "internal" ? "App" : "Ableton"}
+                {DAW_TARGET_SHORT[mode]}
               </button>
             ))}
-            {clockSource === "ableton" && (
+            {target === "live" && (
               <>
                 <AbletonStatus connected={abletonConnected} />
                 {abletonConnected && !abletonPlaying && (
@@ -235,7 +233,7 @@ export default function StudioView() {
           <button
             className="border border-edge text-inkMuted hover:text-ink rounded px-2 py-1 text-xs font-mono"
             onClick={() => setShowMidiSetup(true)}
-            title="MIDI Out setup — port, per-track channels (kit/crave/chord/color), and test"
+            title="MIDI Out setup — port, per-stem channels and instruments, output latency"
           >
             MIDI{midiOutputId ? " ●" : ""}
           </button>
@@ -245,7 +243,7 @@ export default function StudioView() {
             onClick={togglePlayback}
             disabled={song.sections.length === 0}
           >
-            {isPlaying ? "■ Stop" : clockSource === "ableton" ? "⟲ Sync" : "▶ Play"}
+            {isPlaying ? "■ Stop" : target === "live" ? "⟲ Sync" : "▶ Play"}
           </button>
           <button
             className="border border-edge text-inkMuted hover:text-ink text-xs font-medium px-2.5 py-1 rounded"

@@ -1,5 +1,12 @@
 import { useState } from "react";
 import { useSongStore } from "../../store/songStore";
+import {
+  DAW_TARGETS,
+  DAW_TARGET_DESCRIPTIONS,
+  DAW_TARGET_LABELS,
+  useDawTargetStore,
+  type DawTarget,
+} from "../../store/dawTargetStore";
 import MidiSetupPanel from "../studio/MidiSetupPanel";
 import MidiTemplateGuide from "../studio/MidiTemplateGuide";
 import ExportMenu from "../studio/ExportMenu";
@@ -25,8 +32,8 @@ import TapeLabel from "../common/TapeLabel";
  */
 export default function SettingsView() {
   const currentSong = useSongStore((s) => s.currentSong());
-  const clockSource = useSongStore((s) => s.clockSource);
-  const setClockSource = useSongStore((s) => s.setClockSource);
+  const target = useDawTargetStore((s) => s.target);
+  const setTarget = useDawTargetStore((s) => s.setTarget);
   const [guideOpen, setGuideOpen] = useState(false);
   const [dirsOpen, setDirsOpen] = useState(false);
 
@@ -39,16 +46,17 @@ export default function SettingsView() {
     );
   }
 
-  const clockBtn = (mode: "internal" | "ableton", label: string, title: string) => (
+  const targetBtn = (mode: DawTarget) => (
     <button
+      key={mode}
       type="button"
       className={`px-2 py-0.5 rounded border text-[10px] font-mono ${
-        clockSource === mode ? "border-accent/50 bg-panelAlt text-ink" : "border-edge/70 text-inkMuted hover:text-ink"
+        target === mode ? "border-accent/50 bg-panelAlt text-ink" : "border-edge/70 text-inkMuted hover:text-ink"
       }`}
-      onClick={() => setClockSource(mode)}
-      title={title}
+      onClick={() => setTarget(mode)}
+      title={DAW_TARGET_DESCRIPTIONS[mode]}
     >
-      {label}
+      {DAW_TARGET_LABELS[mode]}
     </button>
   );
 
@@ -72,13 +80,14 @@ export default function SettingsView() {
         </header>
         <div className="p-3 space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-mono text-inkMuted">Playback clock</span>
-            <div className="flex gap-0.5">
-              {clockBtn("internal", "App", "Playback position comes from the app's own player")}
-              {clockBtn("ableton", "Ableton", "Follow Ableton's transport over the osc-bridge (seek/loop defer to Live)")}
-            </div>
+            <span className="text-[10px] font-mono text-inkMuted">Target DAW</span>
+            <div className="flex gap-0.5">{DAW_TARGETS.map(targetBtn)}</div>
             <span className="text-[10px] text-inkMuted/60">
-              {clockSource === "ableton" ? "Live drives position; seek waits for Live." : "The app's player drives position."}
+              {target === "live"
+                ? "Live drives position; seek waits for Live."
+                : target === "other"
+                  ? "The app's player drives position; stems stream over MIDI."
+                  : "The app's player drives position; nothing is sent over MIDI."}
             </span>
           </div>
           <MidiSetupPanel inline onClose={() => {}} />

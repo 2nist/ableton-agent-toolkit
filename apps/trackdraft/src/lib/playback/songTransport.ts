@@ -1,5 +1,6 @@
 import { sectionSpans, type SectionSpan } from "../arrangement";
 import { getAbletonClock } from "./abletonClock";
+import { createAbletonSyncClock, type AbletonSyncClock } from "./abletonSyncClock";
 import { beatsPerBar } from "../../types/blueprint";
 import type { BlueprintSong } from "../../types/blueprint";
 
@@ -79,6 +80,9 @@ class SongTransport {
   private nextBarAt = -1;
   private tickListeners = new Set<(tick: TransportTick) => void>();
   private abletonUnsub: (() => void) | null = null;
+  /** The clock following Live in this mode — owned here (not by the MIDI
+   *  scheduler) so `stop()` can dispose it; the scheduler gets its own. */
+  private abletonClock: AbletonSyncClock | null = null;
   /** Latest song-relative beat reported under an external (Ableton) clock.
    *  `startedAtMs` means nothing in that mode — the app's own wall clock
    *  isn't the one running — so positions have to be remembered as they
@@ -239,28 +243,20 @@ class SongTransport {
    *  are triggered (Ableton is already sounding them); this only turns
    *  Ableton's raw beat position into song-relative ticks on the same
    *  `{ beat, isPlaying, sectionIndex }` shape `play()` emits, so every
-   *  consumer (playhead, popout) works identically either way. Connects
-   *  `abletonClock` if it isn't already (safe to call repeatedly — it
-   *  no-ops once connected). The offset comes from `song.beatOffset ?? 0`
-   *  so it survives page refreshes. Call `calibrate()` to anchor it.
+   *  consumer (playhead, popout) works identically either way. The offset
+   *  comes from `song.beatOffset ?? 0` so it survives page refreshes. Call
+   *  `calibrate()` to anchor it.
    *
-   *  `osc-bridge` only pushes a message once per *whole* beat — there is
-   *  no fractional/sub-beat position in the wire protocol (confirmed: its
-   *  own `apc-sequencer` client has the same gap, flagged there as
-   *  "full phase-lock needs osc-bridge songTime"). Emitting only on each
-   *  real message made this mode's playhead visibly step once per beat
-   *  instead of moving continuously — jarring next to `play()`'s smooth
-   *  60fps internal clock, and the likely source of "the timing feels
-   *  buggy" reports specifically when following real Ableton playback.
-   *  Fixed the same way any networked-clock UI handles a sparse position
-   *  feed: keep emitting exactly on every real update (so the position is
-   *  always eventually correct, never just guessed), and *additionally*
-   *  extrapolate a smooth estimate on every animation frame in between,
-   *  using the song's own bpm as the assumed rate — reasonable since
-   *  Ableton's tempo is normally driven *from* this song's bpm via the
-   *  blueprint push path, and safely self-correcting either way: each
-   *  real beat message resets the estimate's anchor, so any drift from a
-   *  slightly-off bpm assumption never accumulates past one beat. */
+   *  Runs on the same `AbletonSyncClock` the live MIDI scheduler uses, so the
+   *  playhead and the streamed notes cannot disagree about where the beat is
+   *  — one interpolation, at Live's measured rate, instead of two (this used
+   *  to re-derive its own from the song's bpm, which is a different tempo
+   *  whenever Live isn't set to the song's).
+   *
+   *  `osc-bridge` only pushes a message per *whole* beat, so the position is
+   *  interpolated between them: emitted exactly on each real message (the
+   *  position is never just a guess), plus every animation frame in between
+   *  so the playhead moves continuously rather than stepping once per beat. */
   syncToAbleton(song: BlueprintSong): void {
     this.stop();
     // Own the mode rather than trusting the caller to have set it: every
@@ -270,54 +266,42 @@ class SongTransport {
     this.spans = sectionSpans(song);
     if (this.spans.length === 0) return;
 
-    const offset = song.beatOffset ?? 0;
-    const secPerBeat = 60 / song.bpm;
-    const clock = getAbletonClock();
-    clock.connect();
+    const clock = createAbletonSyncClock(song);
+    this.abletonClock = clock;
     this.isPlaying = true;
 
-    // Interpolation anchor: the last real beat message and the wall-clock
-    // moment it arrived. `reallyPlaying` gates the animation loop so a
-    // paused transport doesn't keep extrapolating forward from a stale beat.
-    let lastBeat: number | null = null;
-    let lastBeatAtMs = 0;
-    let reallyPlaying = false;
+    const followPosition = () => {
+      if (!this.isPlaying) return;
+      const beat = clock.position();
+      if (beat === null) {
+        // Live's transport is stopped: report it once so the UI drops out of
+        // "playing", but hold the last beat rather than rewinding to the top.
+        const held = this.syncedBeat ?? 0;
+        this.emit({ beat: held, isPlaying: false, sectionIndex: sectionIndexAt(this.spans, held) });
+        return;
+      }
+      this.syncedBeat = beat;
+      // A staged live edit still lands on the bar under this clock: the
+      // boundary is crossed between the bridge's whole-beat messages, and
+      // this interpolated position is what sees it.
+      if (this.nextBarCb !== null && beat >= this.nextBarAt) {
+        const cb = this.nextBarCb;
+        this.nextBarCb = null;
+        cb();
+      }
+      this.emit({ beat, isPlaying: true, sectionIndex: sectionIndexAt(this.spans, beat) });
+    };
+
+    // Bridge messages land exactly on the beat — emit on those as well as on
+    // frames, so beat-aligned consumers see the beat itself, not the frame
+    // that happens to follow it.
+    this.abletonUnsub = clock.onUpdate(followPosition);
 
     const tickLoop = () => {
       if (!this.isPlaying) return;
-      if (reallyPlaying && lastBeat !== null) {
-        const estimatedAbletonBeat = lastBeat + (performance.now() - lastBeatAtMs) / (secPerBeat * 1000);
-        const beat = Math.max(0, estimatedAbletonBeat - offset);
-        this.syncedBeat = beat;
-        // A staged live edit still lands on the bar under this clock: the
-        // boundary is crossed between the bridge's whole-beat messages, and
-        // this interpolated estimate is what sees it.
-        if (this.nextBarCb !== null && beat >= this.nextBarAt) {
-          const cb = this.nextBarCb;
-          this.nextBarCb = null;
-          cb();
-        }
-        this.emit({ beat, isPlaying: true, sectionIndex: sectionIndexAt(this.spans, beat) });
-      }
+      if (clock.position() !== null) followPosition();
       this.schedulerId = requestAnimationFrame(tickLoop);
     };
-
-    this.abletonUnsub = clock.onChange((state) => {
-      if (!this.isPlaying) return;
-      reallyPlaying = state.isPlaying;
-      if (state.abletonBeat === null) {
-        lastBeat = null;
-        this.syncedBeat = 0;
-        this.emit({ beat: 0, isPlaying: state.isPlaying, sectionIndex: -1 });
-        return;
-      }
-      lastBeat = state.abletonBeat;
-      lastBeatAtMs = performance.now();
-      const beat = Math.max(0, state.abletonBeat - offset);
-      this.syncedBeat = beat;
-      this.emit({ beat, isPlaying: state.isPlaying, sectionIndex: sectionIndexAt(this.spans, beat) });
-    });
-
     this.schedulerId = requestAnimationFrame(tickLoop);
   }
 
@@ -349,6 +333,8 @@ class SongTransport {
       this.abletonUnsub();
       this.abletonUnsub = null;
     }
+    this.abletonClock?.dispose();
+    this.abletonClock = null;
 
     const wasPlaying = this.isPlaying;
     this.isPlaying = false;

@@ -2,34 +2,21 @@ import { sectionSpans } from "../arrangement";
 import { planChordStem, planBassStem, planDrumStem, type MidiNote } from "../midiExport";
 import { planColorStem } from "../colorStem";
 import { planMelodyStem } from "../melody/melodyStem";
+import { LIVE_ROUTING, clampChannel, type StemId, type StemRoutingMap } from "../stems";
 import type { BlueprintSong } from "../../types/blueprint";
 
-/** 1-based MIDI channels (1-16, matching how Ableton's UI numbers them) —
- *  one per generated stem, so each Ableton track can listen on its own
- *  channel of the same shared virtual port instead of everything landing
- *  on channel 1. Defaults match the template set's actual track order, so
- *  channel number = track number for the four tracks TrackDraft drives:
- *  `kit` (drums, ch.1), `crave` (bass, ch.2), `chord` (ch.3 — it already
- *  listens to all channels, so this works with no Ableton-side change;
- *  `kit`/`crave`/`color` need a one-time "MIDI From" repoint to this
+/** Per-stem routing for the live MIDI out — the same shape the file export
+ *  takes (see `lib/stems.ts`), so one editor can describe both paths. Only
+ *  `channel` matters here; `instrumentName`/`gmProgram` are file metadata
+ *  and are deliberately not sent as program changes mid-stream (that would
+ *  stomp on whatever the user already loaded in their DAW).
+ *
+ *  Defaults are the Live template's track order, where channel number =
+ *  track number: `kit` (drums, ch.1), `crave` (bass, ch.2), `chord` (ch.3 —
+ *  it already listens to all channels, so this works with no Ableton-side
+ *  change; `kit`/`crave`/`color` need a one-time "MIDI From" repoint to this
  *  port, filtered to their own channel). */
-export interface LiveMidiChannelMap {
-  chords: number;
-  bass: number;
-  drums: number;
-  color: number;
-  /** Melody — the captured hum-to-MIDI line. Defaults to ch.5, matching
-   *  the template's `melody` track. */
-  melody: number;
-}
-
-export const DEFAULT_LIVE_MIDI_CHANNELS: LiveMidiChannelMap = {
-  drums: 1,
-  bass: 2,
-  chords: 3,
-  color: 4,
-  melody: 5,
-};
+export const DEFAULT_LIVE_MIDI_CHANNELS: StemRoutingMap = LIVE_ROUTING.stems;
 
 export interface MidiOutputInfo {
   id: string;
@@ -45,7 +32,9 @@ export function midiOutSupported(): boolean {
 
 let midiAccess: MIDIAccess | null = null;
 
-async function getMidiAccess(): Promise<MIDIAccess> {
+/** The cached `MIDIAccess`, requested on first use — shared with the
+ *  self-test in `midiSelfTest.ts` so both use one permission grant. */
+export async function getMidiAccess(): Promise<MIDIAccess> {
   if (!midiAccess) midiAccess = await navigator.requestMIDIAccess({ sysex: false });
   return midiAccess;
 }
@@ -58,6 +47,15 @@ export async function listMidiOutputs(): Promise<MidiOutputInfo[]> {
   return Array.from(access.outputs.values()).map((o) => ({ id: o.id, name: o.name ?? o.id }));
 }
 
+/** Every MIDI *input* port visible to the browser. Only the self-test uses
+ *  these: a virtual bus like IAC appears as both an output and an input, so
+ *  writing to the output and reading the input proves the whole OS-level
+ *  route works without needing a DAW open. */
+export async function listMidiInputs(): Promise<MidiOutputInfo[]> {
+  const access = await getMidiAccess();
+  return Array.from(access.inputs.values()).map((i) => ({ id: i.id, name: i.name ?? i.id }));
+}
+
 /** Resolves a port id (from `listMidiOutputs`) to the live `MIDIOutput`
  *  `LiveMidiScheduler.start` needs — reuses the same cached `MIDIAccess`
  *  `listMidiOutputs` populated, rather than requesting access again. */
@@ -65,6 +63,8 @@ export async function getMidiOutput(id: string): Promise<MIDIOutput | null> {
   const access = await getMidiAccess();
   return access.outputs.get(id) ?? null;
 }
+
+
 
 /** Sends one short MIDI note on a 1-based `channel` through `output` — a
  *  quick way to verify a port + channel actually reaches a Live track
@@ -127,6 +127,8 @@ export interface LiveSchedulerOptions {
   startBeat?: number;
   /** When both set, only notes inside [loopStart, loopEnd) are played, and
    *  they repeat forever (folded into the loop) instead of stopping. */
+  /** Loop the same region as the playhead (used when recording a melody
+   *  against a section). */
   loopStart?: number;
   loopEnd?: number;
   /** Slave the schedule to an external clock instead of the app's own
@@ -136,6 +138,15 @@ export interface LiveSchedulerOptions {
    *  hasn't reported one yet) silences everything and waits instead of
    *  guessing. The scheduler owns the clock: `stop()` disposes it. */
   clock?: SchedulerClock;
+  /** User-calibrated output latency in ms — positive delays every note.
+   *  Without the Live clock re-anchoring on every beat, this is the only
+   *  thing standing between "streamed into another DAW" and "audibly late".
+   *  Clamped to a sane ±500ms; default 0. */
+  outputLatencyMs?: number;
+  /** Apply the song's `outputOffsetBeats` render shift to the streamed notes
+   *  (see the field's docs). Callers set this for every target except Live —
+   *  Live's clock already carries the calibration in `beatOffset`. */
+  applyOutputOffset?: boolean;
 }
 
 /** Where the scheduler gets its time — the only thing that decides *when* a
@@ -157,7 +168,7 @@ export interface SchedulerClock {
 
 class LiveMidiScheduler {
   private output: MIDIOutput | null = null;
-  private channelMap: LiveMidiChannelMap = DEFAULT_LIVE_MIDI_CHANNELS;
+  private routing: StemRoutingMap = DEFAULT_LIVE_MIDI_CHANNELS;
   private notes: ScheduledNote[] = [];
   private clock: SchedulerClock | null = null;
   /** True when `clock` is external (Ableton) — the master owns the window,
@@ -166,6 +177,8 @@ class LiveMidiScheduler {
   /** Set while the master reports no position (stopped) — see `hold()`. */
   private held = false;
   private secPerBeat = 0.5;
+  /** Calibrated output latency in ms (see `outputLatencyMs`). */
+  private latencyMs = 0;
   private startBeat = 0;
   private loopStart: number | null = null;
   private loopEnd: number | null = null;
@@ -192,7 +205,7 @@ class LiveMidiScheduler {
   start(
     song: BlueprintSong,
     output: MIDIOutput,
-    channelMap: LiveMidiChannelMap = DEFAULT_LIVE_MIDI_CHANNELS,
+    routing: StemRoutingMap = DEFAULT_LIVE_MIDI_CHANNELS,
     opts: LiveSchedulerOptions = {},
   ): void {
     // A re-plan can hand back the very clock it's already running on (see
@@ -200,21 +213,39 @@ class LiveMidiScheduler {
     // would dispose the subscription it's about to keep following.
     this.teardown(opts.clock ?? null);
     this.output = output;
-    this.channelMap = channelMap;
+    this.routing = routing;
 
     const spans = sectionSpans(song);
+    // Rendered output shifts by `outputOffsetBeats` (see the blueprint
+    // field): some catalog songs' grid sits a beat off the reference
+    // recording, and the notes move to lock with the record. The file export
+    // has always applied that shift. When the target isn't Live, the stream
+    // applies it too — otherwise exporting and streaming the same song
+    // disagree by a beat with nothing on screen to explain why. Under the
+    // Live clock the shift would fight `beatOffset`'s calibration, so it's
+    // opt-in per start (see `LiveSchedulerOptions.applyOutputOffset`).
+    //
+    // Clamped at 0 exactly like the export, so a note shifted before the top
+    // plays on the downbeat rather than being dropped by `windowedStart`.
+    const outputOffset = opts.applyOutputOffset ? (song.outputOffsetBeats ?? 0) : 0;
+    const stem = (notes: MidiNote[], id: StemId): ScheduledNote[] =>
+      notes.map((note) => ({
+        note: outputOffset === 0 ? note : { ...note, startTime: Math.max(0, note.startTime + outputOffset) },
+        channel: clampChannel(routing[id].channel),
+      }));
     const scheduled: ScheduledNote[] = [
-      ...planChordStem(spans, song).map((note) => ({ note, channel: channelMap.chords })),
-      ...planBassStem(spans, song).map((note) => ({ note, channel: channelMap.bass })),
-      ...planDrumStem(spans, song).map((note) => ({ note, channel: channelMap.drums })),
-      ...planColorStem(spans, song).map((note) => ({ note, channel: channelMap.color })),
-      ...planMelodyStem(spans, song).map((note) => ({ note, channel: channelMap.melody })),
+      ...stem(planChordStem(spans, song), "chords"),
+      ...stem(planBassStem(spans, song), "bass"),
+      ...stem(planDrumStem(spans, song), "drums"),
+      ...stem(planColorStem(spans, song), "color"),
+      ...stem(planMelodyStem(spans, song), "melody"),
     ];
     scheduled.sort((a, b) => a.note.startTime - b.note.startTime);
     this.notes = scheduled;
     this.lastNoteStart = scheduled.length ? scheduled[scheduled.length - 1].note.startTime : 0;
 
     this.secPerBeat = 60 / song.bpm;
+    this.latencyMs = Math.max(-500, Math.min(500, Math.round(opts.outputLatencyMs ?? 0)));
     this.startBeat = Math.max(0, opts.startBeat ?? 0);
     this.loopStart = opts.loopStart ?? null;
     this.loopEnd = opts.loopEnd ?? null;
@@ -329,8 +360,11 @@ class LiveMidiScheduler {
 
   private send(note: MidiNote, channel: number, atBeat: number): void {
     if (!this.output || !this.clock) return; // tick() guards too, but this runs on its own
-    const onAtMs = this.clock.timeAt(atBeat);
-    if (onAtMs === null) return;
+    const scheduledAtMs = this.clock.timeAt(atBeat);
+    if (scheduledAtMs === null) return;
+    // Calibrated latency shifts both ends together, so note lengths are
+    // untouched — only when the whole stream lands.
+    const onAtMs = scheduledAtMs + this.latencyMs;
     const ch = Math.max(0, Math.min(15, channel - 1)); // MIDI wire format is 0-based
     const pitch = Math.max(0, Math.min(127, Math.round(note.pitch)));
     const velocity = Math.max(1, Math.min(127, Math.round(note.velocity)));
@@ -353,7 +387,13 @@ class LiveMidiScheduler {
    *  matching note-off. */
   private allNotesOff(): void {
     if (!this.output) return;
-    const channels = new Set([this.channelMap.chords, this.channelMap.bass, this.channelMap.drums, this.channelMap.color, this.channelMap.melody]);
+    const channels = new Set([
+      this.routing.chords.channel,
+      this.routing.bass.channel,
+      this.routing.drums.channel,
+      this.routing.color.channel,
+      this.routing.melody.channel,
+    ]);
     for (const channel of channels) {
       const ch = Math.max(0, Math.min(15, channel - 1));
       this.output.send([0xb0 | ch, ALL_NOTES_OFF_CC, 0]);

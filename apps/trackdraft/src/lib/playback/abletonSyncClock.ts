@@ -14,9 +14,12 @@
  *
  * The wire protocol only carries *whole* beats (`/live/song/get/beat` pushes
  * an integer once per beat — see `packages/osc-bridge/README.md`), so between
- * messages the position is interpolated and the next message re-anchors. The
- * two clocks run on the same machine, so that interpolation only has to be
- * right for the fraction of a beat it covers.
+ * messages the position is interpolated and the next message re-anchors. That
+ * interpolation runs at Live's *measured* rate, not the song's bpm: Live is
+ * the master, and its tempo is routinely not the song's (a set at 143 while
+ * the song is written at 104). Interpolating at the song's bpm there would
+ * crawl at 73% of a beat and then snap forward a quarter beat on every
+ * message — the playhead and the click visibly stuttering against Live.
  *
  * `beatOffset` is applied the same way `SongTransport.syncToAbleton` applies
  * it, so the streamed notes and the app's playhead agree on where "song beat
@@ -26,18 +29,25 @@
 import { getAbletonClock, type AbletonClockState } from "./abletonClock";
 import type { SchedulerClock } from "./liveMidiOut";
 
-/** The interpolation rate is measured from Live's own messages so it can
- *  follow a tempo that isn't the song's bpm — but only within this fraction
- *  of it, and only ever one smoothing step at a time, so a single late or
- *  skipped message can't swing it. The next beat re-anchors regardless, so
- *  this only shapes how good the *within-beat* placement is. */
-const TEMPO_TOLERANCE = 0.25;
-/** Weight of each new measured interval (the rest rides the running rate). */
-const TEMPO_SMOOTHING = 0.2;
-/** A measured interval outside this multiple of the song's tempo isn't a
- *  tempo reading at all — it's a gap (pause, seek, skipped message). */
-const INTERVAL_MIN_FACTOR = 0.4;
-const INTERVAL_MAX_FACTOR = 2.5;
+/** How many measured beat intervals the tempo estimate keeps. The median of
+ *  these is the rate, so one delayed or bunched message — the bridge's 5s
+ *  resubscribe makes AbletonOSC fire its listener again moments after a real
+ *  beat, a ~90ms "interval" — can't swing it. A real tempo change is still
+ *  picked up within two beats. */
+const TEMPO_SAMPLES = 5;
+/** Two agreeing intervals are enough to lock the rate; below that the song's
+ *  bpm guess stands. */
+const AGREEMENT_RATIO = 1.1;
+/** A per-beat interval outside this range isn't tempo at all. */
+const PLAUSIBLE_MIN_MS = 100; // 600bpm
+const PLAUSIBLE_MAX_MS = 2000; // 30bpm
+
+/** Median of a small sample — the tempo estimate itself. */
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
 
 export class AbletonSyncClock implements SchedulerClock {
   private readonly clock = getAbletonClock();
@@ -50,10 +60,16 @@ export class AbletonSyncClock implements SchedulerClock {
   private heldSongBeat: number | null = null;
   private playing = false;
   private lastBeatValue: number | null = null;
-  private lastBeatAtMs = 0;
-  /** Smoothed ms-per-beat measured from Live's messages. Seeded from the
-   *  song's own tempo, which is what Live is normally set to anyway. */
+  /** Arrival time of the last new beat; null when there is no previous beat
+   *  to measure an interval against (first message, or across a pause). */
+  private lastBeatAtMs: number | null = null;
+  /** Per-beat intervals measured from Live's messages; median is the rate.
+   *  Seeded from the song's bpm, which is only a guess until Live answers. */
+  private beatMsSamples: number[] = [];
+  /** Ms per beat — the median of the measured intervals, so one jittery
+   *  message can't swing it. */
   private msPerBeat: number;
+  private listeners = new Set<() => void>();
 
   constructor(private readonly song: { bpm: number; beatOffset?: number }) {
     this.msPerBeat = 60000 / song.bpm;
@@ -71,6 +87,16 @@ export class AbletonSyncClock implements SchedulerClock {
     return this.playing;
   }
 
+  /** Fires when a message actually moved the clock — a new beat, or the
+   *  transport starting/stopping. Lets a consumer emit exactly on Live's own
+   *  beat instead of only on its next animation frame. */
+  onUpdate(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
   position(): number | null {
     if (!this.playing || !this.anchor) return null;
     return this.anchor.songBeat + (performance.now() - this.anchor.atMs) / this.msPerBeat;
@@ -84,11 +110,13 @@ export class AbletonSyncClock implements SchedulerClock {
   dispose(): void {
     this.unsub?.();
     this.unsub = null;
+    this.listeners.clear();
     this.anchor = null;
     this.playing = false;
     this.heldSongBeat = null;
     this.lastBeatValue = null;
-    this.lastBeatAtMs = 0;
+    this.lastBeatAtMs = null;
+    this.beatMsSamples = [];
   }
 
   /** Fold one bridge message into the clock. Note that `onChange` fires for
@@ -101,12 +129,14 @@ export class AbletonSyncClock implements SchedulerClock {
     const beat = state.abletonBeat;
 
     if (!state.isPlaying || beat === null) {
+      const wasPlaying = this.playing;
       if (this.playing && this.anchor) this.heldSongBeat = this.position();
       this.playing = false;
       this.anchor = null;
       // The next message won't be one beat after the last one (the gap spans
       // the pause) — don't let it pollute the measured tempo.
-      this.lastBeatAtMs = 0;
+      this.lastBeatAtMs = null;
+      if (wasPlaying) this.notify();
       return;
     }
 
@@ -114,18 +144,7 @@ export class AbletonSyncClock implements SchedulerClock {
     this.playing = true;
 
     const isNewBeat = beat !== this.lastBeatValue;
-    if (isNewBeat && this.lastBeatAtMs > 0) {
-      const dt = now - this.lastBeatAtMs;
-      const expected = 60000 / this.song.bpm;
-      if (dt > expected * INTERVAL_MIN_FACTOR && dt < expected * INTERVAL_MAX_FACTOR) {
-        const measured = this.msPerBeat * (1 - TEMPO_SMOOTHING) + dt * TEMPO_SMOOTHING;
-        const min = expected * (1 - TEMPO_TOLERANCE);
-        const max = expected * (1 + TEMPO_TOLERANCE);
-        this.msPerBeat = Math.max(min, Math.min(max, measured));
-      }
-    }
-    this.lastBeatValue = beat;
-    if (isNewBeat) this.lastBeatAtMs = now;
+    if (isNewBeat) this.measureTempo(beat, now);
 
     const beatOffset = this.song.beatOffset ?? 0;
     if (isNewBeat) {
@@ -141,6 +160,40 @@ export class AbletonSyncClock implements SchedulerClock {
       this.anchor = { songBeat, atMs: now };
     }
     this.heldSongBeat = null;
+
+    if (isNewBeat || !wasPlaying) this.notify();
+  }
+
+  /** Measure the interval this beat arrived after the previous one and fold
+   *  it into the rate. Uses the *beat count* between messages, not just the
+   *  elapsed time, so a skipped message reads as one long beat rather than
+   *  poisoning the estimate. */
+  private measureTempo(beat: number, now: number): void {
+    const previousBeat = this.lastBeatValue;
+    const sinceMs = this.lastBeatAtMs;
+    this.lastBeatValue = beat;
+    this.lastBeatAtMs = now;
+    if (previousBeat === null || sinceMs === null) return;
+
+    const beats = beat - previousBeat;
+    // Backwards (a rewind, or Live's loop wrapping) says nothing about tempo.
+    if (beats < 1) return;
+    const perBeat = (now - sinceMs) / beats;
+    if (perBeat < PLAUSIBLE_MIN_MS || perBeat > PLAUSIBLE_MAX_MS) return;
+
+    this.beatMsSamples.push(perBeat);
+    if (this.beatMsSamples.length > TEMPO_SAMPLES) this.beatMsSamples.shift();
+
+    // The median needs three readings before it can outvote an outlier; two
+    // are enough when they agree, which is the normal case and locks the rate
+    // a beat sooner.
+    const samples = this.beatMsSamples;
+    const agreed = samples.length >= 3 || (samples.length === 2 && Math.max(...samples) < Math.min(...samples) * AGREEMENT_RATIO);
+    if (agreed) this.msPerBeat = median(samples);
+  }
+
+  private notify(): void {
+    for (const listener of this.listeners) listener();
   }
 }
 

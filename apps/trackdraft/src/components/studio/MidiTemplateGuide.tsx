@@ -1,19 +1,22 @@
-import { TEMPLATE_TRACK_NAMES } from "../../lib/liveTemplate";
+import { LIVE_TEMPLATE_TRACK_NAMES } from "../../lib/liveTemplate";
 
-/** The channel → template-track mapping TrackDraft's MIDI out streams on.
- *  Channel number = template track number for the first four tracks. */
+/** The channel → template-track mapping the Live preset streams on.
+ *  Channel number = template track number for the first four tracks.
+ *  Only relevant to the Live target — every other DAW just takes "channel
+ *  N" on a track you make yourself. */
 const CHANNEL_MAP = [
-  { channel: 1, stem: "Drums", track: TEMPLATE_TRACK_NAMES[0] },
-  { channel: 2, stem: "Bass", track: TEMPLATE_TRACK_NAMES[1] },
-  { channel: 3, stem: "Chords", track: TEMPLATE_TRACK_NAMES[2] },
-  { channel: 4, stem: "Color", track: TEMPLATE_TRACK_NAMES[3] },
+  { channel: 1, stem: "Drums", track: LIVE_TEMPLATE_TRACK_NAMES[0] },
+  { channel: 2, stem: "Bass", track: LIVE_TEMPLATE_TRACK_NAMES[1] },
+  { channel: 3, stem: "Chords", track: LIVE_TEMPLATE_TRACK_NAMES[2] },
+  { channel: 4, stem: "Color", track: LIVE_TEMPLATE_TRACK_NAMES[3] },
 ];
 
-/** One-time Live-side setup guide for hearing TrackDraft's MIDI out on
- *  the template set — a small modal explaining the virtual port pick and
- *  the per-track "MIDI From" repoint. Purely informational: the picker in
+/** One-time Live-side setup guide for hearing TrackDraft's MIDI out on the
+ *  template set — a small modal explaining the virtual port pick and the
+ *  per-track "MIDI From" repoint. Purely informational: the picker in
  *  StudioView is the actual control; this just tells you how to wire the
- *  other side of it. */
+ *  other side of it. Live-only by design: it describes one specific .als,
+ *  not a generic DAW setup (see MidiSetupPanel's copy for that). */
 export default function MidiTemplateGuide({ onClose }: { onClose: () => void }) {
   return (
     <div
@@ -25,7 +28,7 @@ export default function MidiTemplateGuide({ onClose }: { onClose: () => void }) 
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium text-sm">MIDI Out → Live template</h3>
+          <h3 className="font-medium text-sm">MIDI Out → Live template (Live target)</h3>
           <button className="text-inkMuted hover:text-ink leading-none text-sm" onClick={onClose} title="Close">
             &times;
           </button>
@@ -38,7 +41,7 @@ export default function MidiTemplateGuide({ onClose }: { onClose: () => void }) 
           </li>
           <li>
             In Live, use the template set — its tracks are{" "}
-            <span className="text-ink font-mono">{TEMPLATE_TRACK_NAMES.slice(0, 4).join(" · ")}</span>.
+            <span className="text-ink font-mono">{LIVE_TEMPLATE_TRACK_NAMES.slice(0, 4).join(" · ")}</span>.
           </li>
           <li>Pick that port in the MIDI Out dropdown, then point each template track's "MIDI From" at it, filtered to its own channel:</li>
         </ol>

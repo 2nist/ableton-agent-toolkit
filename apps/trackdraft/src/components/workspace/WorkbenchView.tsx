@@ -11,6 +11,7 @@ import {
 } from "@drum/library";
 import { effectiveTonicRegions } from "../../lib/harmony/tonic";
 import { useSongStore } from "../../store/songStore";
+import { useDawTargetStore } from "../../store/dawTargetStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { useTimeSelectionStore } from "../../store/timeSelectionStore";
@@ -254,7 +255,7 @@ function SectionWorkspace({
   );
   const jump = (tab: string) => navigate(`/song/${id}/${tab}?section=${section.id}`);
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const clockSource = useSongStore((s) => s.clockSource);
+  const target = useDawTargetStore((s) => s.target);
   const undo = useSongStore((s) => s.undo);
   const canUndo = useSongStore((s) => s.canUndo());
   const writeMelodyNotes = useWriteMelodyNotes();
@@ -395,7 +396,7 @@ function SectionWorkspace({
     : 0;
 
   function seekInSection(beat: number) {
-    void seekTo(song, clockSource, span.startBeat + beat);
+    void seekTo(song, target, span.startBeat + beat);
   }
 
   return (
@@ -493,7 +494,7 @@ function SectionWorkspace({
         <IconBtn
           icon="loop"
           title={`Loop "${section.name}" — audition it while you edit (the spine's loop lights up)`}
-          disabled={clockSource === "ableton"}
+          disabled={target === "live"}
           onClick={() => void playSectionLoop(song, section.id)}
         />
         <span className="text-[9px] font-mono text-inkMuted/40" title="Navigation grammar: ←→ walks sections anywhere in the workbench">
@@ -715,7 +716,7 @@ function SectionWorkspace({
                 scale={effScale}
                 height={128}
                 activeBeat={beatInSection}
-                onSeekBeat={(beat) => void seekTo(song, clockSource, span.startBeat + beat)}
+                onSeekBeat={(beat) => void seekTo(song, target, span.startBeat + beat)}
               />
             </div>
           ) : (

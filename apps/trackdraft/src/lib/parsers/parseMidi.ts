@@ -21,7 +21,18 @@ import {
 
 interface MidiEvent {
   tick: number;
-  type: "noteOn" | "noteOff" | "tempo" | "timeSig" | "keySig" | "trackName" | "endOfTrack" | "unknown";
+  type:
+    | "noteOn"
+    | "noteOff"
+    | "programChange"
+    | "tempo"
+    | "timeSig"
+    | "keySig"
+    | "trackName"
+    | "instrumentName"
+    | "endOfTrack"
+    | "unknown";
+  /** 0-based MIDI channel, as the status nibble carries it. */
   channel?: number;
   note?: number;       // MIDI note number 0-127
   velocity?: number;
@@ -31,6 +42,8 @@ interface MidiEvent {
   keySigSharps?: number; // negative = flats
   major?: boolean;
   name?: string;
+  /** GM program number as written in the file (0-based on the wire). */
+  program?: number;
 }
 
 interface MidiTrack {
@@ -168,6 +181,9 @@ function parseTrack(data: Uint8Array, offset: number, end: number): MidiTrack {
         case 0x03: // Track name
           events.push({ tick, type: "trackName", name: new TextDecoder().decode(metaData) });
           break;
+        case 0x04: // Instrument name
+          events.push({ tick, type: "instrumentName", name: new TextDecoder().decode(metaData) });
+          break;
         case 0x2f: // End of track
           events.push({ tick, type: "endOfTrack" });
           break;
@@ -193,9 +209,14 @@ function parseTrack(data: Uint8Array, offset: number, end: number): MidiTrack {
         default:
           events.push({ tick, type: "unknown" });
       }
+    } else if (command === 0xc0) {
+      // Program change — one data byte, kept so an imported file's instrument
+      // intent can be read back (see `midiExport`'s program-change writing).
+      if (offset >= end) break;
+      events.push({ tick, type: "programChange", channel, program: data[offset++] });
     } else {
       // Other channel events — skip parameter bytes
-      const paramCount = command === 0xc0 || command === 0xd0 ? 1 : 2;
+      const paramCount = command === 0xd0 ? 1 : 2;
       offset = Math.min(offset + paramCount, end);
     }
   }

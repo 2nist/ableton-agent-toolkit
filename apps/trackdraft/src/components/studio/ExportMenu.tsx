@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import type { BlueprintSong } from "../../types/blueprint";
 import { downloadSongJson, pushSongToAbleton } from "../../lib/exportImport";
 import { downloadSongMidi } from "../../lib/midiExport";
+import { useDawTargetStore } from "../../store/dawTargetStore";
 
 /** Studio's export/send actions tucked under a single button — Export JSON,
- *  Export MIDI, and Send to Ableton — so the transport bar stays one tight
- *  row. Closes on outside click or Escape. */
+ *  Export MIDI, and (only when Live is the target) Send to Ableton — so the
+ *  transport bar stays one tight row. Closes on outside click or Escape. */
 export default function ExportMenu({ song }: { song: BlueprintSong }) {
   const [open, setOpen] = useState(false);
   const [sendingToAbleton, setSendingToAbleton] = useState(false);
+  const target = useDawTargetStore((s) => s.target);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -51,7 +53,11 @@ export default function ExportMenu({ song }: { song: BlueprintSong }) {
         className="bg-accent text-accentInk text-xs font-medium px-2.5 py-1 rounded flex items-center gap-1"
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Export this song — JSON blueprint, multi-track MIDI, or straight to Ableton"
+        title={
+          target === "live"
+            ? "Export this song — JSON blueprint, multi-track MIDI, or straight to Ableton"
+            : "Export this song — JSON blueprint or a multi-track MIDI file for your DAW"
+        }
         onClick={() => setOpen((o) => !o)}
       >
         Export
@@ -70,7 +76,7 @@ export default function ExportMenu({ song }: { song: BlueprintSong }) {
           </button>
           <button
             className="w-full text-left text-xs px-3 py-1.5 text-ink hover:bg-panelAlt"
-            title="Export this song as a multi-track MIDI file (.mid) — chords, bass, and drums. Works with any DAW."
+            title="Export this song as a multi-track MIDI file (.mid) — one track per stem, General MIDI channels and instrument names, so it opens correctly in any DAW."
             onClick={() => {
               setOpen(false);
               downloadSongMidi(song);
@@ -78,14 +84,16 @@ export default function ExportMenu({ song }: { song: BlueprintSong }) {
           >
             Export MIDI
           </button>
-          <button
-            className="w-full text-left text-xs px-3 py-1.5 text-ink hover:bg-panelAlt disabled:opacity-40 border-t border-edge"
-            disabled={sendingToAbleton}
-            title="Push this song's blueprint to Ableton via the osc-bridge — the bridge itself queues an apply command, which reuses the template's chord, crave, kit, and color MIDI tracks (creating them if absent) and fills them with real clips — no manual right-clicking needed"
-            onClick={sendToAbleton}
-          >
-            {sendingToAbleton ? "Sending…" : "Send to Ableton"}
-          </button>
+          {target === "live" && (
+            <button
+              className="w-full text-left text-xs px-3 py-1.5 text-ink hover:bg-panelAlt disabled:opacity-40 border-t border-edge"
+              disabled={sendingToAbleton}
+              title="Push this song's blueprint to Ableton via the osc-bridge — the bridge itself queues an apply command, which reuses the template's chord, crave, kit, and color MIDI tracks (creating them if absent) and fills them with real clips — no manual right-clicking needed"
+              onClick={sendToAbleton}
+            >
+              {sendingToAbleton ? "Sending…" : "Send to Ableton"}
+            </button>
+          )}
         </div>
       )}
     </div>

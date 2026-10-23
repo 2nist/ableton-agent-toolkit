@@ -90,9 +90,65 @@ describe("AbletonSyncClock", () => {
     emit(1040, { abletonBeat: 2 });
     expect(clock.position()).toBe(2);
     nowMs = 1290;
-    // Half a beat on from the new anchor — and the late message nudged the
-    // smoothed rate by well under a percent, not by the full 8% it was late.
+    // Half a beat on from the new anchor — the anchor moved with the message
+    // rather than the lateness being baked into the position.
     expect(clock.position()).toBeCloseTo(2.5, 1);
+  });
+
+  it("follows a master running well away from the song's own bpm", () => {
+    // The song is 104bpm (577ms/beat) but Live is at 143bpm (420ms/beat).
+    // Trusting the song's tempo here crawls at 73% of a beat and then snaps
+    // forward on every message — the playhead stuttering against Live.
+    const clock = createAbletonSyncClock({ bpm: 104 });
+    emit(0, { abletonBeat: 10 });
+    emit(419.6, { abletonBeat: 11 });
+    emit(839.2, { abletonBeat: 12 });
+
+    nowMs = 1049; // half a beat on at 143bpm
+    expect(clock.position()).toBeCloseTo(12.5, 2);
+    expect(clock.timeAt(13)).toBeCloseTo(839.2 + 419.6, 1);
+  });
+
+  it("doesn't take a bunched message for a tempo change", () => {
+    // The bridge re-sends its subscriptions every 5s, which makes AbletonOSC
+    // fire its beat listener again moments after a real beat — an ~90ms
+    // "interval" that would read as 666bpm if it were believed.
+    const clock = createAbletonSyncClock({ bpm: 104 });
+    emit(0, { abletonBeat: 1 });
+    emit(420, { abletonBeat: 2 });
+    emit(840, { abletonBeat: 3 });
+    emit(1260, { abletonBeat: 4 });
+    emit(1350, { abletonBeat: 5 });
+    emit(1770, { abletonBeat: 6 });
+
+    nowMs = 1980;
+    expect(clock.position()).toBeCloseTo(6.5, 2);
+  });
+
+  it("reads a skipped message as one long beat rather than a tempo change", () => {
+    const clock = createAbletonSyncClock({ bpm: 120 });
+    emit(0, { abletonBeat: 0 });
+    emit(500, { abletonBeat: 1 });
+    emit(1000, { abletonBeat: 2 });
+    // Beat 3's message was dropped: beat 4 arrives two beats after beat 2.
+    emit(2000, { abletonBeat: 4 });
+
+    nowMs = 2250;
+    expect(clock.position()).toBeCloseTo(4.5, 2);
+  });
+
+  it("ignores the interval across a rewind", () => {
+    const clock = createAbletonSyncClock({ bpm: 120 });
+    emit(0, { abletonBeat: 8 });
+    emit(500, { abletonBeat: 9 });
+    // Live looped back to the top: a huge negative interval, which says
+    // nothing about the tempo.
+    emit(600, { abletonBeat: 1 });
+    expect(clock.position()).toBe(1);
+
+    emit(1100, { abletonBeat: 2 });
+    nowMs = 1350;
+    expect(clock.position()).toBeCloseTo(2.5, 2);
   });
 
   it("ignores messages that carry no new beat (telemetry, reconnect)", () => {

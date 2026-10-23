@@ -280,3 +280,49 @@ describe("LiveMidiScheduler under an external clock", () => {
     expect(scheduler.activeClock).toBeNull();
   });
 });
+
+describe("LiveMidiScheduler output options", () => {
+  const scheduler = getLiveMidiScheduler();
+  const routing = DEFAULT_LIVE_MIDI_CHANNELS;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    scheduler.stop();
+    vi.useRealTimers();
+  });
+
+  /** One streaming pass over the first four beats, from a fresh start. */
+  function stream(opts: { outputLatencyMs?: number; applyOutputOffset?: boolean }, blueprint = song()): FakeOutput {
+    const out = new FakeOutput();
+    const clock = new FakeClock();
+    scheduler.start(blueprint, out as unknown as MIDIOutput, routing, { clock, ...opts });
+    for (let pos = 0; pos <= 4 + 1e-9; pos += 0.5) {
+      clock.pos = pos;
+      vi.advanceTimersByTime(50);
+    }
+    scheduler.stop();
+    return out;
+  }
+
+  it("shifts every note by the calibrated output latency", () => {
+    const plain = noteOns(stream({})).map((m) => m[3]!);
+    const late = noteOns(stream({ outputLatencyMs: 30 })).map((m) => m[3]!);
+    expect(plain.length).toBeGreaterThan(0);
+    expect(late.length).toBe(plain.length);
+    expect(late).toEqual(plain.map((t) => t + 30));
+  });
+
+  it("applies the song's render offset only when asked, clamped at the top", () => {
+    const shiftedSong = { ...song(), outputOffsetBeats: 1 };
+    const plain = noteOns(stream({}, shiftedSong)).map((m) => m[3]!);
+    const shifted = noteOns(stream({ applyOutputOffset: true }, shiftedSong)).map((m) => m[3]!);
+
+    // Unshifted, the chord/drum downbeat sits on beat 0.
+    expect(Math.min(...plain)).toBe(new FakeClock().originMs);
+    // One beat later at 120bpm = 500ms, and nothing is pulled before the top.
+    expect(Math.min(...shifted)).toBe(new FakeClock().originMs + 500);
+  });
+});

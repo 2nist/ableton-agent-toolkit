@@ -22,6 +22,7 @@ import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
 import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, applyStyleToVariant, resolveEffectiveStyle, resolveNarrativeProfile, narrativeHarmonySection, narrativeTransitionModel, styleArticulation, styleQualityFor, styleSpacing, styleVelocityTarget, type SectionDrumInput } from "@drum/library";
 import { planColorStem } from "./colorStem";
 import { planMelodyStem } from "./melody/melodyStem";
+import { GM_ROUTING, STEM_LABELS, clampChannel, clampProgram, type StemId, type StemRoutingMap } from "./stems";
 import { barLengths, beatsPerBar, meterForLength, type BlueprintSong, type BlueprintSection } from "../types/blueprint";
 
 // ---------------------------------------------------------------------------
@@ -268,17 +269,31 @@ interface RawMidiEvent {
   data: number[]; // raw bytes including status byte
 }
 
-/** Builds a MIDI track chunk from a sorted list of events. */
-function buildTrackChunk(events: RawMidiEvent[], trackName?: string): number[] {
+/** Builds a MIDI track chunk from a sorted list of events.
+ *
+ *  `meta` names the track and, when the user has said what should be loaded
+ *  there, the *instrument* — a separate meta event (0xFF 0x04) from the
+ *  track name (0xFF 0x03), because DAWs surface them in different places:
+ *  track name is the lane label, instrument name is the sound. */
+function buildTrackChunk(events: RawMidiEvent[], meta: { name?: string; instrument?: string } = {}): number[] {
   const bytes: number[] = [];
 
   // Track name meta event (at tick 0)
-  if (trackName) {
-    const nameBytes = Array.from(new TextEncoder().encode(trackName));
+  if (meta.name) {
+    const nameBytes = Array.from(new TextEncoder().encode(meta.name));
     bytes.push(0x00); // delta = 0
     bytes.push(0xff, 0x03); // meta: track name
     bytes.push(...writeVarLen(nameBytes.length));
     bytes.push(...nameBytes);
+  }
+
+  // Instrument name meta event (at tick 0) — the "load this sound" hint.
+  if (meta.instrument) {
+    const instrumentBytes = Array.from(new TextEncoder().encode(meta.instrument));
+    bytes.push(0x00); // delta = 0
+    bytes.push(0xff, 0x04); // meta: instrument name
+    bytes.push(...writeVarLen(instrumentBytes.length));
+    bytes.push(...instrumentBytes);
   }
 
   // Sort events by tick (stable enough for our purposes)
@@ -348,6 +363,23 @@ function keySignature(song: BlueprintSong): { sharps: number; major: boolean } {
 // Main export function
 // ---------------------------------------------------------------------------
 
+/** The GM program to write for `stem`, or null when none applies — drums
+ *  (channel 10 is percussion, a program change there does nothing useful),
+ *  or a stem with no program in either the song or the profile. The song's
+ *  own choice wins over the profile's default. */
+function programFor(song: BlueprintSong, stem: StemId, routing: StemRoutingMap): number | null {
+  if (stem === "drums") return null;
+  const program = song.instruments?.[stem]?.gmProgram ?? routing[stem].gmProgram;
+  return program === undefined || program === null ? null : clampProgram(program);
+}
+
+/** The instrument label to write for `stem`: the song's own name for it
+ *  when authored, otherwise the profile's default. */
+function instrumentNameFor(song: BlueprintSong, stem: StemId, routing: StemRoutingMap): string | undefined {
+  const authored = song.instruments?.[stem]?.name?.trim();
+  return authored || routing[stem].instrumentName;
+}
+
 /** Converts a BlueprintSong to a Standard MIDI File as a Uint8Array.
  *
  *  Produces a Type-1 SMF with 6 tracks:
@@ -363,8 +395,15 @@ function keySignature(song: BlueprintSong): { sharps: number; major: boolean } {
  *  Each stem's notes are generated using the same `sectionSpans` + shared
  *  `@drum/library` chord-cycle logic the Ableton bridge uses, so the
  *  exported MIDI matches what "Send to Ableton" would produce.
+ *
+ *  `routing` decides which channel each stem lands on and what instrument
+ *  metadata the file carries. It defaults to the General MIDI profile —
+ *  drums on channel 10 — because a .mid is opened by *any* DAW. The live
+ *  template's channels (drums on channel 1) belong to live MIDI out, not
+ *  here: exporting them would make a GM-compatible DAW play the drum part
+ *  on a piano.
  */
-export function songToMidi(song: BlueprintSong): Uint8Array {
+export function songToMidi(song: BlueprintSong, routing: StemRoutingMap = GM_ROUTING.stems): Uint8Array {
   const spans = sectionSpans(song);
 
   // Generate stems
@@ -399,7 +438,7 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
     data: [0xff, 0x59, 0x02, sharpsByte & 0xff, major ? 0 : 1],
   });
 
-  const conductorTrack = buildTrackChunk(conductorEvents, song.title);
+  const conductorTrack = buildTrackChunk(conductorEvents, { name: song.title });
 
   // --- Stem tracks ---
   // Per-song output alignment (`outputOffsetBeats`, see song-blueprint):
@@ -409,32 +448,31 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
   // live MIDI out intentionally do NOT apply this — the app's own grid is
   // what they play against.
   const outputOffsetTicks = Math.round((song.outputOffsetBeats ?? 0) * TICKS_PER_QUARTER);
-  const stemEvents = (notes: MidiNote[], channel: number): RawMidiEvent[] => {
-    const events = notesToEvents(notes, channel);
-    return outputOffsetTicks === 0
-      ? events
-      : events.map((e) => ({ ...e, tick: Math.max(0, e.tick + outputOffsetTicks) }));
+  /** Note events for one stem, on the channel its routing names, with the
+   *  song's render offset applied and (when the stem has a GM program) a
+   *  program change ahead of them at tick 0. */
+  const stemEvents = (notes: MidiNote[], stem: StemId): RawMidiEvent[] => {
+    const channel = clampChannel(routing[stem].channel) - 1;
+    const noteEvents = notesToEvents(notes, channel);
+    const shifted =
+      outputOffsetTicks === 0
+        ? noteEvents
+        : noteEvents.map((e) => ({ ...e, tick: Math.max(0, e.tick + outputOffsetTicks) }));
+    const program = programFor(song, stem, routing);
+    // Inserted first so it precedes any note on the same tick:
+    // buildTrackChunk's sort is stable, so equal ticks keep this order.
+    return program === null ? shifted : [{ tick: 0, data: [0xc0 | channel, program - 1] }, ...shifted];
   };
-  const chordTrack = buildTrackChunk(
-    stemEvents(chordNotes, 0),
-    "Chords",
-  );
-  const bassTrack = buildTrackChunk(
-    stemEvents(bassNotes, 1),
-    "Bass",
-  );
-  const drumTrack = buildTrackChunk(
-    stemEvents(drumNotes, 9), // channel 10 = GM drums
-    "Drums",
-  );
-  const colorTrack = buildTrackChunk(
-    stemEvents(colorNotes, 2),
-    "Color",
-  );
-  const melodyTrack = buildTrackChunk(
-    stemEvents(melodyNotes, 4), // channel 5 (0-based 4) — the template's melody track
-    "Melody",
-  );
+  const track = (notes: MidiNote[], stem: StemId): number[] =>
+    buildTrackChunk(stemEvents(notes, stem), {
+      name: STEM_LABELS[stem],
+      instrument: instrumentNameFor(song, stem, routing),
+    });
+  const chordTrack = track(chordNotes, "chords");
+  const bassTrack = track(bassNotes, "bass");
+  const drumTrack = track(drumNotes, "drums");
+  const colorTrack = track(colorNotes, "color");
+  const melodyTrack = track(melodyNotes, "melody");
 
   // --- Assemble SMF ---
   const numTracks = 6;
@@ -459,8 +497,8 @@ export function songToMidi(song: BlueprintSong): Uint8Array {
 }
 
 /** Triggers a browser download of a song as a .mid file. */
-export function downloadSongMidi(song: BlueprintSong): void {
-  const bytes = songToMidi(song);
+export function downloadSongMidi(song: BlueprintSong, routing: StemRoutingMap = GM_ROUTING.stems): void {
+  const bytes = songToMidi(song, routing);
   const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "audio/midi" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

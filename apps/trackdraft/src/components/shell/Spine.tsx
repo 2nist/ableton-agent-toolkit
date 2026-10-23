@@ -12,6 +12,7 @@ import ThemeToggle from "../common/ThemeToggle";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
 import { useSongStore } from "../../store/songStore";
+import { useDawTargetStore } from "../../store/dawTargetStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { useInspectorStore } from "../../store/inspectorStore";
@@ -73,7 +74,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
-  const clockSource = useSongStore((s) => s.clockSource);
+  const target = useDawTargetStore((s) => s.target);
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
   const id = songId ?? song.id;
@@ -431,7 +432,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   async function togglePlay() {
     if (tick?.isPlaying) return;
     setRegion(null); // a plain play is not the region loop
-    await playSong(song, clockSource);
+    await playSong(song, target);
   }
   function pausePlayback() {
     pauseSong();
@@ -486,7 +487,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     // length — equal to the declared meter unless a meter map makes the bars
     // different lengths.
     const beat = span.startBeat + (bar - span.startBar) * beatsPerBarOf(span);
-    void seekTo(song, clockSource, beat);
+    void seekTo(song, target, beat);
   }
 
   /** Draw-loop the bars a..b (inclusive): bar b ends where bar b+1 begins. */
@@ -505,7 +506,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
    *  (shown live as a draft); release without moving = seek. Window-level
    *  listeners so the gesture survives re-renders (the Knob lesson). */
   function onRulerMouseDown(e: ReactMouseEvent<HTMLDivElement>) {
-    if (e.button !== 0 || clockSource === "ableton") return;
+    if (e.button !== 0 || target === "live") return;
     const startX = e.clientX;
     const startBar = barFromClientX(startX);
     rulerDrag.current = { startBar, startX, moved: false };
@@ -647,7 +648,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
         <IconBtn title="Stop — reset to the top" disabled={tick?.isPlaying !== true && !isPaused} onClick={stopPlayback} icon="stop" />
         <IconBtn
           title={loopOn ? "Looping this section — click to stop" : "Loop a section — the one playing, or the one selected on the spine"}
-          disabled={clockSource === "ableton"}
+          disabled={target === "live"}
           active={loopOn}
           onClick={() => void toggleLoop()}
           icon="loop"

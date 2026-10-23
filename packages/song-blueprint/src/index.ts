@@ -872,6 +872,29 @@ export interface Provenance {
   warnings?: string[];
 }
 
+/** The five stems TrackDraft renders. Mirrors
+ *  `apps/trackdraft/src/lib/stems.ts` (which narrows this to `StemId`) —
+ *  it lives here because the blueprint is the shared schema both sides
+ *  read, and the instrument map below is part of that schema. */
+export type StemName = "drums" | "bass" | "chords" | "color" | "melody";
+
+/** Per-song instrument choice for one stem — what the user wants loaded on
+ *  the DAW track that receives it. Rendered output uses it two ways: `name`
+ *  becomes an instrument-name meta event and `gmProgram` a program change,
+ *  so a General MIDI-compatible DAW assigns the sound on import. Nothing
+ *  here can force a non-GM instrument into a DAW; it's the author's intent,
+ *  carried with the data. Absent → the receiving track is left alone. */
+export interface StemInstrument {
+  name?: string;
+  /** General MIDI program number, 1-128 (0-127 on the wire). Ignored for
+   *  drums: GM channel 10 is percussion by definition. */
+  gmProgram?: number;
+}
+
+/** Per-song instrument intent, keyed by stem. Sparse — a song normally
+ *  authors only the stems whose default sound it wants to change. */
+export type SongInstruments = Partial<Record<StemName, StemInstrument>>;
+
 /** The top-level authoring unit. Extends what TrackDraft's documented
  *  Song shape carried (title/key/tempo/sections/progression) with the
  *  concept-album blueprint fields lalo-chezia's source docs have but
@@ -906,6 +929,11 @@ export interface BlueprintSong {
    *  (`songToMidi` / "Send to Ableton") shift every note by this much so
    *  the output locks with the record. Absent/0 → no shift. */
   outputOffsetBeats?: number;
+
+  /** What to load on each stem's DAW track (see `StemInstrument`). Carried
+   *  into rendered output as instrument-name + program-change metadata;
+   *  never affects the notes themselves. */
+  instruments?: SongInstruments;
 
   concept?: string;
   /** The song's genre label (e.g. "rock", "bossa", "trap") — the key into

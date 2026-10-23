@@ -4,21 +4,14 @@ import { createDebouncedWriter, readStorage, readRawStorage, writeRawStorage } f
 
 const STORAGE_KEY = "trackdraft-songs";
 const CURRENT_ID_KEY = "trackdraft-current-song-id";
-const CLOCK_SOURCE_KEY = "trackdraft-clock-source";
 const MAX_HISTORY = 50;
 const AUTOSAVE_DEBOUNCE_MS = 1500;
-
-export type ClockSource = "internal" | "ableton";
 
 interface SongStoreState {
   songs: BlueprintSong[];
   currentSongId: string | null;
   history: BlueprintSong[];
   historyIndex: number;
-
-  /** Persisted clock source — survives page refresh. Default "internal". */
-  clockSource: ClockSource;
-  setClockSource: (mode: ClockSource) => void;
 
   currentSong: () => BlueprintSong | null;
 
@@ -51,13 +44,6 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
   currentSongId: null,
   history: [],
   historyIndex: -1,
-  clockSource: "internal",
-
-  setClockSource: (mode) => {
-    set({ clockSource: mode });
-    writeRawStorage(CLOCK_SOURCE_KEY, mode);
-  },
-
   currentSong: () => {
     const { songs, currentSongId } = get();
     return songs.find((s) => s.id === currentSongId) ?? null;
@@ -161,13 +147,11 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
     const storedCurrentId = readRawStorage(CURRENT_ID_KEY);
     const currentSongId = songs.some((s) => s.id === storedCurrentId) ? storedCurrentId : null;
     const current = songs.find((s) => s.id === currentSongId);
-    const clockSource: ClockSource = readRawStorage(CLOCK_SOURCE_KEY) === "ableton" ? "ableton" : "internal";
     set({
       songs,
       currentSongId,
       history: current ? [current] : [],
       historyIndex: current ? 0 : -1,
-      clockSource,
     });
   },
 }));
