@@ -99,6 +99,13 @@ export interface ApplySongMapOptions {
    *  genre itself is applied either way, and without this flag the song's
    *  existing `bend` stays untouched (neutral stays neutral). */
   seedStyleRecipe?: boolean;
+  /** Copy the template's narrative arcs — the song-level master and each
+   *  slot's own profile — onto the result. Off by default, for the same
+   *  reason as `seedStyleRecipe`: applying a template sets the STRUCTURE,
+   *  and the abstract arc is an opinion about the feel. Without the flag
+   *  the song's own `narrative` survives and every fresh section starts
+   *  with no arc (neutral, i.e. a byte-identical render). */
+  seedNarrative?: boolean;
 }
 
 /** Replaces the song's sections wholesale with a MAP template's slots.
@@ -200,9 +207,10 @@ export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplyS
       harmonyMeterOutline,
       harmonyFollowsDrums: harmonyRhythm === "follow drums" ? true : harmonyRhythm === "beats" ? false : undefined,
       syncopationOffset: slot.syncopationOffset,
-      // UPGRADE: carry the abstract narrative arc onto the section so the
-      // translation middleware can tint the subgenre's concrete vocabulary.
-      narrative: slot.narrative ?? section.narrative,
+      // The abstract narrative arc, only when the apply asked for it. The
+      // translation middleware turns it into deltas over the subgenre's
+      // concrete vocabulary (packages/drum-library/src/narrative.ts).
+      narrative: options?.seedNarrative ? (slot.narrative ?? section.narrative) : section.narrative,
     };
   });
   // Every slot mints a fresh section id (see the comment above), so
@@ -217,7 +225,7 @@ export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplyS
     concept: defaults.concept ?? song.concept,
     genre: defaults.genre ?? song.genre,
     bend,
-    narrative: map.defaults?.narrative ?? song.narrative,
+    narrative: options?.seedNarrative ? (defaults.narrative ?? song.narrative) : song.narrative,
     sections,
   });
 }

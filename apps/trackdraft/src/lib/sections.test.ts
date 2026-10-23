@@ -321,4 +321,43 @@ describe("applySongMap — engine genre (Groove DNA) + Bend seeding", () => {
     const bent = { ...makeSong([]), bend: { energy: 0.9 } };
     expect(applySongMap(bent, map).bend).toEqual({ energy: 0.9 });
   });
+
+});
+
+describe("applySongMap — narrative seeding", () => {
+  const arc = { tension_profile: 0.9, rhythmic_energy: 0.2, transition_delta: 0.5, structural_warp: 0.7 };
+  const map: SongMap = {
+    id: "arc",
+    name: "Arc",
+    description: "",
+    defaults: { narrative: arc },
+    slots: [
+      { role: "verse", label: "V1", purpose: "", narrative: arc },
+      { role: "chorus", label: "C", purpose: "" },
+    ],
+  };
+
+  it("leaves structure-applied narrative alone without the flag", () => {
+    // A template is a structure first: the arc is an opinion, so the song's
+    // own master survives and fresh sections start with no arc at all.
+    const mine = { tension_profile: 0.1, rhythmic_energy: 0.1, transition_delta: 0, structural_warp: 0 };
+    const song = applySongMap({ ...makeSong([]), narrative: mine }, map);
+    expect(song.narrative).toEqual(mine);
+    expect(song.sections.every((s) => s.narrative === undefined)).toBe(true);
+  });
+
+  it("copies the master and each slot's arc when asked", () => {
+    const song = applySongMap(makeSong([]), map, { seedNarrative: true });
+    expect(song.narrative).toEqual(arc);
+    expect(song.sections[0].narrative).toEqual(arc);
+    expect(song.sections[1].narrative).toBeUndefined();
+  });
+
+  it("falls back to the song's own master when the map has none", () => {
+    const mine = { tension_profile: 0.1, rhythmic_energy: 0.1, transition_delta: 0, structural_warp: 0 };
+    const noMaster: SongMap = { ...map, defaults: undefined };
+    const song = applySongMap({ ...makeSong([]), narrative: mine }, noMaster, { seedNarrative: true });
+    expect(song.narrative).toEqual(mine);
+    expect(song.sections[0].narrative).toEqual(arc); // the slot still carries its own
+  });
 });

@@ -3,6 +3,7 @@ import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { removeSection, repeatsFor, updateRepeats, updateSection } from "../../lib/sections";
 import { DRUM_PATTERN_OPTIONS, variantCount } from "../../lib/playback/drumPreview";
 import DrumNecklacePreview from "../structure/DrumNecklacePreview";
+import NarrativeArcEditor from "../structure/NarrativeArcEditor";
 import FitStatus from "../harmony/FitStatus";
 import { askConfirm } from "../../lib/confirm";
 import type { BlueprintSection, DrumPattern, SectionRole, VelocityPreset } from "../../types/blueprint";
@@ -66,8 +67,11 @@ export default function SectionStructurePanel() {
     <div className="space-y-2">
       {/* Identity: name · role · delete */}
       <div className="flex items-center gap-1.5">
+        {/* `size` is only read in the paper theme, where the tape is torn to
+            the name's length; in the dark theme the field stays `flex-1`. */}
         <input
-          className="flex-1 min-w-0 bg-panelAlt border border-edge rounded px-1.5 py-1 text-xs text-ink font-medium"
+          className="tape-input flex-1 min-w-0 bg-panelAlt border border-edge rounded px-1.5 py-1 text-xs text-ink font-medium"
+          size={Math.max(4, section.name.length + 1)}
           value={section.name}
           onChange={(e) => onChange((s) => ({ ...s, name: e.target.value }))}
           title="Section name"
@@ -226,6 +230,14 @@ export default function SectionStructurePanel() {
           ))}
         </select>
       </label>
+
+      {/* The narrative arc — the same editor the Structure page's card uses
+          (one implementation), one fader per row because this rail is narrow */}
+      <NarrativeArcEditor
+        compact
+        narrative={section.narrative}
+        onChange={(narrative) => onChange((s) => ({ ...s, narrative }))}
+      />
 
       {/* Harmony customization readout — edited in the element, noted here */}
       {(section.harmonyMeterOutline || section.harmonyFollowsDrums || section.syncopationOffset) && (

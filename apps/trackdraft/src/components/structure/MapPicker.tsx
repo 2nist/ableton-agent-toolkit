@@ -21,6 +21,7 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
   const [variantName, setVariantName] = useState<string>(PRIMARY_FORM);
   const [excludeOptional, setExcludeOptional] = useState(false);
   const [seedStyleRecipe, setSeedStyleRecipe] = useState(false);
+  const [seedNarrative, setSeedNarrative] = useState(false);
 
   // Keep selected in sync with the current source
   const map = maps.find((m) => m.id === selected) ?? maps[0];
@@ -35,10 +36,12 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
     setVariantName(PRIMARY_FORM);
     setExcludeOptional(false);
     setSeedStyleRecipe(false);
+    setSeedNarrative(false);
   }, [effectiveId]);
 
   const activeSlots = variantName ? (map?.variants?.find((v) => v.name === variantName)?.slots ?? map?.slots) : map?.slots;
   const hasOptionalSlots = (activeSlots ?? []).some((slot) => slot.optional);
+  const narrativeSlotCount = (activeSlots ?? []).filter((slot) => slot.narrative).length;
 
   function switchSource(newSource: MapSource) {
     setSource(newSource);
@@ -123,6 +126,7 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
               variantName: variantName || undefined,
               excludeOptional,
               seedStyleRecipe,
+              seedNarrative,
             });
           }}
         >
@@ -145,6 +149,24 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
           />
           Seed Bend sliders from the &quot;{map.defaults.genre}&quot; style recipe
           <span className="text-inkMuted/50">· Groove DNA: {map.defaults.genre}</span>
+        </label>
+      )}
+      {/* The narrative arc is opt-in for the same reason the Bend sliders
+         are: a template sets the STRUCTURE, and the abstract arc is an
+         opinion about how the song should feel. Maps that carry one (the
+         three archetypes) show this; the count is per slot, so the label
+         can't promise more than the template delivers. */}
+      {narrativeSlotCount > 0 && (
+        <label className="flex items-center gap-1.5 text-xs text-inkMuted">
+          <input
+            type="checkbox"
+            checked={seedNarrative}
+            onChange={(e) => setSeedNarrative(e.target.checked)}
+          />
+          Seed this template&apos;s narrative arc
+          <span className="text-inkMuted/50">
+            · {narrativeSlotCount} section{narrativeSlotCount === 1 ? "" : "s"} carry tension/energy
+          </span>
         </label>
       )}
       {/* Variants are alternate full structures a genre map can offer

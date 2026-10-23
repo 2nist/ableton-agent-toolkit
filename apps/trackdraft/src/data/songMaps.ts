@@ -194,6 +194,156 @@ export const SONG_MAPS: SongMap[] = [
   // harmonyRhythm), and keeping both made the Templates tab show
   // near-identical duplicates. Genre maps live in data/genre-catalog;
   // SONG_MAPS is narrative/mood only.
+  /* The three narrative archetypes. Unlike the forms above, the point of
+     these is the ARC: every slot carries a `narrative` profile, so applying
+     one (with `seedNarrative`) tints the subgenre's concrete vocabulary from
+     section to section instead of only arranging it. The profiles are
+     authored, not inferred — the layer deliberately has no fallback that
+     guesses an arc from a section's role. */
+  {
+    id: "inverted-matrix",
+    name: "Inverted Matrix",
+    description:
+      "The peak arrives first and the song spends itself getting quiet — a hook that opens cold, then decays through the rest of the form.",
+    slots: [
+      {
+        role: "chorus",
+        label: "Peak — Chorus",
+        purpose: "Hit at full height with nothing earned yet. This is the loudest the song gets.",
+        bars: 8,
+        velocity: "ff",
+        narrative: { tension_profile: 0.95, rhythmic_energy: 0.95, transition_delta: -0.25, structural_warp: 0.6 },
+      },
+      {
+        role: "verse",
+        label: "Aftermath — Verse 1",
+        purpose: "The drop after the peak. Same harmony, most of the weight removed.",
+        bars: 8,
+        velocity: "mp",
+        narrative: { tension_profile: 0.6, rhythmic_energy: 0.5, transition_delta: -0.1, structural_warp: 0.3 },
+      },
+      {
+        role: "chorus",
+        label: "Echo — Chorus",
+        purpose: "The hook again, remembered rather than shouted.",
+        bars: 8,
+        velocity: "mf",
+        narrative: { tension_profile: 0.5, rhythmic_energy: 0.55, transition_delta: 0, structural_warp: 0.2 },
+      },
+      {
+        role: "verse",
+        label: "Drift — Verse 2",
+        purpose: "Texture without arrival; the song is now about the room, not the hook.",
+        bars: 8,
+        velocity: "p",
+        narrative: { tension_profile: 0.3, rhythmic_energy: 0.3, transition_delta: -0.2, structural_warp: 0 },
+      },
+      {
+        role: "outro",
+        label: "Settle — Outro",
+        purpose: "Land the idea and leave the machinery audible.",
+        bars: 8,
+        velocity: "pp",
+        narrative: { tension_profile: 0.15, rhythmic_energy: 0.15, transition_delta: 0, structural_warp: 0 },
+      },
+    ],
+  },
+  {
+    id: "vignette",
+    name: "Vignette",
+    description:
+      "Self-contained scenes at one intensity — no build, no release. Each section changes colour without changing height.",
+    slots: [
+      {
+        role: "verse",
+        label: "Scene I",
+        purpose: "One image, held. Do not build toward anything.",
+        bars: 8,
+        velocity: "mp",
+        narrative: { tension_profile: 0.45, rhythmic_energy: 0.5, transition_delta: 0, structural_warp: 0 },
+      },
+      {
+        role: "verse",
+        label: "Scene II",
+        purpose: "A neighbouring image at the same height; the change is colour, not dynamic.",
+        bars: 8,
+        velocity: "mp",
+        narrative: { tension_profile: 0.55, rhythmic_energy: 0.5, transition_delta: 0, structural_warp: 0 },
+      },
+      {
+        role: "chorus",
+        label: "Scene III — Together",
+        purpose: "The one moment the arrangement widens, then settles back rather than peaking.",
+        bars: 8,
+        velocity: "mf",
+        narrative: { tension_profile: 0.55, rhythmic_energy: 0.55, transition_delta: 0.1, structural_warp: 0 },
+      },
+      {
+        role: "verse",
+        label: "Scene IV",
+        purpose: "Back to the room you started in, one detail changed.",
+        bars: 8,
+        velocity: "mp",
+        narrative: { tension_profile: 0.45, rhythmic_energy: 0.5, transition_delta: -0.1, structural_warp: 0 },
+      },
+      {
+        role: "outro",
+        label: "Scene V — Lens Out",
+        purpose: "Widen to landscape and stop; no resolution, just a cut.",
+        bars: 8,
+        velocity: "p",
+        narrative: { tension_profile: 0.4, rhythmic_energy: 0.4, transition_delta: 0, structural_warp: 0 },
+      },
+    ],
+  },
+  {
+    id: "cyclical-loop",
+    name: "Cyclical Loop",
+    description:
+      "One figure returning three times, each return more warped than the last — the harmony grid buckles as the loop tightens.",
+    slots: [
+      {
+        role: "intro",
+        label: "Loop A",
+        purpose: "State the figure plainly. This is the version that has to be recognisable on the way back.",
+        bars: 8,
+        velocity: "mp",
+        narrative: { tension_profile: 0.4, rhythmic_energy: 0.5, transition_delta: 0.1, structural_warp: 0 },
+      },
+      {
+        role: "verse",
+        label: "Loop B",
+        purpose: "A second figure that answers A without resolving it.",
+        bars: 8,
+        velocity: "mp",
+        narrative: { tension_profile: 0.45, rhythmic_energy: 0.55, transition_delta: 0.05, structural_warp: 0 },
+      },
+      {
+        role: "chorus",
+        label: "Loop A′",
+        purpose: "A returns, now bent — the same figure at a different angle.",
+        bars: 8,
+        velocity: "mf",
+        narrative: { tension_profile: 0.55, rhythmic_energy: 0.6, transition_delta: 0.15, structural_warp: 0.55 },
+      },
+      {
+        role: "verse",
+        label: "Loop B′",
+        purpose: "B returns warped too; the two figures start to sound like one.",
+        bars: 8,
+        velocity: "f",
+        narrative: { tension_profile: 0.6, rhythmic_energy: 0.65, transition_delta: 0.1, structural_warp: 0.7 },
+      },
+      {
+        role: "outro",
+        label: "Loop A″",
+        purpose: "The figure fully distorted, held until it stops.",
+        bars: 8,
+        velocity: "mf",
+        narrative: { tension_profile: 0.7, rhythmic_energy: 0.6, transition_delta: 0, structural_warp: 0.85 },
+      },
+    ],
+  },
   {
     id: "minimal-loop",
     name: "Minimal / Ambient",
