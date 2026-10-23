@@ -207,6 +207,18 @@ export interface ChordPerformanceEffect {
   params?: Record<string, number>;
 }
 
+/** A chord read against a tonic other than the section's key. */
+export interface ChordFunction {
+  /** How the chord reads inside its local key, e.g. "V65", "viio6", "N". */
+  numeral: string;
+  /** The local tonic, as a scale degree of the section's key (0-6). */
+  targetDegree: number;
+  /** Accidental on that target degree: -1 flat, 0 natural, +1 sharp. */
+  targetAccidental: number;
+  /** Absolute pitch class of the local tonic, for analysis. */
+  targetRootPc: number;
+}
+
 /** A chord in the Harmony view's progression builder. Distinct from
  *  song-structure's SectionChord (which is arrangement-DSL shaped) —
  *  this is the authoring-time representation with a resolved MIDI root. */
@@ -232,6 +244,12 @@ export interface Chord {
    *  it, and it is deliberately NOT `extendedSuffix`, which means "a
    *  quality suffix" and feeds hex placement and voicing. */
   annotation?: string;
+  /** Secondary function: this chord is a degree of a *local* tonic rather
+   *  than of the section's key — "V65 of V", "viio6 of ii". The chord's
+   *  `root`/`quality` stay absolute, so every planner keeps working; this
+   *  only records what the source actually said, which is the part a
+   *  Roman numeral alone cannot express. */
+  secondaryFunction?: ChordFunction;
   /** Optional per-step articulation effect (strum/pulse/legato). When
    *  absent the chord plays as a plain block chord — no change from
    *  current behaviour. */

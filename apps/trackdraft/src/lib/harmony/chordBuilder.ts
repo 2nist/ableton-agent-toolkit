@@ -40,6 +40,28 @@ export function getDiatonicOptions(scale: ScaleType): DiatonicOption[] {
   }));
 }
 
+const ROMAN_DEGREES = ["I", "II", "III", "IV", "V", "VI", "VII"];
+
+/**
+ * How a chord reads as a secondary function — `V6/V`, `vii°/ii` — or `null`
+ * when it is simply a degree of the section's key.
+ *
+ * A `romanNumeral` alone cannot say "this is V of V": the app stores the
+ * absolute root so every planner works, and this puts the functional reading
+ * back for display. The Roman is shown as the source wrote it (lowercase for
+ * minor, accidental kept), with the local tonic after the slash.
+ */
+export function chordFunctionLabel(chord: {
+  secondaryFunction?: { numeral: string; targetDegree: number; targetAccidental: number };
+}): string | null {
+  const fn = chord.secondaryFunction;
+  if (!fn) return null;
+  const base = ROMAN_DEGREES[fn.targetDegree];
+  if (!base) return null;
+  const target = `${fn.targetAccidental === -1 ? "♭" : fn.targetAccidental === 1 ? "♯" : ""}${base}`;
+  return `${fn.numeral}/${target}`;
+}
+
 export function chordDisplayName(root: number, quality: ChordQuality, key: NoteName): string {
   return chordName(root, quality, key);
 }

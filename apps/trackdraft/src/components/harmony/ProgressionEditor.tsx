@@ -27,7 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord, TonicRegion } from "../../types/blueprint";
-import { chordDisplayName, chordFunction, functionColorHex } from "../../lib/harmony/chordBuilder";
+import { chordDisplayName, chordFunction, chordFunctionLabel, functionColorHex } from "../../lib/harmony/chordBuilder";
 import { borrowedChordIds, chordHomes } from "../../lib/harmony/modeInference";
 import { bassName, cycleInversion, inversionCount, toggleSpread } from "../../lib/harmony/voicing";
 import {
@@ -479,10 +479,14 @@ export default function ProgressionEditor({
                     <div className="absolute inset-y-0 left-[5px] right-1 flex flex-col justify-center overflow-hidden">
                       {cellWidth >= 22 && (
                         <span
-                          className="truncate text-[9px] font-mono uppercase tracking-wide text-inkMuted/80"
+                          // No `uppercase`: case is meaningful here — "vi" is
+                          // minor and "VI" major, and the CSS transform was
+                          // silently turning every diminished chord into a
+                          // major-looking numeral on these cards.
+                          className="truncate text-[9px] font-mono tracking-wide text-inkMuted/80"
                           style={chord.isSubstitution ? { color: "#ffa500" } : undefined}
                         >
-                          {chord.romanNumeral}
+                          {chordFunctionLabel(chord) ?? chord.romanNumeral}
                         </span>
                       )}
                       {cellWidth >= 46 && (

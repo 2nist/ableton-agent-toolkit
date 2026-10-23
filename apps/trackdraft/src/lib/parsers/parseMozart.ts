@@ -26,7 +26,7 @@
 
 import { noteName, pitchClass, SCALE_INTERVALS } from "@music-theory/core";
 import type { ChordQuality, NoteName, ScaleType } from "@music-theory/core";
-import type { BlueprintSong, BlueprintSection, Chord } from "@music-theory/song-blueprint";
+import type { BlueprintSong, BlueprintSection, Chord, ChordFunction } from "@music-theory/song-blueprint";
 import { degreeRelativeTo } from "../harmony/tonic";
 
 /** The Roman numerals DCML uses, longest first so `III` wins over `II`. */
@@ -52,6 +52,9 @@ export interface ParsedMozartLabel {
   inversion: number;
   /** Local tonic the label was written against, when it differs. */
   localKeyPc: number | null;
+  /** The chord read against that local tonic — "V65 of V". Null when the
+   *  chord is simply a degree of the section's own key. */
+  secondaryFunction: ChordFunction | null;
   /** True for augmented sixths and Neapolitans — chromatic function chords. */
   chromatic: boolean;
 }
@@ -175,6 +178,10 @@ export function parseMozartLabel(
 
   let tonicPc = localKeyPc ?? sonataKeyPc;
   let tonicScale: ScaleType = localMode ?? sonataScale;
+  /** The innermost slash target (the local tonic in the section's key), which
+   *  is what a "V of …" reading names. */
+  let targetDegreeInKey: number | null = null;
+  let targetAccidentalInKey = 0;
   // Walk from the innermost target outward.
   for (let i = targets.length - 1; i >= 0; i--) {
     const parsed = parseRoman(targets[i].replace(/[o+%]/g, ""));
@@ -182,7 +189,13 @@ export function parseMozartLabel(
     const intervals = SCALE_INTERVALS[tonicScale] ?? SCALE_INTERVALS.ionian;
     tonicPc = (tonicPc + intervals[parsed.degree] + parsed.accidental + 12) % 12;
     tonicScale = "ionian";
+    if (i === targets.length - 1) {
+      targetDegreeInKey = parsed.degree;
+      targetAccidentalInKey = parsed.accidental;
+    }
   }
+  // An explicit key prefix is the local tonic even without a slash.
+  const tonicised = localKeyPc != null || targets.length > 0;
 
   // Figures = the digits/symbols after the Roman numeral. Parenthesised
   // qualifiers are decoration describing the chord's spacing, NOT figures —
@@ -195,18 +208,27 @@ export function parseMozartLabel(
   let accidental: number;
   let quality: ChordQuality;
   let chromatic = false;
+  /** The chord's degree and accidental within its *local* key, which is what
+   *  a "V of X" reading names — unlike `degree`, which is expressed against
+   *  the sonata's key. */
+  let localDegree = 0;
+  let localAccidental = 0;
 
   if (augmentedSixth) {
     // Built on the flattened sixth degree; the augmented quality carries the
     // raised fourth that names it.
     degree = 5;
     accidental = -1;
+    localDegree = 5;
+    localAccidental = -1;
     quality = "aug";
     chromatic = true;
   } else if (/nan/.test(core)) {
     // Neapolitan: a major triad on the flattened second.
     degree = 1;
     accidental = -1;
+    localDegree = 1;
+    localAccidental = -1;
     quality = "maj";
     chromatic = true;
   } else {
@@ -218,6 +240,8 @@ export function parseMozartLabel(
     if (!parsed) return null;
     degree = parsed.degree;
     accidental = parsed.accidental;
+    localDegree = parsed.degree;
+    localAccidental = parsed.accidental;
     quality = qualityFor(parsed.minor, diminished, augmented, halfDiminished, figuresOnly, majorSeventh);
     chromatic = accidental !== 0 || diminished || halfDiminished || augmented;
   }
@@ -241,6 +265,23 @@ export function parseMozartLabel(
     quality,
     inversion: inversionFor(figuresOnly),
     localKeyPc: localKeyPc != null && localKeyPc !== sonataKeyPc ? localKeyPc : null,
+    secondaryFunction:
+      tonicised && targetDegreeInKey != null
+        ? {
+            numeral: romanFor(localDegree, localAccidental, quality),
+            targetDegree: targetDegreeInKey,
+            targetAccidental: targetAccidentalInKey,
+            targetRootPc: tonicPc,
+          }
+        : tonicised && localKeyPc != null && localKeyPc !== sonataKeyPc
+          ? {
+              // A key prefix with no slash: the local tonic is that key.
+              numeral: romanFor(localDegree, localAccidental, quality),
+              targetDegree: degreeRelativeTo(localKeyPc, sonataKeyPc, sonataScale).deg,
+              targetAccidental: degreeRelativeTo(localKeyPc, sonataKeyPc, sonataScale).acc,
+              targetRootPc: localKeyPc,
+            }
+          : null,
     chromatic,
   };
 }
@@ -293,15 +334,17 @@ function romanFor(degree: number, accidental: number, quality: ChordQuality): st
   const prefix = accidental === -1 ? "♭" : accidental === 1 ? "♯" : "";
   const numeral = minor ? base.toLowerCase() : base;
   const suffix =
-    quality === "dim" || quality === "m7b5"
-      ? "°"
-      : quality === "maj7"
-        ? "maj7"
-        : quality === "min7"
-          ? "7"
-          : quality === "7"
+    quality === "m7b5"
+      ? "%"
+      : quality === "dim"
+        ? "°"
+        : quality === "maj7"
+          ? "maj7"
+          : quality === "min7"
             ? "7"
-            : "";
+            : quality === "7"
+              ? "7"
+              : "";
   return `${prefix}${numeral}${suffix}`;
 }
 
@@ -393,6 +436,7 @@ export function parseMozartJcrd(raw: unknown): BlueprintSong {
       // that field means "a quality suffix" and feeds hex placement, so a
       // label like "FV65/V" there produced honeycomb text such as "iviv".
       annotation: span.label,
+      secondaryFunction: parsed.secondaryFunction ?? undefined,
       isSubstitution: parsed.chromatic || undefined,
     });
     cursor = startBeat + beats;

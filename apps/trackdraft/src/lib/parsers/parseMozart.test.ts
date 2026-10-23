@@ -133,6 +133,31 @@ describe("parseMozartLabel — local keys and tonicisation", () => {
     expect(parsed.accidental).toBe(0);
   });
 
+  it("records the secondary function of a tonicised chord", () => {
+    // FV65/V in F: V65 of V — the local tonic is C, degree 4 of F.
+    const parsed = parseMozartLabel("FV65/V", 5, "ionian")!;
+    expect(parsed.secondaryFunction).toEqual({
+      numeral: "V7",
+      targetDegree: 4,
+      targetAccidental: 0,
+      targetRootPc: 0,
+    });
+    // viio7/V is a leading-tone reading of the same target.
+    expect(parseMozartLabel("Fviio7/V", 5, "ionian")!.secondaryFunction?.numeral).toBe("vii°");
+  });
+
+  it("reads the function in the local key, not the sonata key", () => {
+    // Cmin#viio7 in F: the chord is the leading tone of C minor, so it reads
+    // ♯vii° of V — not the ♯iv° that its F-relative root would suggest.
+    const parsed = parseMozartLabel("Cmin#viio7", 5, "ionian")!;
+    expect(parsed.secondaryFunction).toMatchObject({ numeral: "♯vii°", targetDegree: 4, targetRootPc: 0 });
+  });
+
+  it("leaves the function null for a plain degree of the section key", () => {
+    expect(parseMozartLabel("V7", 5, "ionian")!.secondaryFunction).toBeNull();
+    expect(parseMozartLabel("viio6", 5, "ionian")!.secondaryFunction).toBeNull();
+  });
+
   it("refuses a label it cannot read instead of inventing a chord", () => {
     expect(parseMozartLabel("", 0, "ionian")).toBeNull();
     expect(parseMozartLabel("xyz", 0, "ionian")).toBeNull();

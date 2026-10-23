@@ -2,7 +2,7 @@ import { pitchClass, noteName } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
 import { getSubstitutionMenu } from "../../lib/harmony/substitutions";
-import { chordDisplayName, CHORD_QUALITIES } from "../../lib/harmony/chordBuilder";
+import { chordDisplayName, chordFunctionLabel, CHORD_QUALITIES } from "../../lib/harmony/chordBuilder";
 
 // Chromatic subs (tritone/secondary-dominant) aren't diatonic, so there's no
 // scale degree to label them with — derive a key-relative roman numeral from
@@ -92,15 +92,21 @@ export default function ChordEditorPopover({
         </div>
       </div>
 
-      {/* The label this chord was imported with, when the source used its own
-          notation (the Mozart corpus writes DCML: "FV65/V"). Display only —
-          the app's harmony comes from the root, quality and voicing. */}
-      {chord.annotation && (
-        <p
-          className="shrink-0 text-3xs font-mono text-inkMuted/70"
-          title="The label this chord came in with, verbatim"
-        >
-          source label: <span className="text-inkMuted">{chord.annotation}</span>
+      {/* What the chord *functions* as, when it is a degree of a local tonic
+          rather than of the section's key — "V6 of V". The root, quality and
+          voicing remain absolute, so this is a reading, not a second model. */}
+      {(chordFunctionLabel(chord) || chord.annotation) && (
+        <p className="shrink-0 text-3xs font-mono text-inkMuted/70 space-x-2">
+          {chordFunctionLabel(chord) && (
+            <span title="A degree of a local tonic rather than of this section's key">
+              function <span className="text-accent/90">{chordFunctionLabel(chord)}</span>
+            </span>
+          )}
+          {chord.annotation && (
+            <span title="The label this chord came in with, verbatim">
+              source <span className="text-inkMuted">{chord.annotation}</span>
+            </span>
+          )}
         </p>
       )}
 

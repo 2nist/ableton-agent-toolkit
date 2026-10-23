@@ -194,10 +194,35 @@ rather than guessing:
   into "♭I", a degree that does not exist, so diminished chords a semitone
   under the tonic are written `vii` instead.
 
-Every chord keeps its original annotation in `extendedSuffix` (so a performer
-can see `FV65/V` even though the app stores the root and degree), and the
-chromatic ones are marked `isSubstitution`. All 553 distinct labels in the
-17-sonata corpus now parse; none are skipped.
+All 553 distinct labels in the 17-sonata corpus now parse; none are skipped.
+
+### What a Roman numeral cannot say
+
+`romanNumeral` names a degree of the *section's* key, so a tonicised chord
+loses its meaning: `FV65/V` collapses to "V" and the fact that it is V **of V**
+— the whole point of the label — disappears. `Chord.secondaryFunction` records
+it: the numeral the chord has inside its local key, the local tonic as a degree
+of the section's key, and that tonic's absolute pitch class. The chord's
+`root`/`quality`/`voicing` stay absolute, so every planner, export and the
+Ableton bridge are untouched; the field is a *reading*, not a second model.
+
+Two details that took checking:
+
+- The numeral must be read **in the local key**, not the sonata key. `Cmin#viio7`
+  in F is the leading tone of C minor — `♯vii°/V` — and reading it against F
+  would have produced `♯iv°`, which means nothing.
+- The DCML label itself goes in `Chord.annotation`, **not** `extendedSuffix`.
+  That field means "a quality suffix" and `chordsToHoneycombText` appends it to
+  the numeral before the hex wheel parses it, so a label there corrupted the
+  harmony outright: `iv` came out as `iviv`, `I` as `ii`.
+
+Surfaced in the UI: progression cards show `V7/VI`, `vii°/V`, `♯vii°/VI`
+(60 of them in Sonata no. 12, 19 % of its chords), and the chord editor shows
+`function V6/V` beside `source FV6/V`.
+
+One more fix while looking at it: the card numeral had `uppercase`, a CSS
+transform that destroys the case distinction — `vi` (minor) rendered as `VI`
+(major), and every diminished chord looked major.
 
 What the format does **not** give us, and the parser therefore refuses to
 invent: **barlines** (a chord's length comes from the next onset, because the
