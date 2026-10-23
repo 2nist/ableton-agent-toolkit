@@ -627,7 +627,7 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
           />
         ) : (
           <button
-            className="marker-label text-xs font-semibold text-ink truncate hover:text-accent"
+            className="hand-value text-xs font-semibold text-ink truncate hover:text-accent"
             title="Click to rename — this section also follows into the right rail's tools"
             onClick={() => props.onBeginNameEdit(section.id)}
           >

@@ -138,7 +138,7 @@ export default function StudioConsole({ song }: { song: BlueprintSong }) {
           style={{ background: role.bg, boxShadow: `0 0 0 1px ${role.text}55` }}
           title={role.label}
         />
-        <h3 className="marker-label text-xs font-medium text-ink truncate">{section.name}</h3>
+        <h3 className="hand-value text-xs font-medium text-ink truncate">{section.name}</h3>
         {activeSpan.variation && <span className="text-[9px] font-mono text-inkMuted/60">({activeSpan.variation})</span>}
         <span className="text-[10px] font-mono text-inkMuted/70 tabular-nums">{Math.round(activeSpan.bars)} bars</span>
         {isLive && (

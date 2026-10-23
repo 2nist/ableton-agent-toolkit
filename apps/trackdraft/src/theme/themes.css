@@ -405,40 +405,19 @@ body {
 [data-theme="logsheet"] .hand-value--up {
   font-size: 17px;
 }
+/* The pen in a slot that is only as tall as two rows — the spine's section
+   blocks are 34px and also carry a 9px readout, so the standard 17px pen
+   pushes that readout out of the block. Size only: the voice is unchanged. */
+[data-theme="logsheet"] .hand-value--tight {
+  font-size: 13px;
+}
 /* The pen on a dark instrument plate would lose its contrast — lift the ink. */
 [data-theme="logsheet"] .on-deep .hand-value {
   color: #9db6ef;
 }
 
-/* --------------------------------------------------------------------------
-   THE NAMING VOICE. Declared BELOW `.hand-value` on purpose: these two classes
-   are the same specificity, so source order is the only thing that decides —
-   a `.marker-label hand-value` call site once rendered in the pen because
-   `.hand-value` came later in this file.
-   -------------------------------------------------------------------------- */
-
-/* Marker WITHOUT tape — a name inside a surface that is already decorated
-   (a spine block, a card header bar, a drum lane in the ruler). Colour is
-   inherited on purpose: the spine's block colour is the section's role, and
-   the drum ruler's lane colour is the voice. */
-[data-theme="logsheet"] .marker-label {
-  font-family: "Permanent Marker", "Nothing You Could Do", cursive;
-  font-weight: 400;
-  letter-spacing: 0.015em;
-  line-height: 1.15;
-  color: inherit;
-  /* No font-size, for the same reason `.hand-value` has none: `themes.css`
-     loads after the Tailwind layer, so a size declared here would beat the
-     call site's `text-[10px]` / `text-xs` and resolve against the PARENT
-     instead. Every marker label keeps whatever size its site already used. */
-}
-
-/* A name in a slot that was sized for 10px mono (the spine's blocks, the
-   arrangement's section blocks): the marker has to go up a step to read, but
-   only in the paper theme, so the dark theme keeps the size it always had. */
-[data-theme="logsheet"] .marker-label--tight {
-  font-size: 12px;
-}
+/* Declared BELOW `.hand-value` on purpose: same specificity, so source order is
+   the only thing that decides which face a call site carrying both gets. */
 
 /* A section's name IS a header, so the field that holds it is tape too. The
    tape recipe goes on the input itself rather than a wrapper: the input is a

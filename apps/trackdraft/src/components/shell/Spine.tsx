@@ -1128,7 +1128,7 @@ function SpineBlock({
           <span key={d.label} className={`flex-1 ${d.present ? "bg-current opacity-60" : "bg-current opacity-15"}`} />
         ))}
       </span>
-      <span className="marker-label marker-label--tight w-full truncate px-1.5 text-[10px] leading-tight font-medium">
+      <span className="hand-value hand-value--tight w-full truncate px-1.5 text-[10px] leading-tight font-medium">
         {showName ? span.section.name : ""}
         {showName && span.variation ? <span className="opacity-60"> ({span.variation})</span> : null}
       </span>

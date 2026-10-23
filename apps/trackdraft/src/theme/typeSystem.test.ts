@@ -100,15 +100,13 @@ describe("type system — app and prototype agree", () => {
     expect(sizeOf(".tape-label--md")).toBe(base);
   });
 
-  it("declares the naming voice below the pen", () => {
-    // `[data-theme="logsheet"] .marker-label` and `.hand-value` are the same
-    // specificity; whichever comes last sets font-family on a call site that
-    // carries both. The naming rules must win.
+  it("declares the tape field below the pen", () => {
+    // `[data-theme="logsheet"] .tape-input` and `.hand-value` are the same
+    // specificity; whichever comes last sets the font on a call site that
+    // carries both. The section name field must come out as tape, not pen.
     const pen = APP_CSS.indexOf('[data-theme="logsheet"] .hand-value {');
-    const marker = APP_CSS.indexOf('[data-theme="logsheet"] .marker-label {');
     const tapeInput = APP_CSS.indexOf('[data-theme="logsheet"] .tape-input {');
     expect(pen).toBeGreaterThan(-1);
-    expect(marker).toBeGreaterThan(pen);
     expect(tapeInput).toBeGreaterThan(pen);
   });
 
