@@ -1,5 +1,6 @@
 import type { SectionRole, VelocityPreset } from "@music-theory/song-structure";
 import type { NoteName, ScaleType } from "@music-theory/core";
+import type { NarrativeProfile } from "@music-theory/song-blueprint";
 
 /** A single slot in a narrative structure template: which section role
  *  goes here, and what its dramatic purpose is (the "narrative prompter"
@@ -85,6 +86,11 @@ export interface MapSlot {
    *  this much (0.25 = a sixteenth). Mirrors the Harmony tab's Push
    *  control. */
   syncopationOffset?: number;
+  /** Relative narrative parameters — the abstract "lyrical arc" this slot
+   *  carries (see `NarrativeProfile`). Applied as the section's `narrative`
+   *  on template apply so the translation middleware can tint this subgenre
+   *  map's concrete vocabulary per-slot. */
+  narrative?: NarrativeProfile;
 }
 
 /** Song-level defaults a map may establish. `concept` is the primary drum
@@ -107,6 +113,10 @@ export interface SongMapDefaults {
    *  an engine family — most catalog genres have no family and keep
    *  their drum identity in `concept`/`groove` prose instead. */
   genre?: string;
+  /** Whole-song relative narrative master — the abstract "lyrical arc" the
+   *  template sets at the song level, tinting every section that doesn't
+   *  carry its own `narrative` override. */
+  narrative?: NarrativeProfile;
 }
 
 /** A fully alternate section structure for a map — same song identity

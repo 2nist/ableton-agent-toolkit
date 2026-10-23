@@ -344,6 +344,41 @@ export interface StyleProfile {
   tempo: number;
 }
 
+/**
+ * Relative narrative parameters — the abstract "lyrical arc" a section or a
+ * template slot carries, INDEPENDENT of any subgenre's concrete musical
+ * vocabulary. This is a second abstract layer that sits ABOVE the Bend axes
+ * (`StyleProfile`) and tints them at render time; it never names chords,
+ * notes, drum patterns, or kits.
+ *
+ * Follows the same decoupling rule as `StyleProfile`/`MeterOutline`/
+ * `TransitionModel`: this type is declared here in the schema package and
+ * `drum-library` keeps its own structurally-identical copy, so neither side
+ * imports the other. All values 0..1 where 0.5 = neutral, EXCEPT
+ * `transition_delta` which is signed (-1..+1, 0 = neutral) because it is a
+ * directional boundary signal. `structural_warp` is also neutral at 0 (it is
+ * an additive deformation, not a 0.5-centered tint). A section/song with no
+ * `narrative` resolves to all-neutral = the engine's current behavior,
+ * byte-for-byte (parity).
+ *
+ * - `tension_profile` → `StyleProfile.tension`/`harmony` (dissonance + color).
+ * - `rhythmic_energy` → `StyleProfile.energy`/`density`/`articulation` (drum
+ *   + chord velocity and density).
+ * - `transition_delta` → the section-boundary transition model (build vs drain).
+ * - `structural_warp` → an asymmetric (Euclidean 2s/3s) harmony grid / meter
+ *   deformation, instead of flat beatsPerChord.
+ */
+export interface NarrativeProfile {
+  /** 0 = resolved/calm … 1 = dissonant/suspenseful. */
+  tension_profile: number;
+  /** 0 = sparse/still … 1 = driving/busy. */
+  rhythmic_energy: number;
+  /** -1 = energy drains out of the boundary … +1 = builds into the next section. */
+  transition_delta: number;
+  /** 0 = no deformation … 1 = warped (asymmetric meter / Euclidean harmony). */
+  structural_warp: number;
+}
+
 /** A single captured melody note — one sung/hummed pitch, segmented from
  *  the microphone by the Melody tab's audio-to-MIDI pipeline. Timing is
  *  in song beats relative to the section start (the same timebase as
@@ -434,6 +469,12 @@ export interface BlueprintSection {
    *  master. Absent → the section follows the song master, which itself
    *  defaults to the engine's neutral behavior. */
   bend?: Partial<StyleProfile>;
+  /** Per-section relative narrative parameters — the abstract "lyrical arc"
+   *  this section carries (see `NarrativeProfile`). Read as an override on
+   *  top of the song master's `narrative` at render time, exactly like
+   *  `bend`. Absent → the section follows the song master, which itself
+   *  defaults to all-neutral (the engine's current behavior). */
+  narrative?: NarrativeProfile;
   /** Captured monophonic melody for this section — a sung/hummed line
    *  recorded from the microphone and segmented into notes by the Melody
    *  tab (audio-to-MIDI). Notes are beats-relative-to-section-start, so
@@ -603,7 +644,7 @@ export interface ArrangementRepeat {
   repeats: number;
   /** Display label for a specific pass, e.g. "Chorus (final)". */
   variation?: string;
-  overrides?: Partial<Pick<BlueprintSection, "bars" | "velocity" | "chords" | "lyrics" | "lyricsTimeline">>;
+  overrides?: Partial<Pick<BlueprintSection, "bars" | "velocity" | "chords" | "lyrics" | "lyricsTimeline" | "bend" | "narrative" | "drumTransitionModel" | "drumMeterOutline">>;
 }
 
 /**
@@ -879,6 +920,13 @@ export interface BlueprintSong {
    *  resolver merges with the defaults). Absent → the engine's current
    *  behavior. */
   bend?: Partial<StyleProfile>;
+  /** Whole-song relative narrative master — the abstract "lyrical arc" the
+   *  song as a whole carries, tinting every section that doesn't carry its
+   *  own `narrative` override (same precedence as `bend`). This is the
+   *  "abstract blueprint" half of the narrative layer; the concrete musical
+   *  vocabulary it tints comes from the active subgenre map / Bend recipe.
+   *  Absent → all-neutral (no narrative tint). */
+  narrative?: NarrativeProfile;
   /** Analysis-derived Bend ratings — what the SONG suggests on the same
    *  axes ("detected" ghosts in the Mix/Bend station). Non-destructive:
    *  nothing applies these automatically; the panel shows markers with an

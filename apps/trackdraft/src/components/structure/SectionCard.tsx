@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { BlueprintSection, SectionRole, VelocityPreset, DrumPattern } from "../../types/blueprint";
+import type { BlueprintSection, NarrativeProfile, SectionRole, VelocityPreset, DrumPattern } from "../../types/blueprint";
 import { DRUM_PATTERN_OPTIONS, variantCount } from "../../lib/playback/drumPreview";
 import DrumNecklacePreview from "./DrumNecklacePreview";
 
@@ -215,6 +215,96 @@ export default function SectionCard({ section, repeats, onChange, onChangeRepeat
             ))}
           </select>
         </label>
+        {section.narrative ? (
+          <>
+            <label className="flex flex-col gap-1 text-xs text-inkMuted pt-1 border-t border-edge/30">
+              Narrative arc (tints subgenre vocabulary)
+              <div className="flex gap-2">
+                <label className="flex flex-col gap-0.5 w-full">
+                  <span className="flex justify-between">
+                    <span>Tension</span>
+                    <span className="text-inkMuted/60">{Math.round(section.narrative.tension_profile * 100)}%</span>
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    className="w-full h-1 bg-panelAlt border border-edge rounded-lg appearance-none cursor-pointer accent-accent"
+                    value={Math.round(section.narrative.tension_profile * 100)}
+                    onChange={(e) => onChange((s) => ({ ...s, narrative: { ...s.narrative!, tension_profile: Number(e.target.value) / 100 } }))}
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5 w-full">
+                  <span className="flex justify-between">
+                    <span>Energy</span>
+                    <span className="text-inkMuted/60">{Math.round(section.narrative.rhythmic_energy * 100)}%</span>
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    className="w-full h-1 bg-panelAlt border border-edge rounded-lg appearance-none cursor-pointer accent-accent"
+                    value={Math.round(section.narrative.rhythmic_energy * 100)}
+                    onChange={(e) => onChange((s) => ({ ...s, narrative: { ...s.narrative!, rhythmic_energy: Number(e.target.value) / 100 } }))}
+                  />
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <label className="flex flex-col gap-0.5 w-full">
+                  <span className="flex justify-between">
+                    <span>Boundary</span>
+                    <span className="text-inkMuted/60">{section.narrative.transition_delta >= 0 ? "+" : ""}{section.narrative.transition_delta.toFixed(2)}</span>
+                  </span>
+                  <input
+                    type="range"
+                    min="-100"
+                    max="100"
+                    step="5"
+                    className="w-full h-1 bg-panelAlt border border-edge rounded-lg appearance-none cursor-pointer accent-accent"
+                    value={Math.round(section.narrative.transition_delta * 100)}
+                    onChange={(e) => onChange((s) => ({ ...s, narrative: { ...s.narrative!, transition_delta: Number(e.target.value) / 100 } }))}
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5 w-full">
+                  <span className="flex justify-between">
+                    <span>Warp</span>
+                    <span className="text-inkMuted/60">{Math.round(section.narrative.structural_warp * 100)}%</span>
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    className="w-full h-1 bg-panelAlt border border-edge rounded-lg appearance-none cursor-pointer accent-accent"
+                    value={Math.round(section.narrative.structural_warp * 100)}
+                    onChange={(e) => onChange((s) => ({ ...s, narrative: { ...s.narrative!, structural_warp: Number(e.target.value) / 100 } }))}
+                  />
+                </label>
+              </div>
+            </label>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="text-xs text-inkMuted hover:text-ink underline underline-offset-4 px-1"
+            title="Add a narrative arc to tint this section's subgenre vocabulary (tension, energy, boundary, warp)"
+            onClick={() =>
+              onChange((s) => ({
+                ...s,
+                narrative: {
+                  tension_profile: 0.5,
+                  rhythmic_energy: 0.5,
+                  transition_delta: 0,
+                  structural_warp: 0,
+                } as NarrativeProfile,
+              }))
+            }
+          >
+            + Narrative arc
+          </button>
+        )}
       </div>
 
       {section.drumPattern && (

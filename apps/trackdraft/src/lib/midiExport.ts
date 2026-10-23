@@ -19,7 +19,7 @@ import { chordToMidiNotes, getChordIntervals, pitchClass, planChordNotes, voiceC
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
 import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
-import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, applyStyleToVariant, resolveStyleProfile, styleArticulation, styleQualityFor, styleSpacing, styleVelocityTarget, type SectionDrumInput } from "@drum/library";
+import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, applyStyleToVariant, resolveEffectiveStyle, resolveNarrativeProfile, narrativeHarmonySection, narrativeTransitionModel, styleArticulation, styleQualityFor, styleSpacing, styleVelocityTarget, type SectionDrumInput } from "@drum/library";
 import { planColorStem } from "./colorStem";
 import { planMelodyStem } from "./melody/melodyStem";
 import { barLengths, beatsPerBar, meterForLength, type BlueprintSong, type BlueprintSection } from "../types/blueprint";
@@ -76,8 +76,13 @@ const GM_DRUM_PITCHES = new Set([36, 37, 38, 39, 41, 42, 44, 45, 46, 47, 49, 51,
 export function planChordStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
-    const profile = resolveStyleProfile(span.section, song);
-    const occurrences = resolveChordOccurrences(span.section, span.durationBeats, styleSpacing(profile.density));
+    const profile = resolveEffectiveStyle(span.section, song);
+    const narrative = resolveNarrativeProfile(span.section, song);
+    // structural_warp re-grids the harmony (authored outline wins), and chord
+    // velocity follows the energy axis — must match the bridge's chordClips.ts.
+    const harmonySection = narrativeHarmonySection(span.section, narrative);
+    const chordVelocity = styleVelocityTarget(CHORD_VELOCITY, profile);
+    const occurrences = resolveChordOccurrences(harmonySection, span.durationBeats, styleSpacing(profile.density));
     for (const occ of occurrences) {
       const rootPc = pitchClass(occ.chord.root);
       // Bend Harmony layer: Color (extensions) then Tension (dissonance
@@ -98,7 +103,7 @@ export function planChordStem(spans: SectionSpan[], song?: BlueprintSong): MidiN
         voiced.intervals,
         occ.startTime,
         occ.duration,
-        CHORD_VELOCITY,
+        chordVelocity,
         // Bend Articulation layer (an authored performance wins).
         occ.chord.performance ?? styleArticulation(profile.articulation ?? 0.5),
       ).map((n) => ({
@@ -121,8 +126,10 @@ export function planChordStem(spans: SectionSpan[], song?: BlueprintSong): MidiN
 export function planBassStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
-    const profile = resolveStyleProfile(span.section, song);
-    const occurrences = resolveChordOccurrences(span.section, span.durationBeats, styleSpacing(profile.density)).map((occ) => ({
+    const profile = resolveEffectiveStyle(span.section, song);
+    const narrative = resolveNarrativeProfile(span.section, song);
+    const harmonySection = narrativeHarmonySection(span.section, narrative);
+    const occurrences = resolveChordOccurrences(harmonySection, span.durationBeats, styleSpacing(profile.density)).map((occ) => ({
       rootPc: pitchClass(occ.chord.root),
       startTime: span.startBeat + occ.startTime,
       duration: occ.duration,
@@ -148,7 +155,8 @@ export function planBassStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
 export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const inputs: SectionDrumInput[] = spans.map((span) => {
     const section = span.section;
-    const profile = resolveStyleProfile(section, song);
+    const profile = resolveEffectiveStyle(section, song);
+    const narrative = resolveNarrativeProfile(section, song);
     let variant = resolveSectionVariant(section, song, span.occurrenceIndex);
     if (variant && section.drumMeterOutline) {
       variant = { ...variant, notes: humanizeOutlineNotes(variant.notes, section.drumMeterOutline.cellBeats) };
@@ -193,7 +201,7 @@ export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
       variation: section.drumVariationOutline ?? null,
       variationBars: section.drumVariationBars,
       variationStartBeat: section.drumVariationStartBeat,
-      transitionModel: section.drumTransitionModel ?? null,
+      transitionModel: section.drumTransitionModel ?? narrativeTransitionModel(narrative.transition_delta),
       transitionBars: section.drumTransitionBars,
       gridBeats: section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25,
       durationBeats: span.durationBeats,

@@ -200,6 +200,9 @@ export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplyS
       harmonyMeterOutline,
       harmonyFollowsDrums: harmonyRhythm === "follow drums" ? true : harmonyRhythm === "beats" ? false : undefined,
       syncopationOffset: slot.syncopationOffset,
+      // UPGRADE: carry the abstract narrative arc onto the section so the
+      // translation middleware can tint the subgenre's concrete vocabulary.
+      narrative: slot.narrative ?? section.narrative,
     };
   });
   // Every slot mints a fresh section id (see the comment above), so
@@ -214,6 +217,7 @@ export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplyS
     concept: defaults.concept ?? song.concept,
     genre: defaults.genre ?? song.genre,
     bend,
+    narrative: map.defaults?.narrative ?? song.narrative,
     sections,
   });
 }

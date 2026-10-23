@@ -14,6 +14,9 @@ import {
   pickVariantIndexFor,
   applyStyleToVariant,
   hasBend,
+  narrativeTransitionModel,
+  resolveEffectiveStyle,
+  resolveNarrativeProfile,
   resolveStyleProfile,
   styleSeed,
   styleVelocityTarget,
@@ -185,7 +188,7 @@ export function planDrumClips(
                 timeSignatureDenPower: Math.log2(meter.denominator),
               };
               const runVariant = resolveBaseVariant(probe, durationBeats, occurrenceIndex, song, songSignals, presetData);
-              const styled = runVariant ? applyStyleToVariant(runVariant, resolveStyleProfile(section, song)) : null;
+              const styled = runVariant ? applyStyleToVariant(runVariant, resolveEffectiveStyle(section, song)) : null;
               return styled ? [[String(length), styled] as const] : [];
             }),
           )
@@ -193,7 +196,8 @@ export function planDrumClips(
     // The Bend note transforms (Feel + Backbeat) apply after the outline
     // humanization baked into `resolved[i]` — the same relative point the
     // app applies them, so app == bridge. Neutral profile = no-op.
-    const profile = resolveStyleProfile(section, song);
+    const profile = resolveEffectiveStyle(section, song);
+    const narrative = resolveNarrativeProfile(section, song);
     const variant = resolved[i] ? applyStyleToVariant(resolved[i], profile) : null;
     return {
       sectionId: section.id,
@@ -208,7 +212,9 @@ export function planDrumClips(
       variation: section.drumVariationOutline ?? null,
       variationBars: section.drumVariationBars,
       variationStartBeat: section.drumVariationStartBeat,
-      transitionModel: section.drumTransitionModel ?? null,
+      // transition_delta → a named transition model when the author hasn't
+      // picked one explicitly (an authored drumTransitionModel always wins).
+      transitionModel: section.drumTransitionModel ?? narrativeTransitionModel(narrative.transition_delta),
       transitionBars: section.drumTransitionBars,
       gridBeats: section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25,
       durationBeats,
