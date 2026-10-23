@@ -180,7 +180,7 @@ export default function PresetPicker({
             </optgroup>
           ))}
         </select>
-        <button className="bg-accent text-black font-medium px-2 py-1 rounded" onClick={handleApplyBuiltin}>
+        <button className="bg-accent text-accentInk font-medium px-2 py-1 rounded" onClick={handleApplyBuiltin}>
           Apply preset
         </button>
       </div>
@@ -203,7 +203,7 @@ export default function PresetPicker({
                   autoFocus
                 />
                 <button
-                  className="bg-accent text-black text-[11px] font-medium px-2 py-0.5 rounded"
+                  className="bg-accent text-accentInk text-[11px] font-medium px-2 py-0.5 rounded"
                   onClick={handleSaveCurrent}
                   disabled={!saveName.trim()}
                 >
@@ -228,7 +228,7 @@ export default function PresetPicker({
                 >
                   {p.name}
                 </button>
-                <button className="text-inkMuted hover:text-red-400 px-0.5" title="Delete preset" onClick={() => handleDeletePreset(p.id)}>
+                <button className="text-inkMuted hover:text-danger px-0.5" title="Delete preset" onClick={() => handleDeletePreset(p.id)}>
                   ✕
                 </button>
               </div>

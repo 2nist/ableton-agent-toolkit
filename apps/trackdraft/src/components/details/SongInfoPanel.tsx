@@ -13,12 +13,12 @@ const SOURCE_LABEL: Record<Provenance["source"], string> = {
 function ProvenanceBanner({ provenance }: { provenance: Provenance }) {
   if (provenance.source === "manual") return null;
   return (
-    <div className="border border-amber-700/40 bg-amber-950/20 rounded p-2 space-y-1">
-      <p className="text-2xs font-medium text-amber-400">
+    <div className="border border-warn/40 bg-amber-950/20 rounded p-2 space-y-1">
+      <p className="text-2xs font-medium text-warn">
         {SOURCE_LABEL[provenance.source]} — draft, review before finalizing
       </p>
       {provenance.warnings && provenance.warnings.length > 0 && (
-        <ul className="text-3xs text-amber-200/80 list-disc list-inside space-y-0.5">
+        <ul className="text-3xs text-warn/80 list-disc list-inside space-y-0.5">
           {provenance.warnings.map((w, i) => (
             <li key={i}>{w}</li>
           ))}
@@ -80,7 +80,7 @@ function ListField({
             onChange={(e) => onChange(items.map((it, j) => (j === i ? e.target.value : it)))}
           />
           <button
-            className="text-2xs text-inkMuted hover:text-red-400 px-1"
+            className="text-2xs text-inkMuted hover:text-danger px-1"
             onClick={() => onChange(items.filter((_, j) => j !== i))}
           >
             ✕
@@ -119,7 +119,7 @@ function AlternatesEditor({
               }
             />
             <button
-              className="text-2xs text-inkMuted hover:text-red-400 px-1"
+              className="text-2xs text-inkMuted hover:text-danger px-1"
               onClick={() => onChange(alternates.filter((_, j) => j !== i))}
             >
               ✕

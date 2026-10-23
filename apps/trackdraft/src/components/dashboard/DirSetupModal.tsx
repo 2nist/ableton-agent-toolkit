@@ -79,7 +79,7 @@ export default function DirSetupModal({ open, onClose }: DirSetupModalProps) {
                       </button>
                     )}
                     <button
-                      className="text-xs text-inkMuted hover:text-red-400 shrink-0"
+                      className="text-xs text-inkMuted hover:text-danger shrink-0"
                       onClick={() => removeDirectory(dir.path)}
                       title="Remove"
                     >
@@ -114,9 +114,9 @@ export default function DirSetupModal({ open, onClose }: DirSetupModalProps) {
                 onKeyDown={(e) => e.key === "Enter" && handleAdd()}
               />
             </div>
-            {addError && <p className="text-[10px] text-red-400">{addError}</p>}
+            {addError && <p className="text-[10px] text-danger">{addError}</p>}
             <button
-              className="bg-accent text-black font-medium px-3 py-1 rounded text-xs"
+              className="bg-accent text-accentInk font-medium px-3 py-1 rounded text-xs"
               onClick={handleAdd}
             >
               Scan & Add

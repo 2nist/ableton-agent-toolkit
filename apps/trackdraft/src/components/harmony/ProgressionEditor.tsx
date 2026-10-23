@@ -509,7 +509,7 @@ export default function ProgressionEditor({
                     {selected && (
                       <button
                         type="button"
-                        className="absolute right-0.5 top-0.5 z-30 rounded bg-[#0E1116]/70 px-1 text-[10px] leading-none text-inkMuted hover:text-red-400"
+                        className="absolute right-0.5 top-0.5 z-30 rounded bg-[#0E1116]/70 px-1 text-[10px] leading-none text-inkMuted hover:text-danger"
                         aria-label="Remove chord"
                         title="Remove this chord"
                         onPointerDown={(event) => event.stopPropagation()}

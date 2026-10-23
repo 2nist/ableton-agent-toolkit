@@ -24,15 +24,15 @@ export default function StorageWarning() {
   return (
     <div
       role="alert"
-      className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 border border-red-500/60 bg-panel px-3 py-2 rounded shadow-lg text-xs"
+      className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 border border-danger/60 bg-panel px-3 py-2 rounded shadow-lg text-xs"
     >
       <span className="text-ink">
-        <span className="text-red-400 font-medium">Autosave failed.</span> Recent edits may not
+        <span className="text-danger font-medium">Autosave failed.</span> Recent edits may not
         survive a reload ({failure.message}).
       </span>
       <button
         type="button"
-        className="bg-accent text-black font-medium px-2 py-0.5 rounded whitespace-nowrap"
+        className="bg-accent text-accentInk font-medium px-2 py-0.5 rounded whitespace-nowrap"
         onClick={() => downloadLibraryBackup(useSongStore.getState().songs)}
       >
         Download backup

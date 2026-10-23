@@ -200,7 +200,7 @@ export default function ActionBar() {
           />
           <button
             type="submit"
-            className="bg-accent text-black font-medium px-3 py-1 rounded text-xs"
+            className="bg-accent text-accentInk font-medium px-3 py-1 rounded text-xs"
           >
             Create
           </button>
@@ -277,7 +277,7 @@ export default function ActionBar() {
       {/* Progress indicator */}
       {progressStep && (
         <div className="flex items-center gap-2 px-1">
-          <span className="text-[10px] text-emerald-400 font-mono">
+          <span className="text-[10px] text-ok font-mono">
             {progressStep.step === "start" && "⬇ Starting…"}
             {progressStep.step === "metadata" && "🔍 " + progressStep.message}
             {progressStep.step === "download" && "⬇ " + progressStep.message}
@@ -294,7 +294,7 @@ export default function ActionBar() {
           {analyzing ? "Analyzing audio with ChordMiniApp…" : "Analyze audio file (chords + key + BPM + structure)"}
         </span>
         <button
-          className="border border-purple-400/50 text-purple-300 rounded px-3 py-1 text-xs hover:bg-purple-400/10 disabled:opacity-40"
+          className="border border-accentAlt/50 text-accentAlt rounded px-3 py-1 text-xs hover:bg-accentAlt/10 disabled:opacity-40"
           onClick={() => audioInputRef.current?.click()}
           disabled={analyzing}
         >
@@ -313,7 +313,7 @@ export default function ActionBar() {
         />
       </div>
 
-      {importError && <p className="text-[10px] text-red-400">{importError}</p>}
+      {importError && <p className="text-[10px] text-danger">{importError}</p>}
     </div>
   );
 }

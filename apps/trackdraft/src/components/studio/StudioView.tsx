@@ -193,7 +193,7 @@ export default function StudioView() {
                 <AbletonStatus connected={abletonConnected} />
                 {abletonConnected && !abletonPlaying && (
                   <span
-                    className="text-[10px] font-mono text-amber-400"
+                    className="text-[10px] font-mono text-warn"
                     title="Live's transport is stopped, so there's no grid to lock the streamed chords/bass/drums to. Press play in Live — the parts start streaming from wherever Live is, on its beats."
                   >
                     ⏸ live stopped
@@ -241,7 +241,7 @@ export default function StudioView() {
           </button>
           {showMidiSetup && <MidiSetupPanel onClose={() => setShowMidiSetup(false)} />}
           <button
-            className="bg-accent text-black text-xs font-medium px-2.5 py-1 rounded disabled:opacity-40"
+            className="bg-accent text-accentInk text-xs font-medium px-2.5 py-1 rounded disabled:opacity-40"
             onClick={togglePlayback}
             disabled={song.sections.length === 0}
           >

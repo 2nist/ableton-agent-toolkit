@@ -10,15 +10,16 @@ import ActionBar from "./ActionBar";
 import FilterBar, { type Filters, defaultFilters } from "./FilterBar";
 import SongTable, { type SortKey, type SortDir } from "./SongTable";
 import TemplatePicker from "./TemplatePicker";
+import ThemeToggle from "../common/ThemeToggle";
 import DirSetupModal from "./DirSetupModal";
 
 const TYPE_BADGES: Record<string, { label: string; color: string }> = {
   blueprint: { label: "Blueprint", color: "bg-accent/20 text-accent" },
-  audio: { label: "Audio", color: "bg-amber-400/20 text-amber-400" },
-  midi: { label: "MIDI", color: "bg-emerald-400/20 text-emerald-400" },
-  lyrics: { label: "Lyrics", color: "bg-blue-400/20 text-blue-400" },
-  ableton: { label: "Ableton", color: "bg-purple-400/20 text-purple-400" },
-  musicxml: { label: "MusicXML", color: "bg-rose-400/20 text-rose-400" },
+  audio: { label: "Audio", color: "bg-warn/20 text-warn" },
+  midi: { label: "MIDI", color: "bg-ok/20 text-ok" },
+  lyrics: { label: "Lyrics", color: "bg-info/20 text-info" },
+  ableton: { label: "Ableton", color: "bg-accentAlt/20 text-accentAlt" },
+  musicxml: { label: "MusicXML", color: "bg-danger/20 text-danger" },
   directory: { label: "Folder", color: "bg-inkMuted/20 text-inkMuted" },
   unknown: { label: "File", color: "bg-inkMuted/10 text-inkMuted" },
 };
@@ -261,7 +262,7 @@ export default function Dashboard() {
             <div className="flex-1 overflow-y-auto">
               {dirError && (
                 <div className="p-4 text-center">
-                  <div className="text-sm text-red-400 mb-1">Failed to load directory</div>
+                  <div className="text-sm text-danger mb-1">Failed to load directory</div>
                   <div className="text-xs text-inkMuted">{dirError}</div>
                 </div>
               )}
@@ -350,15 +351,16 @@ export default function Dashboard() {
               <header className="flex items-center justify-between px-4 py-2 border-b border-edge">
                 <h1 className="text-sm font-semibold">TrackDraft</h1>
                 <div className="flex items-center gap-3 text-[10px] text-inkMuted">
+                  <ThemeToggle />
                   <span>{songs.length} songs</span>
                   <span className="flex items-center gap-1">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-ok" />
                     {confidenceStats.complete}
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-warn" />
                     {confidenceStats.strong}
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-400" />
                     {confidenceStats.partial}
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400" />
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-danger" />
                     {confidenceStats.draft}
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-500" />
                     {confidenceStats.empty}

@@ -303,8 +303,8 @@ export default function DesignLab() {
               active tabs, play/loop state, focus emphasis.
             </p>
             <div className="flex items-center gap-2">
-              <button className="bg-accent text-black text-xs font-medium px-2.5 py-1 rounded">▶ Play</button>
-              <span className="text-xs px-2 py-1 rounded bg-accent text-black">Active tab</span>
+              <button className="bg-accent text-accentInk text-xs font-medium px-2.5 py-1 rounded">▶ Play</button>
+              <span className="text-xs px-2 py-1 rounded bg-accent text-accentInk">Active tab</span>
               <span className="text-xs px-2 py-1 rounded border border-edge text-inkMuted">Inactive</span>
             </div>
           </TemplateCard>
@@ -452,16 +452,16 @@ export default function DesignLab() {
             <div>
               <p className="text-2xs text-inkMuted/70 mb-1.5">Today</p>
               <div className="flex items-center gap-2">
-                <button className="bg-accent text-black text-xs font-medium px-2.5 py-1 rounded">Apply</button>
-                <span className="text-xs px-2 py-1 rounded bg-accent text-black">ON</span>
+                <button className="bg-accent text-accentInk text-xs font-medium px-2.5 py-1 rounded">Apply</button>
+                <span className="text-xs px-2 py-1 rounded bg-accent text-accentInk">ON</span>
                 <span className="text-xs px-2 py-1 rounded bg-black text-inkMuted">OFF</span>
               </div>
             </div>
             <div>
               <p className="text-2xs text-inkMuted/70 mb-1.5">Tightened candidate</p>
               <div className="flex items-center gap-1.5">
-                <button className="bg-accent text-black text-[10px] font-medium px-1.5 py-0.5 rounded">Apply</button>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent text-black">ON</span>
+                <button className="bg-accent text-accentInk text-[10px] font-medium px-1.5 py-0.5 rounded">Apply</button>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent text-accentInk">ON</span>
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-black text-inkMuted">OFF</span>
               </div>
             </div>
@@ -479,19 +479,19 @@ export default function DesignLab() {
             {[
               {
                 label: "Primary — dense 2xs (canonical)",
-                cls: "bg-accent text-black text-[10px] font-medium px-2 py-0.5 rounded",
+                cls: "bg-accent text-accentInk text-[10px] font-medium px-2 py-0.5 rounded",
                 text: "Add Section",
                 src: "your D2 call",
               },
               {
                 label: "Primary — xs (folds into dense)",
-                cls: "bg-accent text-black text-xs font-medium px-2.5 py-1 rounded",
+                cls: "bg-accent text-accentInk text-xs font-medium px-2.5 py-1 rounded",
                 text: "Apply",
                 src: "still in the wild; migrating",
               },
               {
                 label: "Toggle pair — ON",
-                cls: "bg-accent text-black text-xs px-2 py-1 rounded",
+                cls: "bg-accent text-accentInk text-xs px-2 py-1 rounded",
                 text: "Per-section",
                 src: "accent = active",
               },
@@ -515,7 +515,7 @@ export default function DesignLab() {
               },
               {
                 label: "Danger (kept — red stays)",
-                cls: "bg-red-600 text-white text-[10px] font-medium px-2 py-0.5 rounded",
+                cls: "bg-danger text-white text-[10px] font-medium px-2 py-0.5 rounded",
                 text: "● Record",
                 src: "flag if this should change",
               },
@@ -662,7 +662,7 @@ export default function DesignLab() {
                     ? "border-accent/50 text-accent"
                     : d.status === "PROPOSED"
                       ? "border-edge text-inkMuted"
-                      : "border-emerald-400/50 text-emerald-400"
+                      : "border-ok/50 text-ok"
                 }`}
               >
                 {d.status}

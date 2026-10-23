@@ -645,7 +645,7 @@ export default function DrumsView({
       </div>
       )}
       {!embedded && importStatus && (
-        <div className={`font-mono text-2xs mb-1.5 ${importStatus.ok ? "text-[#E8B54A]" : "text-red-400"}`}>
+        <div className={`font-mono text-2xs mb-1.5 ${importStatus.ok ? "text-[#E8B54A]" : "text-danger"}`}>
           {importStatus.text}
         </div>
       )}

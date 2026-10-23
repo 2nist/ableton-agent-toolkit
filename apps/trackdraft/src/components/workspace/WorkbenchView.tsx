@@ -658,7 +658,7 @@ function SectionWorkspace({
             <div className="flex gap-1 border border-edge rounded p-0.5">
               <button
                 type="button"
-                className={`text-[10px] px-1.5 py-0.5 rounded ${melodyMode === "staff" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
+                className={`text-[10px] px-1.5 py-0.5 rounded ${melodyMode === "staff" ? "bg-accent text-accentInk" : "text-inkMuted hover:text-ink"}`}
                 onClick={() => setMelodyMode("staff")}
                 title="Read the line as notation"
               >
@@ -666,7 +666,7 @@ function SectionWorkspace({
               </button>
               <button
                 type="button"
-                className={`text-[10px] px-1.5 py-0.5 rounded ${melodyMode === "notes" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
+                className={`text-[10px] px-1.5 py-0.5 rounded ${melodyMode === "notes" ? "bg-accent text-accentInk" : "text-inkMuted hover:text-ink"}`}
                 onClick={() => setMelodyMode("notes")}
                 title={`Edit "${section.name}"'s notes right here — tap the grid to add, drag to move, drag an edge to resize`}
               >

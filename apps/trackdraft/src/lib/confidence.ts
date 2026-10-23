@@ -10,10 +10,10 @@ export interface ConfidenceResult {
 }
 
 const LEVELS: { level: ConfidenceLevel; min: number; label: string; color: string }[] = [
-  { level: "complete", min: 0.9, label: "Complete", color: "bg-emerald-400" },
-  { level: "strong", min: 0.6, label: "Strong", color: "bg-amber-400" },
+  { level: "complete", min: 0.9, label: "Complete", color: "bg-ok" },
+  { level: "strong", min: 0.6, label: "Strong", color: "bg-warn" },
   { level: "partial", min: 0.3, label: "Partial", color: "bg-orange-400" },
-  { level: "draft", min: 0.05, label: "Draft", color: "bg-red-400" },
+  { level: "draft", min: 0.05, label: "Draft", color: "bg-danger" },
   { level: "empty", min: 0, label: "Empty", color: "bg-neutral-500" },
 ];
 

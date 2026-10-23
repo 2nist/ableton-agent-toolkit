@@ -1,0 +1,109 @@
+/* ==========================================================================
+   RUNTIME THEMES
+   --------------------------------------------------------------------------
+   Every Tailwind colour token resolves to `rgb(var(--c-*) / <alpha-value>)`
+   (see tailwind.config.js), so a theme is a block of channel triples here —
+   nothing in a component knows which theme is on.
+
+   `:root` IS the dark theme: it holds the exact values that used to be
+   imported from @platform/ui-kit's ABLETON_DARK, so switching to any other
+   theme and back is a no-op. Do not "tidy" these into hex: Tailwind's
+   opacity modifiers need the space-separated channels.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  --c-canvas: 56 56 56; /* #383838 */
+  --c-panel: 78 78 78; /* #4E4E4E */
+  --c-panelAlt: 92 92 92; /* #5C5C5C */
+  --c-edge: 44 44 44; /* #2C2C2C */
+  --c-ink: 255 255 255; /* #FFFFFF */
+  --c-inkMuted: 176 176 176; /* #B0B0B0 */
+  --c-accent: 255 165 0; /* #FFA500 */
+  --c-accentHover: 255 183 51; /* #FFB733 */
+  --c-accentActive: 204 132 0; /* #CC8400 */
+  --c-accentInk: 0 0 0; /* text on top of accent */
+
+  /* Status. A theme can't express these as Tailwind's fixed ramps: the same
+     `red-400` that glows on Live's grey is illegible on paper. */
+  --c-ok: 52 211 153; /* #34D399 emerald-400 */
+  --c-warn: 251 191 36; /* #FBBF24 amber-400 */
+  --c-danger: 248 113 113; /* #F87171 red-400 */
+
+  /* Two more hues so the eight provenance badges stay distinguishable once
+     the fixed Tailwind ramps are gone. */
+  --c-info: 96 165 250; /* #60A5FA blue-400 */
+  --c-accentAlt: 192 132 252; /* #C084FC purple-400 */
+
+  --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --paper-grain: none;
+  --scroll-thumb: rgba(255, 255, 255, 0.14);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.28);
+}
+
+/* --------------------------------------------------------------------------
+   LOG SHEET — the studio-log theme.
+   Printed form (typewriter) · handwritten values (pencil) · masking tape ·
+   rubber stamps. Contrast is measured, not eyeballed: ink 14.2:1 and muted
+   6.8:1 on the card stock, and the six pencil voice hues all land 4.5–6:1
+   (the dark theme's chart hues are fixed in src/theme/palette.ts).
+   -------------------------------------------------------------------------- */
+[data-theme="logsheet"] {
+  color-scheme: light;
+
+  --c-canvas: 239 231 214; /* #EFE7D6 — the sheet */
+  --c-panel: 248 243 231; /* #F8F3E7 — card stock */
+  --c-panelAlt: 231 221 200; /* #E7DDC8 — recessed well */
+  --c-edge: 125 113 96; /* #7D7160 — pencil edge */
+  --c-ink: 38 34 27; /* #26221B */
+  --c-inkMuted: 92 83 70; /* #5C5346 */
+  --c-accent: 38 34 27; /* ink, not orange: the paper has no LEDs */
+  --c-accentHover: 74 66 56;
+  --c-accentActive: 20 18 14;
+  --c-accentInk: 248 243 231; /* card stock reads on ink */
+
+  /* Status, as pencil. Measured on the card stock: ok 7.0:1, warn 6.4:1,
+     danger 7.3:1 — the dark theme's glowing ramps drop to 1.5–2.9:1 here. */
+  --c-ok: 27 94 62; /* #1B5E3E */
+  --c-warn: 122 79 8; /* #7A4F08 */
+  --c-danger: 146 43 33; /* #922B21 ≈ the kick pencil */
+  --c-info: 26 74 122; /* #1A4A7A */
+  --c-accentAlt: 90 58 128; /* #5A3A80 */
+
+  /* The printed-form voice. Components that want a written value opt in with
+     `font-hand`; everything else inherits this. */
+  --ui-font: "Courier Prime", "Courier New", Courier, monospace;
+
+  /* Static grain: a background image drawn once, never a live filter — the
+     paper must not re-rasterise with the transport. */
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E");
+  --scroll-thumb: rgba(38, 34, 27, 0.22);
+  --scroll-thumb-hover: rgba(38, 34, 27, 0.38);
+}
+
+body {
+  font-family: var(--ui-font);
+  background-image: var(--paper-grain);
+  background-repeat: repeat;
+  background-blend-mode: multiply;
+}
+
+/* Scrollbars follow the theme — the dark theme's white-alpha thumbs are
+   invisible on paper. Same rules as index.css, re-pointed at the variables. */
+* {
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+}
+
+/* Typewriter numerals need tabular figures or every readout jitters as it
+   counts; Caveat has no tabular set, so numbers are always mono. */
+[data-theme="logsheet"] .tabular-nums,
+[data-theme="logsheet"] .font-mono {
+  letter-spacing: 0.01em;
+}

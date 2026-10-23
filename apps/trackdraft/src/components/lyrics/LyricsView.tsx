@@ -46,13 +46,13 @@ export default function LyricsView() {
         </div>
         <div className="flex gap-1 border border-edge rounded p-0.5">
           <button
-            className={`text-xs px-2 py-1 rounded ${mode === "per-section" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
+            className={`text-xs px-2 py-1 rounded ${mode === "per-section" ? "bg-accent text-accentInk" : "text-inkMuted hover:text-ink"}`}
             onClick={() => setMode("per-section")}
           >
             Per-section
           </button>
           <button
-            className={`text-xs px-2 py-1 rounded ${mode === "song-text" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
+            className={`text-xs px-2 py-1 rounded ${mode === "song-text" ? "bg-accent text-accentInk" : "text-inkMuted hover:text-ink"}`}
             onClick={() => setMode("song-text")}
             title="See the whole song's lyrics as one document and define or fix sections directly from the words"
           >

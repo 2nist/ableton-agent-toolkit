@@ -414,7 +414,7 @@ export default function MelodyNoteEditor({
             </span>
             <button
               type="button"
-              className="ml-1 border border-edge rounded px-1.5 py-0.5 text-[10px] text-inkMuted hover:text-red-400 hover:border-red-400/60"
+              className="ml-1 border border-edge rounded px-1.5 py-0.5 text-[10px] text-inkMuted hover:text-danger hover:border-danger/60"
               onClick={deleteSelected}
               title="Delete the selected note (or press Delete)"
             >

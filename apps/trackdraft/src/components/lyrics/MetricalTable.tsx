@@ -53,7 +53,7 @@ export default function MetricalTable({ rows, onChange }: MetricalTableProps) {
                 />
               ))}
               <button
-                className="ml-auto text-inkMuted hover:text-red-400 text-xs px-2"
+                className="ml-auto text-inkMuted hover:text-danger text-xs px-2"
                 onClick={() => removeRow(i)}
               >
                 ✕

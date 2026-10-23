@@ -54,7 +54,7 @@ export default function SectionMarker({
           placeholder="Section name"
         />
         <button
-          className="bg-accent text-black text-sm font-medium px-3 py-1 rounded"
+          className="bg-accent text-accentInk text-sm font-medium px-3 py-1 rounded"
           onClick={() => onMarkAsSection({ role, name })}
         >
           Mark as section

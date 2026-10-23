@@ -212,7 +212,7 @@ export default function GenreWorkbench() {
               {/* Generation controls */}
               <div className="flex items-center gap-2">
                 <button
-                  className="bg-accent text-black text-sm font-medium px-4 py-1.5 rounded disabled:opacity-50"
+                  className="bg-accent text-accentInk text-sm font-medium px-4 py-1.5 rounded disabled:opacity-50"
                   onClick={handleGenerate}
                   disabled={status === "generating"}
                 >
@@ -225,8 +225,8 @@ export default function GenreWorkbench() {
               </div>
 
               {error && (
-                <div className="border border-red-500/30 rounded bg-red-500/10 p-3">
-                  <p className="text-sm text-red-400">{error}</p>
+                <div className="border border-danger/30 rounded bg-danger/10 p-3">
+                  <p className="text-sm text-danger">{error}</p>
                 </div>
               )}
 
@@ -248,7 +248,7 @@ export default function GenreWorkbench() {
                       </button>
                       {generatedMap && (
                         <button
-                          className="text-xs bg-accent text-black rounded px-2 py-0.5 disabled:opacity-50"
+                          className="text-xs bg-accent text-accentInk rounded px-2 py-0.5 disabled:opacity-50"
                           onClick={handleCopyToCatalog}
                         >
                           {copied ? "Copied!" : "Copy to catalog"}
@@ -271,11 +271,11 @@ export default function GenreWorkbench() {
 
               {/* Validation errors */}
               {validationErrors.length > 0 && (
-                <div className="border border-red-500/30 rounded bg-red-500/10 p-3">
-                  <p className="text-sm font-medium text-red-400 mb-1">
+                <div className="border border-danger/30 rounded bg-danger/10 p-3">
+                  <p className="text-sm font-medium text-danger mb-1">
                     Validation errors:
                   </p>
-                  <ul className="list-disc list-inside text-xs text-red-400/80 space-y-0.5">
+                  <ul className="list-disc list-inside text-xs text-danger/80 space-y-0.5">
                     {validationErrors.map((err, i) => (
                       <li key={i}>{err}</li>
                     ))}

@@ -43,7 +43,7 @@ export default function AbletonStatus({ connected }: { connected: boolean }) {
   }, []);
 
   if (connected) {
-    return <span className="text-[10px] font-mono text-green-400">● connected</span>;
+    return <span className="text-[10px] font-mono text-ok">● connected</span>;
   }
 
   function retry() {
@@ -56,7 +56,7 @@ export default function AbletonStatus({ connected }: { connected: boolean }) {
     return (
       <span className="flex items-center gap-1">
         <span
-          className="text-[10px] font-mono text-amber-400"
+          className="text-[10px] font-mono text-warn"
           title="The osc-bridge isn't running. Start it with `npm run bridge` (start-all.sh does this automatically), and make sure Ableton Live is open."
         >
           ○ bridge not running

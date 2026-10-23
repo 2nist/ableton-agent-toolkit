@@ -82,7 +82,7 @@ function ImportZoneSidebar() {
             <div className="text-[9px] text-inkMuted">{t.label}</div>
             <div
               className={`text-[7px] px-1 rounded mt-0.5 inline-block ${
-                t.status === "soon" ? "bg-amber-400/20 text-amber-400" : "bg-neutral-500/20 text-neutral-500"
+                t.status === "soon" ? "bg-warn/20 text-warn" : "bg-neutral-500/20 text-neutral-500"
               }`}
             >
               {t.status === "soon" ? "Soon" : "Planned"}

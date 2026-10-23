@@ -48,7 +48,7 @@ export default function ExportMenu({ song }: { song: BlueprintSong }) {
   return (
     <div className="relative" ref={ref}>
       <button
-        className="bg-accent text-black text-xs font-medium px-2.5 py-1 rounded flex items-center gap-1"
+        className="bg-accent text-accentInk text-xs font-medium px-2.5 py-1 rounded flex items-center gap-1"
         aria-haspopup="menu"
         aria-expanded={open}
         title="Export this song — JSON blueprint, multi-track MIDI, or straight to Ableton"

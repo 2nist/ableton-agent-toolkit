@@ -8,6 +8,7 @@ import type { NoteName } from "@music-theory/core";
 import { resolveChordOccurrences } from "@drum/library";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import IconBtn from "../common/IconBtn";
+import ThemeToggle from "../common/ThemeToggle";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
 import { useSongStore } from "../../store/songStore";
@@ -653,6 +654,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           onClick={toggleFollow}
           icon="follow"
         />
+        <ThemeToggle compact />
       </div>
 
       {/* A blank song STILL gets its arrangement surface (user repro
@@ -918,7 +920,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
             → Move right
           </button>
           <button
-            className="w-full text-left px-2.5 py-1 font-mono text-[11px] text-inkMuted/70 hover:text-red-400 hover:bg-panelAlt/60"
+            className="w-full text-left px-2.5 py-1 font-mono text-[11px] text-inkMuted/70 hover:text-danger hover:bg-panelAlt/60"
             onClick={async () => {
               const span = menu.span;
               setMenu(null);

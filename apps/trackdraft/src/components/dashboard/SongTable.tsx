@@ -143,7 +143,7 @@ export default function SongTable({ songs, sortKey, sortDir, onSort }: SongTable
                       Export
                     </button>
                     <button
-                      className="text-[10px] text-inkMuted hover:text-red-400 px-1"
+                      className="text-[10px] text-inkMuted hover:text-danger px-1"
                       onClick={(e) => {
                         e.stopPropagation();
                         deleteSong(song.id);

@@ -94,7 +94,7 @@ export default function MelodyGenerateBar({
 
   const btn =
     "rounded border px-2 py-0.5 text-[10px] font-mono whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed";
-  const primary = `${btn} border-accent bg-accent text-black font-medium hover:bg-accent/90`;
+  const primary = `${btn} border-accent bg-accent text-accentInk font-medium hover:bg-accent/90`;
   const secondary = `${btn} border-edge text-inkMuted hover:text-ink hover:bg-panelAlt`;
   const ghost = `${btn} border-transparent text-inkMuted/70 hover:text-ink`;
 

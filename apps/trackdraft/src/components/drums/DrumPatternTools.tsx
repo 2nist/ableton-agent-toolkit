@@ -824,7 +824,7 @@ export default function DrumPatternTools() {
                       + insert after
                     </button>
                     <button
-                      className="font-mono text-3xs text-inkMuted hover:text-red-400 disabled:opacity-30 disabled:hover:text-inkMuted"
+                      className="font-mono text-3xs text-inkMuted hover:text-danger disabled:opacity-30 disabled:hover:text-inkMuted"
                       onClick={() => removeOutlineCell(selectedCell)}
                       disabled={outline.cells.length <= 1}
                     >
@@ -952,7 +952,7 @@ export default function DrumPatternTools() {
                         + insert after
                       </button>
                       <button
-                        className="font-mono text-3xs text-inkMuted hover:text-red-400 disabled:opacity-30 disabled:hover:text-inkMuted"
+                        className="font-mono text-3xs text-inkMuted hover:text-danger disabled:opacity-30 disabled:hover:text-inkMuted"
                         onClick={() => removeVariationCell(vSelectedCell)}
                         disabled={variation.cells.length <= 1}
                       >

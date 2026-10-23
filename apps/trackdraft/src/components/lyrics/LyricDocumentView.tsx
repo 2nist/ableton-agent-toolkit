@@ -340,7 +340,7 @@ export default function LyricDocumentView({ song, onChange }: LyricDocumentViewP
               if (e.key === "Enter") handleAddSection();
             }}
           />
-          <button className="text-[10px] bg-accent text-black rounded px-2 py-0.5 font-medium" onClick={handleAddSection}>
+          <button className="text-[10px] bg-accent text-accentInk rounded px-2 py-0.5 font-medium" onClick={handleAddSection}>
             Add Section
           </button>
           <span className="text-[10px] text-inkMuted mx-0.5">|</span>
@@ -594,7 +594,7 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
   return (
     <div
       className={`rounded border ${
-        isPlayingBlock ? "border-accent/50" : isUnassigned ? "border-dashed border-amber-500/40" : "border-edge/70"
+        isPlayingBlock ? "border-accent/50" : isUnassigned ? "border-dashed border-warn/40" : "border-edge/70"
       }`}
     >
       {/* header */}
@@ -639,7 +639,7 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
           </span>
         )}
         {block.kind === "instrumental" && <span className="text-[9px] px-1 rounded border border-edge text-inkMuted/70">instrumental</span>}
-        {isUnassigned && <span className="text-[9px] px-1 rounded border border-dashed border-amber-500/40 text-amber-400/80">parked</span>}
+        {isUnassigned && <span className="text-[9px] px-1 rounded border border-dashed border-warn/40 text-warn/80">parked</span>}
         <span className="text-2xs text-inkMuted font-mono">
           {section.bars} bars · {section.beatsPerChord}/chord · {meter}
         </span>
@@ -652,7 +652,7 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
           <button className="text-inkMuted hover:text-ink px-1 text-xs" onClick={() => props.onBumpRepeats(section.id, -1)}>
             −
           </button>
-          <span className={`text-2xs font-mono ${block.repeats === 0 ? "text-amber-400" : "text-inkMuted"}`}>&times;{block.repeats}</span>
+          <span className={`text-2xs font-mono ${block.repeats === 0 ? "text-warn" : "text-inkMuted"}`}>&times;{block.repeats}</span>
           <button className="text-inkMuted hover:text-ink px-1 text-xs" onClick={() => props.onBumpRepeats(section.id, +1)}>
             ＋
           </button>
@@ -794,7 +794,7 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
             );
           })}
           {isUnassigned && block.lines.length > 0 && (
-            <p className="px-2 pb-1 text-[9px] font-sans text-amber-400/70 italic">
+            <p className="px-2 pb-1 text-[9px] font-sans text-warn/70 italic">
               Parked — select lines and Move, or Add Section, to file them into the form.
             </p>
           )}

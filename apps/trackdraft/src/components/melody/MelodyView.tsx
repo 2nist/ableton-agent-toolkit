@@ -337,7 +337,7 @@ export default function MelodyView() {
       <div className="flex items-center gap-2 border-b border-edge pb-2">
         <button
           className={`text-xs font-medium px-3 py-1.5 rounded disabled:opacity-40 ${
-            recording ? "bg-red-600 text-white" : "bg-accent text-black"
+            recording ? "bg-danger text-white" : "bg-accent text-accentInk"
           }`}
           onClick={() => void toggleRecord()}
           disabled={!micSupported}
@@ -370,14 +370,14 @@ export default function MelodyView() {
         </label>
         <div className="flex border border-edge rounded p-0.5" title="What plays while you record">
           <button
-            className={`text-[10px] px-1.5 py-0.5 rounded ${recordMode === "follow" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
+            className={`text-[10px] px-1.5 py-0.5 rounded ${recordMode === "follow" ? "bg-accent text-accentInk" : "text-inkMuted hover:text-ink"}`}
             onClick={() => setRecordMode("follow")}
             title="Record the section that's playing — Record jumps playback to the selected section"
           >
             Follow
           </button>
           <button
-            className={`text-[10px] px-1.5 py-0.5 rounded ${recordMode === "loop" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
+            className={`text-[10px] px-1.5 py-0.5 rounded ${recordMode === "loop" ? "bg-accent text-accentInk" : "text-inkMuted hover:text-ink"}`}
             onClick={() => setRecordMode("loop")}
             title="Loop the selected section while you record, so you can hum it over and over"
           >
@@ -402,7 +402,7 @@ export default function MelodyView() {
         )}
       </div>
 
-      {micError && <p className="text-xs text-red-500">{micError}</p>}
+      {micError && <p className="text-xs text-danger">{micError}</p>}
       {!micSupported && (
         <p className="text-xs text-inkMuted">
           Microphone capture needs a secure context. Open TrackDraft at <span className="font-mono">localhost:5183</span> (or serve it over HTTPS) to hum a melody.
@@ -455,14 +455,14 @@ export default function MelodyView() {
           <div className="text-3xs text-inkMuted uppercase tracking-wide font-mono">Melody · {activeSection?.name}</div>
           <div className="flex gap-1 border border-edge rounded p-0.5">
             <button
-              className={`text-[10px] px-1.5 py-0.5 rounded ${viewMode === "staff" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
+              className={`text-[10px] px-1.5 py-0.5 rounded ${viewMode === "staff" ? "bg-accent text-accentInk" : "text-inkMuted hover:text-ink"}`}
               onClick={() => setViewMode("staff")}
               title="Show the melody as musical notation on a treble staff"
             >
               Staff
             </button>
             <button
-              className={`text-[10px] px-1.5 py-0.5 rounded ${viewMode === "piano" ? "bg-accent text-black" : "text-inkMuted hover:text-ink"}`}
+              className={`text-[10px] px-1.5 py-0.5 rounded ${viewMode === "piano" ? "bg-accent text-accentInk" : "text-inkMuted hover:text-ink"}`}
               onClick={() => setViewMode("piano")}
               title="Note editor — tap the grid to add, drag to move, drag an edge to resize, drag the velocity lane"
             >
@@ -512,7 +512,7 @@ export default function MelodyView() {
                 <span className="w-14 text-right font-mono">{n.startTime.toFixed(2)}</span>
                 <span className="w-14 text-right font-mono">{n.duration.toFixed(2)}</span>
                 <button
-                  className="w-8 text-center text-inkMuted hover:text-red-500"
+                  className="w-8 text-center text-inkMuted hover:text-danger"
                   title="Remove this note"
                   onClick={() => {
                     if (!activeSection) return;
@@ -526,7 +526,7 @@ export default function MelodyView() {
           </div>
           <div className="flex justify-end px-2.5 py-1.5 bg-panelAlt">
             <button
-              className="text-[11px] text-inkMuted hover:text-red-500"
+              className="text-[11px] text-inkMuted hover:text-danger"
               onClick={clearMelody}
               title="Remove the melody from this section entirely"
             >

@@ -1,16 +1,3 @@
-import { ABLETON_DARK } from "@platform/ui-kit";
-
-/** panelAlt has no equivalent role in @platform/ui-kit's PaletteRoles (one
- *  "panel" role, not two nested shades) — TrackDraft needs a second, lighter
- *  panel-on-panel tone (e.g. a nested card inside a panel), so it's derived
- *  here rather than hand-picked, keeping the whole palette traceable back to
- *  one source. */
-function lighten(hex, amount) {
-  const n = parseInt(hex.slice(1), 16);
-  const channel = (shift) => Math.min(255, ((n >> shift) & 255) + amount);
-  return `#${[channel(16), channel(8), channel(0)].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
-}
-
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
@@ -18,22 +5,43 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Adopted directly from @platform/ui-kit's ABLETON_DARK — Ableton's
-        // own webview chrome palette, not a TrackDraft-specific one. Same
-        // token names as before (canvas/panel/panelAlt/edge/ink/inkMuted/
-        // accent) so no component needs to change, only what they resolve
-        // to. `accent` was already this exact hex before this change; every
-        // other role shifts from TrackDraft's original near-black, ad hoc
-        // dark theme to Ableton's actual mid-gray chrome.
-        canvas: ABLETON_DARK.background,
-        panel: ABLETON_DARK.panel,
-        panelAlt: lighten(ABLETON_DARK.panel, 14),
-        edge: ABLETON_DARK.border,
-        ink: ABLETON_DARK.text,
-        inkMuted: ABLETON_DARK.textMuted,
-        accent: ABLETON_DARK.accent,
-        accentHover: ABLETON_DARK.accentHover,
-        accentActive: ABLETON_DARK.accentActive,
+        // The palette is a RUNTIME theme, not a build-time constant: each
+        // token resolves to a CSS variable holding an "r g b" channel triple,
+        // so `bg-panel/40` still works (Tailwind substitutes the alpha into
+        // `<alpha-value>`) while a `[data-theme]` block can swap the whole
+        // palette without touching a component.
+        //
+        // This used to import @platform/ui-kit's ABLETON_DARK directly. Those
+        // values now live in `src/index.css` as the `:root` defaults — the
+        // dark theme is still exactly Ableton's chrome, it just arrives via a
+        // variable. NEVER write a hex here: a literal breaks the theme, and
+        // the opacity modifiers silently stop working.
+        canvas: "rgb(var(--c-canvas) / <alpha-value>)",
+        panel: "rgb(var(--c-panel) / <alpha-value>)",
+        panelAlt: "rgb(var(--c-panelAlt) / <alpha-value>)",
+        edge: "rgb(var(--c-edge) / <alpha-value>)",
+        ink: "rgb(var(--c-ink) / <alpha-value>)",
+        inkMuted: "rgb(var(--c-inkMuted) / <alpha-value>)",
+        accent: "rgb(var(--c-accent) / <alpha-value>)",
+        accentHover: "rgb(var(--c-accentHover) / <alpha-value>)",
+        accentActive: "rgb(var(--c-accentActive) / <alpha-value>)",
+        // Foreground for anything on `bg-accent`. Never hardcode `text-black`
+        // there: the accent is orange in the dark theme and ink on paper, so
+        // the readable partner colour is whatever the theme says it is.
+        accentInk: "rgb(var(--c-accentInk) / <alpha-value>)",
+        ok: "rgb(var(--c-ok) / <alpha-value>)",
+        warn: "rgb(var(--c-warn) / <alpha-value>)",
+        danger: "rgb(var(--c-danger) / <alpha-value>)",
+        info: "rgb(var(--c-info) / <alpha-value>)",
+        accentAlt: "rgb(var(--c-accentAlt) / <alpha-value>)",
+      },
+      fontFamily: {
+        // Two more voices for the studio-log theme. `sans`/`mono` are the
+        // dark theme's; `type` (typewriter) and `hand` (pencil) are what the
+        // log sheet substitutes for labels and written values.
+        type: ["'Courier Prime'", "'Courier New'", "Courier", "monospace"],
+        hand: ["Caveat", "'Segoe Script'", "'Bradley Hand'", "cursive"],
+        marker: ["'Permanent Marker'", "Caveat", "cursive"],
       },
       // Tightened from Tailwind's defaults (sm 2px/DEFAULT 4px/md 6px/lg 8px)
       // toward Live's own near-square clip cells, buttons, and knob chips —

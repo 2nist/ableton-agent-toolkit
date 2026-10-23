@@ -88,7 +88,7 @@ export default function ChordEditorPopover({
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <button className="text-[11px] text-inkMuted hover:text-red-400" onClick={onRemove}>
+          <button className="text-[11px] text-inkMuted hover:text-danger" onClick={onRemove}>
             Remove chord
           </button>
           <button className="text-inkMuted hover:text-ink" onClick={onDeselect} aria-label="Deselect">✕</button>

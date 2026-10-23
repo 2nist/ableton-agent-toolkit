@@ -157,7 +157,7 @@ export default function ChordCard({
       </div>
 
       <button
-        className="absolute top-0.5 right-1 text-[10px] text-inkMuted hover:text-red-400"
+        className="absolute top-0.5 right-1 text-[10px] text-inkMuted hover:text-danger"
         onClick={(e) => {
           e.stopPropagation();
           onRemove();

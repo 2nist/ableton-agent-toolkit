@@ -67,7 +67,7 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
           >
             Narrative
           </button>
-          <button className="text-xs px-2 py-0.5 rounded bg-accent text-black">
+          <button className="text-xs px-2 py-0.5 rounded bg-accent text-accentInk">
             Genre maps
           </button>
         </div>
@@ -83,13 +83,13 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
       <div className="flex items-center justify-between gap-2 mb-1">
         <div className="flex items-center gap-2">
           <button
-            className={`text-xs px-2 py-0.5 rounded transition-colors ${source === "narrative" ? "bg-accent text-black" : "border border-edge text-inkMuted hover:text-ink"}`}
+            className={`text-xs px-2 py-0.5 rounded transition-colors ${source === "narrative" ? "bg-accent text-accentInk" : "border border-edge text-inkMuted hover:text-ink"}`}
             onClick={() => switchSource("narrative")}
           >
             Narrative
           </button>
           <button
-            className={`text-xs px-2 py-0.5 rounded transition-colors ${source === "genre" ? "bg-accent text-black" : "border border-edge text-inkMuted hover:text-ink"}`}
+            className={`text-xs px-2 py-0.5 rounded transition-colors ${source === "genre" ? "bg-accent text-accentInk" : "border border-edge text-inkMuted hover:text-ink"}`}
             onClick={() => switchSource("genre")}
           >
             Genre maps
@@ -114,7 +114,7 @@ export default function MapPicker({ onApply, hasSections }: MapPickerProps) {
           ))}
         </select>
         <button
-          className="bg-accent text-black text-sm font-medium px-3 py-1 rounded"
+          className="bg-accent text-accentInk text-sm font-medium px-3 py-1 rounded"
           onClick={async () => {
             const currentMap = maps.find((m) => m.id === effectiveId);
             if (!currentMap) return;

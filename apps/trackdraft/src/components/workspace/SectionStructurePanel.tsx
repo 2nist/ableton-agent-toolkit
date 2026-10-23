@@ -83,7 +83,7 @@ export default function SectionStructurePanel() {
           ))}
         </select>
         <button
-          className="shrink-0 text-2xs font-mono text-inkMuted/70 hover:text-red-400 border border-edge rounded px-1.5 py-1"
+          className="shrink-0 text-2xs font-mono text-inkMuted/70 hover:text-danger border border-edge rounded px-1.5 py-1"
           onClick={onDelete}
           title="Delete this section"
         >

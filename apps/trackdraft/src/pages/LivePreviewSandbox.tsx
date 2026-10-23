@@ -87,8 +87,8 @@ export default function LivePreviewSandbox() {
             saveStatus === "saving"
               ? "bg-panelAlt text-inkMuted"
               : saveStatus === "saved"
-                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                : "bg-red-500/20 text-red-400 border border-red-500/30"
+                ? "bg-ok/20 text-ok border border-ok/30"
+                : "bg-danger/20 text-danger border border-danger/30"
           }`}
         >
           {saveStatus === "saving" && "Saving…"}

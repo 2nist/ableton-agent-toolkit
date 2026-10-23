@@ -63,7 +63,7 @@ export default function SectionCard({ section, repeats, onChange, onChangeRepeat
           ))}
         </select>
         <button
-          className="text-inkMuted hover:text-red-400 text-xs px-2"
+          className="text-inkMuted hover:text-danger text-xs px-2"
           onClick={onDelete}
         >
           Delete
