@@ -624,7 +624,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
             dissolve the top tabs, gain two rows). Click = dashboard. */}
         <button
           type="button"
-          className="flex items-center gap-1.5 min-w-0 max-w-[260px] shrink group text-left"
+          className={`flex items-center gap-1.5 min-w-0 shrink group text-left ${handDrawn ? "max-w-[380px]" : "max-w-[260px]"}`}
           onClick={() => navigate("/")}
           title={`${song.title} — ${song.key} ${song.scale} · ${song.bpm} BPM${
             song.sections.length > 0 ? ` · ${classifySong(song).label}` : ""

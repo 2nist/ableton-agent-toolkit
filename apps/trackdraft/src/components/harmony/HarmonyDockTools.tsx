@@ -177,8 +177,10 @@ export function HarmonyTools() {
 
       {/* CHORDS — the authored progression (editing the selected chord),
           how it advances (Rhythm), and the template (Preset). */}
-      <div className="px-2.5 pt-2 pb-1.5 border-b border-edge font-mono text-3xs uppercase tracking-wider text-inkMuted/70">
-        Chords
+      <div className="px-2.5 pt-2 pb-1.5 border-b border-edge">
+        <span className="tape-label tape-label--end font-mono text-3xs uppercase tracking-wider text-inkMuted/70">
+          Chords
+        </span>
       </div>
 
       {/* Selected chord's editor — selection/remove → Beats → Quality →
@@ -246,7 +248,7 @@ export function HarmonyTools() {
             chords advance: every chord change lands this many beats early. */}
         <div className="flex items-center justify-between mb-2">
           <span
-            className="font-mono text-2xs uppercase tracking-wider text-inkMuted"
+            className="tape-label font-mono text-2xs uppercase tracking-wider text-inkMuted"
             title="Anticipation — push every chord change this many beats early (a jazz push). The wheel/UI stay on the clean grid; only the exported onsets shift."
           >
             Push
@@ -284,7 +286,7 @@ export function HarmonyTools() {
               onChange={(nv, kv, rv) => setHarmonyOutline(buildEuclideanOutline(nv, hDenom, kv, rv))}
             />
             <div className="flex items-center justify-between">
-              <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Grid</span>
+              <span className="tape-label tape-label--flat font-mono text-2xs uppercase tracking-wider text-inkMuted">Grid</span>
               <div className="flex gap-1">
                 {[8, 16].map((d) => (
                   <button
@@ -317,7 +319,7 @@ export function HarmonyTools() {
       {/* Preset — the progression template, tucked under the Color flavor
           (it's tall enough to dominate the menu when it sits at the top). */}
       <div className="p-2.5 border-b border-edge">
-        <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Preset</span>
+        <span className="tape-label font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Preset</span>
         <PresetPicker
           keyName={effectiveKey}
           beatsPerChord={activeSection.beatsPerChord}

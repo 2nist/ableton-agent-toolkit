@@ -338,3 +338,17 @@ body {
   letter-spacing: 0.01em;
   font-weight: 500;
 }
+
+/* A printed card has crisp corners, not soft ones. Only the radius changes —
+   the shadowed "card" radius most of the app uses reads as a screen panel,
+   and on paper a 5px round looks like a mistake. */
+[data-theme="logsheet"] .rounded-lg,
+[data-theme="logsheet"] .rounded-md {
+  border-radius: 2px;
+}
+
+/* The red margin down the left of the sheet. A stripe, not a border, so it
+   sits *inside* the canvas the way a ruled margin sits inside the page. */
+[data-theme="logsheet"] main {
+  box-shadow: inset 2px 0 0 var(--ledger-margin);
+}

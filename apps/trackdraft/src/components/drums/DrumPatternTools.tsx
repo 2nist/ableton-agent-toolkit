@@ -38,7 +38,7 @@ const DEFAULT_DENOM = 8;
 const CHIP = "font-mono text-2xs rounded px-2 py-1 border border-edge text-inkMuted hover:text-ink";
 const CHIP_ON = "font-mono text-2xs rounded px-2 py-1 border border-accent text-accent bg-accent/10";
 const TAB = "flex-1 rounded border border-edge px-2 py-1 font-mono text-2xs uppercase tracking-wider text-inkMuted hover:text-ink";
-const TAB_ON = "flex-1 rounded border border-accent px-2 py-1 font-mono text-2xs uppercase tracking-wider text-accent bg-accent/10";
+const TAB_ON = "nav-on flex-1 rounded border border-accent px-2 py-1 font-mono text-2xs uppercase tracking-wider text-accent bg-accent/10";
 
 /** The section's meter at an 8th-note grid — the natural outline/variation
  *  numerator for the editor defaults, so a 4/4 song lands on 8 (8 eighths
@@ -532,7 +532,7 @@ export default function DrumPatternTools() {
   return (
     <div className="p-2.5 space-y-2.5">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted">Pattern · {section.name}</span>
+        <span className="tape-label font-mono text-3xs uppercase tracking-wider text-inkMuted">Pattern · {section.name}</span>
         {isDraft && (
           <span className="font-mono text-3xs uppercase tracking-wider text-track">● preview</span>
         )}
