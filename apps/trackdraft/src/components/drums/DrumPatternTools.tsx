@@ -30,6 +30,7 @@ import {
 } from "@drum/library";
 import type { BlueprintSection, DrumPattern, DrumTransitionModel, DrumCellVoice, MeterOutline } from "../../types/blueprint";
 import { beatsPerBar } from "../../types/blueprint";
+import TapeLabel from "../common/TapeLabel";
 
 type DrumMode = "auto" | "preset" | "outline";
 type ToolTab = "pattern" | "variation" | "transition";
@@ -532,7 +533,9 @@ export default function DrumPatternTools() {
   return (
     <div className="p-2.5 space-y-2.5">
       <div className="flex items-center justify-between">
-        <span className="tape-label font-mono text-3xs uppercase tracking-wider text-inkMuted">Pattern · {section.name}</span>
+        <TapeLabel size="md" className="font-mono text-3xs uppercase tracking-wider text-inkMuted">
+            Pattern · {section.name}
+          </TapeLabel>
         {isDraft && (
           <span className="font-mono text-3xs uppercase tracking-wider text-track">● preview</span>
         )}

@@ -15,6 +15,7 @@ import MelodyStaff from "./MelodyStaff";
 import MelodyGenerateBar from "./MelodyGenerateBar";
 import MelodyNoteEditor from "./MelodyNoteEditor";
 import { beatsPerBar, type BlueprintSection, type MelodyNote } from "../../types/blueprint";
+import TapeLabel from "../common/TapeLabel";
 
 /** The Melody tab — capture a sung/hummed line from the microphone while a
  *  section plays, then dial it in with a quantize grid + fit-to-scale knob.
@@ -452,7 +453,9 @@ export default function MelodyView() {
           piano roll (pitch on the Y axis, time on X), via a small toggle. */}
       <div>
         <div className="flex items-center justify-between mb-1">
-          <div className="tape-label text-3xs text-inkMuted uppercase tracking-wide font-mono">Melody · {activeSection?.name}</div>
+          <TapeLabel size="md" className="text-3xs text-inkMuted uppercase tracking-wide font-mono">
+            Melody · {activeSection?.name}
+          </TapeLabel>
           <div className="flex gap-1 border border-edge rounded p-0.5">
             <button
               className={`text-[10px] px-1.5 py-0.5 rounded ${viewMode === "staff" ? "bg-accent text-accentInk" : "text-inkMuted hover:text-ink"}`}

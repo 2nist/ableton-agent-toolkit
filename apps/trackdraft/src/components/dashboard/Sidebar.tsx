@@ -1,4 +1,5 @@
 import DirectoryTree from "./DirectoryTree";
+import TapeLabel from "../common/TapeLabel";
 
 interface SidebarProps {
   selectedDir: string | null;
@@ -67,9 +68,13 @@ function ImportZoneSidebar() {
 
   return (
     <div className="px-2 py-2 space-y-1">
-      <span className="tape-label tape-label--end text-[9px] font-semibold text-inkMuted uppercase tracking-wider block">
+      <TapeLabel
+        size="md"
+        tilt="right"
+        className="text-[9px] font-semibold text-inkMuted uppercase tracking-wider block"
+      >
         Import (drop)
-      </span>
+      </TapeLabel>
       <div className="grid grid-cols-2 gap-1">
         {targets.map((t) => (
           <div

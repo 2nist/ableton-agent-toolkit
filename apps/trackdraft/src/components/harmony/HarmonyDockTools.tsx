@@ -17,6 +17,7 @@ import ChordEditorPopover from "./ChordEditorPopover";
 import BassSettings from "./BassSettings";
 import ColorSettings from "./ColorSettings";
 import MeterMapPanel from "./MeterMapPanel";
+import TapeLabel from "../common/TapeLabel";
 
 /** Which rotation (if any) of `buildEuclideanOutline(n, d, k, r)` matches
  *  the outline's cells — so the Offset slider shows a real number rather
@@ -155,7 +156,7 @@ export function HarmonyTools() {
       {/* Tools header — the progression preview's play button lives here,
           keeping the strip a single compact row. */}
       <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-edge shrink-0">
-        <span className="tape-label text-[11px] font-mono uppercase tracking-wider text-inkMuted">Tools</span>
+        <TapeLabel size="md" className="text-[11px] font-mono uppercase tracking-wider text-inkMuted">Tools</TapeLabel>
         <button
           className="border border-edge text-inkMuted hover:text-ink rounded px-2 py-0.5 text-xs font-mono"
           onClick={() => {
@@ -178,9 +179,9 @@ export function HarmonyTools() {
       {/* CHORDS — the authored progression (editing the selected chord),
           how it advances (Rhythm), and the template (Preset). */}
       <div className="px-2.5 pt-2 pb-1.5 border-b border-edge">
-        <span className="tape-label tape-label--end font-mono text-3xs uppercase tracking-wider text-inkMuted/70">
+        <TapeLabel size="md" tilt="right" className="font-mono text-3xs uppercase tracking-wider text-inkMuted/70">
           Chords
-        </span>
+        </TapeLabel>
       </div>
 
       {/* Selected chord's editor — selection/remove → Beats → Quality →
@@ -247,12 +248,13 @@ export function HarmonyTools() {
         {/* Push — the global anticipation offset, orthogonal to how the
             chords advance: every chord change lands this many beats early. */}
         <div className="flex items-center justify-between mb-2">
-          <span
-            className="tape-label font-mono text-2xs uppercase tracking-wider text-inkMuted"
+          <TapeLabel
+            size="sm"
+            className="font-mono text-2xs uppercase tracking-wider text-inkMuted"
             title="Anticipation — push every chord change this many beats early (a jazz push). The wheel/UI stay on the clean grid; only the exported onsets shift."
           >
             Push
-          </span>
+          </TapeLabel>
           <div className="flex items-center gap-1">
             <button
               className="font-mono text-2xs rounded px-1.5 py-0.5 border border-edge text-inkMuted hover:text-ink"
@@ -286,7 +288,7 @@ export function HarmonyTools() {
               onChange={(nv, kv, rv) => setHarmonyOutline(buildEuclideanOutline(nv, hDenom, kv, rv))}
             />
             <div className="flex items-center justify-between">
-              <span className="tape-label tape-label--flat font-mono text-2xs uppercase tracking-wider text-inkMuted">Grid</span>
+              <TapeLabel size="sm" tilt="none" className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Grid</TapeLabel>
               <div className="flex gap-1">
                 {[8, 16].map((d) => (
                   <button
@@ -319,7 +321,7 @@ export function HarmonyTools() {
       {/* Preset — the progression template, tucked under the Color flavor
           (it's tall enough to dominate the menu when it sits at the top). */}
       <div className="p-2.5 border-b border-edge">
-        <span className="tape-label font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Preset</span>
+        <TapeLabel size="sm" tilt="right" className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Preset</TapeLabel>
         <PresetPicker
           keyName={effectiveKey}
           beatsPerChord={activeSection.beatsPerChord}

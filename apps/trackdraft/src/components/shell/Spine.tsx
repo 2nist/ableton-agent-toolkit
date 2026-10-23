@@ -9,6 +9,7 @@ import { resolveChordOccurrences } from "@drum/library";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import IconBtn from "../common/IconBtn";
 import ThemeToggle from "../common/ThemeToggle";
+import TapeLabel from "../common/TapeLabel";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
 import { useSongStore } from "../../store/songStore";
@@ -624,14 +625,14 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
             dissolve the top tabs, gain two rows). Click = dashboard. */}
         <button
           type="button"
-          className={`flex items-center gap-1.5 min-w-0 shrink group text-left ${handDrawn ? "max-w-[380px]" : "max-w-[260px]"}`}
+          className={`flex items-center gap-1.5 min-w-0 shrink group text-left ${handDrawn ? "max-w-[480px]" : "max-w-[260px]"}`}
           onClick={() => navigate("/")}
           title={`${song.title} — ${song.key} ${song.scale} · ${song.bpm} BPM${
             song.sections.length > 0 ? ` · ${classifySong(song).label}` : ""
           }\nClick to go back to the dashboard`}
         >
           <span className="text-inkMuted group-hover:text-ink text-sm shrink-0">←</span>
-          <span className="tape-label truncate text-xs text-ink/90">{song.title}</span>
+          <TapeLabel size="md" className="truncate text-xs text-ink/90">{song.title}</TapeLabel>
           <span className="plabel hidden md:inline text-[9px] font-mono text-inkMuted/60 tabular-nums shrink-0">
             {song.key} {song.scale} · {song.bpm}
           </span>
@@ -1128,7 +1129,7 @@ function SpineBlock({
           <span key={d.label} className={`flex-1 ${d.present ? "bg-current opacity-60" : "bg-current opacity-15"}`} />
         ))}
       </span>
-      <span className="hand-value w-full truncate px-1.5 text-[10px] leading-tight font-medium">
+      <span className="hand-value hand-value--up w-full truncate px-1.5 text-[10px] leading-tight font-medium">
         {showName ? span.section.name : ""}
         {showName && span.variation ? <span className="opacity-60"> ({span.variation})</span> : null}
       </span>

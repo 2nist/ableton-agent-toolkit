@@ -49,7 +49,10 @@ export default {
         // dark theme's; `type` (typewriter) and `hand` (pencil) are what the
         // log sheet substitutes for labels and written values.
         type: ["'Courier Prime'", "'Courier New'", "Courier", "monospace"],
-        hand: ["Caveat", "'Segoe Script'", "'Bradley Hand'", "cursive"],
+        // Handwriting voice. "Nothing You Could Do" replaced Caveat: Caveat's
+        // narrow, upright forms read as a UI font at 11–13px, while this one
+        // keeps a pen's slant and thick/thin at the sizes values actually use.
+        hand: ["'Nothing You Could Do'", "'Segoe Script'", "'Bradley Hand'", "cursive"],
         marker: ["'Permanent Marker'", "Caveat", "cursive"],
       },
       // Tightened from Tailwind's defaults (sm 2px/DEFAULT 4px/md 6px/lg 8px)

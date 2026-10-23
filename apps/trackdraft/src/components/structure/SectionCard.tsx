@@ -3,6 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { BlueprintSection, NarrativeProfile, SectionRole, VelocityPreset, DrumPattern } from "../../types/blueprint";
 import { DRUM_PATTERN_OPTIONS, variantCount } from "../../lib/playback/drumPreview";
 import DrumNecklacePreview from "./DrumNecklacePreview";
+import TapeLabel from "../common/TapeLabel";
 
 const ROLES: SectionRole[] = [
   "intro", "verse", "pre_chorus", "chorus", "bridge", "solo", "breakdown", "outro", "custom",
@@ -279,9 +280,9 @@ export default function SectionCard({ section, repeats, onChange, onChangeRepeat
         {section.narrative ? (
           <div className="flex flex-col gap-1 text-xs text-inkMuted pt-1 border-t border-edge/30">
             <div className="flex items-center justify-between gap-2">
-              <span className="tape-label font-mono text-3xs uppercase tracking-wider">
+              <TapeLabel size="sm" tilt="right" className="font-mono text-3xs uppercase tracking-wider">
                 Narrative arc
-              </span>
+              </TapeLabel>
               <button
                 type="button"
                 className="text-3xs text-inkMuted hover:text-danger px-1 shrink-0"

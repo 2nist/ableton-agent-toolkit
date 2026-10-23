@@ -44,6 +44,7 @@ import ColorFace from "./layers/ColorFace";
 import LyricsFace from "./layers/LyricsFace";
 import { beatsPerBar } from "../../types/blueprint";
 import type { BlueprintSection, BlueprintSong, Chord, SectionRole } from "../../types/blueprint";
+import TapeLabel from "../common/TapeLabel";
 
 /** Canonical role order for the header's role menu (same list everywhere). */
 const ROLE_OPTIONS: SectionRole[] = ["intro", "verse", "pre_chorus", "chorus", "bridge", "solo", "breakdown", "outro", "custom"];
@@ -185,7 +186,7 @@ function ElementRow({
             <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={12} />
           </button>
         )}
-        <span className="tape-label text-3xs font-mono uppercase tracking-widest text-inkMuted">{title}</span>
+        <TapeLabel size="md" className="text-3xs font-mono uppercase tracking-widest text-inkMuted">{title}</TapeLabel>
         <span className="text-[9px] font-mono text-inkMuted/50 truncate flex-1" title={hint}>
           {hint}
         </span>

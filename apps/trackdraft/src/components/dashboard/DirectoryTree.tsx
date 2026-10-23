@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useDirectoryStore, type DirectoryConfig } from "../../store/directoryStore";
+import TapeLabel from "../common/TapeLabel";
 
 interface DirectoryTreeProps {
   selectedDir: string | null;
@@ -27,9 +28,9 @@ export default function DirectoryTree({ selectedDir, onSelectDir, onManageDirs }
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between px-1">
-        <span className="tape-label tape-label--flat text-xs font-semibold text-inkMuted uppercase tracking-wider">
+        <TapeLabel size="md" tilt="none" className="text-xs font-semibold text-inkMuted uppercase tracking-wider">
           Directories
-        </span>
+        </TapeLabel>
         <button
           className="text-xs text-inkMuted hover:text-ink px-1"
           onClick={onManageDirs}

@@ -12,6 +12,7 @@ import SongTable, { type SortKey, type SortDir } from "./SongTable";
 import TemplatePicker from "./TemplatePicker";
 import ThemeToggle from "../common/ThemeToggle";
 import { usePalette } from "../../theme/palette";
+import TapeLabel from "../common/TapeLabel";
 import DirSetupModal from "./DirSetupModal";
 
 const TYPE_BADGES: Record<string, { label: string; color: string }> = {
@@ -361,7 +362,7 @@ export default function Dashboard() {
             <div className="shrink-0">
               <header className="flex items-center justify-between px-4 py-2 border-b border-edge">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <h1 className="tape-label text-sm font-semibold">TrackDraft</h1>
+                  <TapeLabel size="lg" tilt="left" className="text-sm font-semibold">TrackDraft</TapeLabel>
                   {handDrawn && <span className="stamp stamp--tight">Studio log</span>}
                 </div>
                 <div className="flex items-center gap-3 text-[10px] text-inkMuted">

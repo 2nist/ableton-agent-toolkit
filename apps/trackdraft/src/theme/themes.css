@@ -160,14 +160,27 @@ body {
 
 /* Masking tape. The clip-path's ragged polygon is what makes the ends read as
    torn rather than cut; `end` shifts the lean so a row of labels doesn't look
-   machine-stamped. */
+   machine-stamped.
+
+   SIZES ARE DECLARED HERE, not at the call sites. Every header used to carry
+   its own `text-3xs` / `text-[11px]` / `text-xs`, so one row of panels could
+   show the same kind of label at 9px, 10px, 11px and 12px. Three steps now,
+   and the component picks one:
+     --sm  12px  dense dock sub-labels
+     --md  14px  panel and view headers (the default)
+     --lg  19px  page identity, e.g. the app brand
+   `line-height` is set with the size so the tape's padding can't collapse. */
 [data-theme="logsheet"] .tape-label {
+  --tape-size: 14px;
   display: inline-block;
-  font-family: "Permanent Marker", Caveat, cursive;
+  font-family: "Permanent Marker", "Nothing You Could Do", cursive;
+  font-size: var(--tape-size);
+  line-height: 1.32;
   font-weight: 400;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
+  text-transform: none;
   color: var(--tape-ink);
-  padding: 0.06em 0.6em 0.02em;
+  padding: 0.16em 0.62em 0.1em;
   background: linear-gradient(180deg, var(--tape-a), var(--tape-b));
   clip-path: polygon(
     2% 7%, 30% 0, 61% 5%, 98% 2%, 100% 27%, 97.5% 52%, 100% 76%,
@@ -176,6 +189,18 @@ body {
   filter: drop-shadow(1px 1.5px 1px rgba(0, 0, 0, 0.16));
   transform: rotate(-0.7deg);
   white-space: nowrap;
+}
+[data-theme="logsheet"] .tape-label--sm {
+  --tape-size: 12px;
+  padding: 0.12em 0.55em 0.06em;
+}
+[data-theme="logsheet"] .tape-label--md {
+  --tape-size: 14px;
+}
+[data-theme="logsheet"] .tape-label--lg {
+  --tape-size: 19px;
+  padding: 0.14em 0.7em 0.08em;
+  filter: drop-shadow(1.5px 2px 1.5px rgba(0, 0, 0, 0.2));
 }
 [data-theme="logsheet"] .tape-label--end {
   transform: rotate(0.9deg);
@@ -331,12 +356,28 @@ body {
   text-decoration-skip-ink: none;
 }
 
-/* A written value: pencil, one size up from its label, never bold. */
+/* A written value: pencil, never bold. "Nothing You Could Do" ships one weight,
+   so anything above 400 would be a synthetic bold that smears the pen stroke.
+   
+   The size is INHERITED on purpose. It used to be a 1.25em multiplier, which
+   resolves against the *parent's* size and therefore overrode any `text-[10px]`
+   the call site set on the same element — a 10px section name came out at 20px
+   and clipped. Each call site now states its own size (12px in the spine band,
+   15px for titles, 12.5px in the inspector); this class only changes the hand. */
 [data-theme="logsheet"] .hand-value {
-  font-family: "Caveat", "Segoe Script", "Bradley Hand", cursive;
-  font-size: 1.14em;
-  letter-spacing: 0.01em;
-  font-weight: 500;
+  font-family: "Nothing You Could Do", "Segoe Script", "Bradley Hand", cursive;
+  /* No `font-size` on purpose — see above. Declaring even `1em` here wins the
+     cascade over the call site's own `text-[12px]`/`text-2xs` and resolves
+     against the PARENT, which is exactly how a 10px section name came out at
+     20px and clipped inside the spine band. */
+  letter-spacing: 0.015em;
+  font-weight: 400;
+}
+/* A hand-written value in a slot designed for 9–10px type. The pen needs a
+   little more room than mono to stay legible, but only on paper — the dark
+   theme keeps the call site's own utility, untouched. */
+[data-theme="logsheet"] .hand-value--up {
+  font-size: 12px;
 }
 
 /* A printed card has crisp corners, not soft ones. Only the radius changes —
