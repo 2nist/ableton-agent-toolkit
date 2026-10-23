@@ -315,7 +315,7 @@ export default function BendPanel() {
                 type="checkbox"
                 checked={sectionHasBend}
                 onChange={(e) => setSectionOverride(e.target.checked)}
-                className="accent-[#E8B54A]"
+                className="accent-track"
               />
               Override this section
             </label>

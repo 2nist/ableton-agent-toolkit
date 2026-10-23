@@ -34,6 +34,15 @@ export default {
         danger: "rgb(var(--c-danger) / <alpha-value>)",
         info: "rgb(var(--c-info) / <alpha-value>)",
         accentAlt: "rgb(var(--c-accentAlt) / <alpha-value>)",
+        // Instrument surfaces — drawn-code colours that a few layouts still
+        // express as classes (`bg-well/80` over the harmony scene).
+        track: "rgb(var(--c-track) / <alpha-value>)",
+        scene: "rgb(var(--c-scene) / <alpha-value>)",
+        deep: "rgb(var(--c-deep) / <alpha-value>)",
+        well: "rgb(var(--c-well) / <alpha-value>)",
+        label: "rgb(var(--c-label) / <alpha-value>)",
+        grid: "rgb(var(--c-grid) / <alpha-value>)",
+        cream: "rgb(var(--c-cream) / <alpha-value>)",
       },
       fontFamily: {
         // Two more voices for the studio-log theme. `sans`/`mono` are the

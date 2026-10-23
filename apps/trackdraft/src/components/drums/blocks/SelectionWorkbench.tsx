@@ -3,7 +3,8 @@ import type { DrumLaneId } from "@drum/library";
 import type { SectionSpan } from "../../../lib/arrangement";
 import { beatsPerBarOf } from "../../../lib/timeline/beatMap";
 import type { BlueprintSection, DrumBlockFx } from "../../../types/blueprint";
-import { DRUM_LANES } from "../laneStyle";
+import { DRUM_LANES, laneColor } from "../laneStyle";
+import { usePalette } from "../../../theme/palette";
 import { EuclidRing, FxPanel, MotionRing, VelocityPanel } from "./SelectionDisplays";
 import { euclidBlocksFor, fxBlocksFor, fxForLanes, motionBlockFor, motionLabelFor, upsertModeBlocks } from "./selectionMath";
 import type { VelocityOp } from "./velocityOps";
@@ -23,7 +24,6 @@ import type { VelocityOp } from "./velocityOps";
  * keeps the full width until the user pulls a selection up.
  */
 
-const AMBER = "#E8B54A";
 
 type Mode = "euclid" | "motion" | "velocity" | "fx";
 
@@ -46,6 +46,7 @@ interface SelectionWorkbenchProps {
 }
 
 export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
+  const P = usePalette();
   const { span, section, range, onWrite, onVelocityOp, onFlatten, onRegenerate, hasDraft, onApply, onCancel } = props;
   const [panel, setPanel] = useState<Mode>("euclid");
 
@@ -140,10 +141,10 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
   ];
 
   return (
-    <aside className="w-[340px] shrink-0 sticky top-2 self-start max-h-[calc(100vh-140px)] overflow-y-auto border border-edge rounded bg-black/40">
+    <aside className="w-[340px] shrink-0 sticky top-2 self-start max-h-[calc(100vh-140px)] overflow-y-auto border border-edge rounded bg-deep/40">
       {/* header */}
       <div className="px-3 pt-2.5 pb-2 border-b border-edge">
-        <div className="font-mono text-2xs uppercase tracking-wider text-[#E8B54A]">Selection workbench</div>
+        <div className="font-mono text-2xs uppercase tracking-wider text-track">Selection workbench</div>
         <div className="font-mono text-xs text-ink mt-1">{section.name}</div>
         <div className="font-mono text-2xs text-inkMuted mt-0.5">
           bars {barOf(range.startBeat)}–{barOf(Math.max(range.startBeat, range.endBeat - 1e-6))} ·
@@ -159,7 +160,7 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
             onClick={() => setPanel(c.id)}
             className={`font-mono text-2xs rounded px-2 py-1 border ${
               panel === c.id
-                ? "border-[#E8B54A] text-[#E8B54A] bg-[#E8B54A]/10"
+                ? "border-track text-track bg-track/10"
                 : c.live
                   ? "border-edge text-inkMuted hover:text-ink"
                   : "border-edge text-inkMuted/60"
@@ -184,7 +185,7 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
             )}
           </div>
           <div className="px-3 pb-2.5">
-            <div className="font-mono text-sm text-[#E8B54A]">
+            <div className="font-mono text-sm text-track">
               {isEuclid
                 ? `${euclid.k}/${nBeats} · ↻${euclid.rotation} · ${Math.round((euclid.k / nBeats) * 100)}%`
                 : motionLabelFor(motion) ?? "DRAG TO GESTURE"}
@@ -204,7 +205,7 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
           const lane = DRUM_LANES.find((l) => l.key === k);
           return (
             <span key={k} className="flex items-center gap-1 font-mono text-2xs border border-edge rounded px-1.5 py-0.5 text-inkMuted">
-              <span className="w-2 h-2 rounded-full" style={{ background: lane?.color }} />
+              <span className="w-2 h-2 rounded-full" style={{ background: lane ? laneColor(lane, P) : P.track }} />
               {lane?.label}
             </span>
           );
@@ -229,7 +230,7 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
       {/* footer */}
       <div className="px-3 py-2.5">
         {hasDraft ? (
-          <span className="font-mono text-2xs text-[#E8B54A]">● preview — edits staged</span>
+          <span className="font-mono text-2xs text-track">● preview — edits staged</span>
         ) : (
           <span className="font-mono text-2xs text-inkMuted">no edits yet — drag a ring to stage one</span>
         )}

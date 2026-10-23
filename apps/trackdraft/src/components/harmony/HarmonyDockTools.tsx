@@ -272,7 +272,7 @@ export function HarmonyTools() {
 
         {rhythmMode === "euclid" && hOutline && (
           <div className="space-y-1.5">
-            <StepView outline={hOutline} color="#E8B54A" />
+            <StepView outline={hOutline} />
             <p className="font-mono text-2xs text-inkMuted">
               {hK} / {hN} · rot {hRot} · {hOutline.label}
             </p>

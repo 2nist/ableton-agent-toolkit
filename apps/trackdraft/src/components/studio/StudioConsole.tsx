@@ -4,7 +4,7 @@ import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import { resolveChordOccurrences, resolveStyleProfile, styleSpacing } from "@drum/library";
 import { sectionSpans } from "../../lib/arrangement";
-import { roleStyle } from "../../lib/roleColors";
+import { useRoleStyle } from "../../lib/roleColors";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
@@ -52,6 +52,7 @@ function Pane({ title, hint, onOpen, children }: { title: string; hint: string; 
  *  Read-only by design — edits live in their own tabs, next to the tools.
  */
 export default function StudioConsole({ song }: { song: BlueprintSong }) {
+  const roleStyle = useRoleStyle();
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
   const id = songId ?? song.id;

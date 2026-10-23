@@ -74,7 +74,7 @@ export default function ModeInferenceCard({
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-auto flex items-center gap-3 rounded-md border border-accent/40 bg-[#14161c] px-3 py-2 shadow-lg"
+      className="pointer-events-auto flex items-center gap-3 rounded-md border border-accent/40 bg-well px-3 py-2 shadow-lg"
     >
       <span className="text-accent text-sm leading-none" aria-hidden="true">◆</span>
       <p className="flex-1 text-xs text-ink">

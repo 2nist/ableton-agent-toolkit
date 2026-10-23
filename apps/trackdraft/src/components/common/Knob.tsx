@@ -164,7 +164,7 @@ export default function Knob({
       {/* Track */}
       <path
         d={arcPath(R, START_DEG, START_DEG + SWEEP_DEG)}
-        stroke="rgba(255,255,255,0.12)"
+        stroke="currentColor" strokeOpacity={0.18}
         strokeWidth={3}
         fill="none"
         strokeLinecap="round"

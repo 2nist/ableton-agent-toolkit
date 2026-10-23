@@ -36,6 +36,17 @@
   --c-info: 96 165 250; /* #60A5FA blue-400 */
   --c-accentAlt: 192 132 252; /* #C084FC purple-400 */
 
+  /* Instrument surfaces. Mirrors src/theme/palette.ts, which is what SVG
+     fill/stroke code reads; the mirror exists so a class like `bg-well/80`
+     can still be themed. palette.test.ts fails if the two drift. */
+  --c-track: 232 181 74; /* #E8B54A */
+  --c-scene: 11 14 19; /* #0B0E13 */
+  --c-deep: 11 13 17; /* #0B0D11 */
+  --c-well: 14 17 22; /* #0E1116 */
+  --c-label: 207 207 207; /* #CFCFCF */
+  --c-grid: 86 95 112; /* #565F70 */
+  --c-cream: 245 231 200; /* #F5E7C8 */
+
   --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --paper-grain: none;
   --scroll-thumb: rgba(255, 255, 255, 0.14);
@@ -70,6 +81,16 @@
   --c-danger: 146 43 33; /* #922B21 ≈ the kick pencil */
   --c-info: 26 74 122; /* #1A4A7A */
   --c-accentAlt: 90 58 128; /* #5A3A80 */
+
+  /* Instruments on paper: the accent is pencil ochre, a "well" is recessed
+     stock, and chalk writing becomes ink. */
+  --c-track: 138 106 18; /* #8A6A12 */
+  --c-scene: 239 231 214; /* #EFE7D6 — the sheet itself */
+  --c-deep: 248 243 231; /* #F8F3E7 */
+  --c-well: 231 221 200; /* #E7DDC8 */
+  --c-label: 38 34 27; /* #26221B */
+  --c-grid: 125 113 96; /* #7D7160 */
+  --c-cream: 38 34 27; /* #26221B */
 
   /* The printed-form voice. Components that want a written value opt in with
      `font-hand`; everything else inherits this. */

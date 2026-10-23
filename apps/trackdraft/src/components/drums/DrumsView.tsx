@@ -13,9 +13,10 @@ import {
   seededVariantIndex,
   type VoiceNecklace,
 } from "../../lib/playback/drumPreview";
-import { DRUM_LANES, type DrumLane } from "./laneStyle";
-import { TRANSITION_COLOR, TRANSITION_LABEL } from "./transitionStyle";
-import { SECTION_ROLE_COLOR } from "./sectionRoleStyle";
+import { DRUM_LANES, laneColor, type DrumLane } from "./laneStyle";
+import { usePalette } from "../../theme/palette";
+import { useTransitionColors, TRANSITION_LABEL } from "./transitionStyle";
+import { useSectionRoleColors } from "./sectionRoleStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
 import DrumBlocksView from "./blocks/DrumBlocksView";
 import { planSectionHandoffFills, planSectionTransitions, FILL_DATA, outlineBeatsPerBar, numerator as outlineNumerator, hashSeed, occurrenceSeed, buildEuclideanOutline, twoThreeCellCounts, type HandoffSectionInput } from "@drum/library";
@@ -280,6 +281,9 @@ export default function DrumsView({
    *  dot). */
   onPickRange?: (span: SectionSpan, beatInSection: number, dive: boolean) => void;
 } = {}) {
+  const P = usePalette();
+  const SECTION_ROLE_COLOR = useSectionRoleColors();
+  const TRANSITION_COLOR = useTransitionColors();
   const song = useSongStore((s) => s.currentSong());
   const storedSelection = useStudioSelectionStore((s) => s.selectedSectionId);
   const selectedSectionId = highlightSectionId ?? storedSelection;
@@ -611,7 +615,7 @@ export default function DrumsView({
             onClick={() => chooseView(m)}
             className={`font-mono text-2xs rounded px-2 py-1 border ${
               viewMode === m
-                ? "border-[#E8B54A] text-[#E8B54A] bg-[#E8B54A]/10"
+                ? "border-track text-track bg-track/10"
                 : "border-edge text-inkMuted hover:text-ink"
             }`}
           >
@@ -645,7 +649,7 @@ export default function DrumsView({
       </div>
       )}
       {!embedded && importStatus && (
-        <div className={`font-mono text-2xs mb-1.5 ${importStatus.ok ? "text-[#E8B54A]" : "text-danger"}`}>
+        <div className={`font-mono text-2xs mb-1.5 ${importStatus.ok ? "text-track" : "text-danger"}`}>
           {importStatus.text}
         </div>
       )}
@@ -657,7 +661,7 @@ export default function DrumsView({
         className={
           embedded
             ? "relative overflow-hidden"
-            : "relative overflow-x-auto border border-edge rounded bg-black"
+            : "relative overflow-x-auto border border-edge rounded bg-deep"
         }
       >
         {/* Zoom controls live on the timeline's top row — floating at the
@@ -666,7 +670,7 @@ export default function DrumsView({
             no dedicated row above. (Tab only — the embed gets a fitted zoom
             from its host.) */}
         {!embedded && (
-        <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-0.5 border border-edge rounded bg-black/90 px-1 py-0.5 select-none">
+        <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-0.5 border border-edge rounded bg-deep/90 px-1 py-0.5 select-none">
           <button
             className="w-5 h-5 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
             onClick={() => setZoom((z) => clampZoom(z / 1.2))}
@@ -703,7 +707,7 @@ export default function DrumsView({
             const w = barX(r.span.startBar + r.span.bars) - x;
             const isSelected = r.span.section.id === selectedSectionId;
             const roleColor = SECTION_ROLE_COLOR[r.span.section.role] ?? SECTION_ROLE_COLOR.custom;
-            const col = isSelected ? "#E8B54A" : roleColor.rim;
+            const col = isSelected ? P.track : roleColor.rim;
             const outline = r.section.drumMeterOutline;
             return (
               <g key={`sec-${i}`} pointerEvents="none">
@@ -711,7 +715,7 @@ export default function DrumsView({
                   {r.span.section.name}
                   {r.span.occurrenceIndex > 0 ? ` ·${r.span.occurrenceIndex + 1}` : ""}
                   {outline && (
-                    <tspan fill="#E8B54A" opacity={0.85} fontSize={10}>
+                    <tspan fill={P.track} opacity={0.85} fontSize={10}>
                       {` · ${outlineMeterLabel(outline)}`}
                     </tspan>
                   )}
@@ -733,7 +737,7 @@ export default function DrumsView({
             const model = manual ?? autoTransitions[i].model;
             const hasAutoFill = fillApplied[i];
             const x = barX(r.span.startBar + r.span.bars);
-            const color = model ? TRANSITION_COLOR[model] : "#565F70";
+            const color = model ? TRANSITION_COLOR[model] : P.grid;
             return (
               <g key={`tr-${i}`}>
                 {(model || hasAutoFill) && (
@@ -772,7 +776,7 @@ export default function DrumsView({
               textAnchor="middle"
               fontSize={10}
               fontFamily="'IBM Plex Mono', monospace"
-              fill="#7a7a80"
+              fill={P.grid}
               pointerEvents="none"
             >
               {b}
@@ -796,18 +800,18 @@ export default function DrumsView({
                 <line
                   key={`dg-${lane.key}-${gi}`}
                   x1={g.x} y1={TOP_PAD + li * TRACK_H} x2={g.x} y2={trackBottom(li)}
-                  stroke="#E8B54A"
+                  stroke={P.track}
                   strokeOpacity={g.bar ? 0.2 : 0.09}
                   strokeWidth={g.bar ? 1.4 : 1}
                   strokeDasharray={g.cell ? "1 4" : undefined}
                 />
               ))}
-              <text x={X0 - 14} y={laneY(li) + 4} textAnchor="end" fontSize={12} fontFamily="'IBM Plex Mono', monospace" fill={lane.color} fontWeight={600}>
+              <text x={X0 - 14} y={laneY(li) + 4} textAnchor="end" fontSize={12} fontFamily="'IBM Plex Mono', monospace" fill={laneColor(lane, P)} fontWeight={600}>
                 {lane.label}
               </text>
               <line
                 x1={barX(0)} y1={laneY(li)} x2={barX(bars)} y2={laneY(li)}
-                stroke={lane.color}
+                stroke={laneColor(lane, P)}
                 strokeWidth={1}
                 strokeOpacity={0.12}
               />
@@ -845,7 +849,7 @@ export default function DrumsView({
                   {/* the lane's active line */}
                   <line
                     x1={x1} y1={y} x2={x2} y2={y}
-                    stroke={lane.color}
+                    stroke={laneColor(lane, P)}
                     strokeWidth={6}
                     strokeLinecap="round"
                     strokeOpacity={isSelected ? 1 : 0.9}
@@ -859,18 +863,18 @@ export default function DrumsView({
                       <NecklaceGlyph
                         cx={cx} cy={y} radius={NECK_R}
                         hits={n.hits} steps={n.steps}
-                        color={lane.color}
-                        backdrop="#0D0F14"
+                        color={laneColor(lane, P)}
+                        backdrop={P.deep}
                       />
                       {isSelected && (
-                        <circle cx={cx} cy={y} r={NECK_R + 3} fill="none" stroke="#E8B54A" strokeWidth={1.2} strokeDasharray="3 3" />
+                        <circle cx={cx} cy={y} r={NECK_R + 3} fill="none" stroke={P.track} strokeWidth={1.2} strokeDasharray="3 3" />
                       )}
                       <circle cx={cx} cy={y} r={NECK_R + 8} fill="transparent" />
                     </g>
                   ) : (
                     <g pointerEvents="none">
-                      <circle cx={barX(r.span.startBar)} cy={y} r={3.6} fill="#0D0F14" stroke={lane.color} strokeWidth={1.6} strokeOpacity={0.85} />
-                      <circle cx={barX(r.span.startBar)} cy={y} r={1.5} fill={lane.color} />
+                      <circle cx={barX(r.span.startBar)} cy={y} r={3.6} fill={P.deep} stroke={laneColor(lane, P)} strokeWidth={1.6} strokeOpacity={0.85} />
+                      <circle cx={barX(r.span.startBar)} cy={y} r={1.5} fill={laneColor(lane, P)} />
                     </g>
                   )}
 
@@ -881,7 +885,7 @@ export default function DrumsView({
                       x1={vX1}
                       x2={vX2}
                       y={laneY(li)}
-                      color={lane.color}
+                      color={laneColor(lane, P)}
                     />
                   )}
                 </g>
@@ -906,7 +910,7 @@ export default function DrumsView({
                 <FillDome
                   key={`ts-${i}-${lane.key}`}
                   x1={g1} x2={g2} y={laneY(li)}
-                  color={lane.color} model={model ?? null} depth={depth}
+                  color={laneColor(lane, P)} model={model ?? null} depth={depth}
                 />
               );
             });
@@ -950,12 +954,12 @@ export default function DrumsView({
               y={TOP_PAD + DRUM_LANES.length * TRACK_H}
               width={barX(bars) - barX(0)}
               height={TRACK_H}
-              fill="#0a0c10"
+              fill={P.deep}
             />
-            <text x={X0 - 14} y={DETOUR_Y + 4} textAnchor="end" fontSize={12} fontFamily="'IBM Plex Mono', monospace" fill="#7a7a80" fontWeight={600}>
+            <text x={X0 - 14} y={DETOUR_Y + 4} textAnchor="end" fontSize={12} fontFamily="'IBM Plex Mono', monospace" fill={P.grid} fontWeight={600}>
               DETOUR
             </text>
-            <line x1={barX(0)} y1={DETOUR_Y} x2={barX(bars)} y2={DETOUR_Y} stroke="#565F70" strokeWidth={1.4} strokeOpacity={0.5} />
+            <line x1={barX(0)} y1={DETOUR_Y} x2={barX(bars)} y2={DETOUR_Y} stroke={P.grid} strokeWidth={1.4} strokeOpacity={0.5} />
             {resolved.map((r, i) => {
               const bpb = Math.max(1, Math.round(beatsPerBar(r.span.section)));
               const beatCount = Math.round(r.span.durationBeats);
@@ -974,8 +978,8 @@ export default function DrumsView({
                         cx={x}
                         cy={DETOUR_Y}
                         r={active ? 4.5 : 3}
-                        fill={active ? "#E8B54A" : "#0D0F14"}
-                        stroke={active ? "#E8B54A" : "#9a9aa2"}
+                        fill={active ? P.track : P.deep}
+                        stroke={active ? P.track : P.grid}
                         strokeWidth={active ? 0 : 1.2}
                         style={{ cursor: "pointer" }}
                         onClick={(e) =>

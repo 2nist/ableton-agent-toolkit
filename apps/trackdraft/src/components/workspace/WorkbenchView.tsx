@@ -10,7 +10,7 @@ import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { useTimeSelectionStore } from "../../store/timeSelectionStore";
 import { sectionSpans, type SectionSpan } from "../../lib/arrangement";
 import { updateSection } from "../../lib/sections";
-import { roleStyle } from "../../lib/roleColors";
+import { useRoleStyle } from "../../lib/roleColors";
 import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playback/drumPreview";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import DrumLineEmbed from "./DrumLineEmbed";
@@ -220,6 +220,7 @@ function SectionWorkspace({
   beatInSection,
   onEngageDrums,
 }: SectionWorkspaceProps) {
+  const roleStyle = useRoleStyle();
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
   const id = songId ?? song.id;
@@ -602,7 +603,7 @@ function SectionWorkspace({
         {section.chords.length > 0 ? (
           <div className="w-full">
             <HexReadout chords={section.chords} keyName={effKey} activeChordId={activeChordId} />
-            <div className="mt-2 rounded border border-edge/60 bg-[#0a0d12] px-2 py-1.5">
+            <div className="mt-2 rounded border border-edge/60 bg-deep px-2 py-1.5">
               <ProgressionEditor
                 key={section.id}
                 chords={section.chords}

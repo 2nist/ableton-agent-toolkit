@@ -1,6 +1,7 @@
 import { twoThreeCellCounts, euclidOnsetSteps, numerator as outlineNumerator } from "@drum/library";
 import type { MeterOutline } from "../../types/blueprint";
 import Knob from "../common/Knob";
+import { usePalette, withAlpha } from "../../theme/palette";
 
 /** Shared Euclidean rhythm primitives — the same Length/Density/Offset
  *  sliders + step strips used by the Drums editor's outline authoring, so
@@ -80,7 +81,9 @@ export function EuclidSliders({ n, denom, k, rotation, onChange }: {
 }
 
 /** Narrow step-sequencer strip: n cells, the k onsets filled in. */
-export function StepView({ outline, color }: { outline: MeterOutline; color: string }) {
+export function StepView({ outline, color }: { outline: MeterOutline; color?: string }) {
+  const P = usePalette();
+  const accent = color ?? P.track;
   const n = outlineNumerator(outline);
   const onsets: boolean[] = new Array(n).fill(false);
   let step = 0;
@@ -94,7 +97,7 @@ export function StepView({ outline, color }: { outline: MeterOutline; color: str
         <div
           key={i}
           className="h-3 w-3 rounded-[2px]"
-          style={{ background: on ? color : "rgba(255,255,255,0.08)" }}
+          style={{ background: on ? accent : withAlpha(P.grid, 0.28) }}
         />
       ))}
     </div>
@@ -103,7 +106,8 @@ export function StepView({ outline, color }: { outline: MeterOutline; color: str
 
 /** Narrow step-sequencer strip for a free-form Euclidean pattern. `large`
  *  renders a bigger grid for the Voice-by-Voice editor's pattern display. */
-export function EuclidStepView({ k, n, rotation, color, large }: { k: number; n: number; rotation: number; color: string; large?: boolean }) {
+export function EuclidStepView({ k, n, rotation, color, large }: { k: number; n: number; rotation: number; color?: string; large?: boolean }) {
+  const P = usePalette();
   const onsets = euclidOnsetSteps({ k, n, rotation });
   const box = large ? "h-4 w-4 rounded-[3px]" : "h-3 w-3 rounded-[2px]";
   return (
@@ -112,7 +116,7 @@ export function EuclidStepView({ k, n, rotation, color, large }: { k: number; n:
         <div
           key={i}
           className={box}
-          style={{ background: onsets.includes(i) ? color : "rgba(255,255,255,0.08)" }}
+          style={{ background: onsets.includes(i) ? color ?? P.track : withAlpha(P.grid, 0.28) }}
         />
       ))}
     </div>

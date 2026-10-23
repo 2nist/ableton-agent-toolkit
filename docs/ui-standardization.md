@@ -41,11 +41,14 @@ this document defines what *complete* means (§8).
 
 ## 1. Principles (the constitution)
 
-**P1 — Tokens are the only color source.**
-Classes use token names; the only raw hex in the codebase lives in one palette module
-(which itself derives from `@platform/ui-kit`'s `ABLETON_DARK`). Canvas/SVG draw code
-imports literals *from that module*, never inlines them.
-*Test:* zero raw hex in class strings; the palette module is the only file with hex.
+**P1 — Tokens are the only color source, and they are runtime.**
+Classes use token names, and every token resolves to a CSS variable
+(`rgb(var(--c-*) / <alpha-value>)`, so opacity modifiers still work). A theme is a
+block of channel triples in `theme/themes.css`; nothing in a component knows which
+theme is on. Canvas/SVG draw code can't use classes, so it reads the same values as
+strings from `theme/palette.ts` via `usePalette()` — never an inline literal.
+*Test:* zero raw hex in class strings; hex lives only in `themes.css` and
+`theme/palette.ts`, and `palette.test.ts` fails if the two disagree.
 
 **P2 — One type scale, one label recipe.**
 `text-2xs`/`text-3xs`/`text-xs/text-sm` + the mono micro-label recipe
@@ -278,7 +281,7 @@ decides §9. No code.
 
 **Phase 1 — T0 + T1 foundation + mechanical drift.**
 Palette module (accent, substitution orange, deep fills, six voice colors — single
-source); primitives v1 (Button, IconButton, Input/NumberField, Select, Checkbox, Chip,
+source, theme-aware via `usePalette()`); primitives v1 (Button, IconButton, Input/NumberField, Select, Checkbox, Chip,
 SliderRow, Modal + Confirm, MicroLabel, EmptyState); migrate the countable drift
 (4 accent bracket classes, ~15 active-chip strings, 11 `rounded-lg`, 159 bracket fonts,
 3 `confirm()` calls).

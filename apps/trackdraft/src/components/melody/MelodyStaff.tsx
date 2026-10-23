@@ -22,12 +22,19 @@ import {
   accidentalFor,
   type NoteHeadType,
 } from "../../lib/melody/notation";
+import { usePalette, withAlpha } from "../../theme/palette";
 
-/** Theme colors (ABLETON_DARK via tailwind.config.js) — canvas can't use
- *  Tailwind classes, so these are the resolved hex values. */
-const INK = "#FFFFFF";
-const INK_DIM = "rgba(255,255,255,0.4)";
-const PANEL_ALT = "#5C5C5C";
+/** Canvas ink for the current theme. The draw helpers below are pure geometry
+ *  and take a context, not a palette; the component sets the ink immediately
+ *  before it draws, so a theme switch re-inks the staff without threading a
+ *  palette through nine signatures. */
+const INK = { ink: "#FFFFFF", dim: "rgba(255,255,255,0.4)", panelAlt: "#5C5C5C" };
+
+export function setStaffInk(ink: { ink: string; dim: string; panelAlt: string }): void {
+  INK.ink = ink.ink;
+  INK.dim = ink.dim;
+  INK.panelAlt = ink.panelAlt;
+}
 /** Vertical distance between adjacent staff lines (E-G-B-D-F). */
 const LINE_SPACING = 9;
 /** Horizontal slot for the treble clef at the staff's left. */
@@ -58,6 +65,9 @@ interface Props {
 /** The melody as notation, sized to its container. Redraws only when the
  *  notes/timing/key/scale change (not on every parent re-render). */
 export default function MelodyStaff({ notes, sectionBeats, songKey, scale, height = 120, activeBeat = null, onSeekBeat }: Props) {
+  const P = usePalette();
+  const inkRef = useRef({ ink: P.label, dim: withAlpha(P.label, 0.4), panelAlt: P.well });
+  inkRef.current = { ink: P.label, dim: withAlpha(P.label, 0.4), panelAlt: P.well };
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const notesRef = useRef(notes);
@@ -87,6 +97,7 @@ export default function MelodyStaff({ notes, sectionBeats, songKey, scale, heigh
       canvas.style.width = `${cssWidth}px`;
       canvas.style.height = `${cssHeight}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      setStaffInk(inkRef.current);
       drawStaff(ctx, cssWidth, cssHeight, notesRef.current, sectionBeatsRef.current, keyRef.current, scaleRef.current);
     };
 
@@ -94,7 +105,7 @@ export default function MelodyStaff({ notes, sectionBeats, songKey, scale, heigh
     const ro = new ResizeObserver(render);
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, []);
+  }, [P]);
 
   return (
     <div
@@ -143,7 +154,7 @@ function drawStaff(
   scale: ScaleType,
 ): void {
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = PANEL_ALT;
+  ctx.fillStyle = INK.panelAlt;
   ctx.fillRect(0, 0, width, height);
 
   const sorted = [...notes].sort((a, b) => a.startTime - b.startTime);
@@ -166,7 +177,7 @@ function drawStaff(
   }
 
   // Staff lines (top F5 → bottom E4).
-  ctx.strokeStyle = INK_DIM;
+  ctx.strokeStyle = INK.dim;
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (let i = 0; i < 5; i++) {
@@ -255,13 +266,13 @@ function drawRest(ctx: CanvasRenderingContext2D, x: number, type: NoteHeadType, 
   switch (type) {
     case "whole": {
       // Hangs down from the 4th line (D5).
-      ctx.fillStyle = INK;
+      ctx.fillStyle = INK.ink;
       ctx.fillRect(x - s * 0.65, bottomLineY - 3 * s, s * 1.3, s * 0.55);
       break;
     }
     case "half": {
       // Sits on the 3rd line (B4, middle line).
-      ctx.fillStyle = INK;
+      ctx.fillStyle = INK.ink;
       ctx.fillRect(x - s * 0.65, bottomLineY - 2 * s - s * 0.55, s * 1.3, s * 0.55);
       break;
     }
@@ -281,7 +292,7 @@ function drawRest(ctx: CanvasRenderingContext2D, x: number, type: NoteHeadType, 
  *  bottom hook, centered on `y` (the 3rd space). */
 function drawQuarterRest(ctx: CanvasRenderingContext2D, x: number, y: number): void {
   const s = LINE_SPACING;
-  ctx.strokeStyle = INK;
+  ctx.strokeStyle = INK.ink;
   ctx.lineWidth = Math.max(1.2, s * 0.14);
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -303,8 +314,8 @@ function drawQuarterRest(ctx: CanvasRenderingContext2D, x: number, y: number): v
  *  up-right, and one or two flags hooking down-left. */
 function drawHookRest(ctx: CanvasRenderingContext2D, x: number, y: number, flags: number): void {
   const s = LINE_SPACING;
-  ctx.fillStyle = INK;
-  ctx.strokeStyle = INK;
+  ctx.fillStyle = INK.ink;
+  ctx.strokeStyle = INK.ink;
   ctx.lineWidth = Math.max(1.2, s * 0.14);
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -326,7 +337,7 @@ function drawHookRest(ctx: CanvasRenderingContext2D, x: number, y: number, flags
 
 function drawLedger(ctx: CanvasRenderingContext2D, y: number, x: number): void {
   const w = LINE_SPACING * 1.5;
-  ctx.strokeStyle = INK_DIM;
+  ctx.strokeStyle = INK.dim;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(x - w / 2, y);
@@ -341,7 +352,7 @@ function drawAccidental(
   accidental: "sharp" | "flat" | "natural",
 ): void {
   const glyph = accidental === "sharp" ? "♯" : accidental === "flat" ? "♭" : "♮";
-  ctx.fillStyle = INK;
+  ctx.fillStyle = INK.ink;
   ctx.font = `${Math.round(LINE_SPACING * 1.5)}px serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -357,7 +368,7 @@ function drawNote(ctx: CanvasRenderingContext2D, x: number, y: number, type: Not
   if (hasStem) {
     const stemX = stemUp ? x + headW / 2 : x - headW / 2;
     const tip = stemUp ? y - STEM_LEN : y + STEM_LEN;
-    ctx.strokeStyle = INK;
+    ctx.strokeStyle = INK.ink;
     ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.moveTo(stemX, y);
@@ -375,17 +386,17 @@ function drawNote(ctx: CanvasRenderingContext2D, x: number, y: number, type: Not
   ctx.beginPath();
   ctx.ellipse(x, y, headW / 2, headH / 2, -0.22, 0, Math.PI * 2);
   if (type === "whole" || type === "half") {
-    ctx.strokeStyle = INK;
+    ctx.strokeStyle = INK.ink;
     ctx.lineWidth = 1.6;
     ctx.stroke();
   } else {
-    ctx.fillStyle = INK;
+    ctx.fillStyle = INK.ink;
     ctx.fill();
   }
 }
 
 function drawFlag(ctx: CanvasRenderingContext2D, x: number, y: number, stemUp: boolean): void {
-  ctx.fillStyle = INK;
+  ctx.fillStyle = INK.ink;
   ctx.beginPath();
   if (stemUp) {
     ctx.moveTo(x, y);
@@ -407,7 +418,7 @@ function drawFlag(ctx: CanvasRenderingContext2D, x: number, y: number, stemUp: b
  *  the two right-hand curls. */
 function drawTrebleClef(ctx: CanvasRenderingContext2D, gx: number, gy: number, s: number): void {
   ctx.save();
-  ctx.strokeStyle = INK;
+  ctx.strokeStyle = INK.ink;
   ctx.lineWidth = Math.max(1.3, s * 0.16);
   ctx.lineCap = "round";
   ctx.beginPath();

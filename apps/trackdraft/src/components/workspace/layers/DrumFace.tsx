@@ -2,7 +2,8 @@ import { useMemo, type PointerEvent as ReactPointerEvent } from "react";
 import type { DrumLaneId } from "@drum/library";
 import type { BlueprintSection, BlueprintSong } from "../../../types/blueprint";
 import { resolveSectionLaneHits } from "../../../lib/timeline/drumLaneHits";
-import { DRUM_LANES } from "../../drums/laneStyle";
+import { DRUM_LANES, laneColor } from "../../drums/laneStyle";
+import { usePalette } from "../../../theme/palette";
 import { FaceFrame, useSectionGrid } from "./LayerGrid";
 
 const LANE_H = 8;
@@ -24,6 +25,7 @@ export default function DrumFace({
   onOpen: () => void;
   onEngage?: () => void;
 }) {
+  const P = usePalette();
   const { width, barPx, beatsPerBar, durationBeats, setRange, onSeek } = useSectionGrid();
   const hits = useMemo(
     () => resolveSectionLaneHits(section, song, occurrenceIndex),
@@ -78,7 +80,7 @@ export default function DrumFace({
                   x2={width}
                   y1={y}
                   y2={y}
-                  stroke="rgba(255,255,255,0.05)"
+                  stroke={P.grid} strokeOpacity={0.25}
                   strokeWidth={1}
                 />
                 {(hits.get(lane.key as DrumLaneId) ?? []).map((hit, hitIndex) => (
@@ -87,7 +89,7 @@ export default function DrumFace({
                     cx={(hit.beat / beatsPerBar) * barPx}
                     cy={y}
                     r={2.1}
-                    fill={lane.color}
+                    fill={laneColor(lane, P)}
                     opacity={0.35 + (hit.velocity / 127) * 0.65}
                   />
                 ))}

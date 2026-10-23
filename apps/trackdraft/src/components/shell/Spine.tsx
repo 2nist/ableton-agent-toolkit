@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
-import { roleStyle } from "../../lib/roleColors";
+import { useRoleStyle } from "../../lib/roleColors";
 import { addSection, removeSection, reorderSections, repeatsFor, updateSection } from "../../lib/sections";
 import { NOTE_TO_PC, pitchClass } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
@@ -28,6 +28,7 @@ import { useTimeViewportStore } from "../../store/timeViewportStore";
 import { usePinchToZoom } from "../../hooks/usePinchToZoom";
 import type { BlueprintSection, BlueprintSong, SectionRole } from "../../types/blueprint";
 import { beatsPerBarOf } from "../../lib/timeline/beatMap";
+import { usePalette } from "../../theme/palette";
 
 /** Zoom presets in px per BAR. Bar-linear on purpose: every bar is the
  *  same width — 7/8 bars included — because the bars are the axis (a
@@ -65,6 +66,8 @@ const ROLES: SectionRole[] = ["intro", "verse", "pre_chorus", "chorus", "bridge"
  * re-targets them for free.
  */
 export default function Spine({ song, hint }: { song: BlueprintSong; hint?: string }) {
+  const P = usePalette();
+  const roleStyle = useRoleStyle();
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
@@ -839,7 +842,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
             {playheadPx != null && (
               <div
                 className="absolute top-0 bottom-0 w-px bg-accent pointer-events-none z-20"
-                style={{ left: playheadPx, boxShadow: "0 0 4px 1px #E8B54A" }}
+                style={{ left: playheadPx, boxShadow: `0 0 4px 1px ${P.track}` }}
               />
             )}
           </div>
@@ -1020,6 +1023,7 @@ function SpineBlock({
   canResizeLeft?: boolean;
   canResizeRight?: boolean;
 }) {
+  const roleStyle = useRoleStyle();
   const style = roleStyle(span.section.role);
   const dots = coverageDots(span.section);
   const missing = dots.filter((d) => !d.present).map((d) => d.label);

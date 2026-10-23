@@ -27,9 +27,10 @@ import {
   barX, beatsPerBarOf, gridStepForZoom, snapBeat, spanBeatToX, spanXToBeat, xToSpanBeat,
 } from "../../../lib/timeline/beatMap";
 import { beatsPerBar, sectionDurationBeats, type BlueprintSection, type DrumBlock, type DrumBlockNote, type DrumVoiceName } from "../../../types/blueprint";
-import { DRUM_LANES } from "../laneStyle";
-import { SECTION_ROLE_COLOR } from "../sectionRoleStyle";
-import { TRANSITION_COLOR, TRANSITION_LABEL } from "../transitionStyle";
+import { DRUM_LANES, laneColor } from "../laneStyle";
+import { useSectionRoleColors } from "../sectionRoleStyle";
+import { useTransitionColors, TRANSITION_LABEL } from "../transitionStyle";
+import { usePalette } from "../../../theme/palette";
 import SelectionPad, { PAD_PANEL_H, PAD_PANEL_W, PAD_SCALE } from "./SelectionPad";
 import SelectionEditorModal from "./SelectionEditorModal";
 import SelectionWorkbench from "./SelectionWorkbench";
@@ -166,6 +167,9 @@ interface PadDragState {
 }
 
 export default function DrumBlocksView() {
+  const P = usePalette();
+  const SECTION_ROLE_COLOR = useSectionRoleColors();
+  const TRANSITION_COLOR = useTransitionColors();
   const song = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
@@ -473,9 +477,10 @@ export default function DrumBlocksView() {
   const euclid = existingEuclid?.euclid ?? { k: Math.max(1, Math.round(nSteps / 2)), n: nSteps, rotation: 0 };
   const motion = existingMotion?.motion ?? { x: 0, y: 0 };
   const motionLabel = motionLabelFor(motion);
-  const laneColors = (range?.laneKeys ?? []).map(
-    (k) => DRUM_LANES.find((l) => l.key === k)?.color ?? "#B0B0B0",
-  );
+  const laneColors = (range?.laneKeys ?? []).map((k) => {
+    const found = DRUM_LANES.find((l) => l.key === k);
+    return found ? laneColor(found, P) : P.label;
+  });
 
   // ---- selection pixels -------------------------------------------------------
 
@@ -1119,7 +1124,7 @@ export default function DrumBlocksView() {
 
   if (!song || spans.length === 0) {
     return (
-      <div className="relative overflow-x-auto border border-edge rounded bg-black">
+      <div className="relative overflow-x-auto border border-edge rounded bg-deep">
         <p className="text-inkMuted text-xs p-3">No sections yet — add some in Structure first.</p>
       </div>
     );
@@ -1138,7 +1143,7 @@ export default function DrumBlocksView() {
           Click a cell to toggle · drag cells or their value boxes ↑↓ = the lane's parameter (chip in the gutter picks it) · wheel over the grid zooms · drag beats × lanes → controls · click a title selects the section · ⌥-drag the selection = copy
         </span>
         <span className="flex items-center gap-1.5">
-          {draftSection && <span className="font-mono text-2xs uppercase tracking-wider text-[#E8B54A]">● preview</span>}
+          {draftSection && <span className="font-mono text-2xs uppercase tracking-wider text-track">● preview</span>}
           {draftSection && (
             <>
               <button
@@ -1158,8 +1163,8 @@ export default function DrumBlocksView() {
         </span>
       </div>
 
-      <div ref={scrollRef} className="relative overflow-x-auto border border-edge rounded bg-black">
-        <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-0.5 border border-edge rounded bg-black/90 px-1 py-0.5 select-none">
+      <div ref={scrollRef} className="relative overflow-x-auto border border-edge rounded bg-deep">
+        <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-0.5 border border-edge rounded bg-deep/90 px-1 py-0.5 select-none">
           <button
             onClick={() =>
               useTimeViewportStore.getState().setScale("section", clampBarPx("section", barPx / 1.1))
@@ -1193,7 +1198,7 @@ export default function DrumBlocksView() {
         >
           {/* section labels + brackets + bar numbers */}
           {spans.map((span, si) => {
-            const color = SECTION_ROLE_COLOR[span.section.role]?.rim ?? "#565F70";
+            const color = SECTION_ROLE_COLOR[span.section.role]?.rim ?? P.grid;
             const x1 = barX(span.startBar, zoom);
             const x2 = barX(span.startBar + span.bars, zoom);
             return (
@@ -1213,7 +1218,7 @@ export default function DrumBlocksView() {
           {autoReadout.slice(0, -1).map((r, i) => {
             if (!r) return null;
             const x = barX(spans[i].startBar + spans[i].bars, zoom);
-            const color = r.model ? TRANSITION_COLOR[r.model] : "#8B94A1";
+            const color = r.model ? TRANSITION_COLOR[r.model] : P.voices.snare;
             const label = r.model
               ? `${TRANSITION_LABEL[r.model].toUpperCase()}${r.bars > 1 ? ` ·${r.bars}` : ""}${r.manual ? "" : " ·AUTO"}`
               : "FILL";
@@ -1244,7 +1249,7 @@ export default function DrumBlocksView() {
                 fontSize={9}
                 fontFamily="'IBM Plex Mono', monospace"
                 fontWeight={600}
-                fill="#E8B54A"
+                fill={P.track}
                 fillOpacity={0.85}
                 pointerEvents="none"
               >
@@ -1276,7 +1281,7 @@ export default function DrumBlocksView() {
                 textAnchor="middle"
                 fontSize={10}
                 fontFamily="'IBM Plex Mono', monospace"
-                fill="#7a7a80"
+                fill={P.grid}
                 pointerEvents="none"
               >
                 {Math.round(span.startBar) + barIdx}
@@ -1312,7 +1317,7 @@ export default function DrumBlocksView() {
               <text
                 key={`lb-${lane.key}`}
                 x={X0 - 14} y={cellCy(li, labelR) + 4} textAnchor="end" fontSize={12} fontWeight={600}
-                fontFamily="'IBM Plex Mono', monospace" fill={lane.color} pointerEvents="none"
+                fontFamily="'IBM Plex Mono', monospace" fill={laneColor(lane, P)} pointerEvents="none"
               >
                 {lane.label}
               </text>
@@ -1359,9 +1364,9 @@ export default function DrumBlocksView() {
                   <circle
                     key={`c-${q}`}
                     cx={x} cy={y} r={r}
-                    fill={hit ? lane.color : "#0b0e13"}
+                    fill={hit ? laneColor(lane, P) : P.scene}
                     fillOpacity={hit ? 0.45 + 0.55 * (hit.velocity / 127) : 1}
-                    stroke="#FFFFFF"
+                    stroke={P.label}
                     strokeOpacity={hit ? (accent ? 0.9 : 0.72) : accent ? 0.72 : 0.5}
                     strokeWidth={accent ? sw + 0.3 : sw}
                     pointerEvents="none"
@@ -1375,8 +1380,8 @@ export default function DrumBlocksView() {
                   <polygon
                     key={`m-${i}`}
                     points={`${x},${y - hh} ${x + hh},${y} ${x},${y + hh} ${x - hh},${y}`}
-                    fill={lane.color} fillOpacity={0.9}
-                    stroke="#FFFFFF" strokeOpacity={0.6} strokeWidth={Math.min(1.6, Math.max(0.8, hh * 0.2))}
+                    fill={laneColor(lane, P)} fillOpacity={0.9}
+                    stroke={P.label} strokeOpacity={0.6} strokeWidth={Math.min(1.6, Math.max(0.8, hh * 0.2))}
                     pointerEvents="none"
                   />
                 );
@@ -1410,15 +1415,15 @@ export default function DrumBlocksView() {
                       <g key={`vb-${q}`}>
                         <rect
                           x={x - bm.w / 2} y={bm.top} width={bm.w} height={bm.h} rx={2.5}
-                          fill={hit ? lane.color : "#0b0e13"} fillOpacity={hit ? (dim ? 0.08 : 0.14) : 0.6}
-                          stroke={hit ? lane.color : "#2E3540"} strokeOpacity={hit ? (dim ? 0.32 : 0.55) : 1} strokeWidth={1}
+                          fill={hit ? laneColor(lane, P) : P.scene} fillOpacity={hit ? (dim ? 0.08 : 0.14) : 0.6}
+                          stroke={hit ? laneColor(lane, P) : P.grid} strokeOpacity={hit ? (dim ? 0.32 : 0.55) : 1} strokeWidth={1}
                           pointerEvents="none"
                         />
                         {label !== null && bm.w >= (spec.short.length > 3 ? 16 : 12) && (
                           <text
                             x={x} y={bm.top + bm.h / 2 + Math.min(bm.font, bm.w * 0.34) * 0.36}
                             textAnchor="middle" fontSize={Math.min(bm.font, bm.w * 0.34)} fontFamily="'IBM Plex Mono', monospace"
-                            fill={dim ? "#8B94A1" : "#E9EDF3"} fillOpacity={dim ? 0.8 : 0.92} pointerEvents="none"
+                            fill={dim ? P.voices.snare : P.cream} fillOpacity={dim ? 0.8 : 0.92} pointerEvents="none"
                           >
                             {label}
                           </text>
@@ -1439,11 +1444,11 @@ export default function DrumBlocksView() {
                 >
                   <rect
                     x={8} y={chipY} width={46} height={13} rx={3}
-                    fill="#0f1218" stroke={param !== "vel" ? "#E8B54A" : "#2E3540"} strokeOpacity={param !== "vel" ? 0.8 : 1}
+                    fill={P.deep} stroke={param !== "vel" ? P.track : P.grid} strokeOpacity={param !== "vel" ? 0.8 : 1}
                   />
                   <text
                     x={31} y={chipY + 9.5} textAnchor="middle" fontSize={7.5} fontWeight={600}
-                    fontFamily="'IBM Plex Mono', monospace" fill={param !== "vel" ? "#E8B54A" : "#8B94A1"}
+                    fontFamily="'IBM Plex Mono', monospace" fill={param !== "vel" ? P.track : P.voices.snare}
                   >
                     {spec.short}
                   </text>
@@ -1482,14 +1487,14 @@ export default function DrumBlocksView() {
                   <g key={`sel-${i}`}>
                     <rect
                       x={r.x1} y={r.y1} width={r.x2 - r.x1} height={r.y2 - r.y1}
-                      fill="rgba(232,181,74,0.05)" stroke="#E8B54A" strokeWidth={1.2} strokeDasharray="5 4"
+                      fill="rgba(232,181,74,0.05)" stroke={P.track} strokeWidth={1.2} strokeDasharray="5 4"
                       pointerEvents="none"
                     />
                     {handles.map((h) => (
                       <rect
                         key={h.kind}
                         x={h.x} y={h.y} width={h.w} height={h.h} rx={3}
-                        fill="#E8B54A" fillOpacity={0.9}
+                        fill={P.track} fillOpacity={0.9}
                         style={{ cursor: h.cursor }}
                         onPointerDown={(e) => onHandleDown(e, h.kind, r.span)}
                         onPointerMove={onHandleMove}
@@ -1508,7 +1513,7 @@ export default function DrumBlocksView() {
             <rect
               x={Math.min(marquee.x0, marquee.x1)} y={Math.min(marquee.y0, marquee.y1)}
               width={Math.abs(marquee.x1 - marquee.x0)} height={Math.abs(marquee.y1 - marquee.y0)}
-              fill="rgba(232,181,74,0.07)" stroke="#E8B54A" strokeWidth={1.2} strokeDasharray="5 4"
+              fill="rgba(232,181,74,0.07)" stroke={P.track} strokeWidth={1.2} strokeDasharray="5 4"
               pointerEvents="none"
             />
           )}
@@ -1518,7 +1523,7 @@ export default function DrumBlocksView() {
             <rect
               key={`copyghost-${i}`}
               x={r.x1 + copyDrag.dxPx} y={r.y1} width={r.x2 - r.x1} height={r.y2 - r.y1}
-              fill="rgba(232,181,74,0.10)" stroke="#E8B54A" strokeWidth={1.2} strokeDasharray="2 3"
+              fill="rgba(232,181,74,0.10)" stroke={P.track} strokeWidth={1.2} strokeDasharray="2 3"
               pointerEvents="none"
             />
           ))}
@@ -1529,23 +1534,23 @@ export default function DrumBlocksView() {
             <g pointerEvents="none">
               <rect
                 x={velocityDrag.x + 16} y={velocityDrag.y - 46} width={70} height={70} rx={6}
-                fill="rgba(11,13,17,0.95)" stroke="#E8B54A" strokeOpacity={0.6} strokeWidth={1}
+                fill="rgba(11,13,17,0.95)" stroke={P.track} strokeOpacity={0.6} strokeWidth={1}
               />
               <text
                 x={velocityDrag.x + 51} y={velocityDrag.y - 28} textAnchor="middle" fontSize={14} fontWeight={600}
-                fontFamily="'IBM Plex Mono', monospace" fill="#E8B54A"
+                fontFamily="'IBM Plex Mono', monospace" fill={P.track}
               >
                 {velocityDrag.text}
               </text>
-              <rect x={velocityDrag.x + 47} y={velocityDrag.y - 16} width={8} height={32} rx={4} fill="#1c2129" />
+              <rect x={velocityDrag.x + 47} y={velocityDrag.y - 16} width={8} height={32} rx={4} fill={P.deep} />
               <rect
                 x={velocityDrag.x + 47}
                 y={velocityDrag.y - 16 + 32 * (1 - velocityDrag.frac)}
-                width={8} height={32 * velocityDrag.frac} rx={4} fill="#E8B54A"
+                width={8} height={32 * velocityDrag.frac} rx={4} fill={P.track}
               />
               <text
                 x={velocityDrag.x + 51} y={velocityDrag.y + 36} textAnchor="middle" fontSize={9}
-                fontFamily="'IBM Plex Mono', monospace" fill="#B0B0B0"
+                fontFamily="'IBM Plex Mono', monospace" fill={P.label}
               >
                 {velocityDrag.label}
               </text>
@@ -1567,7 +1572,7 @@ export default function DrumBlocksView() {
                   x={0} y={0} width={width} height={HEIGHT} fill="transparent"
                   onPointerDown={(e) => { e.stopPropagation(); setParamMenu(null); }}
                 />
-                <rect x={8} y={menuY} width={104} height={menuH} rx={4} fill="#0d1016" stroke="#2E3540" />
+                <rect x={8} y={menuY} width={104} height={menuH} rx={4} fill={P.deep} stroke={P.grid} />
                 {STEP_PARAMS.map((p, i) => (
                   <g
                     key={p}
@@ -1581,7 +1586,7 @@ export default function DrumBlocksView() {
                     />
                     <text
                       x={17} y={menuY + 15.5 + i * 17} fontSize={9} fontFamily="'IBM Plex Mono', monospace"
-                      fill={p === active ? "#E8B54A" : "#B0B0B0"}
+                      fill={p === active ? P.track : P.label}
                     >
                       {PARAM_SPECS[p].label}
                     </text>

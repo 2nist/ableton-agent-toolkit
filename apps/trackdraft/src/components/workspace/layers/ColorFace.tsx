@@ -3,6 +3,7 @@ import type { SectionSpan } from "../../../lib/arrangement";
 import type { BlueprintSong } from "../../../types/blueprint";
 import { planColorStem } from "../../../lib/colorStem";
 import StemFace from "./StemFace";
+import { usePalette } from "../../../theme/palette";
 
 /** The color layer's arrangement face: the bi-tonal Color Chord notes that
  *  sit above the block chords, for this section's pass. Flavor and register
@@ -18,6 +19,7 @@ export default function ColorFace({
   span: SectionSpan;
   onOpen: () => void;
 }) {
+  const P = usePalette();
   const { startBeat } = span;
   const notes = useMemo(
     () =>
@@ -33,7 +35,7 @@ export default function ColorFace({
   return (
     <StemFace
       notes={notes}
-      color="#9678C8"
+      color={P.hues[5].rim}
       empty="No color notes — pick a flavor, or add chords for it to sit above."
       onOpen={onOpen}
     />

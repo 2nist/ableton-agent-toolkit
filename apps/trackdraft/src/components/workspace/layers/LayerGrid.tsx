@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useTimeSelectionStore, type TimeSelection } from "../../../store/timeSelectionStore";
 import { useTimeViewportStore } from "../../../store/timeViewportStore";
+import { usePalette } from "../../../theme/palette";
 
 interface SectionGridValue {
   /** Pixel width of the whole section grid (bars × barPx). */
@@ -133,20 +134,20 @@ export function FaceFrame({
   const beatPx = barPx / Math.max(1, beatsPerBar);
   return (
     <div
-      className={`relative w-full overflow-hidden rounded border border-edge/60 bg-[#0a0d12] ${className}`}
+      className={`relative w-full overflow-hidden rounded border border-edge/60 bg-deep ${className}`}
       style={{ height }}
     >
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          backgroundImage: `repeating-linear-gradient(to right, rgba(255,255,255,0.06) 0 1px, transparent 1px ${barPx}px)`,
+          backgroundImage: `repeating-linear-gradient(to right, color-mix(in srgb, currentColor 8%, transparent) 0 1px, transparent 1px ${barPx}px)`,
         }}
       />
       {beatPx >= 9 && (
         <div
           className="absolute inset-0 pointer-events-none opacity-60"
           style={{
-            backgroundImage: `repeating-linear-gradient(to right, rgba(255,255,255,0.025) 0 1px, transparent 1px ${beatPx}px)`,
+            backgroundImage: `repeating-linear-gradient(to right, color-mix(in srgb, currentColor 4%, transparent) 0 1px, transparent 1px ${beatPx}px)`,
           }}
         />
       )}
@@ -172,12 +173,13 @@ export function SelectionBand() {
 }
 
 export function PlayheadLine() {
+  const P = usePalette();
   const { playheadBeat, barPx, beatsPerBar } = useSectionGrid();
   if (playheadBeat == null) return null;
   return (
     <div
       className="absolute inset-y-0 z-20 w-px bg-accent pointer-events-none"
-      style={{ left: (playheadBeat / beatsPerBar) * barPx, boxShadow: "0 0 4px 1px #E8B54A" }}
+      style={{ left: (playheadBeat / beatsPerBar) * barPx, boxShadow: `0 0 4px 1px ${P.track}` }}
       aria-hidden
     />
   );

@@ -4,7 +4,8 @@ import type { SectionSpan } from "../../../lib/arrangement";
 import { beatsPerBarOf } from "../../../lib/timeline/beatMap";
 import type { BlueprintSection, DrumBlockFx } from "../../../types/blueprint";
 import type { LaneHits } from "../../../lib/timeline/drumLaneHits";
-import { DRUM_LANES } from "../laneStyle";
+import { DRUM_LANES, laneColor } from "../laneStyle";
+import { usePalette } from "../../../theme/palette";
 import { EuclidRing, FxPanel, MotionRing, VelocityPanel } from "./SelectionDisplays";
 import { euclidBlocksFor, fxBlocksFor, fxForLanes, motionBlockFor, motionLabelFor, upsertModeBlocks } from "./selectionMath";
 import type { VelocityOp } from "./velocityOps";
@@ -63,11 +64,11 @@ interface SelectionEditorModalProps {
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 const MONO = "'IBM Plex Mono', ui-monospace, Menlo, monospace";
-const AMBER = "#E8B54A";
 
 type Mode = "euclid" | "motion" | "velocity" | "fx";
 
 export default function SelectionEditorModal(props: SelectionEditorModalProps) {
+  const P = usePalette();
   const { span, section, range, hits, spans, stepBeats, onWrite, onVelocityOp, onFlatten, onRegenerate, hasDraft, onApply, onCancel, onClose } = props;
 
   const [panel, setPanel] = useState<Mode>("euclid");
@@ -210,13 +211,13 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-deep/60"
       onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="flex flex-col bg-[#0c0e12] border border-edge rounded-lg shadow-2xl w-[min(1180px,94vw)] h-[min(680px,92vh)]">
+      <div className="flex flex-col bg-deep border border-edge rounded-lg shadow-2xl w-[min(1180px,94vw)] h-[min(680px,92vh)]">
         {/* header */}
         <div className="flex items-center gap-3 px-4 h-10 border-b border-edge shrink-0">
-          <span className="font-mono text-xs uppercase tracking-wider text-[#E8B54A]">Selection editor</span>
+          <span className="font-mono text-xs uppercase tracking-wider text-track">Selection editor</span>
           <span className="font-mono text-xs text-ink">{section.name}</span>
           <span className="font-mono text-2xs text-inkMuted">
             bars {barOf(range.startBeat)}–{barOf(Math.max(range.startBeat, range.endBeat - 1e-6))} ·
@@ -238,7 +239,7 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
           <div className="w-full lg:flex-1 lg:min-w-0 p-3 shrink-0">
             <svg viewBox={`0 0 ${GRID_W} 400`} className="w-full h-auto block">
               {/* grid background */}
-              <rect x={0} y={0} width={GRID_W} height={400} fill="#08090c" />
+              <rect x={0} y={0} width={GRID_W} height={400} fill={P.deep} />
 
               {/* bar lines + numbers (global bar convention) */}
               {Array.from({ length: span.bars + 1 }).map((_, bi) => {
@@ -247,8 +248,8 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
                 const x = xOf(beat);
                 return (
                   <g key={`bar-${bi}`}>
-                    <line x1={x} y1={RULER_H - 6} x2={x} y2={400 - 46} stroke="#FFFFFF" strokeOpacity={0.12} strokeWidth={1} />
-                    <text x={x + 3} y={RULER_H - 11} fontSize={9} fontFamily={MONO} fill="#8B94A1">
+                    <line x1={x} y1={RULER_H - 6} x2={x} y2={400 - 46} stroke={P.label} strokeOpacity={0.12} strokeWidth={1} />
+                    <text x={x + 3} y={RULER_H - 11} fontSize={9} fontFamily={MONO} fill={P.voices.snare}>
                       {span.startBar + bi}
                     </text>
                   </g>
@@ -259,31 +260,31 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
                 if (bi % bpb === 0) return null;
                 const x = xOf(bi);
                 if (bi < viewStart - 1e-9 || bi > viewEnd + 1e-9) return null;
-                return <line key={`bt-${bi}`} x1={x} y1={RULER_H - 10} x2={x} y2={RULER_H - 6} stroke="#FFFFFF" strokeOpacity={0.18} strokeWidth={1} />;
+                return <line key={`bt-${bi}`} x1={x} y1={RULER_H - 10} x2={x} y2={RULER_H - 6} stroke={P.label} strokeOpacity={0.18} strokeWidth={1} />;
               })}
 
               {/* section + neighbour labels for context */}
-              <text x={GRID_X0} y={14} fontSize={11} fontWeight={600} fontFamily={MONO} fill={AMBER}>
+              <text x={GRID_X0} y={14} fontSize={11} fontWeight={600} fontFamily={MONO} fill={P.track}>
                 {section.name.toUpperCase()}
               </text>
               {prevSpan.prev && (
-                <text x={GRID_X0 - 4} y={RULER_H + 318} fontSize={9.5} fontFamily={MONO} fill="#6E7684" textAnchor="start">
+                <text x={GRID_X0 - 4} y={RULER_H + 318} fontSize={9.5} fontFamily={MONO} fill={P.grid} textAnchor="start">
                   ◀ {prevSpan.prev.section.name}
                 </text>
               )}
               {prevSpan.next && (
-                <text x={GRID_W - GRID_PAD_R} y={RULER_H + 318} fontSize={9.5} fontFamily={MONO} fill="#6E7684" textAnchor="end">
+                <text x={GRID_W - GRID_PAD_R} y={RULER_H + 318} fontSize={9.5} fontFamily={MONO} fill={P.grid} textAnchor="end">
                   {prevSpan.next.section.name} ▶
                 </text>
               )}
               {viewStart > 0 && (
-                <text x={GRID_X0 + 4} y={RULER_H - 11} fontSize={8} fontFamily={MONO} fill="#5A6270">…</text>
+                <text x={GRID_X0 + 4} y={RULER_H - 11} fontSize={8} fontFamily={MONO} fill={P.grid}>…</text>
               )}
 
               {/* selection band */}
               <rect
                 x={selX1} y={rowTop(loLane)} width={Math.max(2, selX2 - selX1)} height={(hiLane - loLane + 1) * ROW_H}
-                fill="rgba(232,181,74,0.06)" stroke={AMBER} strokeOpacity={0.55} strokeWidth={1.2} strokeDasharray="5 4"
+                fill="rgba(232,181,74,0.06)" stroke={P.track} strokeOpacity={0.55} strokeWidth={1.2} strokeDasharray="5 4"
               />
 
               {/* lanes */}
@@ -298,10 +299,10 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
                 const laneHitAt = hitAtFor(lane.key as DrumLaneId);
                 return (
                   <g key={lane.key} opacity={selected ? 1 : 0.4}>
-                    <line x1={0} y1={top} x2={GRID_W} y2={top} stroke="#FFFFFF" strokeOpacity={0.06} strokeWidth={1} />
+                    <line x1={0} y1={top} x2={GRID_W} y2={top} stroke={P.label} strokeOpacity={0.06} strokeWidth={1} />
                     <text
                       x={GRID_X0 - 8} y={cy + 4} textAnchor="end" fontSize={11} fontWeight={600}
-                      fontFamily={MONO} fill={selected ? lane.color : "#59606D"}
+                      fontFamily={MONO} fill={selected ? laneColor(lane, P) : P.grid}
                     >
                       {lane.label}
                     </text>
@@ -316,9 +317,9 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
                         <g key={`c-${q}`}>
                           <circle
                             cx={x} cy={cy} r={cellR}
-                            fill={hit ? lane.color : "#0b0e13"}
+                            fill={hit ? laneColor(lane, P) : P.scene}
                             fillOpacity={hit ? (inSel ? 0.18 : 0.1) : 1}
-                            stroke="#FFFFFF"
+                            stroke={P.label}
                             strokeOpacity={hit ? 0.7 : barStart ? 0.5 : 0.3}
                             strokeWidth={barStart ? 2.4 : 2}
                           />
@@ -326,14 +327,14 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
                             <>
                               <rect
                                 x={x - boxW / 2} y={boxTop} width={boxW} height={boxH} rx={2.5}
-                                fill={hit ? lane.color : "#0b0e13"} fillOpacity={hit ? 0.14 : 0.6}
-                                stroke={hit ? lane.color : "#2E3540"} strokeOpacity={hit ? 0.55 : 1} strokeWidth={1}
+                                fill={hit ? laneColor(lane, P) : P.scene} fillOpacity={hit ? 0.14 : 0.6}
+                                stroke={hit ? laneColor(lane, P) : P.grid} strokeOpacity={hit ? 0.55 : 1} strokeWidth={1}
                               />
                               {hit && boxW >= 13 && (
                                 <text
                                   x={x} y={boxTop + boxH / 2 + Math.min(10, Math.max(6.5, boxW * 0.42)) * 0.36}
                                   textAnchor="middle" fontSize={Math.min(10, Math.max(6.5, boxW * 0.42))}
-                                  fontFamily={MONO} fill="#E9EDF3" fillOpacity={0.9}
+                                  fontFamily={MONO} fill={P.cream} fillOpacity={0.9}
                                 >
                                   {Math.round(hit.velocity)}
                                 </text>
@@ -348,7 +349,7 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
               })}
 
               {/* selection captions */}
-              <text x={(selX1 + selX2) / 2} y={rowTop(hiLane) + (hiLane - loLane + 1) * ROW_H + 16} textAnchor="middle" fontSize={10} fontFamily={MONO} fill={AMBER}>
+              <text x={(selX1 + selX2) / 2} y={rowTop(hiLane) + (hiLane - loLane + 1) * ROW_H + 16} textAnchor="middle" fontSize={10} fontFamily={MONO} fill={P.track}>
                 {lanes.length} lane{lanes.length > 1 ? "s" : ""} · {nBeats} beats · drag the ring to set the rhythm
               </text>
             </svg>
@@ -364,7 +365,7 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
                   onClick={() => setPanel(c.id)}
                   className={`font-mono text-2xs rounded px-2 py-1 border ${
                     panel === c.id
-                      ? "border-[#E8B54A] text-[#E8B54A] bg-[#E8B54A]/10"
+                      ? "border-track text-track bg-track/10"
                       : c.live
                         ? "border-edge text-inkMuted hover:text-ink"
                         : "border-edge text-inkMuted/60"
@@ -379,7 +380,7 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
                 to the docked workbench's) — and, for FX, the same Range FX
                 panel the workbench renders */}
             {(panel === "euclid" || panel === "motion") && (
-              <div className="border border-edge rounded bg-black/40">
+              <div className="border border-edge rounded bg-deep/40">
                 <div className="p-2">
                   {panel === "euclid" ? (
                     <EuclidRing k={euclid.k} n={nBeats} rotation={euclid.rotation} lanes={lanes} onChange={writeEuclid} />
@@ -388,7 +389,7 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
                   )}
                 </div>
                 <div className="px-3 py-2 border-t border-edge">
-                  <div className="font-mono text-sm text-[#E8B54A]">
+                  <div className="font-mono text-sm text-track">
                     {panel === "euclid"
                       ? `${euclid.k}/${nBeats} · ↻${euclid.rotation} · ${Math.round((euclid.k / nBeats) * 100)}%`
                       : motionReadout ?? "DRAG TO GESTURE"}
@@ -403,7 +404,7 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
             )}
 
             {panel === "fx" && (
-              <div className="border border-edge rounded bg-black/40">
+              <div className="border border-edge rounded bg-deep/40">
                 <FxPanel values={fx} onChange={writeFx} />
               </div>
             )}
@@ -414,7 +415,7 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
                 const lane = DRUM_LANES.find((l) => l.key === k);
                 return (
                   <span key={k} className="flex items-center gap-1 font-mono text-2xs border border-edge rounded px-1.5 py-0.5 text-inkMuted">
-                    <span className="w-2 h-2 rounded-full" style={{ background: lane?.color }} />
+                    <span className="w-2 h-2 rounded-full" style={{ background: lane ? laneColor(lane, P) : P.track }} />
                     {lane?.label}
                   </span>
                 );
@@ -426,7 +427,7 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
 
             {/* planned control families */}
             {panel === "velocity" && (
-              <div className="border border-edge rounded bg-black/40">
+              <div className="border border-edge rounded bg-deep/40">
                 <VelocityPanel onOp={onVelocityOp} />
               </div>
             )}
@@ -436,7 +437,7 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
         {/* footer */}
         <div className="flex items-center gap-2 px-4 h-12 border-t border-edge shrink-0">
           {hasDraft ? (
-            <span className="font-mono text-2xs text-[#E8B54A]">● preview — edits staged</span>
+            <span className="font-mono text-2xs text-track">● preview — edits staged</span>
           ) : (
             <span className="font-mono text-2xs text-inkMuted">no edits yet — drag the ring to stage one</span>
           )}

@@ -12,10 +12,11 @@ import {
   resolveSectionVariant,
   velocityNumber,
 } from "../../lib/playback/drumPreview";
-import { TRANSITION_COLOR, TRANSITION_LABEL, TRANSITION_MODELS } from "./transitionStyle";
+import { useTransitionColors, TRANSITION_LABEL, TRANSITION_MODELS } from "./transitionStyle";
 import NecklaceRow from "./NecklaceRow";
 import TransitionPreview from "./TransitionPreview";
-import { VOICE_COLOR, VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
+import { VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
+import { usePalette, type VoiceColors } from "../../theme/palette";
 import { SliderRow, EuclidSliders, StepView, EuclidStepView } from "./euclidEditor";
 import {
   buildEuclideanOutline,
@@ -51,10 +52,10 @@ function eighthNoteNumerator(sec: Pick<BlueprintSection, "timeSignatureNumerator
  *  Colors derive from `voiceStyle`'s kick/snare/hat hues (single source:
  *  theme/palette.ts, D5). */
 const CELL_VOICE_LABEL: Record<DrumCellVoice, string> = { kick: "Kick", snare: "Snare", hat: "Hat" };
-const CELL_VOICE_COLOR: Record<DrumCellVoice, string> = {
-  kick: VOICE_COLOR.kick!,
-  snare: VOICE_COLOR.snare!,
-  hat: VOICE_COLOR.closedHat!,
+const CELL_VOICE_FAMILY: Record<DrumCellVoice, keyof VoiceColors> = {
+  kick: "kick",
+  snare: "snare",
+  hat: "hat",
 };
 
 /** Which of the three mutually-exclusive drum-authoring modes a section is
@@ -125,6 +126,13 @@ function FreeSliders({ n, k, rotation, onChange }: {
  *  (`TransitionPreview`), so build/break/cut/drop read differently here and
  *  at export — no more shared placeholder. */
 export default function DrumPatternTools() {
+  const TRANSITION_COLOR = useTransitionColors();
+  const P = usePalette();
+  const CELL_VOICE_COLOR = {
+    kick: P.voices[CELL_VOICE_FAMILY.kick],
+    snare: P.voices[CELL_VOICE_FAMILY.snare],
+    hat: P.voices[CELL_VOICE_FAMILY.hat],
+  } as Record<DrumCellVoice, string>;
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
@@ -526,7 +534,7 @@ export default function DrumPatternTools() {
       <div className="flex items-center justify-between">
         <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted">Pattern · {section.name}</span>
         {isDraft && (
-          <span className="font-mono text-3xs uppercase tracking-wider text-[#E8B54A]">● preview</span>
+          <span className="font-mono text-3xs uppercase tracking-wider text-track">● preview</span>
         )}
       </div>
 
@@ -676,7 +684,7 @@ export default function DrumPatternTools() {
                   {VOICE_LABEL[activeVoice]} · pattern
                 </span>
                 <NecklaceRow large necklaces={necklace ? necklace.filter((n) => n.voice === activeVoice) : null} />
-                <EuclidStepView k={voiceK} n={voiceN} rotation={voiceRot} color="#E8B54A" large />
+                <EuclidStepView k={voiceK} n={voiceN} rotation={voiceRot} color={P.track} large />
                 <p className="font-mono text-2xs text-inkMuted">
                   {voiceK} / {voiceN} · rot {voiceRot}
                 </p>
@@ -725,7 +733,7 @@ export default function DrumPatternTools() {
               <div className="space-y-2">
                 <div className="space-y-1.5">
                   <NecklaceRow necklaces={outlineNecklaces} />
-                  <StepView outline={outline} color="#E8B54A" />
+                  <StepView outline={outline} color={P.track} />
                   <p className="font-mono text-2xs text-inkMuted">
                     {k} / {n} · rot {rotation} · {outline.label}
                   </p>
@@ -767,7 +775,7 @@ export default function DrumPatternTools() {
                       <button
                         key={i}
                         className="flex flex-col items-center gap-0.5 rounded border px-1.5 py-1"
-                        style={{ borderColor: sel ? "#F5E7C8" : "#2E2E34", backgroundColor: sel ? "#232838" : "transparent" }}
+                        style={{ borderColor: sel ? P.cream : P.grid, backgroundColor: sel ? P.deep : "transparent" }}
                         onClick={() => setCellIndex(i)}
                         title={`Cell ${i + 1}: ${cell} beats, plays ${CELL_VOICE_LABEL[voice]}`}
                       >
@@ -806,8 +814,8 @@ export default function DrumPatternTools() {
                             key={v}
                             className="font-mono text-2xs rounded px-1.5 py-0.5 border"
                             style={{
-                              borderColor: active ? color : "#2E2E34",
-                              color: active ? "#12161D" : color,
+                              borderColor: active ? color : P.grid,
+                              color: active ? P.well : color,
                               backgroundColor: active ? color : "transparent",
                             }}
                             onClick={() => setOutlineCellVoice(selectedCell, v)}
@@ -856,7 +864,7 @@ export default function DrumPatternTools() {
                 <div className="space-y-2">
                   <div className="space-y-1.5">
                     <NecklaceRow necklaces={resolveOutlineVoiceNecklaces(variation)} />
-                    <StepView outline={variation} color="#D9954A" />
+                    <StepView outline={variation} color={P.voices.cym} />
                     <p className="font-mono text-2xs text-inkMuted">{vK} / {vN} · rot {vRot} · {variation.label}</p>
                   </div>
                   <div className="border-t border-edge/40 pt-2 space-y-2.5">
@@ -895,7 +903,7 @@ export default function DrumPatternTools() {
                         <button
                           key={i}
                           className="flex flex-col items-center gap-0.5 rounded border px-1.5 py-1"
-                          style={{ borderColor: sel ? "#F5E7C8" : "#2E2E34", backgroundColor: sel ? "#232838" : "transparent" }}
+                          style={{ borderColor: sel ? P.cream : P.grid, backgroundColor: sel ? P.deep : "transparent" }}
                           onClick={() => setVCellIndex(i)}
                           title={`Cell ${i + 1}: ${cell} beats, plays ${CELL_VOICE_LABEL[voice]}`}
                         >
@@ -934,8 +942,8 @@ export default function DrumPatternTools() {
                               key={v}
                               className="font-mono text-2xs rounded px-1.5 py-0.5 border"
                               style={{
-                                borderColor: active ? color : "#2E2E34",
-                                color: active ? "#12161D" : color,
+                                borderColor: active ? color : P.grid,
+                                color: active ? P.well : color,
                                 backgroundColor: active ? color : "transparent",
                               }}
                               onClick={() => setVariationCellVoice(vSelectedCell, v)}
@@ -1080,7 +1088,7 @@ export default function DrumPatternTools() {
             {outline ? (
               <div className="space-y-1.5">
                 <NecklaceRow necklaces={outlineNecklaces} />
-                <StepView outline={outline} color="#E8B54A" />
+                <StepView outline={outline} color={P.track} />
               </div>
             ) : necklace ? (
               <NecklaceRow necklaces={necklace} />

@@ -15,14 +15,24 @@
 import { useEffect, useRef } from "react";
 import type { MelodyNote } from "../../types/blueprint";
 import { midiToNoteName } from "../../lib/melody/recorder";
+import { usePalette, withAlpha } from "../../theme/palette";
 
-/** Theme colors (ABLETON_DARK) — canvas can't use Tailwind classes. */
-const PANEL_ALT = "#5C5C5C";
-const GRID_LINE = "rgba(255,255,255,0.1)";
-const BAR_LINE = "rgba(255,255,255,0.28)";
-const KEY_WHITE = "#C9C9C9";
-const KEY_BLACK = "#242424";
-const KEY_EDGE = "#1C1C1C";
+/** Canvas ink for the current theme — set immediately before drawing, same
+ *  reason as MelodyStaff's: the draw helpers take a context, not a palette. */
+const INK = {
+  panelAlt: "#5C5C5C",
+  gridLine: "rgba(255,255,255,0.1)",
+  barLine: "rgba(255,255,255,0.28)",
+  keyWhite: "#C9C9C9",
+  keyBlack: "#242424",
+  keyEdge: "#1C1C1C",
+  keyInk: "#1C1C1C",
+  axisInk: "rgba(255,255,255,0.6)",
+};
+
+function setRollInk(ink: Partial<typeof INK>): void {
+  Object.assign(INK, ink);
+}
 /** Width of the piano-keyboard gutter (incl. note labels). */
 const GUTTER_W = 54;
 const TOP_PAD = 10;
@@ -41,6 +51,7 @@ interface Props {
 }
 
 export default function MelodyPianoRoll({ notes, sectionBeats, height = 150 }: Props) {
+  const P = usePalette();
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const notesRef = useRef(notes);
@@ -66,6 +77,16 @@ export default function MelodyPianoRoll({ notes, sectionBeats, height = 150 }: P
       canvas.style.width = `${cssWidth}px`;
       canvas.style.height = `${cssHeight}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      setRollInk({
+        panelAlt: P.well,
+        gridLine: withAlpha(P.label, 0.1),
+        barLine: withAlpha(P.label, 0.28),
+        keyWhite: P.label,
+        keyBlack: P.deep,
+        keyEdge: P.grid,
+        keyInk: P.scene,
+        axisInk: withAlpha(P.label, 0.6),
+      });
       drawPianoRoll(ctx, cssWidth, cssHeight, notesRef.current, sectionBeatsRef.current);
     };
 
@@ -73,7 +94,7 @@ export default function MelodyPianoRoll({ notes, sectionBeats, height = 150 }: P
     const ro = new ResizeObserver(render);
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, []);
+  }, [P]);
 
   return (
     <div ref={wrapRef} className="w-full">
@@ -90,7 +111,7 @@ function drawPianoRoll(
   sectionBeats: number,
 ): void {
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = PANEL_ALT;
+  ctx.fillStyle = INK.panelAlt;
   ctx.fillRect(0, 0, width, height);
 
   const pitches = notes.map((n) => n.pitch);
@@ -112,7 +133,7 @@ function drawPianoRoll(
   ctx.lineWidth = 1;
   for (let b = 1; b < Math.floor(stepBeats); b++) {
     const x = mainX + (b / stepBeats) * mainW;
-    ctx.strokeStyle = b % 4 === 0 ? BAR_LINE : GRID_LINE;
+    ctx.strokeStyle = b % 4 === 0 ? INK.barLine : INK.gridLine;
     ctx.beginPath();
     ctx.moveTo(x, TOP_PAD);
     ctx.lineTo(x, TOP_PAD + mainH);
@@ -122,7 +143,7 @@ function drawPianoRoll(
   // --- Horizontal grid: one line per semitone row (very dim). ---
   for (let p = minPitch; p <= maxPitch; p++) {
     const y = pitchToY(p);
-    ctx.strokeStyle = GRID_LINE;
+    ctx.strokeStyle = INK.gridLine;
     ctx.beginPath();
     ctx.moveTo(mainX, y);
     ctx.lineTo(mainX + mainW, y);
@@ -130,7 +151,7 @@ function drawPianoRoll(
   }
 
   // --- Beat labels along the bottom axis. ---
-  ctx.fillStyle = "rgba(255,255,255,0.6)";
+  ctx.fillStyle = INK.axisInk;
   ctx.font = "10px ui-monospace, monospace";
   ctx.textBaseline = "top";
   ctx.textAlign = "center";
@@ -178,16 +199,16 @@ function drawKeyboard(
     const pc = ((p % 12) + 12) % 12;
     if (!NATURAL_PCS.has(pc)) continue;
     const y = pitchToY(p);
-    ctx.fillStyle = KEY_WHITE;
+    ctx.fillStyle = INK.keyWhite;
     ctx.fillRect(0, y, GUTTER_W, rowH + 1);
-    ctx.strokeStyle = KEY_EDGE;
+    ctx.strokeStyle = INK.keyEdge;
     ctx.lineWidth = 1;
     ctx.strokeRect(0.5, y + 0.5, GUTTER_W - 1, rowH);
     // Label when there's room (>= ~7px), else just the octave Cs.
     const labelable = rowH >= 7;
     const isC = pc === 0;
     if (labelable || isC) {
-      ctx.fillStyle = "#1C1C1C";
+      ctx.fillStyle = INK.keyInk;
       ctx.font = `${Math.min(10, Math.max(7, Math.round(rowH - 2)))}px ui-monospace, monospace`;
       ctx.textBaseline = "middle";
       ctx.textAlign = "left";
@@ -200,9 +221,9 @@ function drawKeyboard(
     const pc = ((p % 12) + 12) % 12;
     if (NATURAL_PCS.has(pc)) continue;
     const y = pitchToY(p);
-    ctx.fillStyle = KEY_BLACK;
+    ctx.fillStyle = INK.keyBlack;
     ctx.fillRect(GUTTER_W * 0.52, y - rowH / 2, GUTTER_W * 0.48, rowH);
-    ctx.strokeStyle = KEY_EDGE;
+    ctx.strokeStyle = INK.keyEdge;
     ctx.lineWidth = 1;
     ctx.strokeRect(GUTTER_W * 0.52 + 0.5, y - rowH / 2 + 0.5, GUTTER_W * 0.48 - 1, rowH);
   }

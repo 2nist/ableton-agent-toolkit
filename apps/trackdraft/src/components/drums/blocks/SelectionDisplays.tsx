@@ -1,7 +1,8 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { euclidOnsetSteps, type DrumLaneId } from "@drum/library";
 import type { DrumBlockFx } from "../../../types/blueprint";
-import { DRUM_LANES } from "../laneStyle";
+import { DRUM_LANES, laneColor } from "../laneStyle";
+import { usePalette } from "../../../theme/palette";
 import { FX_PARAMS, FX_SPECS, type FxParam } from "./fxParams";
 import { euclidFromRing, ringHand } from "./selectionMath";
 import type { VelocityOp } from "./velocityOps";
@@ -18,7 +19,6 @@ const DISP = 260;
 const DISP_C = DISP / 2;
 const RING_R = 96;
 const RING_BASE = 30;
-const AMBER = "#E8B54A";
 const MONO = "'IBM Plex Mono', ui-monospace, Menlo, monospace";
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
@@ -39,6 +39,7 @@ export function EuclidRing({ k, n, rotation, lanes, onChange }: {
   lanes: DrumLaneId[];
   onChange: (k: number, rotation: number) => void;
 }) {
+  const P = usePalette();
   const ref = useRef<SVGSVGElement | null>(null);
   const dragging = useRef(false);
   const [dragVis, setDragVis] = useState<{ x: number; y: number } | null>(null);
@@ -85,7 +86,7 @@ export function EuclidRing({ k, n, rotation, lanes, onChange }: {
             key={`t-${s}`}
             x1={DISP_C + Math.cos(a) * (RING_R + 6)} y1={DISP_C + Math.sin(a) * (RING_R + 6)}
             x2={DISP_C + Math.cos(a) * (RING_R + 12)} y2={DISP_C + Math.sin(a) * (RING_R + 12)}
-            stroke={AMBER} strokeOpacity={0.3} strokeWidth={1}
+            stroke={P.track} strokeOpacity={0.3} strokeWidth={1}
           />
         );
       })}
@@ -96,14 +97,14 @@ export function EuclidRing({ k, n, rotation, lanes, onChange }: {
         if (rr < 20) return null;
         return (
           <g key={laneKey}>
-            <circle cx={DISP_C} cy={DISP_C} r={rr} fill="none" stroke={lane?.color ?? "#8B94A1"} strokeOpacity={0.18} strokeWidth={1} />
+            <circle cx={DISP_C} cy={DISP_C} r={rr} fill="none" stroke={lane ? laneColor(lane, P) : P.track ?? P.voices.snare} strokeOpacity={0.18} strokeWidth={1} />
             {onsets.map((s, oi) => {
               const a = -Math.PI / 2 + (s / n) * 2 * Math.PI;
               return (
                 <circle
                   key={`o-${oi}`}
                   cx={DISP_C + Math.cos(a) * rr} cy={DISP_C + Math.sin(a) * rr}
-                  r={4} fill={lane?.color ?? AMBER} fillOpacity={0.9}
+                  r={4} fill={lane ? laneColor(lane, P) : P.track} fillOpacity={0.9}
                 />
               );
             })}
@@ -111,10 +112,10 @@ export function EuclidRing({ k, n, rotation, lanes, onChange }: {
         );
       })}
       {/* extended drag arm — line + ball out to the display edge */}
-      <line x1={DISP_C} y1={DISP_C} x2={armX} y2={armY} stroke={AMBER} strokeWidth={1.6} strokeOpacity={0.85} />
-      <circle cx={armX} cy={armY} r={7.5} fill={AMBER} stroke="#0b0d11" strokeWidth={2} />
-      <circle cx={armX} cy={armY} r={2} fill="#0b0d11" />
-      <circle cx={DISP_C} cy={DISP_C} r={3} fill={AMBER} />
+      <line x1={DISP_C} y1={DISP_C} x2={armX} y2={armY} stroke={P.track} strokeWidth={1.6} strokeOpacity={0.85} />
+      <circle cx={armX} cy={armY} r={7.5} fill={P.track} stroke={P.deep} strokeWidth={2} />
+      <circle cx={armX} cy={armY} r={2} fill={P.deep} />
+      <circle cx={DISP_C} cy={DISP_C} r={3} fill={P.track} />
     </svg>
   );
 }
@@ -124,6 +125,7 @@ export function MotionRing({ x, y, onChange }: {
   y: number;
   onChange: (x: number, y: number) => void;
 }) {
+  const P = usePalette();
   const ref = useRef<SVGSVGElement | null>(null);
   const dragging = useRef(false);
   const [dragVis, setDragVis] = useState<{ x: number; y: number } | null>(null);
@@ -156,25 +158,25 @@ export function MotionRing({ x, y, onChange }: {
       onPointerUp={() => { dragging.current = false; setDragVis(null); }}
       onPointerCancel={() => { dragging.current = false; setDragVis(null); }}
     >
-      <line x1={DISP_C - RING_R} y1={DISP_C} x2={DISP_C + RING_R} y2={DISP_C} stroke={AMBER} strokeOpacity={0.16} strokeWidth={1} />
-      <line x1={DISP_C} y1={DISP_C - RING_R} x2={DISP_C} y2={DISP_C + RING_R} stroke={AMBER} strokeOpacity={0.16} strokeWidth={1} />
-      <circle cx={DISP_C} cy={DISP_C} r={RING_R} fill="none" stroke={AMBER} strokeOpacity={0.2} strokeWidth={1} />
-      <text x={DISP_C + RING_R - 4} y={DISP_C - RING_R + 14} textAnchor="end" fontSize={8.5} fontFamily={MONO} fill="#cfcfcf">BUILD</text>
-      <text x={DISP_C - RING_R + 4} y={DISP_C - RING_R + 14} fontSize={8.5} fontFamily={MONO} fill="#cfcfcf">CRESC</text>
-      <text x={DISP_C - RING_R + 4} y={DISP_C + RING_R - 8} fontSize={8.5} fontFamily={MONO} fill="#cfcfcf">THIN</text>
-      <text x={DISP_C + RING_R - 4} y={DISP_C + RING_R - 8} textAnchor="end" fontSize={8.5} fontFamily={MONO} fill="#cfcfcf">BREAK</text>
+      <line x1={DISP_C - RING_R} y1={DISP_C} x2={DISP_C + RING_R} y2={DISP_C} stroke={P.track} strokeOpacity={0.16} strokeWidth={1} />
+      <line x1={DISP_C} y1={DISP_C - RING_R} x2={DISP_C} y2={DISP_C + RING_R} stroke={P.track} strokeOpacity={0.16} strokeWidth={1} />
+      <circle cx={DISP_C} cy={DISP_C} r={RING_R} fill="none" stroke={P.track} strokeOpacity={0.2} strokeWidth={1} />
+      <text x={DISP_C + RING_R - 4} y={DISP_C - RING_R + 14} textAnchor="end" fontSize={8.5} fontFamily={MONO} fill={P.label}>BUILD</text>
+      <text x={DISP_C - RING_R + 4} y={DISP_C - RING_R + 14} fontSize={8.5} fontFamily={MONO} fill={P.label}>CRESC</text>
+      <text x={DISP_C - RING_R + 4} y={DISP_C + RING_R - 8} fontSize={8.5} fontFamily={MONO} fill={P.label}>THIN</text>
+      <text x={DISP_C + RING_R - 4} y={DISP_C + RING_R - 8} textAnchor="end" fontSize={8.5} fontFamily={MONO} fill={P.label}>BREAK</text>
       <line
         x1={DISP_C} y1={DISP_C}
         x2={dragVis ? clamp(dragVis.x, DISP_C - RING_R, DISP_C + RING_R) : DISP_C + x * RING_R}
         y2={dragVis ? clamp(dragVis.y, DISP_C - RING_R, DISP_C + RING_R) : DISP_C - y * RING_R}
-        stroke={AMBER} strokeWidth={1.6} strokeDasharray="4 3"
+        stroke={P.track} strokeWidth={1.6} strokeDasharray="4 3"
       />
       <circle
         cx={dragVis ? clamp(dragVis.x, DISP_C - RING_R, DISP_C + RING_R) : DISP_C + x * RING_R}
         cy={dragVis ? clamp(dragVis.y, DISP_C - RING_R, DISP_C + RING_R) : DISP_C - y * RING_R}
-        r={7.5} fill={AMBER} stroke="#0b0d11" strokeWidth={2}
+        r={7.5} fill={P.track} stroke={P.deep} strokeWidth={2}
       />
-      <circle cx={DISP_C} cy={DISP_C} r={3} fill={AMBER} />
+      <circle cx={DISP_C} cy={DISP_C} r={3} fill={P.track} />
     </svg>
   );
 }
@@ -227,6 +229,7 @@ export function FxPanel({ values, onChange }: {
 }
 
 function FxRow({ id, value, onChange }: { id: FxParam; value: number; onChange: (v: number) => void }) {
+  const P = usePalette();
   const spec = FX_SPECS[id];
   const track = useRef<HTMLDivElement | null>(null);
   const dragging = useRef(false);
@@ -238,12 +241,12 @@ function FxRow({ id, value, onChange }: { id: FxParam; value: number; onChange: 
   };
   return (
     <div className="flex items-center gap-2" title={spec.hint}>
-      <span className={`font-mono text-2xs w-[62px] shrink-0 ${active ? "text-[#E8B54A]" : "text-inkMuted"}`}>
+      <span className={`font-mono text-2xs w-[62px] shrink-0 ${active ? "text-track" : "text-inkMuted"}`}>
         {spec.label.toUpperCase()}
       </span>
       <div
         ref={track}
-        className="relative flex-1 h-3.5 rounded-sm bg-black/50 border border-edge cursor-ew-resize touch-none"
+        className="relative flex-1 h-3.5 rounded-sm bg-deep/50 border border-edge cursor-ew-resize touch-none"
         onPointerDown={(e) => {
           if (e.button !== 0) return;
           try { (e.currentTarget as Element).setPointerCapture(e.pointerId); } catch { /* not capturable — fine */ }
@@ -258,13 +261,13 @@ function FxRow({ id, value, onChange }: { id: FxParam; value: number; onChange: 
           className="absolute inset-y-0 left-0"
           style={{
             width: `${spec.toFrac(value) * 100}%`,
-            background: active ? AMBER : "#3A3F47",
+            background: active ? P.track : P.grid,
             opacity: active ? 0.9 : 0.5,
           }}
         />
-        {spec.min < 0 && <div className="absolute inset-y-0 left-1/2 w-px bg-white/25" />}
+        {spec.min < 0 && <div className="absolute inset-y-0 left-1/2 w-px bg-ink/25" />}
       </div>
-      <span className={`font-mono text-2xs w-[64px] shrink-0 text-right ${active ? "text-[#E8B54A]" : "text-inkMuted/70"}`}>
+      <span className={`font-mono text-2xs w-[64px] shrink-0 text-right ${active ? "text-track" : "text-inkMuted/70"}`}>
         {spec.format(value)}
       </span>
     </div>
@@ -282,7 +285,7 @@ export function VelocityPanel({ onOp }: { onOp: (op: VelocityOp) => void }) {
   const [every, setEvery] = useState(4);
   const [target, setTarget] = useState(100);
   const btn = "font-mono text-2xs rounded px-1.5 py-0.5 border border-edge text-inkMuted hover:text-ink";
-  const active = "border-[#E8B54A] text-[#E8B54A] bg-[#E8B54A]/10";
+  const active = "border-track text-track bg-track/10";
   return (
     <div className="px-3 py-2.5">
       <div className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Velocity patterns</div>

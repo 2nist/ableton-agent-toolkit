@@ -165,7 +165,7 @@ export default function HarmonyView() {
       {/* Hex canvas — full room to wander now that the preview controls,
          Linear/Loop toggle, and settings live in the dock's Tools panel.
          The progression-fit status lives in this workspace's bottom-right. */}
-      <div className="relative border border-edge rounded-lg bg-[#0e1218] overflow-hidden min-h-[420px] flex flex-col">
+      <div className="relative border border-edge rounded-lg bg-scene overflow-hidden min-h-[420px] flex flex-col">
         {/* View-mode switcher ON the canvas: the same control lives in the
             dock's tools panel, but the inspector rail is narrow enough that a
             fourth button could wrap out of sight — the canvas is where you
@@ -179,7 +179,7 @@ export default function HarmonyView() {
               className={`rounded border px-1.5 py-0.5 text-[10px] font-mono ${
                 honeycombMode === mode
                   ? "border-accent bg-accent/15 text-accent"
-                  : "border-edge/70 bg-[#0E1116]/80 text-inkMuted hover:text-ink"
+                  : "border-edge/70 bg-well/80 text-inkMuted hover:text-ink"
               }`}
               onClick={() => setHoneycombMode(mode)}
               title={
@@ -248,7 +248,7 @@ export default function HarmonyView() {
             grammar 2026-09-21: wide surfaces belong to the canvas, not a
             bottom menu — the old dock's Menu panel died here). */}
         {activeSection && (
-          <div className="border-t border-edge/60 bg-[#0a0d12] px-3 py-2">
+          <div className="border-t border-edge/60 bg-deep px-3 py-2">
             <ProgressionEditor
               key={activeSection.id}
               chords={activeSection.chords}
@@ -266,7 +266,7 @@ export default function HarmonyView() {
           </div>
         )}
         {activeSection && (
-          <div className="flex items-center justify-end gap-2 px-3 py-1.5 border-t border-edge/60 bg-[#0a0d12]">
+          <div className="flex items-center justify-end gap-2 px-3 py-1.5 border-t border-edge/60 bg-deep">
             <FitStatus section={activeSection} onSetBars={setSectionBars} />
           </div>
         )}

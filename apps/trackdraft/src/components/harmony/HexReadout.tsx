@@ -9,9 +9,9 @@ import {
   getWalkPathD,
   hexToPixel,
   hexPoints,
-  HUES,
   degreeAt,
 } from "../../lib/harmony/honeycombWalk";
+import { usePalette } from "../../theme/palette";
 
 /** Read-only harmony hex readout — the Studio console's counterpart to the
  *  Harmony tab's *editable* `HoneycombWheel`. Renders a section's authored
@@ -47,6 +47,7 @@ interface VisitedCell {
 }
 
 export default function HexReadout({ chords, keyName, activeChordId }: HexReadoutProps) {
+  const palette = usePalette();
   const geometry = useMemo(() => {
     // Reuse the editor wheel's exact parse pipeline so identical chords land
     // on identical cells (same projection, accidentals shifted the same way).
@@ -125,7 +126,7 @@ export default function HexReadout({ chords, keyName, activeChordId }: HexReadou
         <path
           d={pathD}
           fill="none"
-          stroke="#F5E7C8"
+          stroke={palette.cream}
           strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -139,7 +140,7 @@ export default function HexReadout({ chords, keyName, activeChordId }: HexReadou
         const cx = hexToPixel(q, r, S).x;
         const cy = hexToPixel(q, r, S).y;
         const chord = chords[firstChordIndex];
-        const hue = HUES[d] ?? HUES[0];
+        const hue = palette.hues[d] ?? palette.hues[0];
         const isActive = geometry.activeCell?.q === q && geometry.activeCell?.r === r;
         const roman = chord?.romanNumeral ?? "";
         const letter = chord ? chordDisplayName(pitchClass(chord.root), chord.quality, keyName) : "";
@@ -160,7 +161,7 @@ export default function HexReadout({ chords, keyName, activeChordId }: HexReadou
               <polygon
                 points={hexPoints(S + 3)}
                 fill="none"
-                stroke="#E8B54A"
+                stroke={palette.track}
                 strokeWidth={1.8}
                 style={{ pointerEvents: "none" }}
               />
@@ -173,7 +174,7 @@ export default function HexReadout({ chords, keyName, activeChordId }: HexReadou
               fontFamily="'IBM Plex Mono', monospace"
               fontSize={romanSize}
               fontWeight={600}
-              fill={isActive ? "#FFF6E0" : hue.ink}
+              fill={isActive ? palette.cream : hue.ink}
               style={{ pointerEvents: "none" }}
             >
               {roman}
@@ -184,7 +185,7 @@ export default function HexReadout({ chords, keyName, activeChordId }: HexReadou
               textAnchor="middle"
               fontFamily="'IBM Plex Mono', monospace"
               fontSize={7.5}
-              fill={isActive ? "#F2D9A0" : hue.rim}
+              fill={isActive ? palette.hues[0].ink : hue.rim}
               opacity={isActive ? 1 : 0.8}
               style={{ pointerEvents: "none" }}
             >
@@ -192,7 +193,7 @@ export default function HexReadout({ chords, keyName, activeChordId }: HexReadou
             </text>
             {count > 1 && (
               <g style={{ pointerEvents: "none" }}>
-                <circle cx={S * 0.62} cy={-S * 0.62} r={8} fill="#0E1116" stroke="#F5E7C8" strokeWidth={1.2} />
+                <circle cx={S * 0.62} cy={-S * 0.62} r={8} fill={palette.well} stroke={palette.cream} strokeWidth={1.2} />
                 <text
                   x={S * 0.62}
                   y={-S * 0.62 + 0.8}
@@ -201,7 +202,7 @@ export default function HexReadout({ chords, keyName, activeChordId }: HexReadou
                   fontFamily="'IBM Plex Mono', monospace"
                   fontSize={7}
                   fontWeight={600}
-                  fill="#F5E7C8"
+                  fill={palette.cream}
                 >
                   ×{count}
                 </text>

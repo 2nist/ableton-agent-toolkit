@@ -18,6 +18,8 @@ export default function ThemeToggle({ compact = false }: { compact?: boolean }) 
           key={option.id}
           type="button"
           aria-pressed={theme === option.id}
+          aria-label={`${option.label} theme`}
+          title={`${option.label} theme`}
           onClick={() => setTheme(option.id)}
           className={`px-1.5 py-0.5 font-mono text-3xs uppercase tracking-wide ${
             theme === option.id ? "bg-panelAlt text-ink" : "text-inkMuted hover:text-ink"

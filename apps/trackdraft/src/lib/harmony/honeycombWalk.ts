@@ -168,22 +168,10 @@ export const SCALE_INTERVALS: Record<string, number[]> = {
 
 /* ---------------------------------------------------------------
    CONSTANTS — colours
+   The degree hues are theme data, not constants: they live beside the rest
+   of the instrument palette in theme/palette.ts (`usePalette().hues`).
    --------------------------------------------------------------- */
-export interface HueSet {
-  fill: string;
-  rim: string;
-  ink: string;
-}
-
-export const HUES: HueSet[] = [
-  { fill: "#3A2F16", rim: "#E8B54A", ink: "#F2D9A0" },
-  { fill: "#232C1E", rim: "#7FA86B", ink: "#C9DDBC" },
-  { fill: "#172C2D", rim: "#4FA3A5", ink: "#BBDFE0" },
-  { fill: "#1A2334", rim: "#5B84C4", ink: "#C2D4EF" },
-  { fill: "#33201D", rim: "#D96459", ink: "#F1C4BE" },
-  { fill: "#261F33", rim: "#9678C8", ink: "#D9CBEF" },
-  { fill: "#232128", rim: "#8A8496", ink: "#CFCBD8" },
-];
+export type { HueSet } from "../../theme/palette";
 
 /* ---------------------------------------------------------------
    CONSTANTS — borrowed chords

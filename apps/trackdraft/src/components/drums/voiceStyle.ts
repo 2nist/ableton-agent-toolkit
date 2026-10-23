@@ -1,5 +1,6 @@
+import { useMemo } from "react";
 import type { KitVoice } from "@drum/library";
-import { TRACKDRAFT } from "../../theme/palette";
+import { usePalette, type Palette, type VoiceColors } from "../../theme/palette";
 
 // Same family of hues as HoneycombWheel's HUES palette (warm/muted, one
 // clear accent per role) — a fresh, voice-specific set rather than a
@@ -9,22 +10,38 @@ import { TRACKDRAFT } from "../../theme/palette";
 // Assignments are the D5 decision from the Design Lab (2026-09-21):
 // kick red · snare slate · rim teal · hat amber · cym orange · tom purple —
 // single-sourced from `theme/palette.ts` so the app and the Lab can't drift.
-export const VOICE_COLOR: Partial<Record<KitVoice, string>> = {
-  kick: TRACKDRAFT.voices.kick,
-  snare: TRACKDRAFT.voices.snare,
-  rim: TRACKDRAFT.voices.rim,
-  // Clap wasn't in the D5 list; it keeps its old orange (now the cym hue).
-  clap: TRACKDRAFT.voices.cym,
-  closedHat: TRACKDRAFT.voices.hat,
-  openHat: TRACKDRAFT.voices.hat,
-  pedalHat: TRACKDRAFT.voices.hat,
-  ride: TRACKDRAFT.voices.cym,
-  rideBell: TRACKDRAFT.voices.cym,
-  crash: TRACKDRAFT.voices.cym,
-  tomLow: TRACKDRAFT.voices.tom,
-  tomMid: TRACKDRAFT.voices.tom,
-  tomHigh: TRACKDRAFT.voices.tom,
+/** Which palette family a kit voice draws in. Clap was never in the D5 list;
+ *  it has always borrowed the cymbal orange, so it keeps doing that. */
+const VOICE_FAMILY: Record<KitVoice, keyof VoiceColors> = {
+  kick: "kick",
+  snare: "snare",
+  rim: "rim",
+  clap: "cym",
+  closedHat: "hat",
+  openHat: "hat",
+  pedalHat: "hat",
+  ride: "cym",
+  rideBell: "cym",
+  crash: "cym",
+  tomLow: "tom",
+  tomMid: "tom",
+  tomHigh: "tom",
 };
+
+/** A voice's colour under the current theme. */
+export function voiceColor(voice: KitVoice, P: Palette): string {
+  return P.voices[VOICE_FAMILY[voice] ?? "snare"];
+}
+
+/** Every voice resolved at once — for lists that draw several in one pass. */
+export function useVoiceColors(): Record<KitVoice, string> {
+  const P = usePalette();
+  return useMemo(() => {
+    const out = {} as Record<KitVoice, string>;
+    for (const voice of Object.keys(VOICE_FAMILY) as KitVoice[]) out[voice] = voiceColor(voice, P);
+    return out;
+  }, [P]);
+}
 
 export const VOICE_LABEL: Record<KitVoice, string> = {
   kick: "KICK", snare: "SNR", rim: "RIM", clap: "CLAP",

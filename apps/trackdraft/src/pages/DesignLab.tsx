@@ -14,6 +14,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ABLETON_DARK, PRESETS, generateFromHue, type PaletteRoles } from "@platform/ui-kit";
 import Knob from "../components/common/Knob";
+import { usePalette } from "../theme/palette";
 
 const ROLE_ORDER: (keyof PaletteRoles)[] = [
   "background",
@@ -253,6 +254,7 @@ const DECISIONS: Array<{ id: string; item: string; status: DecisionStatus; note:
 ];
 
 export default function DesignLab() {
+  const palette = usePalette();
   const [hue, setHue] = useState(28);
   const [copied, setCopied] = useState(false);
   const [drive, setDrive] = useState<number[]>([0.62, 0.4, 0.31, 0.5]);
@@ -322,8 +324,8 @@ export default function DesignLab() {
               rims, slider accent-color, section-role rims, ◆ ghosts. The &ldquo;instrument&rdquo; color.
             </p>
             <div className="flex items-center gap-3">
-              <input type="range" defaultValue={62} className="w-28 accent-[#E8B54A] cursor-pointer" />
-              <span className="text-xs font-mono text-[#E8B54A]">◆ detect 66%</span>
+              <input type="range" defaultValue={62} className="w-28 accent-track cursor-pointer" />
+              <span className="text-xs font-mono text-track">◆ detect 66%</span>
               <span
                 className="inline-block h-5 w-5 rounded-full"
                 style={{ background: "#E8B54A", boxShadow: "0 0 6px rgba(232,181,74,0.5)" }}
@@ -364,7 +366,7 @@ export default function DesignLab() {
             max={360}
             value={hue}
             onChange={(e) => setHue(Number(e.target.value))}
-            className="flex-1 accent-[#E8B54A]"
+            className="flex-1 accent-track"
           />
           <span className="font-mono text-xs text-inkMuted w-12 text-right tabular-nums">{hue}°</span>
           <button
@@ -552,7 +554,7 @@ export default function DesignLab() {
           <div className="flex items-start gap-8 flex-wrap">
             <div>
               <p className="text-2xs text-inkMuted/70 mb-2">A device panel, like your reference:</p>
-              <div className="border border-edge rounded-lg bg-[#14161c] px-4 py-3 grid grid-cols-4 gap-4 w-[360px]">
+              <div className="border border-edge rounded-lg bg-well px-4 py-3 grid grid-cols-4 gap-4 w-[360px]">
                 {[
                   { label: "Drive Amount", fmt: (t: number) => `${(t * 14 - 2).toFixed(1)} dB` },
                   { label: "Drive Color", fmt: (t: number) => `${Math.round(t * 100)} %` },
@@ -591,11 +593,15 @@ export default function DesignLab() {
               <div>
                 <p className="text-2xs text-inkMuted/70 mb-2">Colors (voice tokens) — and a ◆ ghost tick</p>
                 <div className="flex items-center gap-3">
-                  <Knob value={drive[0]} onChange={(v) => setDrive((d) => [v, ...d.slice(1)])} size={34} className="text-[#D96459]" />
-                  <Knob value={drive[1]} onChange={(v) => setDrive((d) => [d[0], v, ...d.slice(2)])} size={34} className="text-[#4FA3A5]" />
-                  <Knob value={drive[2]} onChange={(v) => setDrive((d) => [d[0], d[1], v, d[3]])} size={34} className="text-[#E8B54A]" />
+                  <span style={{ color: palette.voices.kick }}>
+                    <Knob value={drive[0]} onChange={(v) => setDrive((d) => [v, ...d.slice(1)])} size={34} className="text-current" />
+                  </span>
+                  <span style={{ color: palette.voices.rim }}>
+                    <Knob value={drive[1]} onChange={(v) => setDrive((d) => [d[0], v, ...d.slice(2)])} size={34} className="text-current" />
+                  </span>
+                  <Knob value={drive[2]} onChange={(v) => setDrive((d) => [d[0], d[1], v, d[3]])} size={34} className="text-track" />
                   <Knob value={drive[3]} onChange={(v) => setDrive((d) => [d[0], d[1], d[2], v])} size={34} ghost={0.72} className="text-accent" />
-                  <span className="text-2xs font-mono text-[#E8B54A]">◆ 72%</span>
+                  <span className="text-2xs font-mono text-track">◆ 72%</span>
                 </div>
               </div>
               <p className="text-2xs text-inkMuted/70">

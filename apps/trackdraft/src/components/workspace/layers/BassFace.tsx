@@ -3,6 +3,7 @@ import type { SectionSpan } from "../../../lib/arrangement";
 import type { BlueprintSong } from "../../../types/blueprint";
 import { planBassStem } from "../../../lib/midiExport";
 import StemFace from "./StemFace";
+import { usePalette } from "../../../theme/palette";
 
 /** The bass layer's arrangement face: the line the exporter and live MIDI
  *  out will actually play, for this section's pass. Shape comes from the
@@ -18,6 +19,7 @@ export default function BassFace({
   span: SectionSpan;
   onOpen: () => void;
 }) {
+  const P = usePalette();
   const { startBeat } = span;
   const notes = useMemo(
     () =>
@@ -34,7 +36,7 @@ export default function BassFace({
   return (
     <StemFace
       notes={notes}
-      color="#5B84C4"
+      color={P.hues[3].rim}
       empty="No bass line yet — the row below shapes one from the chords."
       onOpen={onOpen}
     />

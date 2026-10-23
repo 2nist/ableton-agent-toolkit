@@ -1,4 +1,5 @@
 import { euclidOnsetSteps } from "@drum/library";
+import { usePalette } from "../../../theme/palette";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 /**
@@ -52,13 +53,13 @@ export interface SelectionPadProps {
   onPadPointerUp: (e: ReactPointerEvent) => void;
 }
 
-const AMBER = "#E8B54A";
 const MONO = "'IBM Plex Mono', ui-monospace, Menlo, monospace";
 
 export default function SelectionPad({
   panelX, panelY, connectorFromX, mode, euclid, motion, motionLabel, laneColors,
   hasDraft, onApply, onCancel, onMode, onExpand, onPadPointerDown, onPadPointerMove, onPadPointerUp,
 }: SelectionPadProps) {
+  const P = usePalette();
   const cx = panelX + 36;
   const cy = panelY + 32;
   const R = 26;
@@ -70,26 +71,26 @@ export default function SelectionPad({
       {/* connector tying the pad to the selection's right edge — decorative:
           it overlaps the selection's right resize handle, so it must never
           swallow pointer events */}
-      <line x1={connectorFromX} y1={cy} x2={panelX} y2={cy} stroke={AMBER} strokeWidth={1.2} strokeOpacity={0.6} pointerEvents="none" />
-      <polygon points={`${connectorFromX + 2},${cy - 4} ${connectorFromX - 2},${cy} ${connectorFromX + 2},${cy + 4}`} fill={AMBER} fillOpacity={0.8} pointerEvents="none" />
+      <line x1={connectorFromX} y1={cy} x2={panelX} y2={cy} stroke={P.track} strokeWidth={1.2} strokeOpacity={0.6} pointerEvents="none" />
+      <polygon points={`${connectorFromX + 2},${cy - 4} ${connectorFromX - 2},${cy} ${connectorFromX + 2},${cy + 4}`} fill={P.track} fillOpacity={0.8} pointerEvents="none" />
 
       {/* everything but the connector lives in one scaled group — panel,
           chips, necklace and hit targets all grow together */}
       <g transform={`translate(${panelX} ${panelY}) scale(${PAD_SCALE}) translate(${-panelX} ${-panelY})`}>
       {/* panel — background only; everything interactive sits on top */}
-      <rect x={panelX} y={panelY} width={PAD_PANEL_W} height={PAD_PANEL_H} rx={6} fill="rgba(11,13,17,0.9)" stroke={AMBER} strokeOpacity={0.4} strokeWidth={1} pointerEvents="none" />
+      <rect x={panelX} y={panelY} width={PAD_PANEL_W} height={PAD_PANEL_H} rx={6} fill="rgba(11,13,17,0.9)" stroke={P.track} strokeOpacity={0.4} strokeWidth={1} pointerEvents="none" />
 
       {/* mode buttons — part of the same cluster */}
       {(["euclid", "motion"] as const).map((m, i) => (
         <g key={m} onClick={() => onMode(m)} onPointerDown={(e) => e.stopPropagation()} style={{ cursor: "pointer" }}>
           <rect
             x={panelX + 78} y={panelY + 10 + i * 24} width={64} height={16} rx={3}
-            fill={mode === m ? "rgba(232,181,74,0.14)" : "#0b0d11"}
-            stroke={mode === m ? AMBER : "#565F70"} strokeWidth={1}
+            fill={mode === m ? "rgba(232,181,74,0.14)" : P.deep}
+            stroke={mode === m ? P.track : P.grid} strokeWidth={1}
           />
           <text
             x={panelX + 110} y={panelY + 21 + i * 24} textAnchor="middle" fontSize={8.5} fontWeight={600}
-            fill={mode === m ? AMBER : "#B0B0B0"} fontFamily={MONO}
+            fill={mode === m ? P.track : P.label} fontFamily={MONO}
           >
             {m === "euclid" ? "Euclid" : "Motion"}
           </text>
@@ -99,17 +100,17 @@ export default function SelectionPad({
       {/* pad face — decorative only; the transparent r=34 circle below is the
           real drag target */}
       <g pointerEvents="none">
-      <circle cx={cx} cy={cy} r={R} fill="#0b0d11" fillOpacity={0.97} stroke={AMBER} strokeWidth={1.3} />
-      <line x1={cx - 30} y1={cy} x2={cx + 30} y2={cy} stroke={AMBER} strokeOpacity={0.16} strokeWidth={1} />
-      <line x1={cx} y1={cy - 30} x2={cx} y2={cy + 30} stroke={AMBER} strokeOpacity={0.16} strokeWidth={1} />
+      <circle cx={cx} cy={cy} r={R} fill={P.deep} fillOpacity={0.97} stroke={P.track} strokeWidth={1.3} />
+      <line x1={cx - 30} y1={cy} x2={cx + 30} y2={cy} stroke={P.track} strokeOpacity={0.16} strokeWidth={1} />
+      <line x1={cx} y1={cy - 30} x2={cx} y2={cy + 30} stroke={P.track} strokeOpacity={0.16} strokeWidth={1} />
 
       {mode === "euclid" ? (
         <>
           {/* rotation axis arrows */}
-          <polygon points={`${cx + 30},${cy} ${cx + 25},${cy - 3} ${cx + 25},${cy + 3}`} fill={AMBER} fillOpacity={0.3} />
-          <polygon points={`${cx - 30},${cy} ${cx - 25},${cy - 3} ${cx - 25},${cy + 3}`} fill={AMBER} fillOpacity={0.3} />
-          <polygon points={`${cx},${cy - 30} ${cx - 3},${cy - 25} ${cx + 3},${cy - 25}`} fill={AMBER} fillOpacity={0.3} />
-          <polygon points={`${cx},${cy + 30} ${cx - 3},${cy + 25} ${cx + 3},${cy + 25}`} fill={AMBER} fillOpacity={0.3} />
+          <polygon points={`${cx + 30},${cy} ${cx + 25},${cy - 3} ${cx + 25},${cy + 3}`} fill={P.track} fillOpacity={0.3} />
+          <polygon points={`${cx - 30},${cy} ${cx - 25},${cy - 3} ${cx - 25},${cy + 3}`} fill={P.track} fillOpacity={0.3} />
+          <polygon points={`${cx},${cy - 30} ${cx - 3},${cy - 25} ${cx + 3},${cy - 25}`} fill={P.track} fillOpacity={0.3} />
+          <polygon points={`${cx},${cy + 30} ${cx - 3},${cy + 25} ${cx + 3},${cy + 25}`} fill={P.track} fillOpacity={0.3} />
           {/* step ticks + the k onsets (necklace as live reference) */}
           {Array.from({ length: n }).map((_, s) => {
             if (n > 24 && s % 2 !== 0) return null;
@@ -119,13 +120,13 @@ export default function SelectionPad({
                 key={`t-${s}`}
                 x1={cx + Math.cos(a) * 19} y1={cy + Math.sin(a) * 19}
                 x2={cx + Math.cos(a) * 23} y2={cy + Math.sin(a) * 23}
-                stroke={AMBER} strokeOpacity={0.25} strokeWidth={0.8}
+                stroke={P.track} strokeOpacity={0.25} strokeWidth={0.8}
               />
             );
           })}
           {onsets.map((s, i) => {
             const a = -Math.PI / 2 + (s / n) * 2 * Math.PI;
-            const color = laneColors[i % Math.max(1, laneColors.length)] ?? AMBER;
+            const color = laneColors[i % Math.max(1, laneColors.length)] ?? P.track;
             return <circle key={`o-${i}`} cx={cx + Math.cos(a) * 21} cy={cy + Math.sin(a) * 21} r={2.5} fill={color} />;
           })}
           {/* handle: angle = rotation, distance = density */}
@@ -136,9 +137,9 @@ export default function SelectionPad({
             const hy = cy + Math.sin(a) * dist;
             return (
               <>
-                <line x1={cx} y1={cy} x2={hx} y2={hy} stroke={AMBER} strokeOpacity={0.5} strokeWidth={1} />
-                <circle cx={hx} cy={hy} r={6} fill={AMBER} stroke="#0b0d11" strokeWidth={2} />
-                <circle cx={hx} cy={hy} r={1.8} fill="#0b0d11" />
+                <line x1={cx} y1={cy} x2={hx} y2={hy} stroke={P.track} strokeOpacity={0.5} strokeWidth={1} />
+                <circle cx={hx} cy={hy} r={6} fill={P.track} stroke={P.deep} strokeWidth={2} />
+                <circle cx={hx} cy={hy} r={1.8} fill={P.deep} />
               </>
             );
           })()}
@@ -146,23 +147,23 @@ export default function SelectionPad({
       ) : (
         <>
           {/* quadrant legend */}
-          <text x={cx + 32} y={cy - 18} textAnchor="start" fontSize={7} fontFamily={MONO} fill="#cfcfcf">BUILD</text>
-          <text x={cx - 32} y={cy - 18} textAnchor="end" fontSize={7} fontFamily={MONO} fill="#cfcfcf">CRESC</text>
-          <text x={cx - 32} y={cy + 36} textAnchor="end" fontSize={7} fontFamily={MONO} fill="#cfcfcf">THIN</text>
-          <text x={cx + 32} y={cy + 36} textAnchor="start" fontSize={7} fontFamily={MONO} fill="#cfcfcf">BREAK</text>
+          <text x={cx + 32} y={cy - 18} textAnchor="start" fontSize={7} fontFamily={MONO} fill={P.label}>BUILD</text>
+          <text x={cx - 32} y={cy - 18} textAnchor="end" fontSize={7} fontFamily={MONO} fill={P.label}>CRESC</text>
+          <text x={cx - 32} y={cy + 36} textAnchor="end" fontSize={7} fontFamily={MONO} fill={P.label}>THIN</text>
+          <text x={cx + 32} y={cy + 36} textAnchor="start" fontSize={7} fontFamily={MONO} fill={P.label}>BREAK</text>
           {/* vector */}
           <line
             x1={cx} y1={cy}
             x2={cx + motion.x * 20} y2={cy - motion.y * 20}
-            stroke={AMBER} strokeWidth={1.4} strokeDasharray="3 3"
+            stroke={P.track} strokeWidth={1.4} strokeDasharray="3 3"
           />
-          <circle cx={cx + motion.x * 20} cy={cy - motion.y * 20} r={5.5} fill={AMBER} />
+          <circle cx={cx + motion.x * 20} cy={cy - motion.y * 20} r={5.5} fill={P.track} />
         </>
       )}
 
       {/* readout */}
-      <rect x={panelX + 6} y={panelY + 64} width={PAD_PANEL_W - 12} height={15} rx={7} fill="#0b0d11" stroke={AMBER} strokeOpacity={0.5} />
-      <text x={panelX + PAD_PANEL_W / 2} y={panelY + 74} textAnchor="middle" fontSize={8.5} fontWeight={600} fill={AMBER} fontFamily={MONO}>
+      <rect x={panelX + 6} y={panelY + 64} width={PAD_PANEL_W - 12} height={15} rx={7} fill={P.deep} stroke={P.track} strokeOpacity={0.5} />
+      <text x={panelX + PAD_PANEL_W / 2} y={panelY + 74} textAnchor="middle" fontSize={8.5} fontWeight={600} fill={P.track} fontFamily={MONO}>
         {mode === "euclid"
           ? `${euclid.k}/${n} · ↻${euclid.rotation} · ${Math.round((euclid.k / n) * 100)}%`
           : motionLabel ?? "DRAG TO GESTURE"}
@@ -173,11 +174,11 @@ export default function SelectionPad({
       <g onClick={onExpand} onPointerDown={(e) => e.stopPropagation()} style={{ cursor: "pointer" }}>
         <rect
           x={panelX + 164} y={panelY + 64} width={28} height={15} rx={7}
-          fill="#141922" stroke={AMBER} strokeOpacity={0.7} strokeWidth={1}
+          fill={P.deep} stroke={P.track} strokeOpacity={0.7} strokeWidth={1}
         />
         <text
           x={panelX + 178} y={panelY + 75} textAnchor="middle" fontSize={11} fontWeight={600}
-          fill={AMBER} fontFamily={MONO}
+          fill={P.track} fontFamily={MONO}
         >
           ⤢
         </text>
@@ -200,12 +201,12 @@ export default function SelectionPad({
           >
             <rect
               x={b.x} y={panelY + PAD_PANEL_H + 4} width={96} height={16} rx={3}
-              fill={b.primary ? "rgba(255,165,0,0.12)" : "#0b0d11"}
-              stroke={b.primary ? "#FFA500" : "#565F70"} strokeWidth={1}
+              fill={b.primary ? "rgba(255,165,0,0.12)" : P.deep}
+              stroke={b.primary ? P.track : P.grid} strokeWidth={1}
             />
             <text
               x={b.x + 48} y={panelY + PAD_PANEL_H + 15} textAnchor="middle" fontSize={8.5} fontWeight={600}
-              fontFamily={MONO} fill={b.primary ? "#FFA500" : "#B0B0B0"}
+              fontFamily={MONO} fill={b.primary ? P.track : P.label}
             >
               {b.label}
             </text>
@@ -214,7 +215,7 @@ export default function SelectionPad({
       ) : (
         <text
           x={panelX + PAD_PANEL_W / 2} y={panelY + PAD_PANEL_H + 15}
-          textAnchor="middle" fontSize={8.5} fontFamily={MONO} fill="#7A8290"
+          textAnchor="middle" fontSize={8.5} fontFamily={MONO} fill={P.grid}
         >
           drag the pad or edit cells — Apply appears here
         </text>

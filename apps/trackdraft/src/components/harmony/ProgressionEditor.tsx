@@ -28,6 +28,7 @@ import { pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord, TonicRegion } from "../../types/blueprint";
 import { chordDisplayName, chordFunction, chordFunctionLabel, functionColorHex } from "../../lib/harmony/chordBuilder";
+import { usePalette } from "../../theme/palette";
 import { borrowedChordIds, chordHomes } from "../../lib/harmony/modeInference";
 import { bassName, cycleInversion, inversionCount, toggleSpread } from "../../lib/harmony/voicing";
 import {
@@ -121,6 +122,7 @@ export default function ProgressionEditor({
   onChange,
   compact = false,
 }: ProgressionEditorProps) {
+  const P = usePalette();
   const [width, setWidth] = useState(0);
   const [draft, setDraft] = useState<Chord[] | null>(null);
   const [caret, setCaret] = useState<number | null>(null);
@@ -455,7 +457,7 @@ export default function ProgressionEditor({
                 const active = chord.id === activeChordId;
                 const name = chordDisplayName(pitchClass(chord.root), chord.quality, keyName);
                 const func = chord.isSubstitution ? null : chordFunction(chord, scale);
-                const stripe = chord.isSubstitution ? "#ffa500" : functionColorHex(func) ?? "#2e2e34";
+                const stripe = chord.isSubstitution ? P.track : functionColorHex(func) ?? P.grid;
                 const borrowed = borrowedIds.has(chord.id);
                 const home = chordHomeOf.get(chord.id) ?? { key: keyName, scale };
                 return (
@@ -469,7 +471,7 @@ export default function ProgressionEditor({
                         ? "bg-accent/15 ring-1 ring-inset ring-accent/70"
                         : active
                           ? "bg-accent/10"
-                          : "hover:bg-white/[0.03]"
+                          : "hover:bg-ink/[0.03]"
                     } ${draggingIndex === index ? "opacity-40" : ""}`}
                     style={{ left: start * pxPerBeat, width: Math.max(2, cellWidth - 1) }}
                     title={`${chord.romanNumeral} — ${name}, ${formatBeats(chord.beats)} of the cycle\nTap to select · drag to reorder`}
@@ -484,7 +486,7 @@ export default function ProgressionEditor({
                           // silently turning every diminished chord into a
                           // major-looking numeral on these cards.
                           className="truncate text-[9px] font-mono tracking-wide text-inkMuted/80"
-                          style={chord.isSubstitution ? { color: "#ffa500" } : undefined}
+                          style={chord.isSubstitution ? { color: P.track } : undefined}
                         >
                           {chordFunctionLabel(chord) ?? chord.romanNumeral}
                         </span>
@@ -509,7 +511,7 @@ export default function ProgressionEditor({
                     {selected && (
                       <button
                         type="button"
-                        className="absolute right-0.5 top-0.5 z-30 rounded bg-[#0E1116]/70 px-1 text-[10px] leading-none text-inkMuted hover:text-danger"
+                        className="absolute right-0.5 top-0.5 z-30 rounded bg-well/70 px-1 text-[10px] leading-none text-inkMuted hover:text-danger"
                         aria-label="Remove chord"
                         title="Remove this chord"
                         onPointerDown={(event) => event.stopPropagation()}
@@ -529,7 +531,7 @@ export default function ProgressionEditor({
               {barTicks.map((beat) => (
                 <div
                   key={`bar-${beat}`}
-                  className="absolute inset-y-0 w-px bg-white/12 pointer-events-none"
+                  className="absolute inset-y-0 w-px bg-ink/12 pointer-events-none"
                   style={{ left: beat * pxPerBeat }}
                 />
               ))}
@@ -554,7 +556,7 @@ export default function ProgressionEditor({
                     onPointerDown={(event) => beginDrag("boundary", index, event)}
                     title="Drag to trade beats with the next chord (snaps to a half beat)"
                   >
-                    <div className="mx-auto h-full w-1 rounded bg-white/15 group-hover:bg-accent/80" />
+                    <div className="mx-auto h-full w-1 rounded bg-ink/15 group-hover:bg-accent/80" />
                   </div>
                 ))}
 
@@ -569,7 +571,7 @@ export default function ProgressionEditor({
                   onPointerDown={(event) => beginDrag("end", cells.length - 1, event)}
                   title="Drag to lengthen or shorten the last chord — this changes the cycle length, so the progression repeats more or less often"
                 >
-                  <div className="mx-auto h-full w-1 rounded bg-white/25 group-hover:bg-accent" />
+                  <div className="mx-auto h-full w-1 rounded bg-ink/25 group-hover:bg-accent" />
                 </div>
               )}
             </div>
@@ -633,7 +635,7 @@ export default function ProgressionEditor({
             {/* Effects lane — click to cycle none → strum → pulse → arp. */}
             {lanes.effects && (
               <div
-                className="relative mt-0.5 rounded border border-edge/50 bg-[#131316] overflow-hidden"
+                className="relative mt-0.5 rounded border border-edge/50 bg-deep overflow-hidden"
                 style={{ height: 24 }}
               >
                 {cells.map(({ chord, start, end }) => {

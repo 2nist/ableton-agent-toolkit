@@ -6,7 +6,7 @@ import type { NoteName } from "@music-theory/core";
 import { NOTE_TO_PC, pitchClass } from "@music-theory/core";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import HexReadout from "../harmony/HexReadout";
-import { roleStyle } from "../../lib/roleColors";
+import { useRoleStyle } from "../../lib/roleColors";
 import {
   buildLyricDocument,
   assignLinesToSection,
@@ -23,7 +23,7 @@ import { sectionSpans, type SectionSpan } from "../../lib/arrangement";
 import { getSongTransport } from "../../lib/playback/songTransport";
 import { planSectionTransitions } from "@drum/library";
 import { velocityNumber } from "../../lib/playback/drumPreview";
-import { TRANSITION_COLOR, TRANSITION_LABEL, TRANSITION_MODELS } from "../drums/transitionStyle";
+import { useTransitionColors, TRANSITION_LABEL, TRANSITION_MODELS } from "../drums/transitionStyle";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useInspectorStore, type InspectorTab } from "../../store/inspectorStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
@@ -89,6 +89,8 @@ interface LyricDocumentViewProps {
  * tray — nothing ever disappears.
  */
 export default function LyricDocumentView({ song, onChange }: LyricDocumentViewProps) {
+  const roleStyle = useRoleStyle();
+  const TRANSITION_COLOR = useTransitionColors();
   const navigate = useNavigate();
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
@@ -488,6 +490,7 @@ interface TransitionPopoverProps {
 }
 
 function TransitionPopover({ song, sectionId, auto, x, y, onSetModel, onSetBars, onOpenDrums }: TransitionPopoverProps) {
+  const TRANSITION_COLOR = useTransitionColors();
   const section = song.sections.find((s) => s.id === sectionId);
   if (!section) return null;
   const manual = section.drumTransitionModel ?? null;
@@ -579,6 +582,8 @@ interface SongTextBlockViewProps {
 }
 
 function SongTextBlockView(props: SongTextBlockViewProps) {
+  const roleStyle = useRoleStyle();
+  const TRANSITION_COLOR = useTransitionColors();
   const { block, song } = props;
   const section = block.section;
   const r = roleStyle(section.role);

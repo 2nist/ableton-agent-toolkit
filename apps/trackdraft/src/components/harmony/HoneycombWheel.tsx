@@ -6,6 +6,7 @@ import { resolveFlavor, BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR } from "@platform/
 import { chordOnsetsForOutline, outlineBeatsPerBar } from "@drum/library";
 import type { Chord, MeterOutline, TonicRegion } from "../../types/blueprint";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
+import { usePalette } from "../../theme/palette";
 import { chordFromDegree, chordsToHoneycombText, chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { degreeRelativeTo, resolveTonicAt } from "../../lib/harmony/tonic";
 import { buildRegionWalk, regionOfCell } from "../../lib/harmony/tonicWalk";
@@ -18,7 +19,6 @@ import {
   visitBeads,
   hexToPixel,
   hexPoints,
-  HUES,
   ROMAN_UP,
   MODE_TO_SCALE_KEY,
   SCALE_INTERVALS,
@@ -88,6 +88,7 @@ export default function HoneycombWheel({
   onPreviewChord,
   regions,
 }: HoneycombWheelProps) {
+  const P = usePalette();
   const [scaleSize, setScaleSize] = useState<number>(() => readScale());
   const S = scaleSize;
 
@@ -423,7 +424,7 @@ export default function HoneycombWheel({
       <div className="absolute left-1 top-1 z-10 flex gap-1">
         <button
           type="button"
-          className="rounded border border-edge/70 bg-[#0E1116]/80 px-1.5 text-[11px] leading-4 text-inkMuted hover:text-ink"
+          className="rounded border border-edge/70 bg-well/80 px-1.5 text-[11px] leading-4 text-inkMuted hover:text-ink"
           onClick={() => changeScale(-4)}
           disabled={S <= MIN_SCALE}
           title="Zoom the honeycomb out"
@@ -432,7 +433,7 @@ export default function HoneycombWheel({
         </button>
         <button
           type="button"
-          className="rounded border border-edge/70 bg-[#0E1116]/80 px-1.5 text-[11px] leading-4 text-inkMuted hover:text-ink"
+          className="rounded border border-edge/70 bg-well/80 px-1.5 text-[11px] leading-4 text-inkMuted hover:text-ink"
           onClick={() => changeScale(6)}
           disabled={S >= MAX_SCALE}
           title="Zoom the honeycomb in — room for stacked variants"
@@ -451,7 +452,7 @@ export default function HoneycombWheel({
             <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
           <marker id="hw-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#E8B54A" />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill={P.track} />
           </marker>
         </defs>
 
@@ -467,7 +468,7 @@ export default function HoneycombWheel({
                 y1={seam.fromPx.y}
                 x2={seam.toPx.x}
                 y2={seam.toPx.y}
-                stroke="#8FD3FF"
+                stroke={P.select}
                 strokeOpacity={0.5}
                 strokeWidth={1.4}
                 strokeDasharray="5 4"
@@ -476,8 +477,8 @@ export default function HoneycombWheel({
                 cx={seam.toPx.x}
                 cy={seam.toPx.y}
                 r={4.5}
-                fill="#0b0e13"
-                stroke="#8FD3FF"
+                fill={P.scene}
+                stroke={P.select}
                 strokeOpacity={0.7}
                 strokeWidth={1.2}
               />
@@ -489,8 +490,8 @@ export default function HoneycombWheel({
                   fontFamily="'IBM Plex Mono', monospace"
                   fontSize={8.5}
                   fontWeight={600}
-                  fill="#8FD3FF"
-                  stroke="#0b0e13"
+                  fill={P.select}
+                  stroke={P.scene}
                   strokeWidth={2.5}
                   paintOrder="stroke"
                 >
@@ -501,19 +502,19 @@ export default function HoneycombWheel({
           ))}
 
         {!isDepth && pathD && (
-          <path d={pathD} fill="none" stroke="#F5E7C8" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" opacity={0.85} filter="url(#hw-glow)" style={{ pointerEvents: "none" }} />
+          <path d={pathD} fill="none" stroke={P.cream} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" opacity={0.85} filter="url(#hw-glow)" style={{ pointerEvents: "none" }} />
         )}
 
         {!isDepth && loop && loop.translated && (
           <g style={{ pointerEvents: "none" }}>
             <line x1={hexToPixel(displayWalk[0].q, displayWalk[0].r, S).x} y1={hexToPixel(displayWalk[0].q, displayWalk[0].r, S).y}
               x2={hexToPixel(displayWalk[displayWalk.length - 1].q, displayWalk[displayWalk.length - 1].r, S).x} y2={hexToPixel(displayWalk[displayWalk.length - 1].q, displayWalk[displayWalk.length - 1].r, S).y}
-              stroke="#E8B54A" strokeWidth={2} strokeDasharray="6 4" markerEnd="url(#hw-arrow)" opacity={0.75} />
+              stroke={P.track} strokeWidth={2} strokeDasharray="6 4" markerEnd="url(#hw-arrow)" opacity={0.75} />
           </g>
         )}
 
         {isDepth && depthPath && (
-          <path d={depthPath} fill="none" stroke="#F5E7C8" strokeWidth={2.4} strokeLinecap="round"
+          <path d={depthPath} fill="none" stroke={P.cream} strokeWidth={2.4} strokeLinecap="round"
             strokeLinejoin="round" opacity={0.45} style={{ pointerEvents: "none" }} />
         )}
 
@@ -521,7 +522,7 @@ export default function HoneycombWheel({
           depthNodes.map((node) => {
             const chord = chords[node.index];
             if (!chord) return null;
-            const hue = HUES[degreeAt(node.q, node.r)];
+            const hue = P.hues[degreeAt(node.q, node.r)];
             const name = chordDisplayName(pitchClass(chord.root), chord.quality, keyName);
             const isSelected = node.index === selectedStep;
             const isLatest = node.index === depthNodes.length - 1;
@@ -544,7 +545,7 @@ export default function HoneycombWheel({
                   style={isLatest ? { filter: "url(#hw-glow)" } : undefined}
                 />
                 {isSelected && (
-                  <polygon points={hexPoints(SD + 2)} fill="none" stroke="#E8B54A" strokeWidth={2}
+                  <polygon points={hexPoints(SD + 2)} fill="none" stroke={P.track} strokeWidth={2}
                     strokeDasharray="3 2" style={{ pointerEvents: "none" }} />
                 )}
                 <text x={0} y={0} textAnchor="middle" dominantBaseline="middle"
@@ -559,7 +560,7 @@ export default function HoneycombWheel({
                 </text>
                 <text x={-SD * 0.62} y={-SD * 0.55} textAnchor="middle"
                   fontFamily="'IBM Plex Mono', monospace" fontSize={7}
-                  fill="#8B94A1" style={{ pointerEvents: "none" }}>
+                  fill={P.voices.snare} style={{ pointerEvents: "none" }}>
                   {node.index + 1}
                 </text>
               </g>
@@ -574,11 +575,11 @@ export default function HoneycombWheel({
             style={{ cursor: "pointer" }}
             onClick={() => addChordAtDegree(cell.d, nextRegion)}
           >
-            <polygon points={hexPoints(SD - 2)} fill="#12161D"
-              stroke={`${HUES[cell.d].rim}66`} strokeWidth={1.4} strokeDasharray="4 3" />
+            <polygon points={hexPoints(SD - 2)} fill={P.well}
+              stroke={`${P.hues[cell.d].rim}66`} strokeWidth={1.4} strokeDasharray="4 3" />
             <text x={0} y={0} textAnchor="middle" dominantBaseline="middle"
               fontFamily="'IBM Plex Mono', monospace" fontSize={9} fontWeight={600}
-              fill="#8B94A1" style={{ pointerEvents: "none" }}>
+              fill={P.voices.snare} style={{ pointerEvents: "none" }}>
               {(homes[nextRegion] ?? homes[0]).diatonicByDegree[cell.d].triad.minor
                 ? ROMAN_UP[cell.d].toLowerCase()
                 : ROMAN_UP[cell.d]}
@@ -632,7 +633,7 @@ export default function HoneycombWheel({
                 home.diatonicByDegree[d].triad.minor ? "min" : "maj",
                 home.key,
               );
-          const hue = HUES[d];
+          const hue = P.hues[d];
 
           // Chords that share this degree (Em → E, VI → bVI) stack as chips
           // instead of silently reusing the cell.
@@ -651,7 +652,7 @@ export default function HoneycombWheel({
               onContextMenu={(e) => { e.preventDefault(); handleCellClick(cell); }}
             >
               <polygon points={hexPoints(S - 2)}
-                fill={isChoice ? "#12161D" : hue.fill}
+                fill={isChoice ? P.well : hue.fill}
                 fillOpacity={isChoice ? 0.5 : 1}
                 stroke={isCurrent ? hue.rim : isChoice ? hue.rim + "66" : hue.rim + "AA"}
                 strokeWidth={isCurrent ? 2.5 : isChoice ? 1.4 : 1.2}
@@ -659,20 +660,20 @@ export default function HoneycombWheel({
                 style={isCurrent ? { filter: "url(#hw-glow)" } : undefined}
               />
               {isPlaying && (
-                <polygon points={hexPoints(S + 4)} fill="none" stroke="#8FD3FF" strokeWidth={2.4} style={{ pointerEvents: "none" }} />
+                <polygon points={hexPoints(S + 4)} fill="none" stroke={P.select} strokeWidth={2.4} style={{ pointerEvents: "none" }} />
               )}
               {isSelected && (
-                <polygon points={hexPoints(S + 2)} fill="none" stroke="#E8B54A" strokeWidth={2} strokeDasharray="3 2" style={{ pointerEvents: "none" }} />
+                <polygon points={hexPoints(S + 2)} fill="none" stroke={P.track} strokeWidth={2} strokeDasharray="3 2" style={{ pointerEvents: "none" }} />
               )}
               <text x={0} y={hasVariants ? -S * 0.24 : 1} textAnchor="middle" dominantBaseline="middle"
                 fontFamily="'IBM Plex Mono', monospace" fontSize={labelSize} fontWeight={600}
-                fill={isChoice ? "#8B94A1" : hue.ink} style={{ pointerEvents: "none" }}>
+                fill={isChoice ? P.voices.snare : hue.ink} style={{ pointerEvents: "none" }}>
                 {hasVariants ? subLabel : romanLabel}
               </text>
               {!hasVariants && (
                 <text x={0} y={S * 0.38} textAnchor="middle"
                   fontFamily="'IBM Plex Mono', monospace" fontSize={9}
-                  fill={isChoice ? "#57606D" : hue.rim} style={{ pointerEvents: "none" }}>
+                  fill={isChoice ? P.grid : hue.rim} style={{ pointerEvents: "none" }}>
                   {subLabel}
                 </text>
               )}
@@ -686,8 +687,8 @@ export default function HoneycombWheel({
                         width={width}
                         height={11}
                         rx={2.5}
-                        fill={isCurrent ? hue.rim : "#10141C"}
-                        stroke={isSelected ? "#E8B54A" : hue.rim}
+                        fill={isCurrent ? hue.rim : P.well}
+                        stroke={isSelected ? P.track : hue.rim}
                         strokeWidth={isSelected ? 1.5 : 0.9}
                       />
                       <text
@@ -696,7 +697,7 @@ export default function HoneycombWheel({
                         textAnchor="middle"
                         fontFamily="'IBM Plex Mono', monospace"
                         fontSize={7}
-                        fill={isCurrent ? "#0E1116" : hue.rim}
+                        fill={isCurrent ? P.well : hue.rim}
                       >
                         {label}
                       </text>
@@ -712,8 +713,8 @@ export default function HoneycombWheel({
                     width={badgeLabel.length * 5 + 6}
                     height={12}
                     rx={3}
-                    fill="#10141C"
-                    stroke="#5B84C4"
+                    fill={P.well}
+                    stroke={P.hues[3].rim}
                     strokeWidth={1}
                   />
                   <text
@@ -721,7 +722,7 @@ export default function HoneycombWheel({
                     y={-S * 0.82 + 9}
                     fontFamily="'IBM Plex Mono', monospace"
                     fontSize={7.5}
-                    fill="#8FB7E8"
+                    fill={P.hues[3].ink}
                   >
                     {badgeLabel}
                   </text>
@@ -736,7 +737,7 @@ export default function HoneycombWheel({
         {!isDepth &&
           visitPlan.beads.map((bead) => (
             <g key={`bead-${bead.step}`} style={{ pointerEvents: "none" }}>
-              <circle cx={bead.x} cy={bead.y} r={5.5} fill="#0E1116" stroke="#F5E7C8" strokeWidth={1.2} />
+              <circle cx={bead.x} cy={bead.y} r={5.5} fill={P.well} stroke={P.cream} strokeWidth={1.2} />
               <text
                 x={bead.x}
                 y={bead.y + 0.5}
@@ -744,7 +745,7 @@ export default function HoneycombWheel({
                 dominantBaseline="middle"
                 fontFamily="'IBM Plex Mono', monospace"
                 fontSize={7}
-                fill="#F5E7C8"
+                fill={P.cream}
               >
                 {bead.step}
               </text>
@@ -771,9 +772,9 @@ export default function HoneycombWheel({
           return (
             <g key={`${q},${r}`} style={{ pointerEvents: "none" }}>
               <title>{badgeTitle}</title>
-              <circle cx={bx} cy={by} r={9} fill="#0E1116" stroke="#F5E7C8" strokeWidth={1.5} />
+              <circle cx={bx} cy={by} r={9} fill={P.well} stroke={P.cream} strokeWidth={1.5} />
               <text x={bx} y={by + 1} textAnchor="middle" dominantBaseline="middle"
-                fontFamily="'IBM Plex Mono', monospace" fontSize={8} fontWeight={600} fill="#F5E7C8">
+                fontFamily="'IBM Plex Mono', monospace" fontSize={8} fontWeight={600} fill={P.cream}>
                 {label}
               </text>
             </g>
@@ -782,7 +783,7 @@ export default function HoneycombWheel({
 
         {dial && dialCenter && (
           <g style={{ pointerEvents: "none" }}>
-            <circle cx={dialCenter.x} cy={dialCenter.y} r={22} fill="#0E1116" stroke="#E8B54A" strokeOpacity={0.4} strokeWidth={1} />
+            <circle cx={dialCenter.x} cy={dialCenter.y} r={22} fill={P.well} stroke={P.track} strokeOpacity={0.4} strokeWidth={1} />
             {dial.onsets.map((t, i) => {
               const a = (t / dial.bpb) * Math.PI * 2 - Math.PI / 2;
               const r2 = i === 0 ? 22 : 19;
@@ -793,14 +794,14 @@ export default function HoneycombWheel({
                   key={i}
                   x1={x1} y1={y1}
                   x2={dialCenter.x + Math.cos(a) * r2} y2={dialCenter.y + Math.sin(a) * r2}
-                  stroke="#E8B54A"
+                  stroke={P.track}
                   strokeWidth={i === 0 ? 2 : 1.3}
                   strokeOpacity={0.9}
                 />
               );
             })}
             <text x={dialCenter.x} y={dialCenter.y + 3} textAnchor="middle" dominantBaseline="middle"
-              fontFamily="'IBM Plex Mono', monospace" fontSize={7} fill="#E8B54A" opacity={0.8}>
+              fontFamily="'IBM Plex Mono', monospace" fontSize={7} fill={P.track} opacity={0.8}>
               {dial.onsets.length}×
             </text>
           </g>

@@ -127,7 +127,7 @@ export default function DrumLineEmbed({
           detour dots → pick a range → beat-by-beat). */}
       <div
         ref={boxRef}
-        className="relative w-full overflow-hidden rounded-md border border-edge/60 bg-black"
+        className="relative w-full overflow-hidden rounded-md border border-edge/60 bg-deep"
         title="The classic drum arrangement — click to edit that range beat-by-beat"
       >
         <DrumsView embedded zoom={zoom} highlightSectionId={span.sectionId} onPickRange={pick} />

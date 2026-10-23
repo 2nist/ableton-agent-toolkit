@@ -512,7 +512,7 @@ export default function MelodyNoteEditor({
 
       {/* Pitch gutter + grid — one scroller so the labels stay aligned. */}
       <div
-        className="flex border border-edge rounded overflow-y-auto overflow-x-hidden bg-[#1d1d1d]"
+        className="flex border border-edge rounded overflow-y-auto overflow-x-hidden bg-well"
         style={{ maxHeight }}
       >
         <div style={{ width: GUTTER_W }} className="shrink-0">
@@ -544,8 +544,8 @@ export default function MelodyNoteEditor({
             <div
               key={row.pitch}
               className={`absolute inset-x-0 ${
-                row.black ? "bg-black/25" : "bg-white/[0.02]"
-              } ${row.inScale ? "" : "bg-black/10"}`}
+                row.black ? "bg-ink/[0.07]" : "bg-ink/[0.02]"
+              } ${row.inScale ? "" : "bg-ink/[0.05]"}`}
               style={{ top: index * rowH, height: rowH }}
             />
           ))}
@@ -554,7 +554,7 @@ export default function MelodyNoteEditor({
           {Array.from({ length: Math.ceil(sectionBeats) }, (_, beat) => (
             <div
               key={beat}
-              className={`absolute inset-y-0 w-px ${beat % perBar === 0 ? "bg-white/30" : "bg-white/10"}`}
+              className={`absolute inset-y-0 w-px ${beat % perBar === 0 ? "bg-ink/30" : "bg-ink/10"}`}
               style={{ left: beat * pxPerBeat }}
             />
           ))}

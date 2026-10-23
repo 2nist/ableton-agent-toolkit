@@ -19,13 +19,13 @@ import { pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord, TonicRegion } from "../../types/blueprint";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
+import { usePalette } from "../../theme/palette";
 import {
   degreeRelativeTo,
   effectiveTonicRegions,
   resolveTonicAt,
 } from "../../lib/harmony/tonic";
 import {
-  HUES,
   ROMAN_UP,
   diatonicChordAt,
   SCALE_INTERVALS,
@@ -106,6 +106,7 @@ export default function HarmonyScene({
   regions: storedRegions,
   height = 420,
 }: HarmonySceneProps) {
+  const P = usePalette();
   const [camera, setCamera] = useState<SceneCamera>(DEFAULT_CAMERA);
   const [width, setWidth] = useState(720);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -327,7 +328,7 @@ export default function HarmonyScene({
     <div ref={wrapRef} className="relative w-full" style={{ height }}>
       {homeTrail && (
         <div
-          className="pointer-events-none absolute bottom-1 left-1 z-10 rounded bg-[#0E1116]/80 px-1.5 py-0.5 font-mono text-[9px] text-inkMuted"
+          className="pointer-events-none absolute bottom-1 left-1 z-10 rounded bg-well/80 px-1.5 py-0.5 font-mono text-[9px] text-inkMuted"
           title="The home each box is measured against — inferred from the chords, one region per stretch that shares it"
         >
           home {homeTrail}
@@ -336,7 +337,7 @@ export default function HarmonyScene({
       <div className="absolute left-1 top-1 z-10 flex items-center gap-1">
         <button
           type="button"
-          className="rounded border border-edge/70 bg-[#0E1116]/80 px-1.5 text-[11px] leading-4 text-inkMuted hover:text-ink"
+          className="rounded border border-edge/70 bg-well/80 px-1.5 text-[11px] leading-4 text-inkMuted hover:text-ink"
           onClick={() => setCamera((current) => zoomBy(current, 1.15))}
           disabled={camera.zoom >= MAX_ZOOM}
           title="Zoom in"
@@ -345,7 +346,7 @@ export default function HarmonyScene({
         </button>
         <button
           type="button"
-          className="rounded border border-edge/70 bg-[#0E1116]/80 px-1.5 text-[11px] leading-4 text-inkMuted hover:text-ink"
+          className="rounded border border-edge/70 bg-well/80 px-1.5 text-[11px] leading-4 text-inkMuted hover:text-ink"
           onClick={() => setCamera((current) => zoomBy(current, 0.87))}
           disabled={camera.zoom <= MIN_ZOOM}
           title="Zoom out"
@@ -354,7 +355,7 @@ export default function HarmonyScene({
         </button>
         <button
           type="button"
-          className="rounded border border-edge/70 bg-[#0E1116]/80 px-1.5 text-[10px] leading-4 text-inkMuted hover:text-ink"
+          className="rounded border border-edge/70 bg-well/80 px-1.5 text-[10px] leading-4 text-inkMuted hover:text-ink"
           onClick={() => setCamera(DEFAULT_CAMERA)}
           title="Reset the view (drag orbits · shift-drag pans · wheel zooms)"
         >
@@ -374,7 +375,7 @@ export default function HarmonyScene({
         onWheel={handleWheel}
         onContextMenu={(event) => event.preventDefault()}
       >
-        <rect x={0} y={0} width={width} height={height} fill="#0b0e13" />
+        <rect x={0} y={0} width={width} height={height} fill={P.scene} />
 
         {/* Accidental lanes — b / ♮ / # — so a borrowed chord visibly leaves
             the diatonic tier instead of just floating a little higher. */}
@@ -396,9 +397,9 @@ export default function HarmonyScene({
                   points={[near, far, backFar, backNear]
                     .map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
                     .join(" ")}
-                  fill="#ffffff"
+                  fill={P.label}
                   fillOpacity={0.04}
-                  stroke="#ffffff"
+                  stroke={P.label}
                   strokeOpacity={0.1}
                   strokeWidth={1}
                 />
@@ -406,9 +407,9 @@ export default function HarmonyScene({
               {outer && (
                 <>
                   <line x1={near.x} y1={near.y} x2={far.x} y2={far.y}
-                    stroke="#E8B54A" strokeOpacity={0.16} strokeWidth={1} />
+                    stroke={P.track} strokeOpacity={0.16} strokeWidth={1} />
                   <line x1={backNear.x} y1={backNear.y} x2={backFar.x} y2={backFar.y}
-                    stroke="#E8B54A" strokeOpacity={0.1} strokeWidth={1} strokeDasharray="5 5" />
+                    stroke={P.track} strokeOpacity={0.1} strokeWidth={1} strokeDasharray="5 5" />
                 </>
               )}
               <text
@@ -417,10 +418,10 @@ export default function HarmonyScene({
                 textAnchor="end"
                 fontFamily="'IBM Plex Mono', monospace"
                 fontSize={outer ? 10 : 9}
-                fill={outer ? "#8a7350" : "#7A8290"}
+                fill={outer ? P.hues[0].rim : P.voices.snare}
               >
                 {LANE_LABEL[lane]}
-                <tspan fill={laneCounts.get(lane) ? "#E8B54A" : "#4d5560"} fontSize={7}>
+                <tspan fill={laneCounts.get(lane) ? P.track : P.grid} fontSize={7}>
                   {" "}
                   {laneCounts.get(lane) ?? 0}
                 </tspan>
@@ -437,7 +438,7 @@ export default function HarmonyScene({
             y1={line.y1}
             x2={line.x2}
             y2={line.y2}
-            stroke="#ffffff"
+            stroke={P.label}
             strokeOpacity={line.strong ? 0.16 : 0.07}
             strokeWidth={1}
           />
@@ -448,7 +449,7 @@ export default function HarmonyScene({
           <path
             d={path}
             fill="none"
-            stroke="#F5E7C8"
+            stroke={P.cream}
             strokeOpacity={0.35}
             strokeWidth={2}
             strokeLinecap="round"
@@ -458,7 +459,7 @@ export default function HarmonyScene({
 
         {/* Chord boxes, painter's order, lit by how square-on each face is. */}
         {projected.map((face, index) => {
-          const hue = HUES[face.node.degree] ?? HUES[0];
+          const hue = P.hues[face.node.degree] ?? P.hues[0];
           return (
             <polygon
               key={`face-${face.node.step}-${index}`}
@@ -466,7 +467,7 @@ export default function HarmonyScene({
               fill={shadeHex(hue.fill, face.shade * face.fade)}
               stroke={
                 face.node.chord.id === activeChordId
-                  ? "#8FD3FF"
+                  ? P.select
                   : shadeHex(hue.rim, face.shade * face.fade)
               }
               strokeWidth={face.node.chord.id === activeChordId ? 2 : 0.6}
@@ -480,7 +481,7 @@ export default function HarmonyScene({
         {/* Labels: billboarded so they stay readable at any tilt. */}
         {nodes.map((node) => {
           const point = projectPoint(node.center, renderCamera, origin);
-          const hue = HUES[node.degree] ?? HUES[0];
+          const hue = P.hues[node.degree] ?? P.hues[0];
           const name = chordDisplayName(pitchClass(node.chord.root), node.chord.quality, keyName);
           return (
             <g
@@ -495,8 +496,8 @@ export default function HarmonyScene({
                 fontFamily="'IBM Plex Mono', monospace"
                 fontSize={10}
                 fontWeight={600}
-                fill="#F5E7C8"
-                stroke="#0b0e13"
+                fill={P.cream}
+                stroke={P.scene}
                 strokeWidth={3}
                 paintOrder="stroke"
               >
@@ -509,7 +510,7 @@ export default function HarmonyScene({
                 fontFamily="'IBM Plex Mono', monospace"
                 fontSize={7.5}
                 fill={hue.rim}
-                stroke="#0b0e13"
+                stroke={P.scene}
                 strokeWidth={2.5}
                 paintOrder="stroke"
               >
@@ -528,8 +529,8 @@ export default function HarmonyScene({
               fontFamily="'IBM Plex Mono', monospace"
               fontSize={8}
               fontWeight={600}
-              fill="#8FD3FF"
-              stroke="#0b0e13"
+              fill={P.select}
+              stroke={P.scene}
               strokeWidth={2.5}
               paintOrder="stroke"
             >
@@ -544,7 +545,7 @@ export default function HarmonyScene({
             cy={projectPoint(selectedNode.center, renderCamera, origin).y}
             r={20}
             fill="none"
-            stroke="#E8B54A"
+            stroke={P.track}
             strokeWidth={1.6}
             strokeDasharray="3 3"
             style={{ pointerEvents: "none" }}
@@ -560,7 +561,7 @@ export default function HarmonyScene({
             textAnchor="middle"
             fontFamily="'IBM Plex Mono', monospace"
             fontSize={9}
-            fill="#7A8290"
+            fill={P.voices.snare}
           >
             {tick.label}
           </text>
@@ -575,7 +576,7 @@ export default function HarmonyScene({
               textAnchor="end"
               fontFamily="'IBM Plex Mono', monospace"
               fontSize={7}
-              fill="#5C646F"
+              fill={P.grid}
             >
               {node.step + 1}
             </text>

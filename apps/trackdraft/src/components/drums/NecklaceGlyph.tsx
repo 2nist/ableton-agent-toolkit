@@ -1,3 +1,5 @@
+import { usePalette } from "../../theme/palette";
+
 /** The canonical Euclidean-rhythm diagram (Toussaint's "rhythm
  *  necklace"): a reference ring at `(cx, cy)` with radius `radius`, and
  *  the given onset fractions (0–1 around the loop) connected in order.
@@ -34,6 +36,7 @@ export default function NecklaceGlyph({
   steps?: number;
   backdrop?: string;
 }) {
+  const P = usePalette();
   const pt = (frac: number): [number, number] => {
     const a = -Math.PI / 2 + frac * Math.PI * 2;
     return [cx + radius * Math.cos(a), cy + radius * Math.sin(a)];
@@ -43,14 +46,14 @@ export default function NecklaceGlyph({
   return (
     <g>
       {backdrop && <circle cx={cx} cy={cy} r={radius + 3} fill={backdrop} />}
-      <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#3A3F4B" strokeWidth={1.4} strokeDasharray="2 3" />
+      <circle cx={cx} cy={cy} r={radius} fill="none" stroke={P.grid} strokeWidth={1.4} strokeDasharray="2 3" />
       {steps && steps > 0 &&
         Array.from({ length: steps }).map((_, i) => {
           // Cap the grid so dense loops (16+ steps) don't blur into a solid
           // ring — draw at most ~16 evenly-spaced reference ticks.
           if (steps > 16 && i % Math.ceil(steps / 16) !== 0) return null;
           const [gx, gy] = pt(i / steps);
-          return <circle key={`grid-${i}`} cx={gx} cy={gy} r={1} fill="#3A3F4B" fillOpacity={0.6} />;
+          return <circle key={`grid-${i}`} cx={gx} cy={gy} r={1} fill={P.grid} fillOpacity={0.6} />;
         })}
       {pts.length >= 2 && (
         <path

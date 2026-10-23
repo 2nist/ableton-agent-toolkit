@@ -3,13 +3,14 @@ import { useNavigate, useParams } from "react-router-dom";
 import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
-import { roleStyle } from "../../lib/roleColors";
+import { useRoleStyle } from "../../lib/roleColors";
 import { classifySong } from "../../lib/classification";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { drumFamilyLabel } from "../../lib/playback/drumPreview";
 import type { BlueprintSong } from "../../types/blueprint";
+import { usePalette } from "../../theme/palette";
 
 const PX_PER_BEAT = 2;
 // Wide enough for the per-section readout strip (harmony/drums/melody)
@@ -100,6 +101,8 @@ function progressionText(span: SectionSpan, song: BlueprintSong): string {
  *  imported. A repeated section (e.g. three Chorus passes) renders as
  *  three separate blocks, exactly as it becomes three separate clips. */
 export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
+  const P = usePalette();
+  const roleStyle = useRoleStyle();
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
@@ -127,7 +130,7 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
           {playheadLeft !== null && (
             <div
               className="absolute top-0 bottom-0 w-px bg-accent pointer-events-none z-10"
-              style={{ left: playheadLeft, boxShadow: "0 0 4px 1px #E8B54A" }}
+              style={{ left: playheadLeft, boxShadow: `0 0 4px 1px ${P.track}` }}
             />
           )}
           {spans.map((span, i) => {

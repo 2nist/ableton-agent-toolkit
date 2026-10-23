@@ -16,8 +16,9 @@ import {
   type BlueprintSong,
   type DrumTransitionModel,
 } from "../../types/blueprint";
-import { VOICE_COLOR, VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
-import { TRANSITION_COLOR, TRANSITION_LABEL } from "./transitionStyle";
+import { voiceColor, VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
+import { useTransitionColors, TRANSITION_LABEL } from "./transitionStyle";
+import { usePalette, withAlpha } from "../../theme/palette";
 
 const round4 = (n: number): number => Math.round(n * 10000) / 10000;
 
@@ -48,6 +49,8 @@ export default function TransitionPreview({
   model: DrumTransitionModel;
   transitionBars: number;
 }) {
+  const P = usePalette();
+  const TRANSITION_COLOR = useTransitionColors();
   const { rows, steps, tooShort } = useMemo(() => {
     const variant = resolveSectionVariant(section, song);
     const barBeats = variant?.beatsPerBar ?? beatsPerBar(section);
@@ -123,7 +126,7 @@ export default function TransitionPreview({
         <div key={voice} className="flex items-center gap-1.5">
           <span
             className="font-mono text-2xs w-10 shrink-0 text-right tabular-nums"
-            style={{ color: VOICE_COLOR[voice] ?? "#8B94A1" }}
+            style={{ color: voiceColor(voice, P) }}
           >
             {VOICE_LABEL[voice] ?? voice}
           </span>
@@ -132,7 +135,7 @@ export default function TransitionPreview({
               <div
                 key={i}
                 className="h-2.5 w-2.5 rounded-[2px]"
-                style={{ background: hits.has(i) ? (VOICE_COLOR[voice] ?? "#E8B54A") : "rgba(255,255,255,0.07)" }}
+                style={{ background: hits.has(i) ? voiceColor(voice, P) : withAlpha(P.grid, 0.22) }}
               />
             ))}
           </div>
