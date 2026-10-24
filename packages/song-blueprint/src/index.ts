@@ -31,8 +31,14 @@ export type DrumCellVoice = "kick" | "snare" | "hat";
  *  mirrors `@drum/library`'s `KitVoice`, declared here independently for
  *  the same schema-decoupling reason as `MeterOutline`/`DrumCellVoice`. */
 export type DrumVoiceName =
-  | "kick" | "snare" | "rim" | "clap" | "closedHat" | "openHat" | "pedalHat"
+  | "kick" | "snare" | "rim" | "clap" | "shaker" | "cowbell"
+  | "closedHat" | "openHat" | "pedalHat"
   | "ride" | "rideBell" | "crash" | "tomLow" | "tomMid" | "tomHigh";
+
+/** The six SURFACE lanes the Blocks timeline stages (a lane is a family of
+ *  kit voices — see `@drum/library`'s `DRUM_LANE_VOICES`). Mute/solo work in
+ *  this vocabulary, not in voices, because the lane is what you see. */
+export type DrumLaneKey = "kick" | "snare" | "rim" | "hat" | "cym" | "tom";
 
 /** A free-form Euclidean rhythm: `k` onsets spread as evenly as possible
  *  across `n` steps, cyclically shifted by `rotation`. Unlike a
@@ -544,6 +550,35 @@ export interface BlueprintSection {
    *  authored material always wins over automatic fills/transitions/
    *  detours; the automatic ending machinery still runs underneath. */
   drumBlocks?: DrumBlock[];
+  /** Per-lane MIDI CC — one controller per surface lane, ramped across the
+   *  section (hat openness CC4, filter CC74, expression CC11…). Emitted by
+   *  the shared `planLaneCc`, so the exported .mid and the live MIDI out
+   *  carry the same messages. NOTE: the Ableton Extensions SDK exposes no
+   *  clip-envelope API, so "Send to Ableton" sends notes only — the CC lines
+   *  arrive with the .mid import, which is the one documented divergence.
+   *  Muted / un-soloed lanes emit nothing, exactly like their notes. */
+  drumLaneCc?: Partial<Record<DrumLaneKey, { cc: number; from: number; to: number }>>;
+  /** Muted surface lanes — their hits leave the preview, the .mid, the
+   *  live MIDI out AND the Ableton clips (the filter runs inside the shared
+   *  `planSectionDrumNotes`, so all four agree). Absent ⇒ nothing muted. */
+  drumLaneMute?: DrumLaneKey[];
+  /** Soloed surface lanes. When any lane is soloed only soloed lanes sound
+   *  (a muted lane stays silent even if soloed). Absent ⇒ no solo. */
+  drumLaneSolo?: DrumLaneKey[];
+  /** Groove-as-glue — impose THIS section's drum pocket (measured from the
+   *  drums that actually play: `extractGroove`) on the other parts, so the
+   *  bass and the comping sit where the drums sit instead of on the grid.
+   *  Absent → byte-identical to the pre-glue pipeline. Applied in the shared
+   *  planners the .mid export, live MIDI out and the Ableton bridge all use
+   *  (`@drum/library`'s `drumPocket` + `glueToPocket`), so all four agree. */
+  grooveGlue?: {
+    /** Put the bass in the drums' pocket. */
+    bass?: boolean;
+    /** Put the chord comping in the drums' pocket. */
+    chords?: boolean;
+    /** 0 = untouched, 1 = the drums' full measured feel. Defaults to 1. */
+    strength?: number;
+  };
   /** Euclidean harmony — a `MeterOutline` whose onsets (each 2s/3s cell's
    *  start) drive when the chord progression advances, instead of each
    *  chord's `beats`. Reuses the exact drum-outline machinery, so harmony

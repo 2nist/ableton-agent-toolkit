@@ -1,427 +1,443 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
-  DRUM_LANE_PRIMARY,
-  FILL_DATA,
   PRESET_DATA,
+  DRUM_LANE_PRIMARY,
+  DRUM_LANE_VOICES,
+  audibleLanes,
   compatibleVariantIndices,
-  hashSeed,
-  occurrenceSeed,
-  planSectionHandoffFills,
-  planSectionTransitions,
   type DrumLaneId,
-  type TransitionModel,
+  type KitVoice,
 } from "@drum/library";
 import { useSongStore } from "../../../store/songStore";
-import { useTimeSelectionStore, drumRangeForSection } from "../../../store/timeSelectionStore";
-import { useTimeViewportStore } from "../../../store/timeViewportStore";
+import { useTimeSelectionStore } from "../../../store/timeSelectionStore";
 import { useStudioSelectionStore } from "../../../store/studioSelectionStore";
 import { useDrumsDraftStore } from "../../../store/drumsDraftStore";
-import { anchoredScrollLeft, clampBarPx, scrollBarFromLeft, scrollLeftFromBar } from "../../../lib/time/timeMath";
-import { usePinchToZoom } from "../../../hooks/usePinchToZoom";
 import { updateSection } from "../../../lib/sections";
-import { sectionSpans, totalBars, type SectionSpan } from "../../../lib/arrangement";
-import { resolveSectionLaneHits, type LaneHit, type LaneHits } from "../../../lib/timeline/drumLaneHits";
-import { inferPatternForSection, resolveSectionVariant, seededVariantIndex, velocityNumber } from "../../../lib/playback/drumPreview";
+import { sectionSpans, type SectionSpan } from "../../../lib/arrangement";
+import type { LaneHit } from "../../../lib/timeline/drumLaneHits";
 import {
-  BAR_PX, GUTTER_INSET, TOP_PAD, TRACK_H, X0,
-  barX, beatsPerBarOf, gridStepForZoom, snapBeat, spanBeatToX, spanXToBeat, xToSpanBeat,
-} from "../../../lib/timeline/beatMap";
-import { beatsPerBar, sectionDurationBeats, type BlueprintSection, type DrumBlock, type DrumBlockNote, type DrumVoiceName } from "../../../types/blueprint";
+  inferPatternForSection,
+  resolveSectionVariant,
+  seededVariantIndex,
+} from "../../../lib/playback/drumPreview";
+import {
+  beatsPerBar,
+  sectionDurationBeats,
+  type BlueprintSection,
+  type DrumBlock,
+  type DrumBlockFx,
+  type DrumBlockNote,
+  type DrumVoiceName,
+} from "../../../types/blueprint";
 import { DRUM_LANES, laneColor } from "../laneStyle";
-import { useSectionRoleColors } from "../sectionRoleStyle";
-import { useTransitionColors, TRANSITION_LABEL } from "../transitionStyle";
+import { VOICE_LABEL } from "../voiceStyle";
 import { usePalette } from "../../../theme/palette";
-import { handRadius } from "../../../theme/handDrawn";
-import SelectionPad, { PAD_PANEL_H, PAD_PANEL_W, PAD_SCALE } from "./SelectionPad";
+import GrooveShelf from "./GrooveShelf";
+import GrooveGlue from "./GrooveGlue";
+import LaneRow from "./LaneRow";
+import LaneGutter from "./LaneGutter";
+import MarkerRail, { MARKER_BAND_H } from "./MarkerRail";
+import { sectionMarkers } from "./transitionMarkers";
 import SelectionEditorModal from "./SelectionEditorModal";
-import SelectionWorkbench from "./SelectionWorkbench";
+import { BARS_PER_VIEW_OPTIONS, stepGridFor, type BarsPerView } from "./meterGrid";
+import { laneHitsFor, peakVelocityByStep } from "./hitsCache";
 import { withToggledStep } from "./stepToggle";
-import { boxMetrics, CELL_TOP_PAD, copyBlocksToRange, euclidBlocksFor, motionBlockFor, motionLabelFor, replaceRangeBlocks, stripFxCarriers, upsertBlocks, upsertModeBlocks } from "./selectionMath";
-import { clampParam, cycleValue, PARAM_SPECS, STEP_PARAMS, type ParamDraftNote, type StepParam } from "./stepParams";
+import { asStepParam } from "./stepParams";
+import { gestureLayerFor } from "./gestureLayer";
+import { auditionDrumHit } from "../../../lib/playback/previewMidi";
+import {
+  copyBlocksToRange,
+  fxBlocksFor,
+  fxForLanes,
+  replaceRangeBlocks,
+  stripFxCarriers,
+  upsertBlocks,
+  upsertModeBlocks,
+} from "./selectionMath";
+import { clampParam, PARAM_SPECS, type ParamDraftNote, type StepParam } from "./stepParams";
 import { scaleVelocity, velocityOpFactor, type VelocityOp } from "./velocityOps";
+import type { FxParam } from "./fxParams";
 
 /**
- * The Drum Blocks view — the alternate drums timeline. Every lane is a row
- * of step dots (the retired DETOUR lane's click-to-edit gesture applied to
- * all six lanes); a marquee drag across beats × drums creates the
- * selection, and the XY pad docks to the right of it in one cluster with
- * the mode buttons. Edits write `BlueprintSection.drumBlocks` through the
- * shared drums draft store, so the existing draft flow (● preview /
- * Apply / Revert) and the next-bar live refresh come for free — and the
- * same `applyDrumBlocks` the export paths use means what you see is what
- * plays.
+ * The Drum Blocks view — rebuilt around three ideas.
  *
- * v1 interactions: marquee select · click a dot to toggle a hit · drag
- * the pad (Euclid: k/rotation; Motion: gesture vector). Zoom-adaptive dot
- * subdivision, dot-drag velocity, selection move/resize and the ⤢ step
- * editor are the next pass.
+ * 1. TIERS. Song map (read-only navigation) → groove shelf (pick a groove by
+ *    seeing its rhythm) → the surface lanes. Nothing docks over the
+ *    timeline, and there is no separate bar strip: at one bar per view the
+ *    lanes ARE the bar view, with the ◂ A · bar n/8 ▸ navigator walking it.
+ *
+ * 2. NO MARQUEE. One drag used to mean three things (vertical = velocity,
+ *    horizontal = select, click = toggle), which is what felt disjointed.
+ *    Selection is built by CLICKING NAMES: a lane label selects that lane,
+ *    a bar number selects that bar across every lane, shift extends. A drag
+ *    on a bar therefore means exactly one thing — its velocity.
+ *
+ * 3. ZOOM IS BARS PER VIEW. [1|2|4|8|16|ALL], with the step grid derived
+ *    from the METER (`meterGrid.ts`), so 12/8 lands on 12/6/3 steps per bar
+ *    and 7/8 keeps its seven eighths. The wheel scrolls; nothing hijacks it.
+ *    Every step is an OUTLINED CELL and the hit fills it from the bottom, so
+ *    the grid reads as a grid instead of squares floating in white space.
+ *
+ * Edits still write `BlueprintSection.drumBlocks` through the shared draft
+ * store with the same helpers the export paths use, and every gesture
+ * commits ONCE on release — a drag never writes per pixel.
  */
 
 const LANE_COUNT = DRUM_LANES.length;
-const STACK_BOTTOM = TOP_PAD + LANE_COUNT * TRACK_H;
-const HEIGHT = STACK_BOTTOM + 22;
+/** Canvas top band: the bar ruler, then the handoff/detour marker rail
+ *  (section names live in the app spine, which selects the same section). */
+const RULER_H = 26;
+const MARKER_TOP = RULER_H + 1;
+const TOP = MARKER_TOP + MARKER_BAND_H;
+const ROW_H = 52;
+const GUTTER = 104;
+const HEIGHT = TOP + LANE_COUNT * ROW_H + 12;
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 const round4 = (n: number): number => Math.round(n * 10000) / 10000;
 
-/** Pointer capture is a nicety (keeps a drag alive outside the svg); the
- *  browser throws for pointers it no longer considers active, so never let
- *  a failed capture abort a gesture. */
-function capture(el: Element, pointerId: number): void {
-  try { el.setPointerCapture(pointerId); } catch { /* not capturable — fine */ }
+/** A lanes × bars selection. */
+interface BarSel {
+  sectionId: string;
+  lanes: DrumLaneId[];
+  fromBar: number;
+  toBar: number;
+}
+
+type ScrubTargets = { draft: ParamDraftNote; value0: number; stepIdx: number }[];
+
+/** The in-flight velocity gesture. */
+interface VelDrag {
+  laneKey: DrumLaneId;
+  stepIdx: number;
+  stepBeat: number;
+  param: StepParam;
+  startValue: number;
+  value: number;
+  /** Press-time snapshot for a selection-wide scrub, else null. */
+  scrub: { targets: ScrubTargets; start: number; end: number; pressed0: number } | null;
+  /** Press point — the drag ORIGIN. Never updated during the gesture. */
+  x0: number;
+  y0: number;
+  /** Current pointer, for the readout. */
+  x: number;
+  y: number;
+  /** The cell's box, so a click can be read as a velocity. */
+  cellTop: number;
+  cellH: number;
+  /** Add the step when the click/drag lands on an empty cell. */
+  addIfEmpty: boolean;
+  moved: boolean;
 }
 
 /**
- * Circular-cell metrics for the step lanes — cells are packed as tightly
- * as the grid allows (sequencer-style: a hair of gap between steps) and sit
- * at the TOP of each lane. The space below a lane's cell row carries the
- * velocity indicator strip; during a drag it also hosts the slider readout.
- * Cell radius grows with zoom, and the step grid itself subdivides with
- * zoom (`gridStepForZoom`), so the on-screen spacing stays workable.
+ * The velocity a pointer HEIGHT means inside a cell: the top of the box is
+ * 127, its floor is 0. Clicking and dragging share this one mapping, so a
+ * click is simply a drag that never moved — and the bar always sits where
+ * your finger is.
  */
-const CELL_MAX_R = 11;
-function cellMetrics(zoom: number, beatsPerBar: number, stepBeats: number): { spacing: number; r: number } {
-  const spacing = (stepBeats * BAR_PX * zoom) / beatsPerBar;
-  const r = Math.max(1.4, Math.min(spacing / 2 - 1, CELL_MAX_R));
-  return { spacing, r };
-}
-const cellCy = (li: number, r: number): number => TOP_PAD + li * TRACK_H + CELL_TOP_PAD + r;
-
-interface MarqueeState { x0: number; y0: number; x1: number; y1: number }
-
-/** The circular cell a press landed on — feeds both click-to-toggle and the
- *  drag-up/down velocity gesture. */
-interface CellPress {
-  span: SectionSpan;
-  laneKey: DrumLaneId;
-  stepBeat: number;
-  /** Peak velocity on this step; null when the cell is empty. */
-  velocity: number | null;
-  cx: number;
-  cy: number;
+function velocityAt(y: number, cellTop: number, cellH: number): number {
+  const frac = Math.max(0, Math.min(1, (cellTop + cellH - y) / Math.max(1, cellH - 2)));
+  return Math.round(frac * 127);
 }
 
-/** One press→release gesture on the canvas. */
-interface PressState {
-  x0: number;
-  y0: number;
-  /** The circular cell under the press — feeds click-to-toggle and the
-   *  drag-up/down velocity gesture. */
-  cell: CellPress | null;
-  /** Which surface the press landed on: the cell ring (toggle + value) or
-   *  the value box below it (the parameter surface — a click there never
-   *  toggles the step; discrete params cycle). */
-  zone: "cell" | "value" | null;
-  /** The lane's active parameter at press time + the step's value of it. */
-  param: StepParam;
-  paramStart: number;
-  /** True when the step has something editable (a hit or an authored note). */
-  editable: boolean;
-  velMode: boolean;
-  /** Set when a value-zone drag covers MULTIPLE steps (a range selection
-   *  over the pressed step) — the press-time snapshot the scrub writes are
-   *  rebuilt from, so repeated moves never compound. */
-  scrub?: ParamScrubTarget | null;
+function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
-/** An in-flight ⌥-drag copy of the selection. */
-interface CopyDragState {
-  span: SectionSpan;
-  range: { startBeat: number; endBeat: number; laneKeys: string[] };
-  /** The beat under the press — the drag delta is measured from here. */
-  grabBeat: number;
-  /** The step grid captured at grab time (deltas snap to it). */
-  grid: number;
-  /** Where the copy will land (updated on every move). */
-  destStart: number;
-}
-
-/** A press-time snapshot for a selection-wide parameter scrub: every step
- *  in the range that has an authored note or a resolved hit, with its full
- *  note draft preserved so other parameters survive the edit. */
-interface ParamScrubTarget {
-  param: StepParam;
-  laneKey: DrumLaneId;
-  start: number;
-  end: number;
-  /** The pressed step's value at press time (the drag origin). */
-  pressed0: number;
-  targets: { draft: ParamDraftNote; value0: number }[];
-}
-
-/** An in-flight selection-edge resize. */
-interface HandleDragState {
-  kind: "left" | "right" | "top" | "bottom";
-  span: SectionSpan;
-  range: { startBeat: number; endBeat: number; laneKeys: string[] };
-}
-
-interface PadDragState {
-  clientX: number;
-  clientY: number;
-  k: number;
-  rotation: number;
-  mx: number;
-  my: number;
-  span: SectionSpan;
-  range: { startBeat: number; endBeat: number };
-  laneKeys: string[];
+function saveJson(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* ignore */
+  }
 }
 
 export default function DrumBlocksView() {
   const P = usePalette();
-  const SECTION_ROLE_COLOR = useSectionRoleColors();
-  const TRANSITION_COLOR = useTransitionColors();
   const song = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
-  const selection = useTimeSelectionStore((s) => s.selection);
-  const range = useMemo(
-    () =>
-      selection && selection.sectionId === selectedSectionId
-        ? { startBeat: selection.startBeat, endBeat: selection.endBeat, laneKeys: selection.lanes }
-        : null,
-    [selection, selectedSectionId],
-  );
-  const setRange = useCallback((next: { startBeat: number; endBeat: number; laneKeys: string[] }) => {
-    const sectionId = useStudioSelectionStore.getState().selectedSectionId;
-    if (!sectionId) return;
-    useTimeSelectionStore.getState().setSelection({
-      sectionId,
-      startBeat: next.startBeat,
-      endBeat: next.endBeat,
-      lanes: next.laneKeys,
-    });
-  }, []);
-  const clearRange = useCallback(() => useTimeSelectionStore.getState().clearSelection(), []);
   const draftSectionId = useDrumsDraftStore((s) => s.sectionId);
   const draftSection = useDrumsDraftStore((s) => s.section);
 
-  const barPx = useTimeViewportStore((s) => s.scales.section);
-  const zoom = barPx / BAR_PX;
-  const [padMode, setPadMode] = useState<"euclid" | "motion">("euclid");
+  const [barsPerView, setBarsPerView] = useState<BarsPerView>(() => loadJson<BarsPerView>("trackdraft-drums-bars-view", "all"));
+  const [sel, setSel] = useState<BarSel | null>(null);
+  const [copyArm, setCopyArm] = useState<BarSel | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [paramMenu, setParamMenu] = useState<string | null>(null);
-  const [marquee, setMarquee] = useState<MarqueeState | null>(null);
-  const [copyDrag, setCopyDrag] = useState<{ dxPx: number; destStart: number } | null>(null);
-  const [velocityDrag, setVelocityDrag] = useState<{ x: number; y: number; text: string; label: string; frac: number } | null>(null);
-  /** Per-lane parameter lane — which step parameter the value boxes show
-   *  and edit (the "effects lane" dropdown). Persisted per browser. */
-  const [laneParams, setLaneParams] = useState<Record<string, StepParam>>(() => {
-    try { return JSON.parse(localStorage.getItem("trackdraft-drums-lane-param") || "{}"); } catch { return {}; }
-  });
-  const setLaneParam = useCallback((laneKey: string, p: StepParam) => {
-    setLaneParams((m) => {
-      const next = { ...m, [laneKey]: p };
-      try { localStorage.setItem("trackdraft-drums-lane-param", JSON.stringify(next)); } catch { /* ignore */ }
-      return next;
-    });
-    setParamMenu(null);
-  }, []);
-  const paramFor = useCallback((laneKey: string): StepParam => laneParams[laneKey] ?? "vel", [laneParams]);
+  const [velDrag, setVelDrag] = useState<VelDrag | null>(null);
+  const [fxPreview, setFxPreview] = useState<{ laneKey: string; id: FxParam; value: number } | null>(null);
+  const [stepSel, setStepSel] = useState<Record<string, StepParam>>(() => loadJson("trackdraft-drums-step-sel", {}));
+  const [fxSel, setFxSel] = useState<Record<string, FxParam | null>>(() => loadJson("trackdraft-drums-fx-sel", {}));
+  const [width, setWidth] = useState(900);
+  const [shiftHeld, setShiftHeld] = useState(false);
 
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const pressRef = useRef<PressState | null>(null);
-  const handleRef = useRef<HandleDragState | null>(null);
-  const padDragRef = useRef<PadDragState | null>(null);
-  const copyRef = useRef<CopyDragState | null>(null);
+  const dragRef = useRef<VelDrag | null>(null);
 
-  // Wheel zoom, cursor-anchored: ⌘/Ctrl anywhere (incl. trackpad pinch),
-  // and a PLAIN wheel while the pointer is over the sequencer's cell area
-  // — the grid itself is the zoom surface there. Elsewhere the plain wheel
-  // keeps the browser's native scrolling.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      // Horizontal pans (trackpad two-finger swipe) stay native scrolls —
-      // the grid's wheel gesture is vertical-only zoom.
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-      const rect = el.getBoundingClientRect();
-      const localY = e.clientY - rect.top;
-      const overCells = localY >= TOP_PAD && localY <= STACK_BOTTOM;
-      if (!e.ctrlKey && !e.metaKey && !overCells) return;
-      e.preventDefault();
-      const state = useTimeViewportStore.getState();
-      const prevBarPx = state.scales.section;
-      const prev = prevBarPx / BAR_PX;
-      const next = clamp(prev * (e.deltaY < 0 ? 1.12 : 1 / 1.12), 0.5, 6);
-      if (Math.abs(next - prev) < 1e-6) return;
-      const nextBarPx = next * BAR_PX;
-      const viewX = e.clientX - rect.left;
-      const nextContentX = X0 + (viewX + el.scrollLeft - X0) * (next / prev);
-      state.setScale("section", nextBarPx);
-      requestAnimationFrame(() => {
-        el.scrollLeft = Math.max(0, nextContentX - viewX);
-      });
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, []);
-
-  // A different song is a different timeline: don't restore the previous
-  // song's section-depth scroll into it.
-  const lastSongIdRef = useRef(song?.id ?? null);
-  useEffect(() => {
-    const id = song?.id ?? null;
-    if (lastSongIdRef.current === id) return;
-    lastSongIdRef.current = id;
-    useTimeViewportStore.getState().setScrollBar("section", 0);
-    if (scrollRef.current) scrollRef.current.scrollLeft = 0;
-  }, [song?.id]);
-
-  // Restore the section-depth scroll position (stored in bars) and record
-  // manual scrolls so leaving and returning to the Blocks editor lands in
-  // the same place.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const restore = requestAnimationFrame(() => {
-      const state = useTimeViewportStore.getState();
-      el.scrollLeft = scrollLeftFromBar(state.scrollBars.section, state.scales.section);
-    });
-    let raf = 0;
-    const onScroll = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        const state = useTimeViewportStore.getState();
-        state.setScrollBar("section", scrollBarFromLeft(el.scrollLeft, state.scales.section));
-      });
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      cancelAnimationFrame(restore);
-      el.removeEventListener("scroll", onScroll);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
-
-  // Pinch-to-zoom on touch. A second finger cancels any single-pointer
-  // gesture that the first finger started (marquee/press), so pinching can
-  // never accidentally edit a step.
-  usePinchToZoom(
-    scrollRef,
-    ({ scale, focalX }) => {
-      const el = scrollRef.current;
-      if (!el) return;
-      const prev = useTimeViewportStore.getState().scales.section;
-      const next = clampBarPx("section", prev * scale);
-      if (Math.abs(next - prev) < 1e-6) return;
-      const left = anchoredScrollLeft(el.scrollLeft, focalX, prev, next);
-      useTimeViewportStore.getState().setScale("section", next);
-      requestAnimationFrame(() => {
-        el.scrollLeft = left;
-      });
-    },
-    {
-      onPinchStart: () => {
-        pressRef.current = null;
-        setMarquee(null);
-      },
-    },
-  );
+  // ---- song / section ---------------------------------------------------------
 
   const spans = useMemo(() => (song ? sectionSpans(song) : []), [song]);
-  const width = useMemo(() => barX(totalBars(spans), zoom) + 40, [spans, zoom]);
+  const anchorSpan = useMemo(
+    () => spans.find((s) => s.section.id === selectedSectionId) ?? spans[0] ?? null,
+    [spans, selectedSectionId],
+  );
 
-  /** The section a span renders — the working draft when one is open for
-   *  it (live preview of uncommitted block edits), else the committed one. */
+  /** The section a span renders — the working draft when one is open. */
   const effectiveSection = useCallback(
     (span: SectionSpan): BlueprintSection =>
       draftSectionId === span.section.id && draftSection ? draftSection : span.section,
     [draftSectionId, draftSection],
   );
 
-  const hitsBySpan = useMemo(() => {
-    const map = new Map<string, LaneHits>();
-    for (const span of spans) {
-      const key = `${span.section.id}:${span.occurrenceIndex}`;
-      if (map.has(key)) continue;
-      map.set(key, resolveSectionLaneHits(effectiveSection(span), song ?? undefined, span.occurrenceIndex));
-    }
-    return map;
-  }, [spans, song, effectiveSection]);
-  const hitsForSpan = useCallback(
-    (span: SectionSpan): LaneHits => hitsBySpan.get(`${span.section.id}:${span.occurrenceIndex}`) ?? new Map(),
-    [hitsBySpan],
+  const section = anchorSpan ? effectiveSection(anchorSpan) : null;
+  const hits = useMemo(
+    () => (anchorSpan && section ? laneHitsFor(section, song ?? undefined, anchorSpan.occurrenceIndex) : null),
+    [anchorSpan, section, song],
   );
 
-  /** The automatic gesture + handoff-fill readout per section END — the
-   *  exact planner inputs the classic view (and `planSectionDrumNotes`) use,
-   *  so a tag on a boundary means the same thing it means at export. Sections
-   *  whose base groove resolves to null show nothing: nothing is layered
-   *  under a blocks-only section (it stays pure). Ambience only — never a
-   *  gesture target. */
-  const autoReadout = useMemo(() => {
-    const resolved = spans.map((span) => {
-      const section = effectiveSection(span);
-      return { span, section, variant: resolveSectionVariant(section, song ?? undefined, span.occurrenceIndex) };
-    });
-    const handoffPlans = planSectionHandoffFills(
-      resolved.map((r) => ({
-        sectionId: r.span.sectionId,
-        occurrenceIndex: r.span.occurrenceIndex,
-        variant: r.variant,
-        durationBeats: r.span.durationBeats,
-        velocityTarget: velocityNumber(r.section.velocity),
-      })),
-      FILL_DATA,
-    );
-    const autoTransitions = planSectionTransitions(
-      resolved.map((r) => ({
-        sectionId: r.span.sectionId,
-        occurrenceIndex: r.span.occurrenceIndex,
-        role: r.section.role ?? null,
-        durationBeats: r.span.durationBeats,
-        beatsPerBar: beatsPerBar(r.span.section),
-        velocityTarget: velocityNumber(r.section.velocity),
-        manualModel: r.section.drumTransitionModel != null,
-        hasVariation: r.section.drumVariationOutline != null,
-      })),
-    );
-    return resolved.map((r, i): { model: TransitionModel | null; manual: boolean; bars: number; fill: boolean; detourStartBeat: number | null } | null => {
-      if (!r.variant) return null;
-      const manual = r.section.drumTransitionModel ?? null;
-      const model = manual ?? autoTransitions[i].model;
-      const fill = !manual && !r.section.drumVariationOutline
-        && autoTransitions[i].model === null
-        && handoffPlans[i].fillStart !== null
-        && hashSeed(`${occurrenceSeed(r.span.sectionId, r.span.occurrenceIndex)}:fill`) % 100 < 45;
-      // An authored detour is still authored in the classic view / dock —
-      // show WHERE it starts here so blocks users aren't blind to it (it
-      // applies at export; a selection edit authors the same shape change).
-      // Mirrors applyVariation's span math.
-      const barBeats = beatsPerBar(r.span.section);
-      const maxBars = Math.floor(r.span.durationBeats / barBeats);
-      let detourStartBeat: number | null = null;
-      if (r.section.drumVariationOutline && maxBars >= 1) {
-        const spanBars = Math.max(1, Math.min(Math.round(r.section.drumVariationBars ?? 1), maxBars));
-        if (!(spanBars >= maxBars && maxBars < 2)) {
-          const spanBeats = spanBars * barBeats;
-          detourStartBeat = round4(Math.max(0, Math.min(
-            r.section.drumVariationStartBeat ?? r.span.durationBeats - spanBeats,
-            r.span.durationBeats - spanBeats,
-          )));
-        }
-      }
-      if (!model && !fill && detourStartBeat === null) return null;
-      return {
-        model,
-        manual: manual != null,
-        bars: manual ? (r.section.drumTransitionBars ?? 1) : autoTransitions[i].bars,
-        fill,
-        detourStartBeat,
-      };
-    });
-  }, [spans, song, effectiveSection]);
+  const grid = useMemo(
+    () => (anchorSpan ? stepGridFor(anchorSpan, barsPerView) : { stepsPerBar: 16, stepBeats: 0.25, beatsPerBar: 4 }),
+    [anchorSpan, barsPerView],
+  );
+  const sectionBars = anchorSpan ? Math.max(1, Math.round(anchorSpan.bars)) : 1;
+  const visibleBars = barsPerView === "all" ? sectionBars : Math.min(sectionBars, barsPerView);
+  // the gutter is a sticky OVERLAY, so the canvas gets the remaining pixels
+  const barPx = Math.max(40, (width - GUTTER) / Math.max(1, visibleBars));
+  const contentW = barPx * sectionBars;
+  const beatToX = barPx / Math.max(1e-6, grid.beatsPerBar);
+  const stepCount = sectionBars * grid.stepsPerBar;
+  // cells take the whole step: fewer bars ⇒ wider cells (no 16px cap),
+  // so a one-bar view fills the panel instead of floating in white space
+  const stepW = Math.max(3, beatToX * grid.stepBeats - 3);
 
-  /** All block edits funnel through here — always into the draft store
-   *  (starting a fresh draft from the committed section when needed), so
-   *  Apply/Revert and the live refresh behave exactly like the classic
-   *  dock editors. */
+  /** What the export plays here that the grid can't show (detour ·
+   *  transition · handoff fill). Cached on the section object, so a drag
+   *  never pays for it. */
+  const gesture = useMemo(() => {
+    if (!song || !anchorSpan) return null;
+    // With the preview draft overlaid, exactly like the marker rail above —
+    // otherwise the rail shows a detour the lanes refuse to explain.
+    const live = spans.map((span) => ({ ...span, section: effectiveSection(span) }));
+    const at = live.findIndex(
+      (sp) => sp.sectionId === anchorSpan.sectionId && sp.occurrenceIndex === anchorSpan.occurrenceIndex,
+    );
+    return at < 0 ? null : gestureLayerFor(song, live, live[at]);
+  }, [song, spans, anchorSpan, effectiveSection]);
+
+  /** Which lanes will actually sound — the SAME rule the planner applies
+   *  (`audibleLanes`), so a dimmed lane is a lane the export drops. */
+  const mutedLanes = useMemo(() => new Set(section?.drumLaneMute ?? []), [section]);
+  const soloedLanes = useMemo(() => new Set(section?.drumLaneSolo ?? []), [section]);
+  const silentLanes = useMemo(() => {
+    if (!section) return new Set<string>();
+    const play = audibleLanes(section.drumLaneMute, section.drumLaneSolo);
+    return new Set(DRUM_LANES.map((l) => l.key).filter((k) => !play.has(k as DrumLaneId)));
+  }, [section]);
+
+  /** Every resolved hit in the section — the pocket the glue measures. */
+  const allDrumBeats = useMemo(() => {
+    if (!hits) return [] as { beat: number; velocity: number }[];
+    const out: { beat: number; velocity: number }[] = [];
+    for (const list of hits.values()) for (const h of list) out.push({ beat: h.beat, velocity: h.velocity });
+    return out.sort((a, b) => a.beat - b.beat);
+  }, [hits]);
+
+  const laneData = useMemo(
+    () =>
+      DRUM_LANES.map((lane) =>
+        peakVelocityByStep((hits?.get(lane.key as DrumLaneId) ?? []) as LaneHit[], grid.stepBeats, stepCount),
+      ),
+    [hits, grid.stepBeats, stepCount],
+  );
+
+  /** Peak maps with the in-flight drag applied — memo-stable per lane, so a
+   *  KICK drag re-renders KICK's row and nothing else. */
+  const peakFor = useCallback(
+    (li: number): ReadonlyMap<number, number> => {
+      const d = velDrag;
+      const laneKey = DRUM_LANES[li].key as DrumLaneId;
+      if (!d || d.laneKey !== laneKey || !d.moved) return laneData[li].peak;
+      const out = new Map(laneData[li].peak);
+      if (d.scrub) {
+        if (d.param === "vel") {
+          const delta = d.value - d.scrub.pressed0;
+          for (const t of d.scrub.targets) out.set(t.stepIdx, clamp(t.value0 + delta, 1, 127));
+        }
+      } else {
+        out.set(d.stepIdx, d.value);
+      }
+      return out;
+    },
+    [velDrag, laneData],
+  );
+
+  // ---- width ------------------------------------------------------------------
+
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      if (w > 0) setWidth(w);
+    });
+    ro.observe(el);
+    setWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
+  // A drag must never outlive its gesture: if the pointerup is swallowed by
+  // another layer (a menu backdrop, an overlay), drop the in-flight drag
+  // instead of leaving a readout glued to the canvas.
+  useEffect(() => {
+    const clear = () => {
+      if (!dragRef.current) return;
+      dragRef.current = null;
+      setVelDrag(null);
+    };
+    window.addEventListener("pointerup", clear);
+    window.addEventListener("pointercancel", clear);
+    return () => {
+      window.removeEventListener("pointerup", clear);
+      window.removeEventListener("pointercancel", clear);
+    };
+  }, []);
+
+  // shift-click extends the bar range; track the modifier globally so the
+  // gutter's lane labels can extend a LANE set the same way
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(true); };
+    const up = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(false); };
+    const blur = () => setShiftHeld(false);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setCopyArm(null); setSel(null); }
+    };
+    window.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+      window.removeEventListener("keydown", esc);
+    };
+  }, []);
+
+  // ---- selection ---------------------------------------------------------------
+
+  const selRange = useMemo(() => {
+    if (!sel || !anchorSpan || sel.sectionId !== anchorSpan.section.id) return null;
+    const bpb = grid.beatsPerBar;
+    const from = Math.min(sel.fromBar, sel.toBar);
+    const to = Math.max(sel.fromBar, sel.toBar);
+    return { startBeat: from * bpb, endBeat: (to + 1) * bpb, laneKeys: sel.lanes };
+  }, [sel, anchorSpan, grid.beatsPerBar]);
+
+  // Mirror into the shared time-selection store so other surfaces see the
+  // same range without reading this view's local state.
+  const selKey = selRange ? `${anchorSpan?.section.id}:${selRange.startBeat}:${selRange.endBeat}:${selRange.laneKeys.join("+")}` : "";
+  useEffect(() => {
+    const store = useTimeSelectionStore.getState();
+    if (!selRange || !anchorSpan) {
+      store.clearSelection();
+      return;
+    }
+    store.setSelection({
+      sectionId: anchorSpan.section.id,
+      startBeat: selRange.startBeat,
+      endBeat: selRange.endBeat,
+      lanes: selRange.laneKeys,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selKey]);
+
+  const selectLane = useCallback((laneKey: DrumLaneId) => {
+    if (!anchorSpan) return;
+    setCopyArm(null);
+    setSel((cur) => {
+      const sameSection = cur && cur.sectionId === anchorSpan.section.id;
+      // plain click = "this lane, the whole section"; shift adds/removes a
+      // lane while keeping whatever bar range is already chosen
+      if (shiftHeld && sameSection) {
+        const has = cur!.lanes.includes(laneKey);
+        const lanes = has ? cur!.lanes.filter((l) => l !== laneKey) : [...cur!.lanes, laneKey];
+        return { ...cur!, lanes: lanes.length > 0 ? lanes : [laneKey] };
+      }
+      return { sectionId: anchorSpan.section.id, lanes: [laneKey], fromBar: 0, toBar: sectionBars - 1 };
+    });
+  }, [anchorSpan, sectionBars, shiftHeld]);
+
+  const selectBar = useCallback((bar: number, extend = false) => {
+    if (!anchorSpan) return;
+    setSel((cur) => {
+      const lanes = cur && cur.sectionId === anchorSpan.section.id ? cur.lanes : DRUM_LANES.map((l) => l.key as DrumLaneId);
+      const from = extend && cur && cur.sectionId === anchorSpan.section.id ? cur.fromBar : bar;
+      return { sectionId: anchorSpan.section.id, lanes, fromBar: from, toBar: bar };
+    });
+  }, [anchorSpan]);
+
+  /** ◂ / ▸ walk the selection one bar at a time (creating a one-bar,
+   *  all-lane selection on the first press). */
+  const stepSelBar = useCallback((delta: number) => {
+    if (!anchorSpan) return;
+    setSel((cur) => {
+      const same = cur && cur.sectionId === anchorSpan.section.id;
+      if (!same) {
+        const bar = clamp(delta < 0 ? sectionBars - 1 : 0, 0, sectionBars - 1);
+        return { sectionId: anchorSpan.section.id, lanes: DRUM_LANES.map((l) => l.key as DrumLaneId), fromBar: bar, toBar: bar };
+      }
+      const lo = Math.min(cur!.fromBar, cur!.toBar);
+      const hi = Math.max(cur!.fromBar, cur!.toBar);
+      const width = hi - lo;
+      const nextLo = clamp(lo + delta, 0, Math.max(0, sectionBars - 1 - width));
+      return { ...cur!, fromBar: nextLo, toBar: nextLo + width };
+    });
+  }, [anchorSpan, sectionBars]);
+
+  const clearSelection = useCallback(() => {
+    setSel(null);
+    setCopyArm(null);
+  }, []);
+
+  // The spine retargets this view, so a selection can outlive its section —
+  // and a section can shrink under it. Drop it, or clamp it, but never let
+  // the navigator name a bar that no longer exists.
+  useEffect(() => {
+    setSel((cur) => {
+      if (!cur) return cur;
+      if (!anchorSpan || cur.sectionId !== anchorSpan.section.id) return null;
+      const last = sectionBars - 1;
+      const fromBar = clamp(cur.fromBar, 0, last);
+      const toBar = clamp(cur.toBar, 0, last);
+      return fromBar === cur.fromBar && toBar === cur.toBar ? cur : { ...cur, fromBar, toBar };
+    });
+  }, [anchorSpan, sectionBars]);
+
+  // Keep the selected bars in view — with a fixed bars-per-view the canvas is
+  // wider than the panel, so walking bars with ◂ ▸ must carry the viewport.
+  const selFrom = sel ? Math.min(sel.fromBar, sel.toBar) : null;
+  const selTo = sel ? Math.max(sel.fromBar, sel.toBar) : null;
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || selFrom === null || selTo === null) return;
+    const lo = selFrom * barPx;
+    const hi = (selTo + 1) * barPx;
+    // prefer the selection's left edge: walking bars should feel like
+    // turning pages, not like chasing content
+    if (lo < el.scrollLeft || hi > el.scrollLeft + el.clientWidth) el.scrollLeft = Math.max(0, lo - 6);
+  }, [selFrom, selTo, barPx]);
+
+  // ---- draft plumbing ------------------------------------------------------------
+
   const writeSection = useCallback(
     (sectionId: string, base: BlueprintSection, mutate: (sec: BlueprintSection) => BlueprintSection) => {
       const current = useDrumsDraftStore.getState();
@@ -429,6 +445,35 @@ export default function DrumBlocksView() {
       useDrumsDraftStore.getState().setDraft(sectionId, mutate(sec));
     },
     [],
+  );
+
+  /** M / S — a per-lane mixer flag on the section (draft → Apply). */
+  const toggleLaneFlag = useCallback(
+    (flag: "drumLaneMute" | "drumLaneSolo", laneKey: string) => {
+      if (!anchorSpan) return;
+      writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => {
+        const cur = sec[flag] ?? [];
+        const next = cur.includes(laneKey as never)
+          ? cur.filter((k) => k !== laneKey)
+          : [...cur, laneKey as never];
+        return { ...sec, [flag]: next.length > 0 ? next : undefined };
+      });
+    },
+    [anchorSpan, writeSection],
+  );
+
+  /** A lane's MIDI CC assignment (draft → Apply). */
+  const setLaneCc = useCallback(
+    (laneKey: string, spec: { cc: number; from: number; to: number } | null) => {
+      if (!anchorSpan) return;
+      writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => {
+        const next = { ...(sec.drumLaneCc ?? {}) };
+        if (spec) next[laneKey as keyof typeof next] = spec;
+        else delete next[laneKey as keyof typeof next];
+        return { ...sec, drumLaneCc: Object.keys(next).length > 0 ? next : undefined };
+      });
+    },
+    [anchorSpan, writeSection],
   );
 
   const applyDraft = useCallback(() => {
@@ -439,328 +484,340 @@ export default function DrumBlocksView() {
       updateCurrentSong((s) => updateSection(s, sectionId, () => next));
       useDrumsDraftStore.getState().clearDraft();
     }
-    // Apply (and Cancel) END the editing session: the selection + popup
-    // close with the commit, so the user never has to click away.
     setEditorOpen(false);
-    clearRange();
-  }, [updateCurrentSong, clearRange]);
+  }, [updateCurrentSong]);
+
   const revertDraft = useCallback(() => {
     useDrumsDraftStore.getState().clearDraft();
     setEditorOpen(false);
-    clearRange();
-  }, [clearRange]);
-
-  // ---- selection → pad values -------------------------------------------------
-
-  const anchorSpan = useMemo(
-    () => spans.find((s) => s.section.id === selectedSectionId) ?? null,
-    [spans, selectedSectionId],
-  );
-  const selectionSection = anchorSpan ? effectiveSection(anchorSpan) : null;
-  const primaryLane = (range?.laneKeys[0] ?? null) as DrumLaneId | null;
-
-  const existingEuclid = useMemo(() => {
-    if (!selectionSection || !range || !primaryLane) return null;
-    return (selectionSection.drumBlocks ?? []).find(
-      (b) => b.mode === "euclid" && b.lane === primaryLane &&
-        Math.abs(b.startBeat - range.startBeat) < 1e-6 && Math.abs(b.endBeat - range.endBeat) < 1e-6,
-    ) ?? null;
-  }, [selectionSection, range, primaryLane]);
-
-  const existingMotion = useMemo(() => {
-    if (!selectionSection || !range || !primaryLane) return null;
-    return (selectionSection.drumBlocks ?? []).find(
-      (b) => b.mode === "motion" && b.lane === primaryLane &&
-        Math.abs(b.startBeat - range.startBeat) < 1e-6 && Math.abs(b.endBeat - range.endBeat) < 1e-6,
-    ) ?? null;
-  }, [selectionSection, range, primaryLane]);
-
-  const nSteps = range ? Math.max(1, Math.round(range.endBeat - range.startBeat)) : 4;
-  const euclid = existingEuclid?.euclid ?? { k: Math.max(1, Math.round(nSteps / 2)), n: nSteps, rotation: 0 };
-  const motion = existingMotion?.motion ?? { x: 0, y: 0 };
-  const motionLabel = motionLabelFor(motion);
-  const laneColors = (range?.laneKeys ?? []).map((k) => {
-    const found = DRUM_LANES.find((l) => l.key === k);
-    return found ? laneColor(found, P) : P.label;
-  });
-
-  // ---- selection pixels -------------------------------------------------------
-
-  const selRects = useMemo(() => {
-    if (!range || !selectedSectionId) return [] as { x1: number; y1: number; x2: number; y2: number; span: SectionSpan }[];
-    const laneIdxs = range.laneKeys
-      .map((k) => DRUM_LANES.findIndex((l) => l.key === k))
-      .filter((i) => i >= 0);
-    if (laneIdxs.length === 0) return [];
-    const y1 = TOP_PAD + Math.min(...laneIdxs) * TRACK_H;
-    const y2 = TOP_PAD + (Math.max(...laneIdxs) + 1) * TRACK_H;
-    const rects: { x1: number; y1: number; x2: number; y2: number; span: SectionSpan }[] = [];
-    for (const span of spans) {
-      if (span.section.id !== selectedSectionId) continue;
-      rects.push({
-        x1: spanBeatToX(span, range.startBeat, zoom),
-        y1,
-        x2: spanBeatToX(span, range.endBeat, zoom),
-        y2,
-        span,
-      });
-    }
-    return rects;
-  }, [range, selectedSectionId, spans, zoom]);
-
-  const padRect = selRects[0] ?? null;
-  const panelX = padRect ? clamp(padRect.x2 + 24, 8, width - PAD_PANEL_W * PAD_SCALE - 8) : 0;
-  const panelY = padRect ? clamp(padRect.y1 - 12, 4, HEIGHT - (PAD_PANEL_H * PAD_SCALE + 34) - 6) : 0;
-
-  // ---- gestures ---------------------------------------------------------------
-
-  const toLocal = useCallback((e: ReactPointerEvent): { x: number; y: number } => {
-    const rect = svgRef.current?.getBoundingClientRect();
-    return { x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0) };
   }, []);
 
-  const toggleStep = useCallback(
-    (span: SectionSpan, laneKey: DrumLaneId, beat: number, stepSize: number) => {
-      const sec = effectiveSection(span);
-      writeSection(span.section.id, span.section, (s) =>
-        withToggledStep(s, { section: sec, song: song ?? undefined, occurrenceIndex: span.occurrenceIndex, laneKey, beat, stepSize }),
-      );
-      setSelectedSectionId(span.section.id);
+  // ---- gestures: velocity (commit on release) -------------------------------------
+
+  const authoredNotesFor = useCallback(
+    (laneKey: DrumLaneId): Map<number, DrumBlockNote> => {
+      const map = new Map<number, DrumBlockNote>();
+      if (!section) return map;
+      const tol = Math.max(0.02, grid.stepBeats * 0.35);
+      for (const b of section.drumBlocks ?? []) {
+        if (b.mode !== "steps" || b.lane !== laneKey) continue;
+        for (const n of b.notes ?? []) {
+          const abs = b.startBeat + n.beat;
+          const idx = Math.round(abs / grid.stepBeats);
+          if (Math.abs(abs - idx * grid.stepBeats) > tol) continue;
+          const prev = map.get(idx);
+          if (!prev || n.velocity > prev.velocity) map.set(idx, n);
+        }
+      }
+      return map;
     },
-    [effectiveSection, song, writeSection, setSelectedSectionId],
+    [section, grid.stepBeats],
   );
 
-  /** The authored step notes for a lane in a span, keyed by step index —
-   *  what the value boxes read beyond velocity, and what the parameter
-   *  edits preserve (a probability-dropped note has no resolved hit but
-   *  stays visible and editable through this map). */
-  const authoredNotesFor = useCallback((span: SectionSpan, laneKey: DrumLaneId, stepBeats: number): Map<number, DrumBlockNote> => {
-    const map = new Map<number, DrumBlockNote>();
-    const sec = effectiveSection(span);
-    const tol = Math.max(0.02, stepBeats * 0.35);
-    for (const b of sec.drumBlocks ?? []) {
+  /** What each lane's cells carry beyond velocity — the marks `LaneRow`
+   *  draws (ratchet ticks, a flam slash, a gate rule) plus the value of the
+   *  lane's ACTIVE step param, so a gate/ratchet/flam is visible after the
+   *  drag ends. Memoised per (section, grid, chip selection) so only the
+   *  lane you edited re-renders. */
+  const laneMarks = useMemo(
+    () =>
+      DRUM_LANES.map((lane) => {
+        const laneKey = lane.key as DrumLaneId;
+        const active = asStepParam(stepSel[laneKey]);
+        const spec = PARAM_SPECS[active];
+        const ratchet = new Map<number, number>();
+        const flam = new Set<number>();
+        const gate = new Map<number, number>();
+        const values = new Map<number, number>();
+        const voices = new Map<number, { label: string; index: number }>();
+        const family = DRUM_LANE_VOICES[laneKey] ?? [];
+        for (const [stepIdx, note] of authoredNotesFor(laneKey)) {
+          const vi = family.indexOf(note.voice as KitVoice);
+          if (vi > 0) voices.set(stepIdx, { label: VOICE_LABEL[note.voice as KitVoice] ?? String(note.voice), index: vi });
+          if (note.ratchet && note.ratchet > 1) ratchet.set(stepIdx, note.ratchet);
+          if (note.flam) flam.add(stepIdx);
+          if (note.durBeats !== undefined) {
+            const frac = note.durBeats / grid.stepBeats;
+            if (Math.abs(frac - 1) > 0.02) gate.set(stepIdx, frac);
+          }
+          const v = spec.read(note, grid.stepBeats, laneKey);
+          if (v !== undefined) values.set(stepIdx, v);
+        }
+        return { ratchet, flam, gate, active, values, voices };
+      }),
+    [authoredNotesFor, stepSel, grid.stepBeats],
+  );
+
+  /** The press-time snapshot for a selection-wide scrub: every authored note
+   *  and every resolved hit inside the selected bars on the pressed lane. */  const buildScrub = useCallback((laneKey: DrumLaneId, param: StepParam, pressed0: number): VelDrag["scrub"] => {
+    if (!section || !selRange || !selRange.laneKeys.includes(laneKey)) return null;
+    if (selRange.endBeat - selRange.startBeat <= grid.stepBeats + 1e-6) return null;
+    const spec = PARAM_SPECS[param];
+    const targets: ScrubTargets = [];
+    for (const b of section.drumBlocks ?? []) {
       if (b.mode !== "steps" || b.lane !== laneKey) continue;
       for (const n of b.notes ?? []) {
         const abs = b.startBeat + n.beat;
-        const idx = Math.round(abs / stepBeats);
-        if (idx < 0 || Math.abs(abs - idx * stepBeats) > tol) continue;
-        const prev = map.get(idx);
-        if (!prev || n.velocity > prev.velocity) map.set(idx, n);
+        if (abs < selRange.startBeat - 1e-9 || abs >= selRange.endBeat - 1e-9) continue;
+        targets.push({
+          draft: {
+            beat: round4(abs - selRange.startBeat), voice: n.voice, velocity: n.velocity,
+            offsetBeats: n.offsetBeats, durBeats: n.durBeats, prob: n.prob, ratchet: n.ratchet, flam: n.flam,
+          },
+          value0: spec.read(n, grid.stepBeats, laneKey) ?? spec.rest,
+          stepIdx: Math.round(abs / grid.stepBeats),
+        });
       }
     }
-    return map;
-  }, [effectiveSection]);
+    const covered = new Set(targets.map((t) => t.stepIdx));
+    const laneHits = hits?.get(laneKey) ?? [];
+    const tol = Math.max(0.02, grid.stepBeats * 0.35);
+    for (let q = 0; q < stepCount; q++) {
+      const beat = q * grid.stepBeats;
+      if (beat < selRange.startBeat - 1e-9 || beat >= selRange.endBeat - 1e-9) continue;
+      if (covered.has(q)) continue;
+      const onStep = laneHits.filter((h) => Math.abs(h.beat - beat) < tol);
+      if (onStep.length === 0) continue;
+      for (const h of onStep) {
+        targets.push({
+          draft: { beat: round4(h.beat - selRange.startBeat), voice: h.voice as DrumVoiceName, velocity: h.velocity },
+          value0: param === "vel" ? h.velocity : spec.rest,
+          stepIdx: q,
+        });
+      }
+    }
+    if (targets.length === 0) return null;
+    return { targets, start: selRange.startBeat, end: selRange.endBeat, pressed0 };
+  }, [section, selRange, grid.stepBeats, hits, stepCount]);
 
-  /** Single-step parameter edit. An existing authored block is edited in
-   *  place (other parameters on the note survive); base-groove steps
-   *  flatten from what's audible first — same WYSIWYG rule as tapping a
-   *  step through, one field at a time. */
-  const writeStepParam = useCallback((cell: CellPress, param: StepParam, value: number) => {
-    const spec = PARAM_SPECS[param];
-    const sec = effectiveSection(cell.span);
-    const grid = gridStepForZoom(zoom);
-    const laneHits = resolveSectionLaneHits(sec, song ?? undefined, cell.span.occurrenceIndex).get(cell.laneKey) ?? [];
-    const tol = Math.max(0.02, grid * 0.35);
-    const existing = (sec.drumBlocks ?? []).find(
-      (b) => b.mode === "steps" && b.lane === cell.laneKey && cell.stepBeat >= b.startBeat - 1e-9 && cell.stepBeat < b.endBeat - 1e-9,
+  /** The velocity a freshly created hit gets: the dragged value when the
+   *  chip is on VEL, otherwise the engine's neutral 100. */
+  const newHitVelocity = (d: VelDrag): number =>
+    d.param === "vel" ? Math.round(d.value) : 100;
+
+  /** One write for a whole gesture. */
+  const commitVelocity = useCallback((d: VelDrag) => {
+    if (!anchorSpan || !section) return;
+    const span = anchorSpan;
+    const spec = PARAM_SPECS[d.param];
+    if (d.scrub) {
+      const delta = d.value - d.scrub.pressed0;
+      const notes: DrumBlockNote[] = d.scrub.targets.map((t) => {
+        const next = spec.kind === "continuous" ? clampParam(spec, t.value0 + delta) : d.value;
+        const draft = { ...t.draft };
+        spec.write(draft, next, grid.stepBeats, d.laneKey);
+        return { ...draft, voice: draft.voice as DrumVoiceName };
+      });
+      const block: DrumBlock = {
+        id: `blk-${d.laneKey}-${round4(d.scrub.start)}-${round4(d.scrub.end)}-steps`,
+        lane: d.laneKey,
+        startBeat: d.scrub.start,
+        endBeat: d.scrub.end,
+        mode: "steps",
+        notes,
+      };
+      writeSection(span.section.id, span.section, (sec) => ({
+        ...sec,
+        drumBlocks: upsertModeBlocks(sec.drumBlocks, d.scrub!.start, d.scrub!.end, [block]),
+      }));
+      return;
+    }
+    const existing = (section.drumBlocks ?? []).find(
+      (b) => b.mode === "steps" && b.lane === d.laneKey && d.stepBeat >= b.startBeat - 1e-9 && d.stepBeat < b.endBeat - 1e-9,
     );
-    const start = existing ? existing.startBeat : cell.stepBeat;
-    const end = existing ? existing.endBeat : round4(cell.stepBeat + grid);
+    const start = existing ? existing.startBeat : d.stepBeat;
+    const end = existing ? existing.endBeat : round4(d.stepBeat + grid.stepBeats);
+    const laneHits = hits?.get(d.laneKey) ?? [];
+    const tol = Math.max(0.02, grid.stepBeats * 0.35);
+    const onStep = laneHits.filter((h) => Math.abs(h.beat - d.stepBeat) < tol);
     let notes: DrumBlockNote[];
+    const voice = () => DRUM_LANE_PRIMARY[d.laneKey] as DrumVoiceName;
     if (existing && (existing.notes?.length ?? 0) > 0) {
       notes = (existing.notes ?? []).map((n) => ({ ...n }));
-      let target = notes.find((n) => Math.abs(start + n.beat - cell.stepBeat) < tol);
+      let target = notes.find((n) => Math.abs(start + n.beat - d.stepBeat) < tol);
       if (!target) {
-        const onStep = laneHits.filter((h) => Math.abs(h.beat - cell.stepBeat) < tol);
-        if (onStep.length === 0) return;
-        const loudest = onStep.reduce((a, b) => (b.velocity > a.velocity ? b : a));
-        target = { beat: round4(loudest.beat - start), voice: loudest.voice as DrumVoiceName, velocity: loudest.velocity };
+        if (onStep.length === 0) {
+          // an empty step: a click/drag at a height CREATES the hit there
+          if (!d.addIfEmpty) return;
+          // a new hit gets a real velocity — `d.value` is the PARAM's value
+          // (a ratchet of 2 is not a velocity of 2)
+          target = { beat: round4(d.stepBeat - start), voice: voice(), velocity: newHitVelocity(d) };
+        } else {
+          const loudest = onStep.reduce((a, b) => (b.velocity > a.velocity ? b : a));
+          target = { beat: round4(loudest.beat - start), voice: loudest.voice as DrumVoiceName, velocity: loudest.velocity };
+        }
         notes.push(target);
       }
-      spec.write(target, value, grid);
+      spec.write(target, d.value, grid.stepBeats, d.laneKey);
+    } else if (onStep.length === 0) {
+      if (!d.addIfEmpty) return;
+      notes = [{ beat: 0, voice: voice(), velocity: newHitVelocity(d) }];
+      spec.write(notes[0], d.value, grid.stepBeats, d.laneKey);
     } else {
-      const onStep = laneHits.filter((h) => Math.abs(h.beat - cell.stepBeat) < tol);
-      if (onStep.length === 0) return;
-      const loudest = onStep.reduce((a, b) => (b.velocity > a.velocity ? b : a));
       notes = onStep.map((h) => ({ beat: round4(h.beat - start), voice: h.voice as DrumVoiceName, velocity: h.velocity }));
-      const target = notes.find((n) => n.voice === loudest.voice && Math.abs(start + n.beat - loudest.beat) < 1e-6);
-      if (!target) return;
-      spec.write(target, value, grid);
+      const loudest = notes.reduce((a, b) => (b.velocity > a.velocity ? b : a));
+      spec.write(loudest, d.value, grid.stepBeats, d.laneKey);
     }
     const block: DrumBlock = {
-      id: existing?.id ?? `blk-${cell.laneKey}-${round4(start)}-${round4(end)}-steps`,
-      lane: cell.laneKey,
+      id: existing?.id ?? `blk-${d.laneKey}-${round4(start)}-${round4(end)}-steps`,
+      lane: d.laneKey,
       startBeat: start,
       endBeat: end,
       mode: "steps",
       notes,
     };
-    writeSection(cell.span.section.id, cell.span.section, (s) => ({ ...s, drumBlocks: upsertModeBlocks(s.drumBlocks, start, end, [block]) }));
-  }, [effectiveSection, song, writeSection, zoom]);
+    writeSection(span.section.id, span.section, (sec) => ({ ...sec, drumBlocks: upsertModeBlocks(sec.drumBlocks, start, end, [block]) }));
+  }, [anchorSpan, section, hits, grid.stepBeats, writeSection]);
 
-  const onCanvasDown = useCallback((e: ReactPointerEvent) => {
-    if (e.button !== 0) return;
-    const { x, y } = toLocal(e);
-    if (y > STACK_BOTTOM) return;
-    const startHit = xToSpanBeat(spans, x, zoom);
-    if (!startHit) return;
-    capture(e.currentTarget as Element, e.pointerId);
+  /** Click feedback: play the hit you just made or pressed, on the lane's
+   *  own voice. `voice` defaults to whatever the step already resolves to. */
+  const auditionStep = useCallback((laneKey: DrumLaneId, beat: number, voice?: KitVoice, velocity?: number) => {
+    const laneHits = hits?.get(laneKey) ?? [];
+    const tol = Math.max(0.02, grid.stepBeats * 0.35);
+    const hit = laneHits.find((h) => Math.abs(h.beat - beat) < tol);
+    const v = voice ?? ((hit?.voice as KitVoice | undefined) ?? (DRUM_LANE_PRIMARY[laneKey] as KitVoice));
+    void auditionDrumHit(v, velocity ?? hit?.velocity ?? 100);
+  }, [hits, grid.stepBeats]);
 
-    // ⌥-drag inside the selection = copy. Capture the source up front; the
-    // drop writes the authored blocks (or the audible material) elsewhere.
-    if (e.altKey && range && anchorSpan) {
-      const inSel = selRects.some((r) => x >= r.x1 - 2 && x <= r.x2 + 2 && y >= r.y1 - 2 && y <= r.y2 + 2);
-      if (inSel) {
-        copyRef.current = {
-          span: anchorSpan,
-          range: { startBeat: range.startBeat, endBeat: range.endBeat, laneKeys: [...range.laneKeys] },
-          grabBeat: spanXToBeat(anchorSpan, x, zoom),
-          grid: gridStepForZoom(zoom),
-          destStart: range.startBeat,
-        };
-        setCopyDrag({ dxPx: 0, destStart: range.startBeat });
-        setMarquee(null);
+  const toggleStep = useCallback((laneKey: DrumLaneId, beat: number) => {
+    if (!anchorSpan || !section) return;
+    writeSection(anchorSpan.section.id, anchorSpan.section, (s) =>
+      withToggledStep(s, {
+        section, song: song ?? undefined, occurrenceIndex: anchorSpan.occurrenceIndex,
+        laneKey, beat, stepSize: grid.stepBeats,
+      }),
+    );
+    setSelectedSectionId(anchorSpan.section.id);
+  }, [anchorSpan, section, song, grid.stepBeats, writeSection, setSelectedSectionId]);
+
+
+  const localPoint = (e: ReactPointerEvent): { x: number; y: number } => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    return { x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0) };
+  };
+
+  const onCanvasDown = (e: ReactPointerEvent) => {
+    if (e.button !== 0 || !anchorSpan) return;
+    const { x, y } = localPoint(e);
+    const bar = clamp(Math.floor(x / barPx), 0, sectionBars - 1);
+
+    // the ruler band: bar selection (or the paste target while copying)
+    if (y < TOP) {
+      if (copyArm) { pasteAtBar(bar); return; }
+      selectBar(bar, e.shiftKey);
+      return;
+    }
+
+    const laneIdx = clamp(Math.floor((y - TOP) / ROW_H), 0, LANE_COUNT - 1);
+    const laneKey = DRUM_LANES[laneIdx].key as DrumLaneId;
+    const stepIdx = clamp(Math.floor(x / (beatToX * grid.stepBeats)), 0, stepCount - 1);
+    const stepBeat = round4(stepIdx * grid.stepBeats);
+
+    if (copyArm) { pasteAtBar(bar); return; }
+
+    const authored = authoredNotesFor(laneKey).get(stepIdx);
+    const param = asStepParam(stepSel[laneKey]);
+    const cellTop = TOP + laneIdx * ROW_H + 5;
+    const cellH = ROW_H - 12;
+    // VEL is absolute: the press height IS the value — a click and a drag
+    // therefore use the same mapping
+    const startValue = param === "vel"
+      ? velocityAt(y, cellTop, cellH)
+      : (authored ? (PARAM_SPECS[param].read(authored, grid.stepBeats, laneKey) ?? PARAM_SPECS[param].rest) : PARAM_SPECS[param].rest);
+    const d: VelDrag = {
+      laneKey, stepIdx, stepBeat, param,
+      startValue, value: startValue,
+      scrub: buildScrub(laneKey, param, startValue),
+      x0: x, y0: y, x, y,
+      cellTop,
+      cellH,
+      addIfEmpty: false,
+      moved: false,
+    };
+    dragRef.current = d;
+    try { (e.currentTarget as Element).setPointerCapture(e.pointerId); } catch { /* fine */ }
+  };
+
+  const onCanvasMove = (e: ReactPointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    // NOTE: no `e.buttons` guard here — a synthetic/pen pointer can report 0
+    // mid-drag. The window-level pointerup listener is what ends the gesture.
+    const { x, y } = localPoint(e);
+    // the origin is fixed: `dy` is press→pointer, not last-move→pointer
+    const dy = y - d.y0;
+    if (!d.moved && Math.abs(dy) < 4) return;
+    const spec = PARAM_SPECS[d.param];
+    d.moved = true;
+    // VEL follows the pointer's height exactly (0 at the cell floor, 127 at
+    // its top) — so a click and a drag are the same mapping, and the whole
+    // range is reachable in one cell. Other params scrub by delta.
+    d.value = d.param === "vel"
+      ? clampParam(spec, velocityAt(y, d.cellTop, d.cellH))
+      : clampParam(spec, d.startValue - dy * spec.perPx);
+    d.x = x;
+    d.y = y;
+    // dragging onto an empty step starts a hit, so a drag can also create one
+    d.addIfEmpty = true;
+    setVelDrag({ ...d });
+  };
+
+  const onCanvasUp = () => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    setVelDrag(null);
+    if (!d) return;
+    if (!d.moved) {
+      const laneHits = hits?.get(d.laneKey) ?? [];
+      const tol = Math.max(0.02, grid.stepBeats * 0.35);
+      const has = laneHits.some((h) => Math.abs(h.beat - d.stepBeat) < tol)
+        || !!authoredNotesFor(d.laneKey).get(d.stepIdx);
+      // With the STEP chip on VEL, a click IS a velocity edit: the height you
+      // press is the value. Clicking the cell's floor (≤2) removes the hit.
+      if (d.param === "vel") {
+        const v = velocityAt(d.y, d.cellTop, d.cellH);
+        if (v <= 2) {
+          if (has) toggleStep(d.laneKey, d.stepBeat);
+          return;
+        }
+        commitVelocity({ ...d, moved: true, value: v, addIfEmpty: true });
+        auditionStep(d.laneKey, d.stepBeat, undefined, v);
         return;
       }
+      // any other step parameter keeps click = toggle; the click still
+      // sounds, so you hear the cell you just turned on
+      toggleStep(d.laneKey, d.stepBeat);
+      if (!has) auditionStep(d.laneKey, d.stepBeat);
+      return;
     }
+    if (d.param !== "vel" && !authoredNotesFor(d.laneKey).get(d.stepIdx)) {
+      auditionStep(d.laneKey, d.stepBeat);
+    }
+    if (d.param === "vel" && d.value <= 2) {
+      // dragged down to the floor — the same gesture as clicking it
+      const laneHits = hits?.get(d.laneKey) ?? [];
+      const tol = Math.max(0.02, grid.stepBeats * 0.35);
+      const had = laneHits.some((h) => Math.abs(h.beat - d.stepBeat) < tol);
+      if (had) { toggleStep(d.laneKey, d.stepBeat); return; }
+      return;
+    }
+    commitVelocity(d);
+  };
 
-    // Resolve the surface under the press up front — the circular CELL
-    // (click-to-toggle + drag = the lane's parameter) or the value BOX
-    // below it (the parameter surface; a click never toggles the step).
-    let cell: CellPress | null = null;
-    let zone: PressState["zone"] = null;
-    let param: StepParam = "vel";
-    let paramStart = 100;
-    let editable = false;
-    if (y >= TOP_PAD && y <= STACK_BOTTOM) {
-      const span = startHit.span;
-      const stepBeats = gridStepForZoom(zoom);
-      const laneIdx = clamp(Math.floor((y - TOP_PAD) / TRACK_H), 0, LANE_COUNT - 1);
-      const stepCount = Math.max(1, Math.ceil(span.durationBeats / stepBeats - 1e-9));
-      const stepIdx = clamp(Math.round(startHit.beat / stepBeats), 0, stepCount - 1);
-      const stepBeat = round4(stepIdx * stepBeats);
-      const { r, spacing } = cellMetrics(zoom, beatsPerBarOf(span), stepBeats);
-      const cx = spanBeatToX(span, stepBeat, zoom);
-      const cy = cellCy(laneIdx, r);
-      const bm = boxMetrics(laneIdx, r, spacing);
-      const laneKey = DRUM_LANES[laneIdx].key as DrumLaneId;
-      const laneHits = hitsForSpan(span).get(laneKey) ?? [];
-      const tol = Math.max(0.02, stepBeats * 0.35);
-      const onStep = laneHits.filter((h) => Math.abs(h.beat - stepBeat) < tol);
-      const peak = onStep.length > 0 ? Math.max(...onStep.map((h) => h.velocity)) : null;
-      if (Math.hypot(cx - x, cy - y) <= r + 3) {
-        cell = { span, laneKey, stepBeat, velocity: peak, cx, cy };
-        zone = "cell";
-      } else if (bm && y >= bm.top - 2 && y <= bm.bottom + 2 && Math.abs(cx - x) <= bm.w / 2 + 1.5) {
-        // Anchor the floating readout on the box, not the circle.
-        cell = { span, laneKey, stepBeat, velocity: peak, cx, cy: (bm.top + bm.bottom) / 2 };
-        zone = "value";
-      }
-      if (cell) {
-        const activeParam = paramFor(laneKey);
-        const activeSpec = PARAM_SPECS[activeParam];
-        const authored = authoredNotesFor(span, laneKey, stepBeats).get(stepIdx);
-        const authoredVal = authored ? activeSpec.read(authored, stepBeats) : undefined;
-        param = activeParam;
-        paramStart = activeParam === "vel" ? (peak ?? authoredVal ?? activeSpec.rest) : (authoredVal ?? activeSpec.rest);
-        editable = onStep.length > 0 || !!authored;
-      }
-    }
-    pressRef.current = { x0: x, y0: y, cell, zone, param, paramStart, editable, velMode: false };
-    setMarquee({ x0: x, y0: y, x1: x, y1: y });
-  }, [spans, zoom, toLocal, hitsForSpan, paramFor, authoredNotesFor, range, anchorSpan, selRects]);
+  // ---- commands: flatten / velocity ops / copy / regenerate ------------------------
 
-  /** Press-time snapshot for a selection-wide parameter scrub: every step
-   *  in the range (authored notes stay canonical — a probability-dropped
-   *  step keeps its box; resolved-only steps flatten in), with the full
-   *  note draft and its starting value for the drag delta. */
-  const buildParamScrub = useCallback((cell: CellPress, param: StepParam, pressed0: number): ParamScrubTarget | null => {
-    const rng = drumRangeForSection(selectedSectionId);
-    const grid = gridStepForZoom(zoom);
-    if (!rng || rng.endBeat - rng.startBeat <= grid + 1e-6) return null;
-    if (cell.stepBeat < rng.startBeat - 1e-6 || cell.stepBeat >= rng.endBeat - 1e-6) return null;
-    const spec = PARAM_SPECS[param];
-    const sec = effectiveSection(cell.span);
-    const laneHits = (hitsForSpan(cell.span).get(cell.laneKey) ?? [])
-      .filter((h) => h.beat >= rng.startBeat - 1e-9 && h.beat < rng.endBeat - 1e-9);
-    const tol = Math.max(0.02, grid * 0.35);
-    const targets: ParamScrubTarget["targets"] = [];
-    for (const b of sec.drumBlocks ?? []) {
-      if (b.mode !== "steps" || b.lane !== cell.laneKey) continue;
-      for (const n of b.notes ?? []) {
-        const abs = b.startBeat + n.beat;
-        if (abs < rng.startBeat - 1e-9 || abs >= rng.endBeat - 1e-9) continue;
-        targets.push({
-          draft: {
-            beat: round4(abs - rng.startBeat), voice: n.voice, velocity: n.velocity,
-            offsetBeats: n.offsetBeats, durBeats: n.durBeats, prob: n.prob, ratchet: n.ratchet, flam: n.flam,
-          },
-          value0: spec.read(n, grid) ?? spec.rest,
-        });
-      }
-    }
-    const covered = new Set(targets.map((t) => Math.round((rng.startBeat + t.draft.beat) / grid)));
-    const stepCount = Math.max(1, Math.ceil(cell.span.durationBeats / grid - 1e-9));
-    for (let q = 0; q < stepCount; q++) {
-      const stepBeat = q * grid;
-      if (stepBeat < rng.startBeat - 1e-9 || stepBeat >= rng.endBeat - 1e-9) continue;
-      if (covered.has(q)) continue;
-      const onStep = laneHits.filter((h) => Math.abs(h.beat - stepBeat) < tol);
-      for (const h of onStep) {
-        targets.push({
-          draft: { beat: round4(h.beat - rng.startBeat), voice: h.voice, velocity: h.velocity },
-          value0: param === "vel" ? h.velocity : spec.rest,
-        });
-      }
-      if (onStep.length > 0) covered.add(q);
-    }
-    if (targets.length === 0) return null;
-    return { param, laneKey: cell.laneKey, start: rng.startBeat, end: rng.endBeat, pressed0, targets };
-  }, [zoom, hitsForSpan, effectiveSection, selectedSectionId]);
-
-  /** Range scrub write: one steps block over the selection, rebuilt from
-   *  the press-time snapshot — continuous params move by the drag delta,
-   *  discrete params take the dragged value across the range. */
-  const scrubParam = useCallback((span: SectionSpan, s: ParamScrubTarget, value: number) => {
-    const spec = PARAM_SPECS[s.param];
-    const grid = gridStepForZoom(zoom);
-    const delta = value - s.pressed0;
-    const notes: DrumBlockNote[] = s.targets.map((t) => {
-      const next = spec.kind === "continuous" ? clampParam(spec, t.value0 + delta) : value;
-      const draft = { ...t.draft };
-      spec.write(draft, next, grid);
-      return { ...draft, voice: draft.voice as DrumVoiceName };
+  const laneRangeMaterial = useCallback((laneKey: DrumLaneId, start: number, end: number) => {
+    const laneHits = (hits?.get(laneKey) ?? []).filter((h) => h.beat >= start - 1e-9 && h.beat < end - 1e-9);
+    if (laneHits.length === 0) return null;
+    const count = Math.max(1, Math.ceil((end - start) / grid.stepBeats - 1e-9));
+    const peaks = new Array<number>(count).fill(0);
+    const entries = laneHits.map((h) => {
+      const stepIdx = clamp(Math.round((h.beat - start) / grid.stepBeats), 0, count - 1);
+      peaks[stepIdx] = Math.max(peaks[stepIdx], h.velocity);
+      return { h, stepIdx };
     });
-    const block: DrumBlock = {
-      id: `blk-${s.laneKey}-${round4(s.start)}-${round4(s.end)}-steps`,
-      lane: s.laneKey,
-      startBeat: s.start,
-      endBeat: s.end,
-      mode: "steps",
-      notes,
-    };
-    writeSection(span.section.id, span.section, (sec) => ({ ...sec, drumBlocks: upsertModeBlocks(sec.drumBlocks, s.start, s.end, [block]) }));
-  }, [writeSection, zoom]);
-
-  /** The selection's audible material for one lane, grouped per step — what
-   *  flatten writes verbatim and what the velocity ops scale. */
-  const laneRangeMaterial = useCallback(
-    (span: SectionSpan, laneKey: DrumLaneId, start: number, end: number) => {
-      const grid = gridStepForZoom(zoom);
-      const hits = (hitsForSpan(span).get(laneKey) ?? [])
-        .filter((h) => h.beat >= start - 1e-9 && h.beat < end - 1e-9);
-      if (hits.length === 0) return null;
-      const stepCount = Math.max(1, Math.ceil((end - start) / grid - 1e-9));
-      const entries = hits.map((h) => ({
-        h,
-        stepIdx: clamp(Math.round((h.beat - start) / grid), 0, stepCount - 1),
-      }));
-      const peaks = new Array<number>(stepCount).fill(0);
-      for (const e of entries) peaks[e.stepIdx] = Math.max(peaks[e.stepIdx], e.h.velocity);
-      return { entries, peaks, stepCount, peak: Math.max(...peaks) };
-    },
-    [zoom, hitsForSpan],
-  );
+    return { entries, stepCount: count, peak: Math.max(...peaks) };
+  }, [hits, grid.stepBeats]);
 
   const stepsBlockFor = (laneKey: DrumLaneId, start: number, end: number, notes: DrumBlockNote[]): DrumBlock => ({
     id: `blk-${laneKey}-${round4(start)}-${round4(end)}-steps`,
@@ -771,95 +828,84 @@ export default function DrumBlocksView() {
     notes,
   });
 
-  /** Flatten — freeze the selection's audible material into editable dots
-   *  (the algorithm underneath is replaced, so the dots are what plays). */
-  const flattenSelection = useCallback((span: SectionSpan, rng: { startBeat: number; endBeat: number; laneKeys: string[] }) => {
-    const lanes = rng.laneKeys as DrumLaneId[];
+  const flattenSelection = useCallback(() => {
+    if (!anchorSpan || !selRange) return;
     const changes: DrumBlock[] = [];
-    for (const laneKey of lanes) {
-      const mat = laneRangeMaterial(span, laneKey, rng.startBeat, rng.endBeat);
+    for (const laneKey of selRange.laneKeys as DrumLaneId[]) {
+      const mat = laneRangeMaterial(laneKey, selRange.startBeat, selRange.endBeat);
       if (!mat) continue;
-      changes.push(stepsBlockFor(laneKey, rng.startBeat, rng.endBeat, mat.entries.map(({ h }) => ({
-        beat: round4(h.beat - rng.startBeat), voice: h.voice as DrumVoiceName, velocity: h.velocity,
+      changes.push(stepsBlockFor(laneKey, selRange.startBeat, selRange.endBeat, mat.entries.map(({ h }) => ({
+        beat: round4(h.beat - selRange.startBeat), voice: h.voice as DrumVoiceName, velocity: h.velocity,
       }))));
     }
     if (changes.length === 0) return;
-    writeSection(span.section.id, span.section, (sec) => ({
+    writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({
       ...sec,
-      drumBlocks: replaceRangeBlocks(sec.drumBlocks, lanes, rng.startBeat, rng.endBeat, changes),
+      drumBlocks: replaceRangeBlocks(sec.drumBlocks, selRange.laneKeys, selRange.startBeat, selRange.endBeat, changes),
     }));
-  }, [laneRangeMaterial, writeSection]);
+  }, [anchorSpan, selRange, laneRangeMaterial, writeSection]);
 
-  /** The one-shot velocity ops — ramp / accents / alternate / humanize /
-   *  scale — baked into steps dots (a step's relative dynamics survive). */
-  const applyVelocityOp = useCallback((span: SectionSpan, rng: { startBeat: number; endBeat: number; laneKeys: string[] }, op: VelocityOp) => {
-    const lanes = rng.laneKeys as DrumLaneId[];
+  const applyVelocityOp = useCallback((op: VelocityOp) => {
+    if (!anchorSpan || !selRange) return;
     const changes: DrumBlock[] = [];
-    for (const laneKey of lanes) {
-      const mat = laneRangeMaterial(span, laneKey, rng.startBeat, rng.endBeat);
+    for (const laneKey of selRange.laneKeys as DrumLaneId[]) {
+      const mat = laneRangeMaterial(laneKey, selRange.startBeat, selRange.endBeat);
       if (!mat) continue;
-      const seed = `${span.section.id}:${laneKey}`;
+      const seed = `${anchorSpan.section.id}:${laneKey}`;
       const notes = mat.entries.map(({ h, stepIdx }) => ({
-        beat: round4(h.beat - rng.startBeat),
+        beat: round4(h.beat - selRange.startBeat),
         voice: h.voice as DrumVoiceName,
         velocity: scaleVelocity(h.velocity, velocityOpFactor(op, stepIdx, { stepCount: mat.stepCount, peakVelocity: mat.peak, seed })),
       }));
-      changes.push(stepsBlockFor(laneKey, rng.startBeat, rng.endBeat, notes));
+      changes.push(stepsBlockFor(laneKey, selRange.startBeat, selRange.endBeat, notes));
     }
     if (changes.length === 0) return;
-    writeSection(span.section.id, span.section, (sec) => ({
+    writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({
       ...sec,
-      drumBlocks: replaceRangeBlocks(sec.drumBlocks, lanes, rng.startBeat, rng.endBeat, changes),
+      drumBlocks: replaceRangeBlocks(sec.drumBlocks, selRange.laneKeys, selRange.startBeat, selRange.endBeat, changes),
     }));
-  }, [laneRangeMaterial, writeSection]);
+  }, [anchorSpan, selRange, laneRangeMaterial, writeSection]);
 
-  /** ⌥-drag drop — copy the source range's authored blocks (or, for lanes
-   *  with none, their audible material) to the destination, then move the
-   *  selection onto the copy so it stays the working range. */
-  const dropCopy = useCallback((span: SectionSpan, rng: { startBeat: number; endBeat: number; laneKeys: string[] }, destStart: number) => {
-    const lanes = rng.laneKeys as DrumLaneId[];
-    const destEnd = round4(destStart + (rng.endBeat - rng.startBeat));
-    const copies = copyBlocksToRange(effectiveSection(span).drumBlocks, lanes, rng.startBeat, rng.endBeat, destStart);
+  const pasteAtBar = useCallback((destBar: number) => {
+    if (!copyArm || !anchorSpan || !section) return;
+    const bpb = grid.beatsPerBar;
+    const srcStart = Math.min(copyArm.fromBar, copyArm.toBar) * bpb;
+    const srcEnd = (Math.max(copyArm.fromBar, copyArm.toBar) + 1) * bpb;
+    const destStart = destBar * bpb;
+    const destEnd = destStart + (srcEnd - srcStart);
+    const copies = copyBlocksToRange(section.drumBlocks, copyArm.lanes, srcStart, srcEnd, destStart);
     const covered = new Set(copies.map((c) => c.lane));
-    for (const laneKey of lanes) {
+    for (const laneKey of copyArm.lanes) {
       if (covered.has(laneKey)) continue;
-      const mat = laneRangeMaterial(span, laneKey, rng.startBeat, rng.endBeat);
+      const mat = laneRangeMaterial(laneKey, srcStart, srcEnd);
       if (!mat) continue;
       copies.push(stepsBlockFor(laneKey, destStart, destEnd, mat.entries.map(({ h }) => ({
-        beat: round4(h.beat - rng.startBeat), voice: h.voice as DrumVoiceName, velocity: h.velocity,
+        beat: round4(h.beat - srcStart), voice: h.voice as DrumVoiceName, velocity: h.velocity,
       }))));
     }
-    if (copies.length === 0) return;
-    writeSection(span.section.id, span.section, (sec) => ({
+    if (copies.length === 0) { setCopyArm(null); return; }
+    writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({
       ...sec,
-      drumBlocks: upsertBlocks(stripFxCarriers(sec.drumBlocks, lanes, destStart, destEnd), copies),
+      drumBlocks: upsertBlocks(stripFxCarriers(sec.drumBlocks, copyArm.lanes, destStart, destEnd), copies),
     }));
-    setSelectedSectionId(span.section.id);
-    setRange({ startBeat: destStart, endBeat: destEnd, laneKeys: rng.laneKeys });
-  }, [effectiveSection, laneRangeMaterial, writeSection, setRange, setSelectedSectionId]);
+    const len = Math.max(1, Math.round((srcEnd - srcStart) / bpb));
+    setSel({ sectionId: anchorSpan.section.id, lanes: copyArm.lanes, fromBar: destBar, toBar: destBar + len - 1 });
+    setCopyArm(null);
+  }, [copyArm, anchorSpan, section, grid.beatsPerBar, laneRangeMaterial, writeSection]);
 
-  /** The section's next seeded variant — what Regenerate rolls to (null on
-   *  sections with no variants: outline / blocks-only / none). Odd-meter
-   *  sections roll only through variants that fit their meter — the mined
-   *  Zappa grooves — so a regenerate never lands a 7/8 section on a 4/4
-   *  groove that drifts against the barline. */
   const regenerate = useMemo(() => {
-    if (!song || !anchorSpan || !selectionSection) return null;
-    const pattern = selectionSection.drumPattern ?? inferPatternForSection(selectionSection, song);
+    if (!song || !anchorSpan || !section) return null;
+    const pattern = section.drumPattern ?? inferPatternForSection(section, song);
     const preset = PRESET_DATA[pattern];
     const all = preset?.variants ?? [];
     if (all.length <= 1) return null;
-    const compatible = compatibleVariantIndices(
-      all,
-      sectionDurationBeats(selectionSection),
-      beatsPerBar(selectionSection),
-    );
+    const compatible = compatibleVariantIndices(all, sectionDurationBeats(section), beatsPerBar(section));
     const pool = compatible.length > 1 ? compatible : all.map((_, i) => i);
-    const current = selectionSection.drumVariantIndex
-      ?? seededVariantIndex(pattern, selectionSection, song, anchorSpan.occurrenceIndex)
+    const current = section.drumVariantIndex
+      ?? seededVariantIndex(pattern, section, song, anchorSpan.occurrenceIndex)
       ?? 0;
     return { pool, current };
-  }, [song, anchorSpan, selectionSection]);
+  }, [song, anchorSpan, section]);
 
   const regenerateVariant = useCallback(() => {
     if (!anchorSpan || !regenerate) return;
@@ -868,231 +914,83 @@ export default function DrumBlocksView() {
     writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({ ...sec, drumVariantIndex: next }));
   }, [anchorSpan, regenerate, writeSection]);
 
-  const onCanvasMove = useCallback((e: ReactPointerEvent) => {
-    const copy = copyRef.current;
-    if (copy) {
-      const { x } = toLocal(e);
-      const length = copy.range.endBeat - copy.range.startBeat;
-      const delta = snapBeat(spanXToBeat(copy.span, x, zoom) - copy.grabBeat, copy.grid);
-      copy.destStart = round4(clamp(copy.range.startBeat + delta, 0, Math.max(0, copy.span.durationBeats - length)));
-      setCopyDrag({
-        dxPx: spanBeatToX(copy.span, copy.destStart, zoom) - spanBeatToX(copy.span, copy.range.startBeat, zoom),
-        destStart: copy.destStart,
+  // ---- lane FX ------------------------------------------------------------------
+
+  const fxScopeFor = useCallback((laneKey: string): { startBeat: number; endBeat: number } => {
+    if (selRange && (selRange.laneKeys as string[]).includes(laneKey)) {
+      return { startBeat: selRange.startBeat, endBeat: selRange.endBeat };
+    }
+    return { startBeat: 0, endBeat: section ? sectionDurationBeats(section) : 0 };
+  }, [selRange, section]);
+
+  const fxValues = useMemo(() => {
+    const out: Record<string, DrumBlockFx | undefined> = {};
+    if (!section) return out;
+    for (const lane of DRUM_LANES) {
+      const scope = fxScopeFor(lane.key);
+      out[lane.key] = fxForLanes(section.drumBlocks, [lane.key as DrumLaneId], scope.startBeat, scope.endBeat);
+    }
+    return out;
+  }, [section, fxScopeFor]);
+
+  const commitLaneFx = useCallback((laneKey: string, next: DrumBlockFx) => {
+    if (!anchorSpan || !section) return;
+    const scope = fxScopeFor(laneKey);
+    writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({
+      ...sec,
+      drumBlocks: fxBlocksFor(sec.drumBlocks, [laneKey as DrumLaneId], scope.startBeat, scope.endBeat, next),
+    }));
+    setSelectedSectionId(anchorSpan.section.id);
+  }, [anchorSpan, section, fxScopeFor, writeSection, setSelectedSectionId]);
+
+  // ---- handoff / detour markers ---------------------------------------------------
+  // Read from the plan the exporter applies, for the section on screen only —
+  // the rail sits inside THIS section's beat axis, so markers land on real bars.
+
+  const markers = useMemo(() => {
+    if (!anchorSpan || !section || !song) return null;
+    const resolved = spans.map((span) => {
+      const sec = effectiveSection(span);
+      return {
+        sectionId: span.sectionId,
+        occurrenceIndex: span.occurrenceIndex,
+        durationBeats: span.durationBeats,
+        section: sec,
+        hasVariant: !!resolveSectionVariant(sec, song, span.occurrenceIndex),
+      };
+    });
+    const at = resolved.findIndex(
+      (r) => r.sectionId === anchorSpan.sectionId && r.occurrenceIndex === anchorSpan.occurrenceIndex,
+    );
+    if (at < 0) return null;
+    return sectionMarkers(resolved)[at];
+  }, [anchorSpan, section, song, spans, effectiveSection]);
+
+  /** A marker click focuses the gesture's bars (shift clears an authored one). */
+  const focusGesture = useCallback(
+    (range: { startBeat: number; endBeat: number }, clear: (() => void) | null, shift: boolean) => {
+      if (!anchorSpan) return;
+      if (shift && clear) {
+        clear();
+        return;
+      }
+      const bpb = Math.max(1e-6, beatsPerBar(anchorSpan.section));
+      const from = clamp(Math.floor(range.startBeat / bpb), 0, sectionBars - 1);
+      const to = clamp(Math.ceil(range.endBeat / bpb) - 1, from, sectionBars - 1);
+      setCopyArm(null);
+      setSel({
+        sectionId: anchorSpan.section.id,
+        lanes: DRUM_LANES.map((l) => l.key as DrumLaneId),
+        fromBar: from,
+        toBar: to,
       });
-      return;
-    }
-    const d = pressRef.current;
-    if (!d) return;
-    const { x, y } = toLocal(e);
-    const dx = x - d.x0;
-    const dy = y - d.y0;
-    // Drag a step (cell or its value box) up/down → the lane's parameter.
-    // A value-box drag over a range selection adjusts every step in the
-    // selection by the same delta (discrete params take the dragged value).
-    if (!d.velMode && d.cell && d.editable && Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx)) {
-      d.velMode = true;
-      if (d.zone === "value") d.scrub = buildParamScrub(d.cell, d.param, d.paramStart);
-      setMarquee(null);
-    }
-    if (d.velMode && d.cell) {
-      const spec = PARAM_SPECS[d.param];
-      const value = clampParam(spec, d.paramStart - dy * spec.perPx);
-      if (d.scrub) scrubParam(d.cell.span, d.scrub, value);
-      else writeStepParam(d.cell, d.param, value);
-      setVelocityDrag({
-        x: d.cell.cx, y: d.cell.cy,
-        text: spec.format(value, gridStepForZoom(zoom)),
-        label: spec.short,
-        frac: Math.max(0, Math.min(1, (value - spec.min) / Math.max(1e-6, spec.max - spec.min))),
-      });
-      return;
-    }
-    setMarquee({ x0: d.x0, y0: d.y0, x1: x, y1: y });
-  }, [toLocal, writeStepParam, buildParamScrub, scrubParam, zoom]);
+    },
+    [anchorSpan, sectionBars],
+  );
 
-  const onCanvasUp = useCallback((e: ReactPointerEvent) => {
-    const copy = copyRef.current;
-    if (copy) {
-      copyRef.current = null;
-      setCopyDrag(null);
-      if (Math.abs(copy.destStart - copy.range.startBeat) > 1e-6) {
-        dropCopy(copy.span, copy.range, copy.destStart);
-      }
-      return;
-    }
-    const d = pressRef.current;
-    pressRef.current = null;
-    setMarquee(null);
-    if (!d) {
-      setVelocityDrag(null);
-      return;
-    }
-    if (d.velMode) {
-      setVelocityDrag(null);
-      return;
-    }
-    const { x, y } = toLocal(e);
-    const dist = Math.hypot(x - d.x0, y - d.y0);
-    const startHit = xToSpanBeat(spans, d.x0, zoom);
-    const stepBeats = gridStepForZoom(zoom);
+  // ---- render -------------------------------------------------------------------
 
-    if (dist < 4) {
-      // A press (not a drag).
-      // Section title row: select the WHOLE section — every lane, first
-      // beat to last — the one-click "edit this section" gesture.
-      if (startHit && d.y0 < TOP_PAD) {
-        setSelectedSectionId(startHit.span.section.id);
-        setRange({
-          startBeat: 0,
-          endBeat: startHit.span.durationBeats,
-          laneKeys: DRUM_LANES.map((l) => l.key),
-        });
-        return;
-      }
-      // A CELL press toggles that step: empty → add, filled → delete.
-      // A VALUE-box click cycles DISCRETE parameters (ratchet/flam) and is
-      // otherwise inert — continuous params exist to be dragged.
-      if (d.zone === "value" && d.cell) {
-        const spec = PARAM_SPECS[d.param];
-        if (spec.kind === "discrete" && d.editable) {
-          writeStepParam(d.cell, d.param, cycleValue(spec, d.paramStart));
-        }
-        return;
-      }
-      if (d.cell && d.zone === "cell") {
-        toggleStep(d.cell.span, d.cell.laneKey, d.cell.stepBeat, stepBeats);
-        return;
-      }
-      // Plain click on empty space: drop the range, keep (or set) the section.
-      clearRange();
-      if (startHit) setSelectedSectionId(startHit.span.section.id);
-      return;
-    }
-    if (!startHit) return; // a drag that started outside every span
-    const span = startHit.span;
-    const b0 = snapBeat(spanXToBeat(span, Math.min(d.x0, x), zoom), stepBeats);
-    const b1 = snapBeat(spanXToBeat(span, Math.max(d.x0, x), zoom), stepBeats);
-    if (b1 - b0 < stepBeats) {
-      clearRange();
-      setSelectedSectionId(span.section.id);
-      return;
-    }
-    // A drag that STARTED on the title row is a section-wide gesture: the
-    // beat range it covers, across every lane.
-    const inTitle = d.y0 < TOP_PAD;
-    const i0 = inTitle ? 0 : clamp(Math.floor((Math.min(d.y0, y) - TOP_PAD) / TRACK_H), 0, LANE_COUNT - 1);
-    const i1 = inTitle ? LANE_COUNT - 1 : clamp(Math.floor((Math.max(d.y0, y) - TOP_PAD - 1e-6) / TRACK_H), 0, LANE_COUNT - 1);
-    setSelectedSectionId(span.section.id);
-    setRange({ startBeat: b0, endBeat: b1, laneKeys: DRUM_LANES.slice(i0, i1 + 1).map((l) => l.key) });
-  }, [spans, zoom, toLocal, clearRange, setSelectedSectionId, setRange, toggleStep, writeStepParam, dropCopy]);
-
-  /** Browsers can CANCEL a pointer mid-gesture (context menu, HMR swap,
-   *  OS-level gesture, devtools). Without this the press / marquee / slider
-   *  state sticks — e.g. a phantom velocity slider frozen over the grid.
-   *  Every gesture surface gets this cleanup. */
-  const onCanvasCancel = useCallback(() => {
-    pressRef.current = null;
-    handleRef.current = null;
-    padDragRef.current = null;
-    copyRef.current = null;
-    setMarquee(null);
-    setCopyDrag(null);
-    setVelocityDrag(null);
-  }, []);
-
-  // ---- selection edge handles -------------------------------------------------
-
-  const onHandleDown = useCallback((e: ReactPointerEvent, kind: HandleDragState["kind"], span: SectionSpan) => {
-    if (!range) return;
-    e.stopPropagation();
-    capture(e.currentTarget as Element, e.pointerId);
-    handleRef.current = {
-      kind,
-      span,
-      range: { startBeat: range.startBeat, endBeat: range.endBeat, laneKeys: [...range.laneKeys] },
-    };
-  }, [range]);
-
-  const onHandleMove = useCallback((e: ReactPointerEvent) => {
-    const d = handleRef.current;
-    if (!d) return;
-    const { x, y } = toLocal(e);
-    const stepBeats = gridStepForZoom(zoom);
-    if (d.kind === "left" || d.kind === "right") {
-      const beat = snapBeat(spanXToBeat(d.span, x, zoom), stepBeats);
-      if (d.kind === "left") {
-        setRange({ ...d.range, startBeat: round4(clamp(beat, 0, d.range.endBeat - stepBeats)) });
-      } else {
-        setRange({ ...d.range, endBeat: round4(clamp(beat, d.range.startBeat + stepBeats, d.span.durationBeats)) });
-      }
-      return;
-    }
-    const laneIdx = clamp(Math.floor((y - TOP_PAD) / TRACK_H), 0, LANE_COUNT - 1);
-    const idxs = d.range.laneKeys.map((k) => DRUM_LANES.findIndex((l) => l.key === k)).filter((i) => i >= 0);
-    if (idxs.length === 0) return;
-    let lo = Math.min(...idxs);
-    let hi = Math.max(...idxs);
-    if (d.kind === "top") lo = clamp(laneIdx, 0, hi);
-    else hi = clamp(laneIdx, lo, LANE_COUNT - 1);
-    setRange({ ...d.range, laneKeys: DRUM_LANES.slice(lo, hi + 1).map((l) => l.key) });
-  }, [toLocal, zoom, setRange]);
-
-  const onHandleUp = useCallback((e: ReactPointerEvent) => {
-    handleRef.current = null;
-    try { (e.currentTarget as Element).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-  }, []);
-
-  const onPadDown = useCallback((e: ReactPointerEvent) => {
-    if (!range || !anchorSpan || !primaryLane) return;
-    e.stopPropagation();
-    capture(e.currentTarget as Element, e.pointerId);
-    padDragRef.current = {
-      clientX: e.clientX, clientY: e.clientY,
-      k: euclid.k, rotation: euclid.rotation,
-      mx: motion.x, my: motion.y,
-      span: anchorSpan,
-      range: { startBeat: range.startBeat, endBeat: range.endBeat },
-      laneKeys: range.laneKeys,
-    };
-  }, [range, anchorSpan, primaryLane, euclid, motion]);
-
-  const onPadMove = useCallback((e: ReactPointerEvent) => {
-    const d = padDragRef.current;
-    if (!d) return;
-    const dx = e.clientX - d.clientX;
-    const dy = e.clientY - d.clientY;
-    if (padMode === "euclid") {
-      const nn = Math.max(1, Math.round(d.range.endBeat - d.range.startBeat));
-      const k = clamp(Math.round(d.k - dy * (nn / 60)), 1, nn);
-      const rotation = ((d.rotation + Math.round(dx * (nn / 80))) % nn + nn) % nn;
-      writeSection(d.span.section.id, d.span.section, (sec) => ({
-        ...sec,
-        drumBlocks: upsertModeBlocks(
-          sec.drumBlocks, d.range.startBeat, d.range.endBeat,
-          euclidBlocksFor(d.laneKeys as DrumLaneId[], d.range.startBeat, d.range.endBeat, k, nn, rotation),
-        ),
-      }));
-    } else {
-      const x = clamp(dx / 40, -1, 1);
-      const y = clamp(-dy / 40, -1, 1);
-      writeSection(d.span.section.id, d.span.section, (sec) => ({
-        ...sec,
-        drumBlocks: upsertModeBlocks(
-          sec.drumBlocks, d.range.startBeat, d.range.endBeat,
-          [motionBlockFor(d.laneKeys[0] as DrumLaneId, d.range.startBeat, d.range.endBeat, x, y)],
-        ),
-      }));
-    }
-  }, [padMode, writeSection]);
-
-  const onPadUp = useCallback((e: ReactPointerEvent) => {
-    padDragRef.current = null;
-    try { (e.currentTarget as Element).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-  }, []);
-
-  // ---- render -----------------------------------------------------------------
-
-  if (!song || spans.length === 0) {
+  if (!song || spans.length === 0 || !anchorSpan || !section) {
     return (
       <div className="relative overflow-x-auto border border-edge rounded bg-deep">
         <p className="text-inkMuted text-xs p-3">No sections yet — add some in Structure first.</p>
@@ -1100,620 +998,362 @@ export default function DrumBlocksView() {
     );
   }
 
-  const totalBarCount = totalBars(spans);
+  const currentPattern = section.drumPattern ?? inferPatternForSection(section, song);
+  const hasDraft = !!draftSection && draftSectionId === anchorSpan.section.id;
+  const barLabel = sel ? `${Math.min(sel.fromBar, sel.toBar) + 1}–${Math.max(sel.fromBar, sel.toBar) + 1}` : "";
+  const gridLines = Array.from({ length: sectionBars + 1 }).map((_, b) => b * barPx);
+  const rangeForModal = selRange
+    ? { startBeat: selRange.startBeat, endBeat: selRange.endBeat, laneKeys: selRange.laneKeys }
+    : null;
 
   return (
-    <div className="flex items-start gap-2">
-      {/* timeline column */}
-      <div className="flex-1 min-w-0">
-      {/* min-h keeps the draft controls from growing this row: layout must
-          not shift mid-gesture (velocity drags compute from client coords) */}
-      <div className="flex items-center justify-between mb-1.5 min-h-6">
-        <span className="text-xs text-inkMuted">
-          Click a cell to toggle · drag cells or their value boxes ↑↓ = the lane's parameter (chip in the gutter picks it) · wheel over the grid zooms · drag beats × lanes → controls · click a title selects the section · ⌥-drag the selection = copy
+    <div className="w-full min-w-0">
+      <GrooveShelf
+        span={anchorSpan}
+        section={section}
+        current={currentPattern}
+        onPick={(pattern) => {
+          writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({
+            ...sec,
+            drumPattern: pattern as BlueprintSection["drumPattern"],
+            drumVariantIndex: 0,
+            drumMeterOutline: undefined,
+          }));
+          setSelectedSectionId(anchorSpan.section.id);
+        }}
+      />
+
+      {/* header: zoom (bars per view) · selection pill · draft controls */}
+      <div className="flex items-center gap-2 mb-1.5 min-h-6">
+        <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-inkMuted">bars</span>
+        <div className="flex items-center gap-0.5">
+          {BARS_PER_VIEW_OPTIONS.map((n) => (
+            <button
+              key={String(n)}
+              onClick={() => { setBarsPerView(n); saveJson("trackdraft-drums-bars-view", n); }}
+              className="font-mono text-2xs rounded-sm px-1.5 py-0.5 border"
+              style={{
+                borderColor: barsPerView === n ? P.track : P.grid,
+                color: barsPerView === n ? P.track : P.label,
+                background: barsPerView === n ? "rgba(232,181,74,0.12)" : "transparent",
+              }}
+              title={`${n === "all" ? "Whole section" : `${n} bar${n === 1 ? "" : "s"}`} per view — the step grid follows the meter`}
+            >
+              {n === "all" ? "ALL" : n}
+            </button>
+          ))}
+        </div>
+
+        {/* the bar navigator — the one-bar view's spine, tied to the
+            selection: it names the bars you have chosen and walks them */}
+        <span className="flex items-center gap-1 font-mono text-2xs text-ink tabular-nums">
+          <button
+            onClick={() => stepSelBar(-1)}
+            className="w-4 h-4 flex items-center justify-center text-inkMuted hover:text-ink"
+            title="Previous bar"
+            aria-label="Previous bar"
+          >
+            ◂
+          </button>
+          <span title="Selection, in bars of this section">
+            {anchorSpan.section.name} ·{" "}
+            {sel
+              ? (() => {
+                  const a = Math.min(sel.fromBar, sel.toBar) + 1;
+                  const b = Math.max(sel.fromBar, sel.toBar) + 1;
+                  return a === b ? `bar ${a}/${sectionBars}` : `bars ${a}–${b}/${sectionBars}`;
+                })()
+              : `${sectionBars} bars`}
+          </span>
+          <button
+            onClick={() => stepSelBar(1)}
+            className="w-4 h-4 flex items-center justify-center text-inkMuted hover:text-ink"
+            title="Next bar"
+            aria-label="Next bar"
+          >
+            ▸
+          </button>
         </span>
-        <span className="flex items-center gap-1.5">
-          {draftSection && <span className="font-mono text-2xs uppercase tracking-wider text-track">● preview</span>}
-          {draftSection && (
-            <>
-              <button
-                onClick={applyDraft}
-                className="font-mono text-2xs rounded px-2 py-0.5 border border-accent text-accent bg-accent/10 hover:bg-accent/20"
-              >
-                Apply
-              </button>
-              <button
-                onClick={revertDraft}
-                className="font-mono text-2xs rounded px-2 py-0.5 border border-edge text-inkMuted hover:text-ink"
-              >
-                Revert
-              </button>
-            </>
-          )}
-        </span>
+
+        <GrooveGlue
+          section={section}
+          drumBeats={allDrumBeats}
+          onWrite={(mutate) => writeSection(anchorSpan.section.id, anchorSpan.section, mutate)}
+        />
+
+        <span className="flex-1" />
+
+        {copyArm && (
+          <span className="font-mono text-2xs text-track" title="Click a bar number (or any lane cell) to paste — Esc cancels">
+            ⧉ click a bar to paste · esc
+          </span>
+        )}
+
+        {sel && !copyArm && (
+          <span className="flex items-center gap-1 rounded border border-edge px-1.5 py-0.5">
+            <span className="font-mono text-2xs text-inkMuted">
+              {sel.lanes.map((k) => DRUM_LANES.find((l) => l.key === k)?.label ?? k).join("·")} × bars {barLabel}
+            </span>
+            <button
+              onClick={() => setCopyArm(sel)}
+              className="font-mono text-2xs rounded px-1 border border-edge text-inkMuted hover:text-ink"
+              title="Copy this selection, then click a bar to paste it there"
+            >
+              ⧉
+            </button>
+            <button
+              onClick={flattenSelection}
+              className="font-mono text-2xs rounded px-1 border border-edge text-inkMuted hover:text-ink"
+              title="Freeze the selection's audible material into editable bars"
+            >
+              ❄
+            </button>
+            <button
+              onClick={regenerateVariant}
+              disabled={!regenerate}
+              className="font-mono text-2xs rounded px-1 border border-edge text-inkMuted hover:text-ink disabled:opacity-30"
+              title="Roll the section to its next seeded variant"
+            >
+              ⟳
+            </button>
+            <button
+              onClick={() => setEditorOpen(true)}
+              className="font-mono text-2xs rounded px-1 border border-edge text-inkMuted hover:text-ink"
+              title="Open the selection editor (Euclid · Motion · Velocity · FX)"
+            >
+              ⤢
+            </button>
+            <button
+              onClick={clearSelection}
+              className="font-mono text-2xs rounded px-1 border border-edge text-inkMuted hover:text-ink"
+              title="Clear the selection (Esc)"
+            >
+              ✕
+            </button>
+          </span>
+        )}
+
+        {hasDraft && <span className="font-mono text-2xs uppercase tracking-wider text-track">● preview</span>}
+        {hasDraft && (
+          <>
+            <button onClick={applyDraft} className="font-mono text-2xs rounded px-2 py-0.5 border border-accent text-accent bg-accent/10 hover:bg-accent/20">Apply</button>
+            <button onClick={revertDraft} className="font-mono text-2xs rounded px-2 py-0.5 border border-edge text-inkMuted hover:text-ink">Revert</button>
+          </>
+        )}
       </div>
 
-      <div ref={scrollRef} className="relative overflow-x-auto border border-edge rounded bg-deep">
-        {/* The scroll content is one wide SVG; the gutter (lane names and
-            their parameter chips) is a second, sticky SVG laid over its left
-            edge, so scrolling the grid never hides which row you are on.
-            Same TOP_PAD/TRACK_H maths in both, so the rows line up. */}
-        <div className="relative" style={{ width: width + GUTTER_INSET, height: HEIGHT }}>
-        <svg
-          ref={svgRef}
-          width={width}
-          height={HEIGHT}
-          style={{ marginLeft: GUTTER_INSET }}
-          className="block touch-none select-none"
-          onPointerDown={onCanvasDown}
-          onPointerMove={onCanvasMove}
-          onPointerUp={onCanvasUp}
-          onPointerCancel={onCanvasCancel}
-        >
-          <defs>
-            {/* One hatch, two passes of the pencil. `userSpaceOnUse` keeps the
-                lines the same weight at every zoom; the cells rotate it with
-                their own lean, so the angles never line up across a row. */}
-            <pattern id="pencil-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(44)">
-              <line x1="0" y1="0" x2="0" y2="5" stroke="rgba(38,34,27,0.30)" strokeWidth="1.15" />
-            </pattern>
-          </defs>
+      {/* TIER 2 — the surface lanes */}
+      <div ref={frameRef} className="w-full border border-edge rounded bg-deep overflow-hidden">
+        <div ref={scrollerRef} className="relative overflow-x-auto" style={{ cursor: copyArm ? "copy" : undefined }}>
+          <div className="relative" style={{ width: GUTTER + contentW, height: HEIGHT }}>
+            <svg
+              ref={svgRef}
+              width={contentW}
+              height={HEIGHT}
+              style={{ marginLeft: GUTTER }}
+              className="block touch-none select-none"
+              onPointerDown={onCanvasDown}
+              onPointerMove={onCanvasMove}
+              onPointerUp={onCanvasUp}
+              onPointerCancel={onCanvasUp}
+            >
+              <defs>
+                <pattern id="pencil-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(44)">
+                  <line x1="0" y1="0" x2="0" y2="5" stroke="rgba(38,34,27,0.30)" strokeWidth="1.15" />
+                </pattern>
+              </defs>
 
-          {/* section labels + brackets + bar numbers */}
-          {spans.map((span, si) => {
-            const color = SECTION_ROLE_COLOR[span.section.role]?.rim ?? P.grid;
-            const x1 = barX(span.startBar, zoom);
-            const x2 = barX(span.startBar + span.bars, zoom);
-            return (
-              <g key={`sec-${si}`} pointerEvents="none">
-                <text x={(x1 + x2) / 2} y={12} textAnchor="middle" fontSize={P.handDrawn ? 16 : 12} fontWeight={600} fontFamily={P.penFont} fill={color}>
-                  {span.section.name}
-                  {span.occurrenceIndex > 0 ? ` ·${span.occurrenceIndex + 1}` : ""}
-                </text>
-                <path d={`M ${x1} 20 L ${x1} 26 L ${x2} 26 L ${x2} 20`} fill="none" stroke={color} strokeWidth={1.6} strokeOpacity={0.6} />
-              </g>
-            );
-          })}
-          {/* automatic gesture + handoff fill at each boundary — read-only
-              ambience, mirroring the classic view's hexagon chip. A tag
-              describes the PRECEDING section's ending (its transition lands
-              on the boundary). */}
-          {autoReadout.slice(0, -1).map((r, i) => {
-            if (!r) return null;
-            const x = barX(spans[i].startBar + spans[i].bars, zoom);
-            const color = r.model ? TRANSITION_COLOR[r.model] : P.voices.snare;
-            const label = r.model
-              ? `${TRANSITION_LABEL[r.model].toUpperCase()}${r.bars > 1 ? ` ·${r.bars}` : ""}${r.manual ? "" : " ·AUTO"}`
-              : "FILL";
-            return (
-              <text
-                key={`auto-${i}`}
-                x={x + 4} y={12}
-                fontSize={9}
-                fontFamily="'IBM Plex Mono', monospace"
-                fontWeight={600}
-                fill={color}
-                fillOpacity={0.9}
-                pointerEvents="none"
-              >
-                {label}
-              </text>
-            );
-          })}
-
-          {/* authored detour marker (classic view / dock still author it) —
-              read-only, marks where the detour's span change begins */}
-          {autoReadout.map((r, i) =>
-            r && r.detourStartBeat !== null ? (
-              <text
-                key={`det-${i}`}
-                x={spanBeatToX(spans[i], r.detourStartBeat, zoom) + 4}
-                y={24}
-                fontSize={9}
-                fontFamily="'IBM Plex Mono', monospace"
-                fontWeight={600}
-                fill={P.track}
-                fillOpacity={0.85}
-                pointerEvents="none"
-              >
-                DETOUR
-              </text>
-            ) : null,
-          )}
-
-          {/* title-row hit strips — a pointer cursor + guaranteed hit area
-              for the click-a-title-selects-the-section gesture (the svg
-              handler does the work; these make it discoverable). */}
-          {spans.map((span, si) => (
-            <rect
-              key={`title-hit-${si}`}
-              x={barX(span.startBar, zoom)}
-              y={2}
-              width={barX(span.startBar + span.bars, zoom) - barX(span.startBar, zoom)}
-              height={28}
-              fill="transparent"
-              style={{ cursor: "pointer" }}
-            />
-          ))}
-          {spans.flatMap((span, si) =>
-            Array.from({ length: span.bars }).map((_, barIdx) => (
-              <text
-                key={`bn-${si}-${barIdx}`}
-                x={barX(span.startBar + barIdx, zoom)}
-                y={32}
-                textAnchor="middle"
-                fontSize={10}
-                fontFamily="'IBM Plex Mono', monospace"
-                fill={P.grid}
-                pointerEvents="none"
-              >
-                {Math.round(span.startBar) + barIdx}
-              </text>
-            )),
-          )}
-
-          {/* section ruler: bar + beat lines */}
-          {spans.map((span, si) => {
-            const bpb = beatsPerBarOf(span);
-            const lines: { x: number; bar: boolean }[] = [];
-            for (let barIdx = 0; barIdx < span.bars; barIdx++) {
-              lines.push({ x: spanBeatToX(span, barIdx * bpb, zoom), bar: true });
-              for (let q = 1; q < bpb - 1e-9; q++) {
-                lines.push({ x: spanBeatToX(span, barIdx * bpb + q, zoom), bar: false });
-              }
-            }
-            lines.push({ x: spanBeatToX(span, span.durationBeats, zoom), bar: true });
-            return lines.map((g, gi) => (
-              <line
-                key={`g-${si}-${gi}`}
-                x1={g.x} y1={TOP_PAD} x2={g.x} y2={STACK_BOTTOM}
-                stroke={P.handDrawn ? P.grid : "#fff"}
-                strokeOpacity={(g.bar ? 0.14 : 0.06) * (P.handDrawn ? 2.6 : 1)}
-                strokeWidth={1}
-                // Hand-ruled bars lean a hair — rotated about their top point so
-                // the grid stays aligned where the cells are.
-                transform={P.handDrawn && g.bar ? `rotate(${((gi % 3) - 1) * 0.45} ${g.x} ${TOP_PAD})` : undefined}
-                pointerEvents="none"
-              />
-            ));
-          })}
-
-          {/* step lanes — packed circular cells; the grid subdivides with
-              zoom (see gridStepForZoom), and the strip below each cell row
-              shows authored velocity as a bar */}
-          {spans.map((span, si) => {
-            const hits = hitsForSpan(span);
-            const bpb = beatsPerBarOf(span);
-            const stepBeats = gridStepForZoom(zoom);
-            const stepCount = Math.max(1, Math.ceil(span.durationBeats / stepBeats - 1e-9));
-            const { r, spacing } = cellMetrics(zoom, bpb, stepBeats);
-            const accentEvery = Math.max(1, Math.round(bpb / stepBeats));
-            const tol = Math.max(0.02, stepBeats * 0.35);
-            return DRUM_LANES.map((lane, li) => {
-              const y = cellCy(li, r);
-              const laneHits = hits.get(lane.key as DrumLaneId) ?? [];
-              const hitAt = new Map<number, LaneHit>();
-              const diamonds: LaneHit[] = [];
-              for (const h of laneHits) {
-                const idx = Math.round(h.beat / stepBeats);
-                if (Math.abs(h.beat - idx * stepBeats) <= tol && idx >= 0 && idx < stepCount) hitAt.set(idx, h);
-                else diamonds.push(h);
-              }
-              const param = paramFor(lane.key);
-              const spec = PARAM_SPECS[param];
-              const authored = authoredNotesFor(span, lane.key as DrumLaneId, stepBeats);
-              const dots = [];
-              for (let q = 0; q < stepCount; q++) {
-                const x = spanBeatToX(span, q * stepBeats, zoom);
-                const hit = hitAt.get(q);
-                const accent = q % accentEvery === 0;
-                // Cells are pure visuals — the canvas pointer-up resolves
-                // clicks into toggles (an SVG circle with fill="none" would
-                // only be hit-testable on its stroke). The ring is the
-                // sequencer's primary affordance: thick, pure white, and
-                // brighter on filled steps + barline accents so the grid
-                // reads at a glance.
-                const sw = Math.min(2.6, Math.max(1.1, r * 0.25));
-                const hand = P.handDrawn ? handRadius(li * 97 + q, r) : null;
-                const glyph = (
-                  <>
-                    {/* the second pass of the pencil: a slightly larger, offset
-                        outline under every filled cell, as if drawn twice */}
-                    {hit && P.handDrawn && (
-                      <ellipse
-                        cx={x + 0.7} cy={y - 0.6}
-                        rx={(hand ? hand.rx : r) + 1.2} ry={(hand ? hand.ry : r) + 1.2}
-                        fill="none" stroke={P.label} strokeOpacity={0.26} strokeWidth={1}
-                        pointerEvents="none"
-                      />
-                    )}
-                    <ellipse
-                      cx={x} cy={y}
-                      rx={hand ? hand.rx : r} ry={hand ? hand.ry : r}
-                      transform={hand ? `rotate(${hand.rotate} ${x} ${y})` : undefined}
-                      fill={hit ? laneColor(lane, P) : P.scene}
-                      /* A hit is a PENCIL mark, not a wash: solid colour, with
-                         only a touch of translucency left to carry velocity.
-                         0.45–1.0 over cream is what read as pastel. The dark
-                         theme keeps the soft dots it has always had. */
-                      fillOpacity={hit ? (P.handDrawn ? 0.82 : 0.45) + (P.handDrawn ? 0.18 : 0.55) * (hit.velocity / 127) : 1}
-                      stroke={P.label}
-                      strokeOpacity={hit ? (accent ? 0.9 : 0.72) : accent ? 0.72 : 0.5}
-                      strokeWidth={accent ? sw + 0.3 : sw}
-                      pointerEvents="none"
-                    />
-                    {/* pencil hatch over the fill — the same 0.26 black at a
-                        per-cell angle the prototype uses for a played step */}
-                    {hit && P.handDrawn && (
-                      <ellipse
-                        cx={x} cy={y}
-                        rx={hand ? hand.rx : r} ry={hand ? hand.ry : r}
-                        transform={hand ? `rotate(${hand.rotate} ${x} ${y})` : undefined}
-                        fill="url(#pencil-hatch)" fillOpacity={0.55}
-                        pointerEvents="none"
-                      />
-                    )}
-                  </>
-                );
-                dots.push(<g key={`c-${q}`}>{glyph}</g>);
-              }
-              const hh = Math.max(2.6, r * 0.62);
-              const marks = diamonds.map((hit, i) => {
-                const x = spanBeatToX(span, hit.beat, zoom);
+              {/* bar ruler — the numbers ARE the bar-selection targets */}
+              {Array.from({ length: sectionBars }).map((_, b) => {
+                const inSel = !!sel && b >= Math.min(sel.fromBar, sel.toBar) && b <= Math.max(sel.fromBar, sel.toBar);
                 return (
-                  <polygon
-                    key={`m-${i}`}
-                    points={`${x},${y - hh} ${x + hh},${y} ${x},${y + hh} ${x - hh},${y}`}
-                    fill={laneColor(lane, P)} fillOpacity={0.9}
-                    stroke={P.label} strokeOpacity={0.6} strokeWidth={Math.min(1.6, Math.max(0.8, hh * 0.2))}
-                    pointerEvents="none"
-                  />
-                );
-              });
-              // Step value boxes — the PARAMETER lane. What each box shows
-              // and edits is the lane's chosen parameter (its dropdown
-              // chip lives in the gutter): velocity by default, or nudge /
-              // gate / probability / ratchet / flam. Authored values read
-              // solid; defaults on live hits read dimmed.
-              const bm = boxMetrics(li, r, spacing);
-              const boxes = bm
-                ? Array.from({ length: stepCount }).map((_, q) => {
-                    const x = spanBeatToX(span, q * stepBeats, zoom);
-                    const hit = hitAt.get(q);
-                    const auth = authored.get(q);
-                    const authoredVal = auth ? spec.read(auth, stepBeats) : undefined;
-                    let v: number | null = null;
-                    let dim = false;
-                    if (param === "vel") {
-                      if (hit) v = Math.round(hit.velocity);
-                      else if (auth) { v = auth.velocity; dim = true; }
-                    } else if (authoredVal !== undefined) {
-                      v = authoredVal;
-                      dim = !hit;
-                    } else if (hit) {
-                      v = spec.rest;
-                      dim = true;
-                    }
-                    const label = v === null ? null : spec.format(v, stepBeats);
-                    return (
-                      <g key={`vb-${q}`}>
-                        <rect
-                          x={x - bm.w / 2} y={bm.top} width={bm.w} height={bm.h} rx={2.5}
-                          /* The value strip is a PRINTED slot, so it sits on the
-                             recessed well rather than near-white paper — a row of
-                             16 pale boxes per lane was the pastel haze on screen. */
-                          fill={hit ? laneColor(lane, P) : P.handDrawn ? P.well : P.scene}
-                          fillOpacity={hit ? (P.handDrawn ? (dim ? 0.22 : 0.38) : (dim ? 0.08 : 0.14)) : P.handDrawn ? 1 : 0.6}
-                          stroke={hit ? laneColor(lane, P) : P.grid}
-                          strokeOpacity={hit ? (P.handDrawn ? (dim ? 0.55 : 0.85) : (dim ? 0.32 : 0.55)) : P.handDrawn ? 0.75 : 1}
-                          strokeWidth={1}
-                          pointerEvents="none"
-                        />
-                        {label !== null && bm.w >= (spec.short.length > 3 ? 16 : 12) && (
-                          <text
-                            x={x} y={bm.top + bm.h / 2 + Math.min(bm.font, bm.w * 0.34) * 0.36}
-                            textAnchor="middle" fontSize={Math.min(bm.font, bm.w * 0.34)} fontFamily="'IBM Plex Mono', monospace"
-                            fill={dim ? P.voices.snare : P.cream} fillOpacity={dim ? 0.8 : 0.92} pointerEvents="none"
-                          >
-                            {label}
-                          </text>
-                        )}
-                      </g>
-                    );
-                  })
-                : [];
-              return <g key={`dots-${si}-${li}`}>{boxes}{dots}{marks}</g>;
-            });
-          })}
-
-          {/* selection: dim everything else, bracket the range */}
-          {selRects.length > 0 && (
-            <>
-              <path
-                d={
-                  `M 0 0 H ${width} V ${HEIGHT} H 0 Z ` +
-                  selRects.map((r) => `M ${r.x1} ${r.y1} H ${r.x2} V ${r.y2} H ${r.x1} Z`).join(" ")
-                }
-                fillRule="evenodd" fill="#000" opacity={0.45} pointerEvents="none"
-              />
-              {selRects.map((r, i) => {
-                const midX = (r.x1 + r.x2) / 2;
-                // Handles live ENTIRELY OUTSIDE the selection's beat span —
-                // they used to straddle the edge (±4px), which stole the
-                // first/last cell's hit area so a press there resized instead
-                // of toggling or scrubbing. The side grips also sit BELOW the
-                // dot row (the cells are centered on the boundary, so their
-                // outer half hangs outside the span): only the lower strip
-                // carries the grip, keeping every cell's dot pressable.
-                const handles: { kind: HandleDragState["kind"]; x: number; y: number; w: number; h: number; cursor: string }[] = [
-                  { kind: "left", x: r.x1 - 8, y: r.y2 - 26, w: 8, h: 20, cursor: "ew-resize" },
-                  { kind: "right", x: r.x2, y: r.y2 - 26, w: 8, h: 20, cursor: "ew-resize" },
-                  { kind: "top", x: midX - 14, y: r.y1 - 8, w: 28, h: 8, cursor: "ns-resize" },
-                  { kind: "bottom", x: midX - 14, y: r.y2, w: 28, h: 8, cursor: "ns-resize" },
-                ];
-                return (
-                  <g key={`sel-${i}`}>
+                  <g key={`bn-${b}`}>
                     <rect
-                      x={r.x1} y={r.y1} width={r.x2 - r.x1} height={r.y2 - r.y1}
-                      fill="rgba(232,181,74,0.05)" stroke={P.track} strokeWidth={1.2} strokeDasharray="5 4"
-                      pointerEvents="none"
+                      x={b * barPx} y={0} width={barPx} height={RULER_H}
+                      fill={inSel ? "rgba(232,181,74,0.10)" : "transparent"}
                     />
-                    {handles.map((h) => (
-                      <rect
-                        key={h.kind}
-                        x={h.x} y={h.y} width={h.w} height={h.h} rx={3}
-                        fill={P.track} fillOpacity={0.9}
-                        style={{ cursor: h.cursor }}
-                        onPointerDown={(e) => onHandleDown(e, h.kind, r.span)}
-                        onPointerMove={onHandleMove}
-                        onPointerUp={onHandleUp}
-                        onPointerCancel={onHandleUp}
-                      />
-                    ))}
+                    <text
+                      x={b * barPx + 4} y={15}
+                      fontSize={9} fontFamily="'IBM Plex Mono', monospace"
+                      fill={inSel ? P.track : P.grid}
+                      pointerEvents="none"
+                    >
+                      {b + 1}
+                    </text>
                   </g>
                 );
               })}
-            </>
-          )}
 
-          {/* marquee rubber band */}
-          {marquee && (
-            <rect
-              x={Math.min(marquee.x0, marquee.x1)} y={Math.min(marquee.y0, marquee.y1)}
-              width={Math.abs(marquee.x1 - marquee.x0)} height={Math.abs(marquee.y1 - marquee.y0)}
-              fill="rgba(232,181,74,0.07)" stroke={P.track} strokeWidth={1.2} strokeDasharray="5 4"
-              pointerEvents="none"
-            />
-          )}
-
-          {/* ⌥-drag copy ghost — the selection's outline at its drop spot */}
-          {copyDrag && selRects.map((r, i) => (
-            <rect
-              key={`copyghost-${i}`}
-              x={r.x1 + copyDrag.dxPx} y={r.y1} width={r.x2 - r.x1} height={r.y2 - r.y1}
-              fill="rgba(232,181,74,0.10)" stroke={P.track} strokeWidth={1.2} strokeDasharray="2 3"
-              pointerEvents="none"
-            />
-          ))}
-
-          {/* floating velocity slider — shown only while dragging a cell
-              up/down; afterwards just the strip bar below the cell remains */}
-          {velocityDrag && (
-            <g pointerEvents="none">
-              <rect
-                x={velocityDrag.x + 16} y={velocityDrag.y - 46} width={70} height={70} rx={6}
-                fill="rgba(11,13,17,0.95)" stroke={P.track} strokeOpacity={0.6} strokeWidth={1}
+              {/* the ruler/marker seam — the rail is a band, not floating text */}
+              <line
+                x1={0} y1={RULER_H} x2={contentW} y2={RULER_H}
+                stroke={P.handDrawn ? P.grid : "#fff"}
+                strokeOpacity={P.handDrawn ? 0.3 : 0.07}
+                strokeWidth={1}
+                pointerEvents="none"
               />
-              <text
-                x={velocityDrag.x + 51} y={velocityDrag.y - 28} textAnchor="middle" fontSize={14} fontWeight={600}
-                fontFamily="'IBM Plex Mono', monospace" fill={P.track}
-              >
-                {velocityDrag.text}
-              </text>
-              <rect x={velocityDrag.x + 47} y={velocityDrag.y - 16} width={8} height={32} rx={4} fill={P.deep} />
-              <rect
-                x={velocityDrag.x + 47}
-                y={velocityDrag.y - 16 + 32 * (1 - velocityDrag.frac)}
-                width={8} height={32 * velocityDrag.frac} rx={4} fill={P.track}
-              />
-              <text
-                x={velocityDrag.x + 51} y={velocityDrag.y + 36} textAnchor="middle" fontSize={9}
-                fontFamily="'IBM Plex Mono', monospace" fill={P.label}
-              >
-                {velocityDrag.label}
-              </text>
-            </g>
-          )}
 
-          {/* the XY pad cluster, docked right of the selection */}
-          {range && padRect && (
-            <SelectionPad
-              panelX={panelX}
-              panelY={panelY}
-              connectorFromX={padRect.x2}
-              mode={padMode}
-              euclid={euclid}
-              motion={motion}
-              motionLabel={motionLabel}
-              laneColors={laneColors}
-              hasDraft={!!draftSection}
-              onApply={applyDraft}
-              onCancel={revertDraft}
-              onMode={setPadMode}
-              onExpand={() => setEditorOpen(true)}
-              onPadPointerDown={onPadDown}
-              onPadPointerMove={onPadMove}
-              onPadPointerUp={onPadUp}
-            />
-          )}
-        </svg>
-
-        {/* the frozen gutter */}
-        <div
-          className="sticky left-0 top-0 z-10"
-          style={{ width: X0, height: HEIGHT, marginTop: -HEIGHT }}
-        >
-          <div className="relative h-full w-full bg-deep">
-            <div className="absolute left-0.5 top-0.5 z-20 flex items-center gap-0 border border-edge rounded bg-deep/95 px-0.5 py-0.5 select-none">
-          <button
-            onClick={() =>
-              useTimeViewportStore.getState().setScale("section", clampBarPx("section", barPx / 1.1))
-            }
-            className="w-4 h-4 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
-          >
-            −
-          </button>
-          <span className="font-mono text-[9px] text-inkMuted tabular-nums w-8 text-center" title="Timeline zoom">
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            onClick={() =>
-              useTimeViewportStore.getState().setScale("section", clampBarPx("section", barPx * 1.1))
-            }
-            className="w-4 h-4 flex items-center justify-center text-inkMuted hover:text-ink text-sm leading-none"
-          >
-            +
-          </button>
-        </div>
-
-            {/* the parameter picker — HTML, not SVG: the chip that opens it
-                lives in this sticky strip, so the menu has to paint above the
-                grid rather than under the strip that owns it */}
-            {paramMenu && (() => {
-              const li = DRUM_LANES.findIndex((l) => l.key === paramMenu);
-              if (li < 0) return null;
-              // one 16px row + a 4px gap each, plus the 4px inset
-              const menuH = STEP_PARAMS.length * 20 + 4;
-              const laneTop = TOP_PAD + li * TRACK_H;
-              const menuY = laneTop + 18 + menuH <= HEIGHT - 6 ? laneTop + 18 : Math.max(2, laneTop - menuH - 2);
-              const active = paramFor(paramMenu);
-              return (
-                <>
-                  <div className="fixed inset-0 z-20" onPointerDown={() => setParamMenu(null)} />
-                  <div
-                    className="absolute z-30 flex flex-col gap-1 rounded border p-0.5"
-                    style={{ left: X0 + 2, top: menuY, width: 108, background: P.deep, borderColor: P.grid }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                  >
-                    {STEP_PARAMS.map((pm) => (
-                      <button
-                        key={pm}
-                        onClick={() => setLaneParam(paramMenu, pm)}
-                        className="block w-full rounded-sm px-1.5 text-left"
-                        style={{
-                          height: 16,
-                          fontSize: 9,
-                          fontFamily: "'IBM Plex Mono', monospace",
-                          color: pm === active ? P.track : P.label,
-                          background: pm === active ? "rgba(232,181,74,0.14)" : "transparent",
-                        }}
-                      >
-                        {PARAM_SPECS[pm].label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              );
-            })()}
-
-            <svg width={X0} height={HEIGHT} className="block">
-              {(() => {
-                const stepBeats = gridStepForZoom(zoom);
-                const { r: labelR, spacing: labelSpacing } = cellMetrics(zoom, 4, stepBeats);
-                return DRUM_LANES.map((lane, li) => {
-                  const color = laneColor(lane, P);
-                  const param = paramFor(lane.key);
-                  const spec = PARAM_SPECS[param];
-                  const bm = boxMetrics(li, labelR, labelSpacing);
-                  // The chip sits in the lane's PARAMETER row — the strip of
-                  // value boxes under the steps — so the dropdown names what
-                  // the numbers beside it mean.
-                  const chipH = 13;
-                  const chipY = bm ? bm.top + (bm.h - chipH) / 2 : cellCy(li, labelR) + 2;
-                  return (
-                    <g key={`gutter-${lane.key}`}>
-                      <text
-                        x={X0 - 14} y={cellCy(li, labelR) + 4} textAnchor="end"
-                        fontSize={P.handDrawn ? 13 : 12} fontWeight={600}
-                        letterSpacing={P.handDrawn ? "0.06em" : undefined}
-                        fontFamily={P.labelFont} fill={color} pointerEvents="none"
-                      >
-                        {lane.label}
-                      </text>
-                      <g
-                        onClick={() => setParamMenu(paramMenu === lane.key ? null : lane.key)}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <rect
-                          x={8} y={chipY} width={46} height={chipH} rx={3}
-                          fill={P.deep}
-                          stroke={param !== "vel" ? P.track : P.grid}
-                          strokeOpacity={param !== "vel" ? 0.8 : 1}
-                        />
-                        <text
-                          x={31} y={chipY + 9.5} textAnchor="middle" fontSize={7.5} fontWeight={600}
-                          fontFamily="'IBM Plex Mono', monospace"
-                          fill={param !== "vel" ? P.track : P.voices.snare}
-                        >
-                          {spec.short}
-                        </text>
-                      </g>
-                    </g>
-                  );
-                });
-              })()}
-              {/* the gutter's own edge — a ruled margin line on paper, the
-                  panel edge in the dark theme (where it draws nothing) */}
-              {P.handDrawn && (
-                <line
-                  x1={X0 - 1} y1={TOP_PAD - 6} x2={X0 - 1} y2={HEIGHT - 6}
-                  stroke={P.grid} strokeOpacity={0.45} strokeWidth={1}
+              {markers && (
+                <MarkerRail
+                  markers={markers}
+                  beatToX={beatToX}
+                  top={MARKER_TOP}
+                  P={P}
+                  onTransition={(e) => {
+                    e.stopPropagation();
+                    if (!markers.transition) return;
+                    const manual = markers.transition.manual;
+                    focusGesture(
+                      markers.transition,
+                      manual
+                        ? () =>
+                            writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({
+                              ...sec,
+                              drumTransitionModel: undefined,
+                              drumTransitionBars: undefined,
+                            }))
+                        : null,
+                      e.shiftKey,
+                    );
+                  }}
+                  onDetour={(e) => {
+                    e.stopPropagation();
+                    if (!markers.detour) return;
+                    focusGesture(
+                      markers.detour,
+                      () =>
+                        writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({
+                          ...sec,
+                          drumVariationOutline: undefined,
+                          drumVariationBars: undefined,
+                          drumVariationStartBeat: undefined,
+                        })),
+                      e.shiftKey,
+                    );
+                  }}
                 />
               )}
+
+              {gridLines.map((x, i) => (
+                <line
+                  key={`bl-${i}`}
+                  x1={x} y1={TOP} x2={x} y2={HEIGHT - 8}
+                  stroke={P.handDrawn ? P.grid : "#fff"}
+                  strokeOpacity={P.handDrawn ? 0.4 : 0.08}
+                  strokeWidth={1}
+                  pointerEvents="none"
+                />
+              ))}
+
+              {sel && (
+                <rect
+                  x={Math.min(sel.fromBar, sel.toBar) * barPx}
+                  y={TOP}
+                  width={(Math.abs(sel.toBar - sel.fromBar) + 1) * barPx}
+                  height={LANE_COUNT * ROW_H}
+                  fill="rgba(232,181,74,0.06)"
+                  pointerEvents="none"
+                />
+              )}
+
+              {DRUM_LANES.map((lane, li) => {
+                const inSel = !!sel && sel.lanes.includes(lane.key as DrumLaneId);
+                return (
+                  <g
+                    key={`lane-${lane.key}`}
+                    opacity={silentLanes.has(lane.key) ? 0.28 : sel && !inSel ? 0.62 : 1}
+                  >
+                    {inSel && (
+                      <rect
+                        x={Math.min(sel!.fromBar, sel!.toBar) * barPx}
+                        y={TOP + li * ROW_H + 2}
+                        width={(Math.abs(sel!.toBar - sel!.fromBar) + 1) * barPx}
+                        height={ROW_H - 4}
+                        fill="rgba(232,181,74,0.10)"
+                        stroke="rgba(232,181,74,0.35)"
+                        strokeWidth={1}
+                        pointerEvents="none"
+                      />
+                    )}
+                    <LaneRow
+                      lane={{ ...lane, color: laneColor(lane, P) }}
+                      beatToX={beatToX}
+                      stepBeats={grid.stepBeats}
+                      stepW={stepW}
+                      stepCount={stepCount}
+                      stepsPerBar={grid.stepsPerBar}
+                      top={TOP + li * ROW_H}
+                      rowH={ROW_H}
+                      peak={peakFor(li)}
+                      offGrid={laneData[li].offGrid}
+                      marks={laneMarks[li]}
+                      gesture={gesture?.get(lane.key as DrumLaneId)}
+                      P={P}
+                    />
+                  </g>
+                );
+              })}
+
+              {velDrag && velDrag.moved && (
+                <g pointerEvents="none">
+                  <rect x={velDrag.x + 14} y={velDrag.y - 46} width={72} height={32} rx={5} fill="rgba(11,13,17,0.95)" stroke={P.track} strokeOpacity={0.6} />
+                  <text x={velDrag.x + 50} y={velDrag.y - 31} textAnchor="middle" fontSize={13} fontWeight={600} fontFamily="'IBM Plex Mono', monospace" fill={P.track}>
+                    {PARAM_SPECS[velDrag.param].format(velDrag.value, grid.stepBeats, velDrag.laneKey)}
+                  </text>
+                  <text x={velDrag.x + 50} y={velDrag.y - 20} textAnchor="middle" fontSize={7.5} fontFamily="'IBM Plex Mono', monospace" fill={P.label}>
+                    {PARAM_SPECS[velDrag.param].short}
+                  </text>
+                </g>
+              )}
             </svg>
+
+            <LaneGutter
+              height={HEIGHT}
+              width={GUTTER}
+              top={TOP}
+              rowH={ROW_H}
+              stepSel={stepSel}
+              fxSel={fxSel}
+              fxValues={fxValues}
+              fxPreview={fxPreview}
+              selectedLanes={new Set(sel?.lanes ?? [])}
+              onLaneClick={(laneKey) => selectLane(laneKey as DrumLaneId)}
+              onStepSel={(laneKey, param) => {
+                setStepSel((m) => { const next = { ...m, [laneKey]: param }; saveJson("trackdraft-drums-step-sel", next); return next; });
+              }}
+              onFxSel={(laneKey, id) => {
+                setFxSel((m) => { const next = { ...m, [laneKey]: id }; saveJson("trackdraft-drums-fx-sel", next); return next; });
+              }}
+              silentLanes={silentLanes}
+              mutedLanes={mutedLanes}
+              soloedLanes={soloedLanes}
+              onMute={(laneKey) => toggleLaneFlag("drumLaneMute", laneKey)}
+              onSolo={(laneKey) => toggleLaneFlag("drumLaneSolo", laneKey)}
+              ccs={(section.drumLaneCc ?? {}) as Record<string, { cc: number; from: number; to: number } | undefined>}
+              onCcSet={(laneKey, spec) => setLaneCc(laneKey, spec)}
+              onFxPreview={setFxPreview}
+              onFxCommit={(laneKey, next) => { setFxPreview(null); commitLaneFx(laneKey, next); }}
+            />
           </div>
-        </div>
         </div>
       </div>
 
-      {/* the exploded selection editor — opened from the pad's ⤢ chip; the
-          docked workbench (right) is the everyday control surface */}
-      {editorOpen && range && anchorSpan && selectionSection && (
+      {editorOpen && rangeForModal && (
         <SelectionEditorModal
           span={anchorSpan}
-          section={selectionSection}
-          range={range}
-          hits={hitsForSpan(anchorSpan)}
+          section={section}
+          range={rangeForModal}
+          hits={hits ?? new Map()}
           spans={spans}
-          stepBeats={gridStepForZoom(zoom)}
-          hasDraft={!!draftSection}
+          stepBeats={grid.stepBeats}
+          hasDraft={hasDraft}
           onWrite={(mutate) => writeSection(anchorSpan.section.id, anchorSpan.section, mutate)}
-          onVelocityOp={(op) => applyVelocityOp(anchorSpan, range, op)}
-          onFlatten={() => flattenSelection(anchorSpan, range)}
+          onVelocityOp={applyVelocityOp}
+          onFlatten={flattenSelection}
           onRegenerate={regenerate ? regenerateVariant : null}
           onApply={applyDraft}
           onCancel={revertDraft}
           onClose={() => setEditorOpen(false)}
-        />
-      )}
-      </div>
-
-      {/* the selection-scoped working area — comes up WITH a selection and
-          goes away with it (Apply/Cancel/plain click). The pad's ⤢ opens
-          the exploded modal version of the same controls. */}
-      {range && anchorSpan && (
-        <SelectionWorkbench
-          span={anchorSpan}
-          section={selectionSection}
-          range={range}
-          onWrite={(mutate) => writeSection(anchorSpan.section.id, anchorSpan.section, mutate)}
-          onVelocityOp={(op) => applyVelocityOp(anchorSpan, range, op)}
-          onFlatten={() => flattenSelection(anchorSpan, range)}
-          onRegenerate={regenerate ? regenerateVariant : null}
-          hasDraft={!!draftSection}
-          onApply={applyDraft}
-          onCancel={revertDraft}
         />
       )}
     </div>

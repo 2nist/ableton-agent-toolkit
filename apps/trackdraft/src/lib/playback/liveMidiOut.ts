@@ -1,5 +1,5 @@
 import { sectionSpans } from "../arrangement";
-import { planChordStem, planBassStem, planDrumStem, type MidiNote } from "../midiExport";
+import { planChordStem, planBassStem, planDrumStem, planDrumCcStem, type MidiNote } from "../midiExport";
 import { planColorStem } from "../colorStem";
 import { planMelodyStem } from "../melody/melodyStem";
 import { LIVE_ROUTING, clampChannel, type StemId, type StemRoutingMap } from "../stems";
@@ -96,6 +96,14 @@ const ALL_NOTES_OFF_CC = 123;
  *  wrap, a jump — move at least a beat and still rebase. */
 const SEEK_TOLERANCE_BEATS = 0.5;
 
+interface ScheduledCc {
+  beat: number;
+  cc: number;
+  value: number;
+  /** 1-based stem channel. */
+  channel: number;
+}
+
 interface ScheduledNote {
   note: MidiNote;
   channel: number; // 1-based
@@ -170,6 +178,8 @@ class LiveMidiScheduler {
   private output: MIDIOutput | null = null;
   private routing: StemRoutingMap = DEFAULT_LIVE_MIDI_CHANNELS;
   private notes: ScheduledNote[] = [];
+  /** Per-lane controller automation, already flattened to absolute beats. */
+  private ccs: ScheduledCc[] = [];
   private clock: SchedulerClock | null = null;
   /** True when `clock` is external (Ableton) — the master owns the window,
    *  its loop, and when the schedule ends. */
@@ -242,6 +252,16 @@ class LiveMidiScheduler {
     ];
     scheduled.sort((a, b) => a.note.startTime - b.note.startTime);
     this.notes = scheduled;
+    // Per-lane CC — same beat frame as the notes (output offset included), on
+    // the drums channel. Built by the shared `planDrumCcStem`, so the .mid and
+    // this stream send identical messages.
+    const drumsChannel = clampChannel(routing.drums.channel);
+    this.ccs = planDrumCcStem(spans, song).map((c) => ({
+      beat: outputOffset === 0 ? c.beat : Math.max(0, c.beat + outputOffset),
+      cc: c.cc,
+      value: c.value,
+      channel: drumsChannel,
+    }));
     this.lastNoteStart = scheduled.length ? scheduled[scheduled.length - 1].note.startTime : 0;
 
     this.secPerBeat = 60 / song.bpm;
@@ -322,6 +342,10 @@ class LiveMidiScheduler {
       const at = this.windowedStart(note.startTime, from, windowEndBeats);
       if (at !== null) this.send(note, channel, at);
     }
+    for (const c of this.ccs) {
+      const at = this.windowedStart(c.beat, from, windowEndBeats);
+      if (at !== null) this.sendCc(c, at);
+    }
     this.lastScheduledElapsed = windowEndBeats;
 
     // Nothing left to schedule and the last note-off has already been
@@ -372,6 +396,17 @@ class LiveMidiScheduler {
 
     this.output.send([0x90 | ch, pitch, velocity], onAtMs);
     this.output.send([0x80 | ch, pitch, 0], offAtMs);
+  }
+
+  private sendCc(c: ScheduledCc, atBeat: number): void {
+    if (!this.output || !this.clock) return;
+    const at = this.clock.timeAt(atBeat);
+    if (at === null) return;
+    const ch = Math.max(0, Math.min(15, c.channel - 1));
+    this.output.send(
+      [0xb0 | ch, Math.max(0, Math.min(127, Math.round(c.cc))), Math.max(0, Math.min(127, Math.round(c.value)))],
+      at + this.latencyMs,
+    );
   }
 
   private stopPolling(): void {
@@ -430,6 +465,7 @@ class LiveMidiScheduler {
     this.held = false;
     this.output = null;
     this.notes = [];
+    this.ccs = [];
     this.startBeat = 0;
     this.loopStart = null;
     this.loopEnd = null;

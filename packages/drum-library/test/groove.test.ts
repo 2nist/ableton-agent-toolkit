@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyGroove, extractGroove } from "../src/groove.js";
+import { applyGroove, drumPocket, extractGroove, glueToPocket, pocketSummary } from "../src/groove.js";
 import type { DrumNote } from "../src/types.js";
 
 describe("extractGroove", () => {
@@ -90,5 +90,57 @@ describe("applyGroove", () => {
     const stab: DrumNote[] = [{ beat: 0, pitch: 40, velocity: 80 }];
     expect(applyGroove(stab, groove)[0].velocity).toBeGreaterThan(80);
     expect(applyGroove(stab, groove, { applyVelocity: false })[0].velocity).toBe(80);
+  });
+});
+
+describe("groove-as-glue — the pocket imposed on other parts", () => {
+  // A four-on-the-floor kick that drags 18 ms late on every beat, plus a
+  // hot off-beat hat — a pocket you can hear.
+  const drums = [
+    { beat: 0, velocity: 110 },
+    { beat: 0.5, velocity: 70 },
+    { beat: 1, velocity: 110 },
+    { beat: 1.5, velocity: 70 },
+  ];
+
+  it("measures a one-bar pocket at 16ths", () => {
+    const pocket = drumPocket(drums, 4);
+    expect(pocket.lengthBeats).toBe(4);
+    expect(pocket.grid).toBe(0.25);
+    expect(pocket.points.map((p) => p.gridBeat)).toEqual([0, 0.5, 1, 1.5]);
+  });
+
+  it("moves grid notes onto the drums' slot and keeps pitch + duration", () => {
+    const pocket = drumPocket([{ beat: 0, velocity: 110 }, { beat: 0.5, velocity: 60 }], 4);
+    const bass = [{ startTime: 0, duration: 1, velocity: 100, pitch: 36 }];
+    const glued = glueToPocket(bass, pocket, { strength: 1 });
+    // both drum slots sit on the grid here, so the note does not move…
+    expect(glued[0].startTime).toBeCloseTo(0, 6);
+    // …but its velocity takes the slot's emphasis (110 vs the 85 mean)
+    expect(glued[0].velocity).toBeGreaterThan(100);
+    expect(glued[0].duration).toBe(1);
+    expect(glued[0].pitch).toBe(36);
+  });
+
+  it("is a no-op at strength 0 and leaves unplayed slots alone", () => {
+    const pocket = drumPocket(drums, 4);
+    const bass = [{ startTime: 0.25, duration: 0.5, velocity: 90 }];
+    expect(glueToPocket(bass, pocket, { strength: 0 })[0].startTime).toBe(0.25);
+    // 0.25 is not a slot the drums play → untouched
+    expect(glueToPocket(bass, pocket, { strength: 1 })[0].startTime).toBe(0.25);
+  });
+
+  it("never pushes a note before the section start", () => {
+    const pocket = drumPocket([{ beat: 0, velocity: 100 }], 4);
+    const late = [{ startTime: 0.6, duration: 0.4, velocity: 100 }];
+    const glued = glueToPocket(late, pocket, { strength: 1 });
+    expect(glued[0].startTime).toBeGreaterThanOrEqual(0);
+  });
+
+  it("summarises the pocket for the UI", () => {
+    const pocket = drumPocket(drums, 4);
+    const s = pocketSummary(pocket);
+    expect(s.slots).toBe(4);
+    expect(Number.isFinite(s.meanOffsetMs)).toBe(true);
   });
 });

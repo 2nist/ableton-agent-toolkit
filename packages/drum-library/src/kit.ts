@@ -9,12 +9,24 @@
  * missing one, so the choices are made visible rather than trusted.
  */
 
-/** The voices we render. Several GM notes can collapse onto one of these. */
+/**
+ * The voices we render. Several GM notes can collapse onto one of these.
+ *
+ * ADDING A VOICE — every table that has to agree, in order (tsc catches the
+ * exhaustive `Record<KitVoice, …>` ones; `test/kit.voices.test.ts` catches
+ * the rest):
+ *   1. this union            5. `voiceStyle.ts` (family · label · order)
+ *   2. `GM_TO_VOICE`         6. `song-blueprint`'s `DrumVoiceName`
+ *   3. `KIT_PITCHES`         7. `DRUM_LANE_VOICES` (which lane owns it)
+ *   4. `VOICE_PATTERNS` + `VOICE_FALLBACKS` (sample matching / substitution)
+ */
 export type KitVoice =
   | "kick"
   | "snare"
   | "rim"
   | "clap"
+  | "shaker"
+  | "cowbell"
   | "closedHat"
   | "openHat"
   | "pedalHat"
@@ -42,7 +54,12 @@ const GM_TO_VOICE: Record<number, KitVoice> = {
   44: "pedalHat",
   45: "tomMid",
   46: "openHat",
-  47: "tomMid",
+  // NOTE: General MIDI calls 47 "Hi-Mid Tom" and puts the high tom at 48/50,
+  // but OUR kit exports TOM HI on 47 (`ABLETON_SAFE_NOTES.tomHigh`). The
+  // reverse map follows the kit, not the spec — otherwise an authored TOM HI
+  // reads back as TOM MID and a resolved hit re-authored by an edit silently
+  // changes voice. Pinned by test/kit.voices.test.ts.
+  47: "tomHigh",
   48: "tomHigh",
   49: "crash",
   50: "tomHigh",
@@ -54,6 +71,8 @@ const GM_TO_VOICE: Record<number, KitVoice> = {
   59: "ride",
   22: "closedHat",
   26: "openHat",
+  56: "cowbell",
+  82: "shaker",
 };
 
 export function voiceOf(pitch: number): KitVoice | null {
@@ -68,6 +87,8 @@ export function voiceOf(pitch: number): KitVoice | null {
  */
 const VOICE_PATTERNS: [KitVoice, RegExp[]][] = [
   ["clap", [/clap/, /\bcp\b/, /handclap/]],
+  ["cowbell", [/cow.?bell/, /\bcb\b/, /cowb/]],
+  ["shaker", [/shaker/, /\bsh\d/, /\bshk/, /\bsh\b/, /tambourine/, /\btamb\b/]],
   ["rideBell", [/bell/, /\bcy2\b/]],
   ["crash", [/crash/, /\bcr\d/, /\bcym/, /\bcy\b/]],
   ["ride", [/ride/, /\brd\b/, /\brid/]],
@@ -153,6 +174,8 @@ export const VOICE_FALLBACKS: Partial<Record<KitVoice, KitVoice[]>> = {
   crash: ["openHat", "closedHat"],
   rim: ["snare"],
   clap: ["snare"],
+  shaker: ["closedHat", "clap"],
+  cowbell: ["rim", "clap"],
   tomMid: ["tomLow", "tomHigh"],
   tomHigh: ["tomMid", "tomLow"],
   tomLow: ["tomMid", "tomHigh"],

@@ -42,7 +42,7 @@ export type DrumLaneId = "kick" | "snare" | "rim" | "hat" | "cym" | "tom";
 export const DRUM_LANE_VOICES: Record<DrumLaneId, KitVoice[]> = {
   kick: ["kick"],
   snare: ["snare"],
-  rim: ["rim", "clap"],
+  rim: ["rim", "clap", "shaker", "cowbell"],
   hat: ["closedHat", "openHat", "pedalHat"],
   cym: ["crash", "ride", "rideBell"],
   tom: ["tomLow", "tomMid", "tomHigh"],

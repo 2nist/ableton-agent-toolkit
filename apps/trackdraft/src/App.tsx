@@ -8,7 +8,7 @@ import SongEditorLayout from "./components/layout/SongEditorLayout";
 import StudioView from "./components/studio/StudioView";
 import StructureView from "./components/structure/StructureView";
 import HarmonyView from "./components/harmony/HarmonyView";
-import DrumsView from "./components/drums/DrumsView";
+import DrumsTab from "./components/drums/DrumsTab";
 import LyricsView from "./components/lyrics/LyricsView";
 import MelodyView from "./components/melody/MelodyView";
 import WorkbenchView from "./components/workspace/WorkbenchView";
@@ -68,7 +68,7 @@ function App() {
             <Route path="studio" element={<StudioView />} />
             <Route path="structure" element={<StructureView />} />
             <Route path="harmony" element={<HarmonyView />} />
-            <Route path="drums" element={<DrumsView />} />
+            <Route path="drums" element={<DrumsTab />} />
             <Route path="lyrics" element={<LyricsView />} />
             <Route path="melody" element={<MelodyView />} />
             <Route path="workbench" element={<WorkbenchView />} />

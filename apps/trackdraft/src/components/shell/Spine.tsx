@@ -8,6 +8,7 @@ import type { NoteName } from "@music-theory/core";
 import { resolveChordOccurrences } from "@drum/library";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import IconBtn from "../common/IconBtn";
+import ImportAnalysisButton from "../drums/ImportAnalysisButton";
 import ThemeToggle from "../common/ThemeToggle";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
@@ -688,6 +689,8 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           }}
           icon="plus"
         />
+        <span className="w-px h-3.5 bg-edge/80 mx-1" />
+        <ImportAnalysisButton />
         <span className="flex-1" />
         <IconBtn title={`Zoom out — fewer pixels per bar (now ${barPx}px)`} onClick={() => stepZoom(-1)} icon="minus" />
         <IconBtn title={`Zoom in — more pixels per bar (now ${barPx}px)`} onClick={() => stepZoom(1)} icon="plus" />
@@ -1129,7 +1132,10 @@ function SpineBlock({
           <span key={d.label} className={`flex-1 ${d.present ? "bg-current opacity-60" : "bg-current opacity-15"}`} />
         ))}
       </span>
-      <span className="hand-value hand-value--tight w-full truncate px-1.5 text-[10px] leading-tight font-medium">
+      {/* Section title — 50% up (2026-10-24). The pen themes pin their own
+          size in themes.css (`.hand-value--tight`), so this utility is the
+          dark theme's half of the same decision. */}
+      <span className="hand-value hand-value--tight w-full truncate px-1.5 text-[15px] leading-tight font-medium">
         {showName ? span.section.name : ""}
         {showName && span.variation ? <span className="opacity-60"> ({span.variation})</span> : null}
       </span>

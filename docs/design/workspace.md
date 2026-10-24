@@ -240,8 +240,10 @@ those controls go and then I will stick with it"):
 **Slice B shipped 2026-09-21 — the dock is dead, long live the inspector:**
 `InspectorRail` is mounted by `SongEditorLayout` on EVERY song route (six
 facets: ≣ structure · ▦ drums · ♪ harmony · ✎ lyrics · ◉ mix · ⓘ song),
-auto-opens on any section-selection change, collapses to a 36px strip, and
-`dockStore.ts` is deleted from the codebase. Wide surfaces went back to
+auto-opens on any section-selection change, collapses to a 36px strip (**as
+of 2026-10-24 that strip shows the same facets as glyphs, so the collapsed
+rail says what it does — see §10**), and `dockStore.ts` is deleted from the
+codebase. Wide surfaces went back to
 their canvases: **Harmony's progression + effect lanes now sit under the
 hex wheel** (the dock's Menu panel is gone). Lyrics *mode* (per-section /
 song-text) moved into `lyricsSelectionStore`; the ✎ facet shows the tools
@@ -697,3 +699,170 @@ jump-open included); the karaoke popout is untouched.
 
 Infinite freeform canvas (the ladder beat it — time stays the axis); in-place
 editor embedding before P3; no tab removal until its home is live.
+
+## 10. Chrome trim (2026-10-24)
+
+Three lanes were carrying nothing the next one down didn't already say.
+
+- **The Drums view has one surface.** "Classic is read only, Steps is
+  obsolete, Blocks is THE view" — so `/song/:id/drums` renders
+  `DrumsTab` → `DrumBlocksView` and the Classic/Steps/Blocks switcher row
+  (plus the `trackdraft-drums-view` preference) is gone. The Classic
+  renderer survives *only* as the Workbench's embedded Drum Line
+  (`<DrumsView embedded />`); `steps/DrumStepsView.tsx` is deleted.
+- **⤓ Import analysis moved to the spine strip**, next to ＋ Add section.
+  It is section-scoped like every other control there (it stages a draft for
+  the *selected* section, Apply keeps / Revert discards), and its result
+  reports inline in the strip — success summary or the exact parse error,
+  click to dismiss. `ImportAnalysisButton` is the one implementation.
+- **Both rails start minimized.** `NavRail` (36px glyph strip, current view
+  lit) and `InspectorRail` (36px, facets as glyphs; clicking one opens the
+  rail *on* that facet). The old "slides open on every section selection"
+  rule is gone: it made "minimized by default" impossible to keep, and the
+  glyph strip already says what it does. Opening is now a facet click or an
+  explicit `engage(tab)` from a surface that means "edit this now" (spine
+  chord → ♪, workbench drums row → ▦, melody generator → ◉).
+
+## 11. Groove as glue (2026-10-23)
+
+The pocket machinery had been in `@drum/library` since the corpus landed —
+`extractGroove` / `applyGroove` — but only ever ran *inside* the drum
+pipeline (`humanizeOutlineNotes`). The bass and the harmony were planned on
+the grid while the drums sat behind it, and the euclidean-harmony lock lived
+only in the Harmony inspector. Both are now one visible control on the drum
+surface.
+
+- **Engine seam** (`packages/drum-library/src/groove.ts`): `drumPocket()`
+  measures a section's one-bar pocket from the notes that will actually play;
+  `glueToPocket()` imposes it on any part's notes (time and velocity move;
+  pitch and duration survive; unplayed slots are left alone);
+  `pocketSummary()` turns a pocket into the "−4 ms behind · 18 slots played"
+  line.
+- **Schema**: `BlueprintSection.grooveGlue?: { bass?, chords?, strength? }`.
+  Absent ⇒ byte-identical to the pre-glue pipeline.
+- **Both exporters glue with the same two calls** — the app's `midiExport`
+  (which the live MIDI out reuses) and the bridge's `chordClips`/`bassLine`
+  via `glue.ts` — over the same shared drum planner, so preview ≡ .mid ≡
+  live-out ≡ Ableton by construction. Five tests in the app pin the note
+  moves through the real planners; five more pin the engine seam.
+- **The control**: a `⛓ GLUE` chip in the Blocks header. It shows the pocket
+  readout live, then three clickable decisions — *put the bass in it*, *put
+  the chords in it*, *strength* — plus the harmony rhythm (`BEATS · EUCLID ·
+  DRUMS`), which is the euclidean-harmony lock surfaced where you can hear
+  the drums you are locking to.
+
+Honest caveat, and the reason the readout matters: most synthesized presets
+are exactly quantized (mean offset 0 ms), so glue is a no-op there and the
+chip says "on the grid". It bites on the corpus presets (54/68/trap), on any
+section whose Bend *feel* is off-centre, and on outline sections — which is
+precisely where the parts used to fight the drums.
+
+## 12. Lane mute / solo (2026-10-23)
+
+The drum surface had no mixer state at all. Now each of the six lanes carries
+**M** and **S** in the gutter, and — because the filter runs inside the
+shared `planSectionDrumNotes` — a muted lane leaves the preview, the `.mid`,
+the live MIDI out AND the Ableton clips together.
+
+- **Schema**: `drumLaneMute[]` / `drumLaneSolo[]` on the section (lane keys,
+  not voices — the lane is what you see).
+- **Engine**: `audibleLanes(mute, solo)` is the single rule (any solo ⇒ only
+  soloed lanes; a muted lane stays silent even when soloed), and the planner
+  drops the notes by pitch → lane. Both exporters pass the section's fields
+  into it, so there is no second implementation to drift.
+- **Canvas**: `resolveSectionLaneHits` applies the same `audibleLanes` set,
+  so a dimmed row is a row the export drops — the cells actually empty out
+  rather than merely greying. Tests: 4 in the library (rule + planner, both
+  the variant and blocks-only paths), 3 in the app (through `planDrumStem`).
+
+## 13. Per-lane MIDI CC (2026-10-23)
+
+Each lane can carry one controller, ramped across the section — hat openness
+(CC4), filter cutoff (CC74), expression (CC11), volume (CC7), anything.
+
+- **Schema**: `drumLaneCc?: Partial<Record<DrumLaneKey, { cc, from, to }>>`.
+  `from === to` means a static device setting (one message at the section
+  start); otherwise the value ramps, `perBar` messages per bar.
+- **Engine**: `planLaneCc` in `@drum/library/src/cc.ts`. Pure and
+  deterministic, and it skips muted / un-soloed lanes with the SAME
+  `audibleLanes` set the notes use (now a shared module, `lanes.ts`, so
+  there is exactly one mute/solo rule in the package).
+- **Carriers**: the `.mid` (CC events on the drum track, moved by
+  `outputOffsetBeats` like the notes) and the live MIDI out (scheduled by the
+  same clock window as notes, on the drums channel). Tests: 6 in the library,
+  4 in the app — the last one scans the written SMF bytes for `0xB0|ch`.
+- **Known divergence, documented in the schema field**: the Ableton
+  Extensions SDK exposes no clip-envelope API, so "Send to Ableton" sends
+  notes only. The CC lines arrive when the `.mid` is imported into Live.
+- **UI**: a `CC` chip beside M/S in each lane gutter (lit + tooltip
+  `CC4 · 0→90` when set) opening a small panel: controller number (with a
+  name hint: foot/hat, volume, expression, cutoff…), FROM, TO, SET, CLEAR.
+
+## 14. Two more kit voices (2026-10-24)
+
+The kit grew from 13 voices to 15: **shaker** (GM 82) and **cowbell** (GM 56),
+both in the PERC lane — which is what makes the VOICE step parameter earn its
+place (PERC now cycles rim → clap → shaker → cowbell).
+
+Adding a voice touches seven tables, and `kit.ts` lists them at the union.
+Two of them are exhaustive `Record<KitVoice, …>`, so the compiler catches
+those; the arrays and the pitch map are now pinned by
+`packages/drum-library/test/kit.voices.test.ts`:
+
+- every voice belongs to exactly one lane
+- every voice has a pitch and `voiceOf(pitch)` reads back as that voice
+- no two voices share a pitch
+- every fallback points at a voice that exists
+
+That test immediately caught a **pre-existing** bug: our TOM HI exports on
+pitch 47 (`ABLETON_SAFE_NOTES.tomHigh`), but the General MIDI reverse map
+called 47 "tomMid" — so an authored TOM HI read back as TOM MID, and any
+edit that re-authored a *resolved* hit silently changed the voice. The
+reverse map now follows the kit, not the spec (documented at the entry).
+
+## 15. Gesture layer — drawing the detour (2026-10-24)
+
+The last truth gap in the Drums surface: the marker rail announced a detour or
+transition, but the cells went on drawing the base groove. A handoff fill or a
+detour is *not* an addition — a sparse detour in a 4-bar section plays 4 notes
+where the grid draws 24 — so "ghosts on top" would have claimed 24 hits were
+sounding. The layer is therefore a **window override**, drawn as two deltas in
+the gesture's window only:
+
+- **ghosts** — `planned − resolved`: what will play that the grid can't show,
+  drawn as a bar at the hit's real velocity. Solid in lane colour when the
+  gesture is the user's (authored detour / authored transition), dashed in ink
+  when the planner chose it (auto transition, handoff fill).
+- **strikes** — `resolved − planned`: a diagonal across the base hits the
+  gesture takes over, so a cell that will not sound never looks like it will.
+
+`gestureLayer.ts` derives both from the planners the app and the bridge already
+share (`planDrumStem` / `resolveSectionLaneHits`), so it cannot invent a rhythm
+neither of them plays.
+
+Two traps, both found in the browser rather than in a test:
+
+- **Windows, not the whole section.** The export carries the corpus's seeded
+  micro-variation (~1/32 beat) while the canvas deliberately draws a plain
+  tiling, so a beat-for-beat diff struck almost every cell in a section whose
+  rail said "clean handoff". The diff is now restricted to the same windows the
+  marker rail draws, and matched with `TOL = 0.08` beats.
+- **The cache must be content-addressed.** Keyed on the section object it
+  served the pre-edit `null` for the whole preview, so a freshly authored
+  detour showed its rail chip and nothing in the lanes. The key is now
+  `WeakMap<song>` → signature of every field that can move the window or the
+  plan (pattern, variation start/bars/outline, transition model/bars, mute,
+  solo). `useMemo` in the view is not enough on its own: `spans` is rebuilt on
+  every render.
+
+The plan is also fed the **preview draft** (`effectiveSection`), the same
+overlay the rail uses — otherwise the rail shows a detour the lanes refuse to
+explain. Cost is ~6 ms per section, paid once per edit and never mid-drag (a
+velocity drag writes nothing until release).
+
+Silent lanes are dropped from both sides: the canvas already dims a muted lane
+and the planner drops its hits, so every cell would read as "taken over".
+
+Deliberately **not** shown: velocity changes the gesture makes to hits that
+survive it. The owner chose the plain override reading; a finer layer can be
+added later without moving the data.

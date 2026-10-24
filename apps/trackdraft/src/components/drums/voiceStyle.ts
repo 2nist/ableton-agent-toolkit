@@ -17,6 +17,8 @@ const VOICE_FAMILY: Record<KitVoice, keyof VoiceColors> = {
   snare: "snare",
   rim: "rim",
   clap: "cym",
+  shaker: "rim",
+  cowbell: "rim",
   closedHat: "hat",
   openHat: "hat",
   pedalHat: "hat",
@@ -45,6 +47,7 @@ export function useVoiceColors(): Record<KitVoice, string> {
 
 export const VOICE_LABEL: Record<KitVoice, string> = {
   kick: "KICK", snare: "SNR", rim: "RIM", clap: "CLAP",
+  shaker: "SHAKER", cowbell: "COWBELL",
   closedHat: "C.HAT", openHat: "O.HAT", pedalHat: "P.HAT",
   ride: "RIDE", rideBell: "BELL", crash: "CRASH",
   tomLow: "TOM LO", tomMid: "TOM MID", tomHigh: "TOM HI",
@@ -54,7 +57,7 @@ export const VOICE_LABEL: Record<KitVoice, string> = {
  *  voices first, so a song using only kick/snare/hat doesn't scatter
  *  them across an otherwise-empty tall stack. */
 export const VOICE_ORDER: KitVoice[] = [
-  "kick", "snare", "rim", "clap",
+  "kick", "snare", "rim", "clap", "shaker", "cowbell",
   "closedHat", "openHat", "pedalHat",
   "tomLow", "tomMid", "tomHigh",
   "ride", "rideBell", "crash",

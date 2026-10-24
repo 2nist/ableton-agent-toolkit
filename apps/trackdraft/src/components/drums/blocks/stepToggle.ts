@@ -48,16 +48,32 @@ export function stepToggleBlock({
   const inRange = laneHits.filter((h) => h.beat >= start - 1e-9 && h.beat < end - 1e-9);
   const hasHit = inRange.some((h) => Math.abs(h.beat - beat) < tol);
 
-  const notes: DrumBlockNote[] = [];
-  for (const h of inRange) {
-    if (Math.abs(h.beat - beat) < tol) continue;
-    notes.push({ beat: round4(h.beat - start), voice: h.voice as DrumVoiceName, velocity: h.velocity });
-  }
-  if (!hasHit) {
+  const newHit = (): DrumBlockNote => {
     const avg = inRange.length > 0
       ? Math.round(inRange.reduce((sum, h) => sum + h.velocity, 0) / inRange.length)
       : 100;
-    notes.push({ beat: round4(beat - start), voice: DRUM_LANE_PRIMARY[laneKey] as DrumVoiceName, velocity: avg });
+    return { beat: round4(beat - start), voice: DRUM_LANE_PRIMARY[laneKey] as DrumVoiceName, velocity: avg };
+  };
+
+  // An authored block is edited NOTE-WISE, not rebuilt from the compiled
+  // hits. Rebuilding used to bake every step parameter into plain notes the
+  // first time you toggled anything in the block — a ratchet became two
+  // hits, a flam became a grace note at a fixed offset, a probability was
+  // resolved for good — so "toggle one cell" silently flattened the rest.
+  let notes: DrumBlockNote[];
+  if (existing && existing.notes && existing.notes.length > 0) {
+    const authored = existing.notes;
+    const rest = authored
+      .filter((n) => Math.abs(start + n.beat - beat) >= tol)
+      .map((n) => ({ ...n }));
+    notes = hasHit ? rest : [...rest, newHit()];
+  } else {
+    notes = [];
+    for (const h of inRange) {
+      if (Math.abs(h.beat - beat) < tol) continue;
+      notes.push({ beat: round4(h.beat - start), voice: h.voice as DrumVoiceName, velocity: h.velocity });
+    }
+    if (!hasHit) notes.push(newHit());
   }
 
   return {

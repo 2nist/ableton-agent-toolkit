@@ -33,7 +33,9 @@ const VIEWS: { to: string; label: string; icon: IconName; divider?: boolean }[] 
  * current view lit — you never lose where you are.
  */
 export default function NavRail() {
-  const [open, setOpen] = useState(true);
+  // Minimized by default (user decision 2026-10-24): the canvas gets the
+  // width, and the glyph strip still says exactly where you are.
+  const [open, setOpen] = useState(false);
 
   return (
     <aside className={`shrink-0 border-r border-edge bg-panel flex flex-col min-h-0 ${open ? "w-32" : "w-9"}`} aria-label="Views">

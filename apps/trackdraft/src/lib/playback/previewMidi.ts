@@ -22,6 +22,7 @@ import {
   type PlannedChordNote,
 } from "@music-theory/core";
 import { generateBiTonal, BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR, type BiTonalChord } from "@platform/progression-engine";
+import { KIT_PITCHES, type KitVoice } from "@drum/library";
 import { getMidiOutput } from "./liveMidiOut";
 import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 
@@ -220,4 +221,25 @@ export async function previewProgression(
       scheduleBlock(colorCtx, [n.pitch], n.startTime * beatMs, Math.max(150, n.duration * beatMs), 80);
     }
   }
+}
+
+/** Audition ONE drum hit — the click feedback while programming a lane.
+ *  Same port as the live out, on the drums channel, at the kit pitch the
+ *  export uses (`KIT_PITCHES`), so what you click is what the clip plays.
+ *  Silently no-ops without a MIDI port, like every other preview here. */
+export async function auditionDrumHit(
+  voice: KitVoice,
+  velocity = 96,
+  durationMs = 140,
+): Promise<void> {
+  const { midiOutputId, routing } = useMidiSettingsStore.getState();
+  if (!midiOutputId) return;
+  const pitch = KIT_PITCHES[voice];
+  if (pitch === undefined) return;
+  const output = await getMidiOutput(midiOutputId);
+  if (!output) return;
+  const ch = Math.max(0, Math.min(15, (routing.drums?.channel ?? 1) - 1));
+  const now = performance.now() + 5;
+  output.send([0x90 | ch, pitch & 0x7f, Math.max(1, Math.min(127, Math.round(velocity)))], now);
+  output.send([0x80 | ch, pitch & 0x7f, 0], now + Math.max(20, durationMs));
 }

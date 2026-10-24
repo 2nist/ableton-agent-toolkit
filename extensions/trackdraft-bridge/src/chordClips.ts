@@ -7,6 +7,8 @@ import {
 } from "@music-theory/core";
 import type { NoteDescription } from "@ableton-extensions/sdk";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
+import { planDrumClips } from "./drumClips.js";
+import { glueSectionNotes } from "./glue.js";
 import {
   narrativeHarmonySection,
   resolveChordOccurrences,
@@ -39,7 +41,10 @@ const DEFAULT_VELOCITY = 96;
  * effect is applied via @music-theory/core's shared applyPerformanceEffect.
  */
 export function planChordClips(song: BlueprintSong, octave: number = DEFAULT_OCTAVE): ChordClipPlan[] {
-  return sectionSpans(song).map(({ section, startBeat, durationBeats }) => {
+  // The drum clips are already the section's pocket source; computing them
+  // once here keeps the glue aligned with what the drum clips will play.
+  const drums = planDrumClips(song);
+  return sectionSpans(song).map(({ section, startBeat, durationBeats }, i) => {
     const profile = resolveEffectiveStyle(section, song);
     const narrative = resolveNarrativeProfile(section, song);
     // structural_warp: re-grid the harmony onto an asymmetric 2s/3s outline
@@ -75,6 +80,11 @@ export function planChordClips(song: BlueprintSong, octave: number = DEFAULT_OCT
 
       notes.push(...chordNotes);
     }
-    return { name: section.name, startBeat, durationBeats, notes };
+    return {
+      name: section.name,
+      startBeat,
+      durationBeats,
+      notes: glueSectionNotes(notes, section, drums[i]?.notes ?? [], "chords"),
+    };
   });
 }

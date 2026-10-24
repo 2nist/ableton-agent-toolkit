@@ -19,7 +19,7 @@ import { chordToMidiNotes, getChordIntervals, pitchClass, planChordNotes, voiceC
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
 import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
-import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, applyStyleToVariant, resolveEffectiveStyle, resolveNarrativeProfile, narrativeHarmonySection, narrativeTransitionModel, styleArticulation, styleQualityFor, styleSpacing, styleVelocityTarget, type SectionDrumInput } from "@drum/library";
+import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, applyStyleToVariant, resolveEffectiveStyle, resolveNarrativeProfile, narrativeHarmonySection, narrativeTransitionModel, styleArticulation, styleQualityFor, styleSpacing, styleVelocityTarget, drumPocket, glueToPocket, planLaneCc, type GrooveMap, type SectionDrumInput } from "@drum/library";
 import { planColorStem } from "./colorStem";
 import { planMelodyStem } from "./melody/melodyStem";
 import { GM_ROUTING, STEM_LABELS, clampChannel, clampProgram, type StemId, type StemRoutingMap } from "./stems";
@@ -74,9 +74,46 @@ const GM_DRUM_PITCHES = new Set([36, 37, 38, 39, 41, 42, 44, 45, 46, 47, 49, 51,
 
 /** Chord notes for one section — block chords with performance effects.
  *  Honors the Bend harmony axis (voicing extension) and density (spacing). */
+/**
+ * GROOVE-AS-GLUE, export side: the section's drum pocket, measured from the
+ * notes `planDrumStem` will actually play (blocks, fills, detours, Bend all
+ * included) — so the bass and the harmony lock to the drums you HEAR, not to
+ * the pattern the section nominally chose. Null when nothing is glued, which
+ * keeps every un-glued song byte-identical to before.
+ */
+function sectionPocket(span: SectionSpan, song?: BlueprintSong): GrooveMap | null {
+  if (!span.section.grooveGlue) return null;
+  const drums = planDrumStem([span], song);
+  if (drums.length === 0) return null;
+  return drumPocket(
+    drums.map((n) => ({ beat: n.startTime - span.startBeat, velocity: n.velocity })),
+    beatsPerBar(span.section),
+  );
+}
+
+/** Impose a section's pocket on its own part's notes (absolute times in,
+ *  absolute times out) — the shape both the chord and the bass stem use. */
+function glueSpanNotes(
+  notes: MidiNote[],
+  span: SectionSpan,
+  song: BlueprintSong | undefined,
+  target: "bass" | "chords",
+): MidiNote[] {
+  const glue = span.section.grooveGlue;
+  if (!glue || !glue[target]) return notes;
+  const pocket = sectionPocket(span, song);
+  if (!pocket) return notes;
+  const relative = notes.map((n) => ({ ...n, startTime: n.startTime - span.startBeat }));
+  return glueToPocket(relative, pocket, { strength: glue.strength ?? 1 }).map((n) => ({
+    ...n,
+    startTime: n.startTime + span.startBeat,
+  }));
+}
+
 export function planChordStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
+    const spanNotes: MidiNote[] = [];
     const profile = resolveEffectiveStyle(span.section, song);
     const narrative = resolveNarrativeProfile(span.section, song);
     // structural_warp re-grids the harmony (authored outline wins), and chord
@@ -113,8 +150,9 @@ export function planChordStem(spans: SectionSpan[], song?: BlueprintSong): MidiN
         duration: n.duration,
         velocity: n.velocity,
       }));
-      notes.push(...chordNotes);
+      spanNotes.push(...chordNotes);
     }
+    notes.push(...glueSpanNotes(spanNotes, span, song, "chords"));
   }
   return notes;
 }
@@ -137,7 +175,8 @@ export function planBassStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
     }));
     // Bend Bass layer: register/motion/rhythm/velocity tint the line (the
     // section's explicit bassProfile underneath, defaults below that).
-    notes.push(...planSectionBass(occurrences, resolveBassProfile(span.section.bassProfile, profile)));
+    const line = planSectionBass(occurrences, resolveBassProfile(span.section.bassProfile, profile));
+    notes.push(...glueSpanNotes(line, span, song, "bass"));
   }
   return notes;
 }
@@ -153,6 +192,35 @@ export function planBassStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
  *  are humanized exactly like the bridge so even microtiming agrees.
  *  `song` feeds the heuristic pattern fallback with full signals (bpm /
  *  title / concept / notes), same as the bridge — see `inferPatternForSection`. */
+/** A controller message at an absolute beat — the drum lane CC stream. */
+export interface MidiCc {
+  beat: number;
+  cc: number;
+  value: number;
+}
+
+/**
+ * PER-LANE CC — the controllers the drum surface assigns, section by section,
+ * at absolute beats. Built by the shared `planLaneCc`, so the .mid and the
+ * live MIDI out send identical messages. (The Ableton bridge can't carry
+ * these: the Extensions SDK has no clip-envelope API — see the schema field.)
+ */
+export function planDrumCcStem(spans: SectionSpan[], _song?: BlueprintSong): MidiCc[] {
+  const out: MidiCc[] = [];
+  for (const span of spans) {
+    const section = span.section;
+    const events = planLaneCc({
+      durationBeats: span.durationBeats,
+      beatsPerBar: beatsPerBar(section),
+      perLane: section.drumLaneCc ?? null,
+      mute: section.drumLaneMute,
+      solo: section.drumLaneSolo,
+    });
+    for (const e of events) out.push({ beat: span.startBeat + e.beat, cc: e.cc, value: e.value });
+  }
+  return out.sort((a, b) => a.beat - b.beat);
+}
+
 export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const inputs: SectionDrumInput[] = spans.map((span) => {
     const section = span.section;
@@ -198,6 +266,8 @@ export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
       variant,
       outline: section.drumMeterOutline ?? null,
       voiceOverrides: section.drumVoicePatterns,
+      mute: section.drumLaneMute,
+      solo: section.drumLaneSolo,
       blocks: section.drumBlocks,
       variation: section.drumVariationOutline ?? null,
       variationBars: section.drumVariationBars,
@@ -470,7 +540,18 @@ export function songToMidi(song: BlueprintSong, routing: StemRoutingMap = GM_ROU
     });
   const chordTrack = track(chordNotes, "chords");
   const bassTrack = track(bassNotes, "bass");
-  const drumTrack = track(drumNotes, "drums");
+  // The drum lane's CC rides the drum track, right after its notes.
+  const drumTrack = (() => {
+    const channel = clampChannel(routing.drums.channel) - 1;
+    const ccs = planDrumCcStem(spans, song).map((c): RawMidiEvent => ({
+      tick: Math.max(0, Math.round(c.beat * TICKS_PER_QUARTER) + outputOffsetTicks),
+      data: [0xb0 | channel, c.cc & 0x7f, c.value & 0x7f],
+    }));
+    return buildTrackChunk([...stemEvents(drumNotes, "drums"), ...ccs], {
+      name: STEM_LABELS.drums,
+      instrument: instrumentNameFor(song, "drums", routing),
+    });
+  })();
   const colorTrack = track(colorNotes, "color");
   const melodyTrack = track(melodyNotes, "melody");
 

@@ -1,5 +1,6 @@
 import {
   applyDrumBlocks,
+  audibleLanes,
   DRUM_LANE_VOICES,
   occurrenceSeed,
   voiceOf,
@@ -91,11 +92,14 @@ export function resolveSectionLaneHits(
     seed: occurrenceSeed(section.id, occurrenceIndex),
   });
 
+  // Muted / un-soloed lanes are dropped here by the SAME rule the planner
+  // uses (`audibleLanes`), so the canvas shows exactly what will play.
+  const play = audibleLanes(section.drumLaneMute, section.drumLaneSolo);
   for (const n of compiled) {
     const voice = voiceOf(n.pitch);
     if (!voice) continue;
     const lane = VOICE_TO_LANE.get(voice);
-    if (!lane) continue;
+    if (!lane || !play.has(lane)) continue;
     const arr = out.get(lane) ?? [];
     arr.push({
       beat: n.beat,

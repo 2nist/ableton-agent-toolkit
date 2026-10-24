@@ -17,7 +17,11 @@ interface InspectorState {
 
 export const useInspectorStore = create<InspectorState>((set) => ({
   tab: "structure",
-  open: true,
+  // Minimized by default (user decision 2026-10-24): the rail shows its
+  // facets as a glyph strip, so the canvas gets the width and the tools are
+  // still one click away. Engagement (a new selection, a facet icon, the
+  // `engage` API) opens it.
+  open: false,
   setTab: (t) => set({ tab: t }),
   setOpen: (o) => set({ open: o }),
   engage: (t) => set({ tab: t, open: true }),

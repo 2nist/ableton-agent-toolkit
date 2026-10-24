@@ -208,6 +208,8 @@ export function planDrumClips(
       variant,
       outline: section.drumMeterOutline ?? null,
       voiceOverrides: section.drumVoicePatterns,
+      mute: section.drumLaneMute,
+      solo: section.drumLaneSolo,
       blocks: section.drumBlocks,
       variation: section.drumVariationOutline ?? null,
       variationBars: section.drumVariationBars,

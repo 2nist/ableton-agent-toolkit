@@ -18,28 +18,7 @@ import { usePalette } from "../../theme/palette";
 import { useTransitionColors, TRANSITION_LABEL } from "./transitionStyle";
 import { useSectionRoleColors } from "./sectionRoleStyle";
 import NecklaceGlyph from "./NecklaceGlyph";
-import DrumBlocksView from "./blocks/DrumBlocksView";
-import DrumStepsView from "./steps/DrumStepsView";
 import { planSectionHandoffFills, planSectionTransitions, FILL_DATA, outlineBeatsPerBar, numerator as outlineNumerator, hashSeed, occurrenceSeed, buildEuclideanOutline, twoThreeCellCounts, type HandoffSectionInput } from "@drum/library";
-import { parseAnalysisFile } from "../../lib/drumImport/analysisFile";
-import { applySectionPatch, planSectionImport } from "../../lib/drumImport/runner";
-
-/** The Drums tab's three surfaces: the classic whole-song canvas, the Drum
- *  Blocks (beta) authoring view, and the plain 16-box Steps sequencer. */
-const VIEW_MODES = ["classic", "steps", "blocks"] as const;
-
-const VIEW_LABEL: Record<(typeof VIEW_MODES)[number], string> = {
-  classic: "Classic",
-  steps: "Steps",
-  blocks: "Blocks (beta)",
-};
-
-const VIEW_HINT: Record<(typeof VIEW_MODES)[number], string> = {
-  classic: "necklaces · detours · transitions",
-  steps: "sixteen boxes · one bar at a time",
-  blocks: "step dots + marquee → XY pad",
-};
-type DrumsViewMode = (typeof VIEW_MODES)[number];
 
 /** A stable identity for a section's *resolved* drum content — same
  *  preset+variant (or same outline cells/voicing) means literally the
@@ -314,72 +293,6 @@ export default function DrumsView({
   const barW = BAR_PX * zoom;
   const barX = (bar: number): number => X0 + bar * barW;
 
-  // Classic ↔ Blocks (beta) — the Drum Blocks view is a parallel authoring
-  // surface for the range-scoped `drumBlocks` model (dotted step lanes +
-  // the selection's XY pad). The classic canvas stays the default until
-  // Blocks reaches parity; the choice persists per browser, not per song.
-  const [viewMode, setViewMode] = useState<DrumsViewMode>(() => {
-    try {
-      const raw = localStorage.getItem("trackdraft-drums-view");
-      return raw === "blocks" || raw === "steps" ? raw : "classic";
-    } catch {
-      return "classic";
-    }
-  });
-  const chooseView = (mode: DrumsViewMode) => {
-    setViewMode(mode);
-    try {
-      localStorage.setItem("trackdraft-drums-view", mode);
-    } catch {
-      /* ignore */
-    }
-  };
-
-  // ---- Import analysis (the drum importer's UI half) ----------------------
-  // A drum-analysis grid (see lib/drumImport/analysisFile.ts — what the
-  // audio→grid side writes) for the SELECTED section stages straight into
-  // the drums draft store, so the timeline previews it exactly like any
-  // other drum edit and the usual Apply/Revert commits or discards it.
-  const analysisInputRef = useRef<HTMLInputElement | null>(null);
-  const [importStatus, setImportStatus] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const onAnalysisFile = async (file: File) => {
-    try {
-      let raw: unknown;
-      try {
-        raw = JSON.parse(await file.text());
-      } catch {
-        throw new Error("Not a JSON file.");
-      }
-      const parsed = parseAnalysisFile(raw);
-      const current = useSongStore.getState().currentSong();
-      if (!current) throw new Error("No song open.");
-      if (parsed.songId !== undefined && parsed.songId !== current.id) {
-        throw new Error(`Analysis is for "${parsed.songId}" — open that song (or re-export the analysis) before importing.`);
-      }
-      const target = current.sections.find((s) => s.id === selectedSectionId) ?? current.sections[0];
-      if (!target) throw new Error("This song has no sections yet.");
-      const staged = useDrumsDraftStore.getState();
-      if (staged.sectionId !== null && staged.sectionId !== target.id) {
-        throw new Error("Another section has staged edits — Apply or Revert them first.");
-      }
-      const result = planSectionImport(parsed, target);
-      if (!result) {
-        const names = parsed.sections.slice(0, 8).map((e) => e.sectionId ?? e.sectionName ?? "?").join(", ");
-        throw new Error(`No span in the analysis matches "${target.name}" — the file covers: ${names}${parsed.sections.length > 8 ? ", …" : ""}.`);
-      }
-      useDrumsDraftStore.getState().setDraft(target.id, applySectionPatch(target, result.patch));
-      setSelectedSectionId(target.id);
-      const st = result.report.stats;
-      setImportStatus({
-        ok: true,
-        text: `Imported "${target.name}": ${result.patch.drumBlocks.length} blocks (${st.euclidBlocks} euclid · ${st.stepsBlocks} steps · ${st.clearBlocks} clears${st.motionBlocks > 0 ? ` · ${st.motionBlocks} motion` : ""}) — preview staged · Apply to keep, Revert to discard`,
-      });
-    } catch (e) {
-      setImportStatus({ ok: false, text: e instanceof Error ? e.message : String(e) });
-    }
-  };
-
   // Embed affordance: the workbench crops the full-song canvas to a window
   // around the focused section. Keep its opening bars in view (4 bars of
   // context before it) whenever the focus or the fitted zoom changes.
@@ -465,8 +378,6 @@ export default function DrumsView({
   const bars = totalBars(spans);
   const width = barX(bars) + 40;
   const height = STACK_BOTTOM + BOTTOM_PAD;
-
-  const anyLaneHits = resolved.some((r) => DRUM_LANES.some((l) => laneNecklace(l, r.necklaces)));
 
   // Beat/bar gridlines for the thick tracks — bar boundaries strong,
   // in-bar beats faint, computed per section's own meter so odd meters
@@ -621,54 +532,6 @@ export default function DrumsView({
 
   return (
     <div className={embedded ? "" : "px-2 pt-1.5 pb-3"}>
-      {!embedded && !anyLaneHits && <p className="text-inkMuted text-xs mb-2">No drum voices resolve for this song yet.</p>}
-      {!embedded && (
-      <div className="flex items-center gap-1.5 mb-1.5">
-        {VIEW_MODES.map((m) => (
-          <button
-            key={m}
-            onClick={() => chooseView(m)}
-            className={`font-mono text-2xs rounded px-2 py-1 border ${
-              viewMode === m
-                ? "border-track text-track bg-track/10"
-                : "border-edge text-inkMuted hover:text-ink"
-            }`}
-          >
-            {VIEW_LABEL[m]}
-          </button>
-        ))}
-        <span className="text-2xs text-inkMuted ml-1">{VIEW_HINT[viewMode]}</span>
-        <span className="flex-1" />
-        <input
-          ref={analysisInputRef}
-          type="file"
-          accept=".json,application/json"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) void onAnalysisFile(file);
-          }}
-        />
-        <button
-          onClick={() => analysisInputRef.current?.click()}
-          title="Import a drum-analysis grid (16 or 12 steps per bar) as a staged draft for the selected section"
-          className="font-mono text-2xs rounded px-2 py-1 border border-edge text-inkMuted hover:text-ink"
-        >
-          ⤓ Import analysis…
-        </button>
-      </div>
-      )}
-      {!embedded && importStatus && (
-        <div className={`font-mono text-2xs mb-1.5 ${importStatus.ok ? "text-track" : "text-danger"}`}>
-          {importStatus.text}
-        </div>
-      )}
-      {!embedded && viewMode === "blocks" ? (
-        <DrumBlocksView />
-      ) : !embedded && viewMode === "steps" ? (
-        <DrumStepsView />
-      ) : (
       <div
         ref={scrollRef}
         className={
@@ -1087,7 +950,6 @@ export default function DrumsView({
         )}
         </div>
       </div>
-      )}
     </div>
   );
 }

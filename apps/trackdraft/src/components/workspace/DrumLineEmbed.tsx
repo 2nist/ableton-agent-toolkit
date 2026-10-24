@@ -99,11 +99,8 @@ export default function DrumLineEmbed({
     setRange({ sectionId: pickedSpan.sectionId, startBeat: a, endBeat: b, lanes: ALL_LANES });
     onEngage?.();
     if (!dive) return;
-    try {
-      localStorage.setItem("trackdraft-drums-view", "blocks");
-    } catch {
-      /* ignore */
-    }
+    // Dive to the Blocks editor — it is the only Drums surface now, so there
+    // is no view preference left to stage.
     navigate(`/song/${id}/drums`);
   }
 

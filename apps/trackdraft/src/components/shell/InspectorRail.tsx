@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { useInspectorStore, type InspectorTab } from "../../store/inspectorStore";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
 import { useLyricsSelectionStore } from "../../store/lyricsSelectionStore";
 import IconBtn from "../common/IconBtn";
 import Icon, { type IconName } from "../common/Icon";
@@ -56,17 +55,18 @@ const VIEW_DEFAULT: Record<string, InspectorTab> = {
 /**
  * The Inspector — the RIGHT zone of the layout grammar (user decision,
  * 2026-09-21): shell chrome on EVERY song route, holding the focused
- * object's tools. It slides open on engagement (any section selection —
- * spine, canvas, arrows), collapses to a thin strip for canvas room, and
- * its facets are fixed components (no per-view registration — the old
- * dock's coupling — so every view gets the same tool surface).
+ * object's tools. MINIMIZED BY DEFAULT since 2026-10-24: the thin strip
+ * carries the facets as glyphs (the same grammar as the left nav rail), a
+ * click opens the rail on that facet, and `engage()` is how a surface asks
+ * for the rail outright. Its facets are fixed components (no per-view
+ * registration — the old dock's coupling — so every view gets the same
+ * tool surface).
  */
 export default function InspectorRail() {
   const tab = useInspectorStore((s) => s.tab);
   const open = useInspectorStore((s) => s.open);
   const setTab = useInspectorStore((s) => s.setTab);
   const setOpen = useInspectorStore((s) => s.setOpen);
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const lyricsMode = useLyricsSelectionStore((s) => s.mode);
   const location = useLocation();
   const view = location.pathname.split("/")[3] ?? "workbench";
@@ -91,12 +91,11 @@ export default function InspectorRail() {
     }
   }, [view, allowed]);
 
-  // Slides open on engagement: selecting anything with controls — a spine
-  // block, a canvas element, the ←→ arrows — opens it. A manual collapse
-  // still wins until the NEXT selection change.
-  useEffect(() => {
-    if (selectedSectionId) setOpen(true);
-  }, [selectedSectionId, setOpen]);
+  // No blanket auto-open (2026-10-24): the minimized rail already names its
+  // facets, so opening is a deliberate act — a facet icon, or `engage(tab)`
+  // from a surface that really means "edit this now" (a spine chord, the
+  // workbench's drums row, the melody generator's mix lens). Auto-opening on
+  // every section selection is what made "minimized" impossible to keep.
 
   return (
     <aside
@@ -138,14 +137,37 @@ export default function InspectorRail() {
           </div>
         </>
       ) : (
-        <button
-          type="button"
-          className="h-9 shrink-0 flex items-center justify-center text-inkMuted hover:text-ink"
-          onClick={() => setOpen(true)}
-          title="Open the inspector — the focused object's tools for this view"
-        >
-          <Icon name="chevron-left" size={13} />
-        </button>
+        /* Minimized: the facets themselves — the same glyph strip the left
+           rail uses, so the icon says what this side does before you open
+           it. Clicking a facet opens the rail ON that facet. */
+        <div className="flex flex-col items-center">
+          {/* The expander sits at the TOP, matching the left rail — both
+              strips then read chevron-then-glyphs. */}
+          <button
+            type="button"
+            className="h-9 w-9 shrink-0 flex items-center justify-center text-inkMuted hover:text-ink"
+            onClick={() => setOpen(true)}
+            title="Open the inspector — the focused object's tools for this view"
+          >
+            <Icon name="chevron-left" size={13} />
+          </button>
+          {visible.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => {
+                setTab(f.id);
+                setOpen(true);
+              }}
+              title={`${f.label} — click to open`}
+              className={`w-9 h-8 flex items-center justify-center ${
+                tab === f.id ? "text-accent bg-panelAlt" : "text-inkMuted hover:text-ink"
+              }`}
+            >
+              <Icon name={f.icon} size={16} />
+            </button>
+          ))}
+        </div>
       )}
     </aside>
   );

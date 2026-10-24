@@ -29,6 +29,7 @@ export type IconName =
   | "fit"
   | "frame"
   | "follow"
+  | "import"
   | "chevron-left"
   | "chevron-right"
   | "chevron-down";
@@ -149,6 +150,13 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <path d="M4 4.5v7" />
       <path d="M7 8h6M10.4 5.4 13 8l-2.6 2.6" />
+    </>
+  ),
+  // Import — an arrow dropping into a tray (a file coming into the song).
+  import: (
+    <>
+      <path d="M8 2.8v6.4M5.6 6.8 8 9.2l2.4-2.4" />
+      <path d="M2.9 11v1.9h10.2V11" />
     </>
   ),
   "chevron-left": <path d="M9.8 3.6 5.4 8l4.4 4.4" />,

@@ -407,9 +407,14 @@ body {
 }
 /* The pen in a slot that is only as tall as two rows — the spine's section
    blocks are 34px and also carry a 9px readout, so the standard 17px pen
-   pushes that readout out of the block. Size only: the voice is unchanged. */
+   pushes that readout out of the block. Size only: the voice is unchanged.
+   Bumped 13 → 20px on 2026-10-24 (the section TITLE is the thing you scan
+   for; the 9px bar/meter readout under it is deliberately left alone), which
+   is why the line-height is pinned to 1: 20 + 9 + the 2px gap still lands
+   inside the 34px block. */
 [data-theme="logsheet"] .hand-value--tight {
-  font-size: 13px;
+  font-size: 20px;
+  line-height: 1;
 }
 /* The pen on a dark instrument plate would lose its contrast — lift the ink. */
 [data-theme="logsheet"] .on-deep .hand-value {

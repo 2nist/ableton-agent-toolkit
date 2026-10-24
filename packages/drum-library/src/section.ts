@@ -19,7 +19,10 @@ import {
   type HandoffSectionInput,
 } from "./handoffs.js";
 import { tileGrooveVaried } from "./vary.js";
-import { applyDrumBlocks, type DrumBlock } from "./blocks.js";
+import { applyDrumBlocks, DRUM_LANE_VOICES, type DrumBlock, type DrumLaneId } from "./blocks.js";
+import { audibleLanes } from "./lanes.js";
+
+export { audibleLanes };
 import { extractGroove, applyGroove } from "./groove.js";
 import {
   synthesizeTransition,
@@ -109,6 +112,9 @@ export function euclidOnsetSteps(pat: EuclidLike): number[] {
  */
 export const KIT_PITCHES: Record<KitVoice, number> = {
   ...ABLETON_SAFE_NOTES,
+  // General MIDI's own assignments — a GM kit plays these untransposed.
+  shaker: 82,
+  cowbell: 56,
   pedalHat: 44,
   tomLow: 41,
   rideBell: 53,
@@ -380,6 +386,13 @@ export interface SectionDrumInput {
   /** The section's subdivision grid for transitions — its outline's
    *  `cellBeats`, or 0.25 for preset/heuristic grooves. */
   gridBeats?: number;
+  /** Muted surface lanes (`BlueprintSection.drumLaneMute`). Their notes are
+   *  dropped from the plan, so the canvas, the .mid, live out and the
+   *  Ableton clips all lose them together. */
+  mute?: readonly DrumLaneId[];
+  /** Soloed surface lanes (`drumLaneSolo`). Any solo ⇒ only soloed lanes
+   *  sound; a muted lane stays silent even when soloed. */
+  solo?: readonly DrumLaneId[];
   durationBeats: number;
   velocityTarget: number;
   /** Beat length of each bar, in order, when the section changes meter.
@@ -444,6 +457,33 @@ export interface PlanSectionDrumOptions {
  * `SectionDrumInput` (exactly like `planSectionHandoffFills`), so both the
  * web app and the Ableton bridge call one function and can't drift.
  */
+/** Pitch → lane, inverted from the library's own voice tables so the filter
+ *  below can never disagree with `DRUM_LANE_VOICES`. Built LAZILY: this
+ *  module and blocks.ts import each other, and a top-level loop here would
+ *  run before blocks.ts has initialized its tables. */
+let laneByPitchCache: Map<number, DrumLaneId> | null = null;
+function laneByPitch(): Map<number, DrumLaneId> {
+  if (laneByPitchCache) return laneByPitchCache;
+  const map = new Map<number, DrumLaneId>();
+  for (const lane of Object.keys(DRUM_LANE_VOICES) as DrumLaneId[]) {
+    for (const voice of DRUM_LANE_VOICES[lane]) map.set(KIT_PITCHES[voice], lane);
+  }
+  laneByPitchCache = map;
+  return map;
+}
+
+/** Drop the notes of muted / un-soloed lanes. A note whose pitch belongs to
+ *  no known lane (a click track, a stray import) is kept. */
+function filterMutedLanes(notes: TiledNote[], input: SectionDrumInput): TiledNote[] {
+  if ((input.mute?.length ?? 0) === 0 && (input.solo?.length ?? 0) === 0) return notes;
+  const play = audibleLanes(input.mute, input.solo);
+  const byPitch = laneByPitch();
+  return notes.filter((n) => {
+    const lane = byPitch.get(n.pitch);
+    return lane === undefined || play.has(lane);
+  });
+}
+
 export function planSectionDrumNotes(
   inputs: SectionDrumInput[],
   fills: FillLibrary,
@@ -523,13 +563,16 @@ export function planSectionDrumNotes(
     if (!variant) {
       if (!input.blocks || input.blocks.length === 0) return { notes: [] };
       return {
-        notes: applyDrumBlocks([], input.blocks, {
-          durationBeats: input.durationBeats,
-          beatsPerBar: input.beatsPerBar ?? 4,
-          velocityTarget: input.velocityTarget,
-          gridBeats: input.gridBeats,
-          seed: occurrenceSeed(input.sectionId, input.occurrenceIndex),
-        }),
+        notes: filterMutedLanes(
+          applyDrumBlocks([], input.blocks, {
+            durationBeats: input.durationBeats,
+            beatsPerBar: input.beatsPerBar ?? 4,
+            velocityTarget: input.velocityTarget,
+            gridBeats: input.gridBeats,
+            seed: occurrenceSeed(input.sectionId, input.occurrenceIndex),
+          }),
+          input,
+        ),
       };
     }
 
@@ -624,6 +667,6 @@ export function planSectionDrumNotes(
     }
 
     tiled.sort((a, b) => a.beat - b.beat || a.pitch - b.pitch);
-    return { notes: tiled };
+    return { notes: filterMutedLanes(tiled, input) };
   });
 }

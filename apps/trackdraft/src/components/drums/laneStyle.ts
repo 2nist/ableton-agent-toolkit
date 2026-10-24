@@ -2,12 +2,14 @@ import { useMemo } from "react";
 import type { KitVoice } from "@drum/library";
 import { usePalette, type Palette, type VoiceColors } from "../../theme/palette";
 
-/** The fixed six-lane stage — the design reference's KICK / SNR / RIM /
- *  HAT / CYM / TOM. Each lane is a *family* of drum voices rendered as
- *  one line and one necklace (rim+clap, the hats, the cymbals, the toms),
- *  so a song using any member voice lights that lane; lanes no member
- *  voice plays anywhere stay dimmed. Colours come from the theme's voice
- *  palette via `laneColor()` — a lane key is a voice family. */
+/** The fixed six-SURFACE stage — KICK / SNARE / PERC / HAT / CYM / TOM.
+ *  A surface is a *family* of kit voices drawn as one lane (perc absorbs
+ *  rim + clap, the hats, the cymbals, the toms), so a song using any
+ *  member voice lights that surface; surfaces no member voice plays
+ *  anywhere stay dimmed. Colours come from the theme's voice palette via
+ *  `laneColor()` — a lane key is a voice family. The keys stay the
+ *  schema's (`rim` is the percussion family) so the engine, the export
+ *  paths and the bridge keep agreeing; only the label says "surface". */
 export interface DrumLane {
   /** Stable key, e.g. "kick" / "hat" / "tom". */
   key: string;
@@ -36,12 +38,12 @@ export function useDrumLanes(): (DrumLane & { color: string })[] {
   return useMemo(() => DRUM_LANES.map((l) => ({ ...l, color: laneColor(l, P) })), [P]);
 }
 
-/** Fixed row order — foundational voices first, matching the reference's
- *  KICK/SNR/RIM/HAT/CYM/TOM stack. */
+/** Fixed row order — foundational surfaces first, matching the reference's
+ *  KICK / SNARE / PERC / HAT / CYM / TOM stack. */
 export const DRUM_LANES: DrumLane[] = [
   lane("kick", "KICK", ["kick"]),
-  lane("snare", "SNR", ["snare"]),
-  lane("rim", "RIM", ["rim", "clap"]),
+  lane("snare", "SNARE", ["snare"]),
+  lane("rim", "PERC", ["rim", "clap"]),
   lane("hat", "HAT", ["closedHat", "openHat", "pedalHat"]),
   lane("cym", "CYM", ["crash", "ride", "rideBell"]),
   lane("tom", "TOM", ["tomLow", "tomMid", "tomHigh"]),

@@ -10,6 +10,8 @@ import {
 } from "@drum/library";
 import type { NoteDescription } from "@ableton-extensions/sdk";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
+import { planDrumClips } from "./drumClips.js";
+import { glueSectionNotes } from "./glue.js";
 
 export interface BassLinePlan {
   name: string;
@@ -37,7 +39,9 @@ export const DEFAULT_OCTAVE = 3;
  * matches the app's .mid/live-out note for note.
  */
 export function planBassLine(song: BlueprintSong, octave: number = DEFAULT_OCTAVE): BassLinePlan[] {
-  return sectionSpans(song).map(({ section, startBeat, durationBeats }) => {
+  // One drum plan for the whole song — the pocket every glued bass line uses.
+  const drums = planDrumClips(song);
+  return sectionSpans(song).map(({ section, startBeat, durationBeats }, i) => {
     // Effective style = Bend base ⊕ narrative tint; the harmony grid is the
     // warped one when `structural_warp` asks for it. Same two calls the app's
     // `planBassStem` makes, so Live and the .mid cannot disagree.
@@ -56,6 +60,11 @@ export function planBassLine(song: BlueprintSong, octave: number = DEFAULT_OCTAV
       occurrences,
       resolveBassProfile({ octave, ...section.bassProfile }, profile),
     ).map((n) => ({ pitch: n.pitch, startTime: n.startTime, duration: n.duration, velocity: n.velocity }));
-    return { name: section.name, startBeat, durationBeats, notes };
+    return {
+      name: section.name,
+      startBeat,
+      durationBeats,
+      notes: glueSectionNotes(notes, section, drums[i]?.notes ?? [], "bass"),
+    };
   });
 }
