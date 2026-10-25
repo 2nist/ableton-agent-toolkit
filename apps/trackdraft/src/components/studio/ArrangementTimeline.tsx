@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
@@ -8,6 +8,7 @@ import { classifySong } from "../../lib/classification";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { rangeIds } from "../../lib/sectionSelection";
 import { drumFamilyLabel } from "../../lib/playback/drumPreview";
 import type { BlueprintSong } from "../../types/blueprint";
 import { usePalette } from "../../theme/palette";
@@ -107,7 +108,14 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
-  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  const selectedSectionIds = useStudioSelectionStore((s) => s.selected);
+  const selectSection = useStudioSelectionStore((s) => s.selectSection);
+  const setSelection = useStudioSelectionStore((s) => s.setSelection);
+  /** Song order for ⇧-ranges and sweeps — spans repeat a section per pass,
+   *  the range is measured against the sections themselves. */
+  const sectionOrder = useMemo(() => song.sections.map((entry) => entry.id), [song.sections]);
+  const sweepRef = useRef<{ from: string; moved: boolean } | null>(null);
+  const sweptRef = useRef(false);
   const spans = sectionSpans(song);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [tick, setTick] = useState<TransportTick | null>(null);
@@ -127,7 +135,33 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
         <FormDisclosure song={song} />
       </div>
       <div className="overflow-x-auto">
-        <div className="relative flex gap-0.5" style={{ width: "max-content" }}>
+        <div
+          className="relative flex gap-0.5"
+          style={{ width: "max-content" }}
+          onPointerDown={(event) => {
+            const block = (event.target as HTMLElement).closest("[data-timeline-block]");
+            if (!block || event.button !== 0) return;
+            // The flag lives for the gesture only — see the Spine's copy of
+            // this: a sweep ending outside the row leaves no click to consume it.
+            sweptRef.current = false;
+            sweepRef.current = { from: block.getAttribute("data-timeline-block") ?? "", moved: false };
+          }}
+          onPointerMove={(event) => {
+            const sweep = sweepRef.current;
+            if (!sweep) return;
+            const id = (event.target as HTMLElement).closest("[data-timeline-block]")?.getAttribute("data-timeline-block");
+            if (!id || id === sweep.from) return;
+            sweep.moved = true;
+            sweptRef.current = true;
+            setSelection(rangeIds(sectionOrder, sweep.from, id), id);
+          }}
+          onPointerUp={() => {
+            sweepRef.current = null;
+          }}
+          onPointerLeave={() => {
+            sweepRef.current = null;
+          }}
+        >
           {playheadLeft !== null && (
             <div
               className="absolute top-0 bottom-0 w-px bg-accent pointer-events-none z-10"
@@ -139,6 +173,7 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
             const rawWidth = span.durationBeats * PX_PER_BEAT;
             const width = isFinite(rawWidth) ? Math.max(MIN_BLOCK_WIDTH, rawWidth) : MIN_BLOCK_WIDTH;
             const isSelected = selectedSectionId === span.sectionId;
+            const inSelection = selectedSectionIds.includes(span.sectionId);
             const section = span.section;
             const melodyCount = section.melody?.notes?.length ?? 0;
             const harmony = section.chords.length > 0 ? section.chords.map((c) => c.romanNumeral).join(" ") : null;
@@ -156,13 +191,26 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
               >
                 {/* the select/edit block itself (role-colored) */}
                 <button
+                  data-timeline-block={span.sectionId}
+                  aria-pressed={inSelection}
                   className={`h-12 rounded-[4px] flex flex-col items-start justify-center px-2 overflow-hidden transition-opacity text-left ${
-                    isSelected ? "ring-1 ring-accent ring-inset opacity-100" : "hover:opacity-90"
+                    isSelected
+                      ? "ring-1 ring-accent ring-inset opacity-100"
+                      : inSelection
+                        ? "ring-1 ring-accent/55 ring-inset opacity-100"
+                        : "hover:opacity-90"
                   }`}
                   style={{ background: style.bg, color: style.text }}
-                  onClick={() => setSelectedSectionId(span.sectionId)}
+                  onClick={(event) => {
+                    if (sweptRef.current) {
+                      sweptRef.current = false;
+                      return;
+                    }
+                    const mode = event.shiftKey ? "extend" : event.metaKey || event.ctrlKey ? "toggle" : "replace";
+                    selectSection(span.sectionId, mode, sectionOrder);
+                  }}
                   onDoubleClick={() => jump("harmony")}
-                  title="Click to target its mix · double-click to edit"
+                  title="Click to target its mix · ⇧ for a range · ⌘ to add · drag across blocks · double-click to edit"
                 >
                   <span className="text-[10.5px] font-medium leading-tight truncate w-full">{section.name}</span>
                   <span className="text-[9px] opacity-80 font-mono leading-tight">{Math.round(span.bars)} bars</span>

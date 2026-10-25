@@ -1,6 +1,7 @@
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { BlueprintSong } from "../types/blueprint";
 import { getBridgeHttpBase } from "./bridgeHost";
+import { encodeIrealUrl, irealPlaylistHtml } from "./ireal/encodeSong";
 
 // ---------------------------------------------------------------------------
 // File System Access API helper — returns a directory handle, or null if
@@ -83,6 +84,24 @@ export function downloadLibraryBackup(songs: BlueprintSong[]): void {
   const a = document.createElement("a");
   a.href = url;
   a.download = `trackdraft-library-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** iReal Pro playlist (.html) — the only shape iReal Pro imports. Each song
+ *  is one obfuscated `irealb://` link, exactly as its own exporter writes
+ *  them; `irealPlaylistHtml` carries iReal's skeleton so the app recognises
+ *  the file instead of showing a bare list of URLs. */
+export function downloadIrealPlaylist(songs: BlueprintSong[]): void {
+  const html = irealPlaylistHtml(
+    songs.map((song) => ({ title: song.title, composer: song.artist, url: encodeIrealUrl(song) })),
+  );
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const name = songs.length === 1 ? songs[0].title : "trackdraft";
+  a.download = `${name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.ireal.html`;
   a.click();
   URL.revokeObjectURL(url);
 }

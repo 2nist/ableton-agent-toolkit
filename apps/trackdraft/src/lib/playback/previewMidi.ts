@@ -69,6 +69,11 @@ export interface PreviewChord {
   root: string;
   quality: string;
   beats?: number;
+  /** Silence after this chord in the audition, so a rest sounds like a rest
+   *  instead of being skipped. Absent = 0. */
+  restAfter?: number;
+  /** Silence before this chord — only meaningful on the first one. */
+  restBefore?: number;
   performance?: ChordPerformanceEffect;
   /** Inversion/spread — auditioned exactly as the export voices it. */
   voicing?: ChordVoicing;
@@ -173,6 +178,32 @@ function colorNotesFor(
   return generated.color.map((n) => ({ pitch: n.pitch, startTime: n.startTime, duration: n.duration }));
 }
 
+/** The bi-tonal color layer is generated as one continuous phrase from the
+ *  chords' durations alone, so rests would leave it running ahead of the
+ *  chords. Slide each note to the start the chord it belongs to actually has. */
+function shiftColorPastRests(
+  notes: { pitch: number; startTime: number; duration: number }[],
+  chords: PreviewChord[],
+): { pitch: number; startTime: number; duration: number }[] {
+  const offsets: { from: number; shift: number }[] = [];
+  let durationOnly = 0;
+  let withRests = 0;
+  for (const chord of chords) {
+    const before = chord.restBefore ?? 0;
+    const after = chord.restAfter ?? 0;
+    withRests += before;
+    offsets.push({ from: durationOnly, shift: withRests - durationOnly });
+    durationOnly += chord.beats ?? 4;
+    withRests += (chord.beats ?? 4) + after;
+  }
+  if (offsets.every((entry) => entry.shift === 0)) return notes;
+  return notes.map((note) => {
+    let shift = 0;
+    for (const entry of offsets) if (note.startTime >= entry.from - 1e-6) shift = entry.shift;
+    return { ...note, startTime: note.startTime + shift };
+  });
+}
+
 /** Audition a whole progression, one chord block per its beat count, at the
  *  given bpm. `layers.bass` sends roots on the bass channel and
  *  `layers.color` streams the bi-tonal color layer on the color channel.
@@ -193,12 +224,14 @@ export async function previewProgression(
   const colorCtx = layers.color ? await previewOutput(routing.color.channel) : null;
 
   const beatMs = 60000 / Math.max(1, bpm);
-  const colorNotes = colorCtx ? colorNotesFor(chords, colorFlavor) : [];
+  const colorNotes = colorCtx ? shiftColorPastRests(colorNotesFor(chords, colorFlavor), chords) : [];
   const startMs = performance.now() + 20;
   let cursorBeats = 0;
 
   for (const chord of chords) {
     const beats = chord.beats ?? beatsPerChord;
+    // A rest is silence: advance the clock without playing anything.
+    cursorBeats += chord.restBefore ?? 0;
 
     // Effect-applied via the same planner the export uses, so an arpeggiated
     // or strummed step auditions the way it will land in Ableton.
@@ -211,7 +244,7 @@ export async function previewProgression(
       const bassPitch = BASS_OCTAVE * 12 + pitchClass(chord.root);
       scheduleBlock(bassCtx, [bassPitch], cursorBeats * beatMs, beats * beatMs, 100);
     }
-    cursorBeats += beats;
+    cursorBeats += beats + (chord.restAfter ?? 0);
   }
 
   // Color notes are beat-relative to the chord cycle, so they map onto the

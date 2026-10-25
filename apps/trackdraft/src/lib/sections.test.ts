@@ -1,5 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { addSection, removeSection, reorderSections, updateRepeats, repeatsFor, applySongMap } from "./sections";
+import {
+  addSection,
+  removeSection,
+  reorderSections,
+  updateRepeats,
+  repeatsFor,
+  applySongMap,
+  splitSection,
+  partBars,
+  splitSectionAt,
+  mergeWithNext,
+  foldSectionSplits,
+  splitSectionAtBar,
+} from "./sections";
 import type { BlueprintSong, BlueprintSection } from "../types/blueprint";
 import type { SongMap } from "../data/songMaps";
 import { getGenreMap } from "../data/genre-catalog";
@@ -359,5 +372,326 @@ describe("applySongMap — narrative seeding", () => {
     const song = applySongMap({ ...makeSong([]), narrative: mine }, noMaster, { seedNarrative: true });
     expect(song.narrative).toEqual(mine);
     expect(song.sections[0].narrative).toEqual(arc); // the slot still carries its own
+  });
+});
+
+describe("splitSection", () => {
+  const chord = (root: string, beats: number) => ({ id: `${root}-${beats}`, root, quality: "min" as const, beats, romanNumeral: "" });
+
+  it("replaces one section with the parts its chord stream is made of", () => {
+    const song = makeSong([{ id: "a" }, { id: "big", name: "Unlabeled", bars: 16, role: "verse" }]);
+    const split = splitSection(song, "big", [
+      { label: "A", chords: [chord("D", 4), chord("Bb", 4)], repeats: 3 },
+      { label: "B", chords: [chord("C", 4)], repeats: 1 },
+    ]);
+    expect(split.sections.map((s) => s.name)).toEqual(["Section 0", "A", "B"]);
+    expect(split.sections[1].chords).toHaveLength(2);
+    expect(split.sections[1].bars).toBe(2);
+    // Role, meter and velocity are the parent's — a detected split moves
+    // boundaries, it doesn't re-label the material.
+    expect(split.sections[1].role).toBe("verse");
+    expect(split.sections[1].timeSignatureDenPower).toBe(2);
+    expect(split.sections[1].beatsPerChord).toBe(4);
+  });
+
+  it("marks consecutive passes as repeats rather than extra sections", () => {
+    const song = makeSong([{ id: "big" }]);
+    const split = splitSection(song, "big", [{ label: "A", chords: [chord("D", 4)], repeats: 4 }]);
+    expect(split.sections).toHaveLength(1);
+    expect(split.arrangement).toEqual([{ sectionId: split.sections[0].id, repeats: 4 }]);
+  });
+
+  it("keeps the arrangement in step with the new section list", () => {
+    const song = makeSong([{ id: "intro" }, { id: "big" }, { id: "outro" }]);
+    const split = splitSection(song, "big", [
+      { label: "A", chords: [chord("D", 4)], repeats: 2 },
+      { label: "B", chords: [chord("C", 4)], repeats: 1 },
+    ]);
+    expect(split.arrangement.map((entry) => entry.sectionId)).toEqual(split.sections.map((s) => s.id));
+    expect(split.arrangement.map((entry) => entry.repeats)).toEqual([1, 2, 1, 1]);
+  });
+
+  it("leaves the song alone when the section is gone", () => {
+    const song = makeSong([{ id: "a" }]);
+    expect(splitSection(song, "nope", [{ label: "A", chords: [], repeats: 1 }])).toBe(song);
+    expect(splitSection(song, "a", [])).toBe(song);
+  });
+
+  it("keeps lyrics on the first part so nothing is lost", () => {
+    const song = makeSong([{ id: "big", lyrics: "first line\nsecond line" }]);
+    const split = splitSection(song, "big", [
+      { label: "A", chords: [chord("D", 4)], repeats: 1 },
+      { label: "B", chords: [chord("C", 4)], repeats: 1 },
+    ]);
+    expect(split.sections[0].lyrics).toBe("first line\nsecond line");
+    expect(split.sections[1].lyrics).toBeUndefined();
+  });
+});
+
+describe("partBars", () => {
+  it("gives each part whole bars that cover its own chords", () => {
+    expect(partBars([16, 16, 16], 4)).toEqual([4, 4, 4]);
+  });
+
+  it("rounds a part that ends mid-bar up, never down", () => {
+    // 21 beats of 3-beat chords = 5.25 bars: five bars would cut the last
+    // chord, which is what export does with an over-long section.
+    expect(partBars([21, 9, 15], 4)).toEqual([6, 3, 4]);
+    for (const [beats, bars] of [[21, 6], [9, 3], [15, 4]] as const) {
+      expect(bars * 4).toBeGreaterThanOrEqual(beats);
+    }
+  });
+
+  it("never returns zero bars, even for an empty part", () => {
+    expect(partBars([0, 4], 4)).toEqual([1, 1]);
+  });
+
+  it("measures bars with the section's own meter", () => {
+    expect(partBars([7, 7], 7)).toEqual([1, 1]);
+  });
+});
+
+function chordSet(count: number, beats = 4) {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `c${i}`,
+    romanNumeral: "",
+    root: "C" as const,
+    quality: "maj" as const,
+    beats,
+  }));
+}
+
+describe("splitSectionAt — a cut where the reading didn't put one", () => {
+  const song = () =>
+    makeSong([
+      { id: "long", name: "Unlabeled", bars: 8, chords: chordSet(16) },
+      { id: "after", name: "Outro", bars: 4 },
+    ]);
+
+  it("cuts at the chord, not through it", () => {
+    const next = splitSectionAt(song(), "long", "c8");
+    expect(next.sections.map((s) => s.id)).not.toContain("long");
+    expect(next.sections).toHaveLength(3);
+    expect(next.sections[0].chords).toHaveLength(8);
+    expect(next.sections[1].chords).toHaveLength(8);
+    expect(next.sections[1].chords[0].id).toBe("c8");
+    // an unnamed block gets plain letters
+    expect([next.sections[0].name, next.sections[1].name]).toEqual(["A", "B"]);
+    // 8 bars of 4/4 at 4 beats per chord → each half is 8 bars… unchanged
+    expect([next.sections[0].bars, next.sections[1].bars]).toEqual([8, 8]);
+  });
+
+  it("keeps a named block's name on both halves", () => {
+    const next = splitSectionAt(makeSong([{ id: "v", name: "Verse", chords: chordSet(8) }]), "v", "c4");
+    expect([next.sections[0].name, next.sections[1].name]).toEqual(["Verse A", "Verse B"]);
+  });
+
+  it("refuses a cut at the first chord — that would make an empty section", () => {
+    const next = splitSectionAt(song(), "long", "c0");
+    expect(next.sections).toHaveLength(2);
+    expect(next.sections[0].id).toBe("long");
+  });
+});
+
+describe("mergeWithNext — the undo of an over-eager split", () => {
+  it("joins two sections into one block of their chords", () => {
+    const song = makeSong([
+      { id: "a", name: "A", bars: 2, chords: chordSet(4) },
+      { id: "b", name: "B", bars: 2, chords: chordSet(4) },
+      { id: "c", name: "C", bars: 2, chords: chordSet(4) },
+    ]);
+    const next = mergeWithNext(song, "a");
+    expect(next.sections.map((s) => s.name)).toEqual(["A", "C"]);
+    expect(next.sections[0].chords).toHaveLength(8);
+    // 8 chords × 4 beats = 32 beats = 8 bars of 4/4
+    expect(next.sections[0].bars).toBe(8);
+  });
+
+  it("expands repeats into the chord list rather than losing them", () => {
+    const song = makeSong(
+      [
+        { id: "a", name: "A", bars: 2, chords: chordSet(4) },
+        { id: "b", name: "B", bars: 2, chords: chordSet(4) },
+      ],
+      [],
+    );
+    const repeated = updateRepeats(song, "a", 2);
+    const next = mergeWithNext(repeated, "a");
+    expect(next.sections[0].chords).toHaveLength(12);
+    expect(next.sections[0].bars).toBe(12);
+    expect(next.arrangement[0].repeats).toBe(1);
+  });
+
+  it("does nothing on the last section", () => {
+    const song = makeSong([{ id: "a" }, { id: "b" }]);
+    expect(mergeWithNext(song, "b").sections).toHaveLength(2);
+  });
+});
+
+describe("foldSectionSplits — the reading is a proposal", () => {
+  const part = (label: string, chords: ReturnType<typeof chordSet>, repeats = 1) => ({
+    label,
+    chords,
+    repeats,
+    bars: Math.ceil(chords.length * 4 / 4),
+  });
+
+  it("folds a part into the one above it and re-derives whole bars", () => {
+    const splits = [part("A", chordSet(4)), part("A", chordSet(4)), part("B", chordSet(8))];
+    const folded = foldSectionSplits(splits, [1], 4);
+    expect(folded).toHaveLength(2);
+    expect(folded[0].chords).toHaveLength(8);
+    expect(folded[0].bars).toBe(8);
+    expect(folded[1].label).toBe("B");
+  });
+
+  it("expands the passes of the part above, because they are literal now", () => {
+    const splits = [part("A", chordSet(4), 2), part("B", chordSet(4))];
+    const folded = foldSectionSplits(splits, [1], 4);
+    expect(folded).toHaveLength(1);
+    expect(folded[0].chords).toHaveLength(12);
+    expect(folded[0].repeats).toBe(1);
+    expect(folded[0].bars).toBe(12);
+  });
+
+  it("leaves the list alone when nothing is folded", () => {
+    const splits = [part("A", chordSet(4)), part("B", chordSet(4))];
+    expect(foldSectionSplits(splits, [], 4)).toHaveLength(2);
+  });
+});
+
+describe("splitSectionAtBar — the cut a bar strip means", () => {
+  it("cuts at the first chord at or after that bar", () => {
+    // 8 chords of 4 beats in 4/4: bar 5 starts at beat 16 = chord 4.
+    const song = makeSong([{ id: "long", name: "Block", bars: 8, chords: chordSet(8) }]);
+    const next = splitSectionAtBar(song, "long", 4);
+    expect(next.sections).toHaveLength(2);
+    expect(next.sections[0].chords).toHaveLength(4);
+    expect(next.sections[1].chords[0].id).toBe("c4");
+    expect(next.sections[0].bars + next.sections[1].bars).toBe(8);
+  });
+
+  it("does nothing for bar 1 or a bar past the end", () => {
+    const song = makeSong([{ id: "long", bars: 8, chords: chordSet(8) }]);
+    expect(splitSectionAtBar(song, "long", 0).sections).toHaveLength(1);
+    expect(splitSectionAtBar(song, "long", 99).sections).toHaveLength(1);
+  });
+});
+
+describe("structural edits move the section's timed data", () => {
+  const chord = (id: string, beats = 4) => ({ id, root: "D", quality: "min" as const, beats, romanNumeral: "" });
+  const eight = () => Array.from({ length: 8 }, (_, i) => chord(`c${i}`));
+
+  it("splits tonic regions at the cut and re-bases the tail", () => {
+    // D for the first four bars, F from bar 5 — a modulation inside one block.
+    const song = makeSong([
+      {
+        id: "big",
+        bars: 8,
+        chords: eight(),
+        tonicRegions: [
+          { startBeat: 0, key: "D", scale: "aeolian", source: "authored" },
+          { startBeat: 16, key: "F", scale: "ionian", source: "authored" },
+        ],
+      },
+    ]);
+    const next = splitSectionAtBar(song, "big", 4);
+    expect(next.sections[0].tonicRegions).toEqual([
+      { startBeat: 0, key: "D", scale: "aeolian", source: "authored" },
+    ]);
+    // The tail opens on the home that was in force at the cut — not beat 16.
+    expect(next.sections[1].tonicRegions).toEqual([
+      { startBeat: 0, key: "F", scale: "ionian", source: "authored" },
+    ]);
+  });
+
+  it("splits a meter map and opens the tail on the meter in force", () => {
+    const song = makeSong([
+      { id: "big", bars: 8, chords: eight(), meterMap: [{ bar: 4, numerator: 7, denominator: 8 }] },
+    ]);
+    const next = splitSectionAtBar(song, "big", 4);
+    expect(next.sections[0].meterMap).toBeUndefined();
+    expect(next.sections[0].timeSignatureNumerator).toBe(4);
+    // The tail's 7/8 bar is its own bar 1 now, and its opening meter is 7/8.
+    expect(next.sections[1].meterMap).toEqual([{ bar: 0, numerator: 7, denominator: 8 }]);
+    expect(next.sections[1].timeSignatureNumerator).toBe(7);
+    expect(next.sections[1].timeSignatureDenPower).toBe(3);
+  });
+
+  it("cuts on the real bar length when a meter map changes it", () => {
+    // Bars: 4, 3.5, 4, 4 — so bar 2 starts at beat 7.5, not 8.
+    const song = makeSong([
+      { id: "big", bars: 4, chords: [chord("c0"), chord("c1"), chord("c2"), chord("c3")], meterMap: [{ bar: 1, numerator: 7, denominator: 8 }] },
+    ]);
+    const next = splitSectionAtBar(song, "big", 2);
+    expect(next.sections[0].chords.map((c) => c.id)).toEqual(["c0", "c1"]);
+    expect(next.sections[1].chords.map((c) => c.id)).toEqual(["c2", "c3"]);
+  });
+
+  it("slices the melody and the lyric timeline, dropping generator provenance", () => {
+    const song = makeSong([
+      {
+        id: "big",
+        bars: 8,
+        chords: eight(),
+        melody: {
+          notes: [
+            { pitch: 62, startTime: 0, duration: 2 },
+            { pitch: 65, startTime: 20, duration: 2 },
+          ],
+          source: "generated",
+          seed: 7,
+        },
+        lyricsTimeline: [
+          { text: "first", startBeat: 4 },
+          { text: "second", startBeat: 20 },
+        ],
+        transitionNote: "drum fill",
+        harmonyMeterOutline: { cellBeats: 0.5, cells: [2, 3], label: "1 2 3" },
+      },
+    ]);
+    const next = splitSectionAtBar(song, "big", 4);
+    expect(next.sections[0].melody?.notes).toEqual([{ pitch: 62, startTime: 0, duration: 2 }]);
+    expect(next.sections[1].melody?.notes).toEqual([{ pitch: 65, startTime: 4, duration: 2 }]);
+    expect(next.sections[0].melody?.source).toBeUndefined();
+    expect(next.sections[0].lyricsTimeline).toEqual([{ text: "first", startBeat: 4 }]);
+    expect(next.sections[1].lyricsTimeline).toEqual([{ text: "second", startBeat: 4 }]);
+    // Whole-section fields stay on the head.
+    expect(next.sections[0].transitionNote).toBe("drum fill");
+    expect(next.sections[1].transitionNote).toBeUndefined();
+    expect(next.sections[0].harmonyMeterOutline).toBeDefined();
+    expect(next.sections[1].harmonyMeterOutline).toBeUndefined();
+  });
+
+  it("merges the second section's timed data behind the first", () => {
+    const song = makeSong([
+      {
+        id: "a",
+        bars: 4,
+        chords: [chord("a0"), chord("a1"), chord("a2"), chord("a3")],
+        tonicRegions: [{ startBeat: 0, key: "D", scale: "aeolian", source: "authored" }],
+        melody: { notes: [{ pitch: 62, startTime: 0, duration: 2 }] },
+      },
+      {
+        id: "b",
+        bars: 4,
+        chords: [chord("b0"), chord("b1"), chord("b2"), chord("b3")],
+        tonicRegions: [{ startBeat: 0, key: "F", scale: "ionian", source: "authored" }],
+        melody: { notes: [{ pitch: 65, startTime: 4, duration: 2 }] },
+        meterMap: [{ bar: 2, numerator: 7, denominator: 8 }],
+      },
+    ], [{ sectionId: "a", repeats: 1 }, { sectionId: "b", repeats: 1 }]);
+    const merged = mergeWithNext(song, "a").sections[0];
+    expect(merged.chords).toHaveLength(8);
+    expect(merged.tonicRegions).toEqual([
+      { startBeat: 0, key: "D", scale: "aeolian", source: "authored" },
+      { startBeat: 16, key: "F", scale: "ionian", source: "authored" },
+    ]);
+    expect(merged.melody?.notes).toEqual([
+      { pitch: 62, startTime: 0, duration: 2 },
+      { pitch: 65, startTime: 20, duration: 2 },
+    ]);
+    // The second section's 7/8 bar is now the merged block's bar 7.
+    expect(merged.meterMap).toEqual([{ bar: 6, numerator: 7, denominator: 8 }]);
   });
 });

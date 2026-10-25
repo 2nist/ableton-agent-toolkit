@@ -25,8 +25,7 @@ interface ChordCardProps {
  *  harmonic function, and clickable to audition.  Progressive-disclosure
  *  editing — the always-visible inline fields are replaced by a single
  *  "edit property" dropdown that reveals the chosen editor only when
- *  selected.  Substitutions stay in ChordInspector (right panel) to
- *  avoid cluttering a chord card this small. */
+ *  selected. */
 export default function ChordCard({
   chord,
   keyName,

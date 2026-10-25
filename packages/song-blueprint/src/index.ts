@@ -235,6 +235,22 @@ export interface Chord {
   quality: ChordQuality;
   function?: string;
   beats: number;
+  /** Beats of silence AFTER this chord, inside the progression's cycle.
+   *  A rest is not a chord: nothing sounds, no note exports, and the next
+   *  chord starts later. Written as a gap on the chord before it, so a
+   *  progression stays a *sequence* — no absolute start times to keep in
+   *  sync when a chord is inserted. Absent = 0 = the historical tiling. */
+  restAfter?: number;
+  /** Beats of silence BEFORE this chord. Only meaningful on the first chord
+   *  of the cycle (every gap between two chords belongs to the one before
+   *  it, as `restAfter`); it exists so a progression can start off the
+   *  downbeat, and it repeats with the cycle. Absent = 0. */
+  restBefore?: number;
+  /** How an out-of-key pitch is NAMED when it sits between two scale
+   *  degrees: "sharp" reads ♯III, "flat" reads ♭IV. Absent = the reader's
+   *  default (flats, except the raised fourth). Display only — the pitch is
+   *  `root` and every consumer (export, playback, transposition) ignores it. */
+  spelling?: "sharp" | "flat";
   isSubstitution?: boolean;
   substitutedFrom?: string;
   /** When the chord has a richer quality than ChordQuality can express
@@ -844,7 +860,14 @@ export interface ProgressionFit {
   overflowBeats: number;
 }
 export function describeProgressionFit(section: BlueprintSection): ProgressionFit | null {
-  const cycleBeats = section.chords.reduce((sum, c) => sum + c.beats, 0);
+  // Rests are part of the cycle: silence makes the loop longer, so a fit
+  // computed from chord beats alone would advise the wrong bar count.
+  const gap = (beats: number | undefined) =>
+    typeof beats === "number" && Number.isFinite(beats) && beats > 0 ? beats : 0;
+  const cycleBeats = section.chords.reduce(
+    (sum, c) => sum + gap(c.restBefore) + c.beats + gap(c.restAfter),
+    0,
+  );
   if (cycleBeats <= 0) return null;
   const durationBeats = sectionDurationBeats(section);
   const wholeCycles = Math.floor(durationBeats / cycleBeats);

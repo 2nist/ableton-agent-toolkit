@@ -106,7 +106,7 @@ export default function PresetPicker({
   const [customPresets, setCustomPresets] = useState<SavedPreset[]>(loadCustomPresets);
   const [saveName, setSaveName] = useState("");
   const [showSave, setShowSave] = useState(false);
-  const [key, preset] = PRESET_ENTRIES.find(([k]) => k === selected)!;
+  const [, preset] = PRESET_ENTRIES.find(([k]) => k === selected)!;
 
   function handleApplyBuiltin() {
     void applyBuiltin();

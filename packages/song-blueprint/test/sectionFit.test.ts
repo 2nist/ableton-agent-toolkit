@@ -95,4 +95,22 @@ describe("describeProgressionFit", () => {
     expect(fit.remainderBeats).toBe(8);
     expect(fit.overflowBeats).toBe(8);
   });
+
+  it("counts rests in the cycle, so the bar advice stays right", () => {
+    // Three 4-beat chords with a 4-beat rest after the first = 16 beats,
+    // not 12: it fills a 4-bar section exactly instead of looping.
+    const sec = section({ bars: 4, chords: [{ ...chord(4), restAfter: 4 }, chord(4), chord(4)] });
+    const fit = describeProgressionFit(sec)!;
+    expect(fit.cycleBeats).toBe(16);
+    expect(fit.wholeCycles).toBe(1);
+    expect(fit.remainderBeats).toBe(0);
+    expect(fit.overflowBeats).toBe(0);
+  });
+
+  it("a rest can push a progression into overflow", () => {
+    const sec = section({ bars: 1, chords: [chord(4), { ...chord(4), restAfter: 2 }] });
+    const fit = describeProgressionFit(sec)!;
+    expect(fit.cycleBeats).toBe(10);
+    expect(fit.overflowBeats).toBe(6);
+  });
 });

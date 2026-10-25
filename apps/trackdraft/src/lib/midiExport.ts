@@ -19,7 +19,7 @@ import { chordToMidiNotes, getChordIntervals, pitchClass, planChordNotes, voiceC
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
 import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
-import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, applyStyleToVariant, resolveEffectiveStyle, resolveNarrativeProfile, narrativeHarmonySection, narrativeTransitionModel, styleArticulation, styleQualityFor, styleSpacing, styleVelocityTarget, drumPocket, glueToPocket, planLaneCc, type GrooveMap, type SectionDrumInput } from "@drum/library";
+import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, pocketSummary, applyStyleToVariant, resolveEffectiveStyle, resolveNarrativeProfile, narrativeHarmonySection, narrativeTransitionModel, styleArticulation, styleQualityFor, styleSpacing, styleVelocityTarget, drumPocket, glueToPocket, planLaneCc, type GrooveMap, type SectionDrumInput } from "@drum/library";
 import { planColorStem } from "./colorStem";
 import { planMelodyStem } from "./melody/melodyStem";
 import { GM_ROUTING, STEM_LABELS, clampChannel, clampProgram, type StemId, type StemRoutingMap } from "./stems";
@@ -71,6 +71,36 @@ const GM_DRUM_PITCHES = new Set([36, 37, 38, 39, 41, 42, 44, 45, 46, 47, 49, 51,
 // ---------------------------------------------------------------------------
 // Stem generators
 // ---------------------------------------------------------------------------
+
+/**
+ * How the section's groove glue would move each chord onset, in beats — the
+ * same `sectionPocket` + `glueToPocket` pair the export runs, so the floor's
+ * preview cannot disagree with what lands in Ableton. Null when the section
+ * does not glue its chords (the common case: nothing to show).
+ */
+export function chordGluePreview(
+  song: BlueprintSong,
+  sectionId: string,
+  starts: readonly number[],
+): { offsets: number[]; strength: number; meanMs: number; slots: number } | null {
+  const span = sectionSpans(song).find((entry) => entry.section.id === sectionId);
+  if (!span || !span.section.grooveGlue?.chords) return null;
+  const pocket = sectionPocket(span, song);
+  if (!pocket) return null;
+  const strength = Math.max(0, Math.min(1, span.section.grooveGlue.strength ?? 1));
+  const glued = glueToPocket(
+    starts.map((startTime) => ({ startTime, duration: 1, velocity: 100 })),
+    pocket,
+    { strength, applyVelocity: false },
+  );
+  const summary = pocketSummary(pocket);
+  return {
+    offsets: glued.map((note, index) => Math.round((note.startTime - starts[index]) * 1000) / 1000),
+    strength,
+    meanMs: summary.meanOffsetMs,
+    slots: summary.slots,
+  };
+}
 
 /** Chord notes for one section — block chords with performance effects.
  *  Honors the Bend harmony axis (voicing extension) and density (spacing). */

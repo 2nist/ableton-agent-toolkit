@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { songToMidi, planChordStem, planDrumStem, planBassStem } from "./midiExport";
+import { songToMidi, planChordStem, planDrumStem, planBassStem, chordGluePreview } from "./midiExport";
 import { resolveChordOccurrences } from "@drum/library";
 import { sectionSpans } from "./arrangement";
 import { parseMidiBytes } from "./parsers/parseMidi";
@@ -73,6 +73,45 @@ function testSong(): BlueprintSong {
   song.arrangement = [{ sectionId: "s1", repeats: 1 }];
   return song;
 }
+
+describe("rests — a rest is silence, not a held chord", () => {
+  /** The Verse with a 4-beat rest after the first chord, so beats 4–8 are
+   *  empty and the loop is 20 beats instead of 16. */
+  function songWithRest(): BlueprintSong {
+    const song = testSong();
+    song.sections[0].chords = [
+      { id: "c1", romanNumeral: "I", root: "C", quality: "maj", beats: 4, restAfter: 4 },
+      { id: "c2", romanNumeral: "V", root: "G", quality: "maj", beats: 4 },
+      { id: "c3", romanNumeral: "vi", root: "A", quality: "min", beats: 4 },
+      { id: "c4", romanNumeral: "IV", root: "F", quality: "maj", beats: 4 },
+    ];
+    song.sections[0].bars = 5;
+    return song;
+  }
+
+  it("exports no chord notes during the rest", () => {
+    const spans = sectionSpans(songWithRest());
+    const notes = planChordStem(spans, songWithRest());
+    const inRest = notes.filter((n) => n.startTime >= 4 && n.startTime < 8);
+    expect(inRest).toEqual([]);
+  });
+
+  it("the chord before the rest is not stretched across it", () => {
+    const song = songWithRest();
+    const notes = planChordStem(sectionSpans(song), song);
+    const first = notes.filter((n) => n.startTime >= 0 && n.startTime < 4);
+    expect(first.length).toBeGreaterThan(0);
+    expect(Math.max(...first.map((n) => n.startTime + n.duration))).toBeLessThanOrEqual(4.0001);
+  });
+
+  it("the rest repeats with the cycle", () => {
+    const song = songWithRest();
+    song.sections[0].bars = 10; // 40 beats = two passes of the 20-beat cycle
+    const notes = planChordStem(sectionSpans(song), song);
+    expect(notes.filter((n) => n.startTime >= 24 && n.startTime < 28)).toEqual([]);
+    expect(notes.some((n) => n.startTime >= 20 && n.startTime < 24)).toBe(true);
+  });
+});
 
 describe("songToMidi", () => {
   it("produces a valid MIDI file header", () => {
@@ -563,5 +602,37 @@ describe("songToMidi — stem routing and instrument metadata", () => {
   it("names each stem track for the DAW lane", () => {
     const parsed = parseMidiBytes(songToMidi(testSong()));
     expect(parsed.tracks.slice(1).map((t) => t.name)).toEqual(["Chords", "Bass", "Drums", "Color", "Melody"]);
+  });
+});
+
+describe("chordGluePreview — the floor's honest preview of the pocket", () => {
+  function gluedSong(strength = 1): BlueprintSong {
+    const song = testSong();
+    song.sections[0].grooveGlue = { chords: true, strength };
+    return song;
+  }
+
+  it("returns null when the section does not glue its chords", () => {
+    expect(chordGluePreview(testSong(), "s1", [0, 4])).toBeNull();
+  });
+
+  it("reports the pocket it would glue to", () => {
+    const preview = chordGluePreview(gluedSong(), "s1", [0, 4, 8, 12])!;
+    expect(preview.offsets).toHaveLength(4);
+    expect(preview.slots).toBeGreaterThan(0);
+    expect(preview.strength).toBe(1);
+  });
+
+  it("strength scales the nudge towards zero", () => {
+    const full = chordGluePreview(gluedSong(1), "s1", [0, 4, 8, 12])!;
+    const half = chordGluePreview(gluedSong(0.5), "s1", [0, 4, 8, 12])!;
+    full.offsets.forEach((offset, index) => {
+      expect(Math.abs(half.offsets[index])).toBeLessThanOrEqual(Math.abs(offset) + 1e-6);
+    });
+  });
+
+  it("never nudges a chord before the section starts", () => {
+    const preview = chordGluePreview(gluedSong(), "s1", [0])!;
+    expect(preview.offsets[0]).toBeGreaterThanOrEqual(0);
   });
 });

@@ -340,6 +340,36 @@ What it refuses to invent, and says so in `provenance.warnings`:
 - **Melody** — the export is rests.
 - **`.mxl`** (zipped MusicXML) is not read; only plain `.musicxml`/`.xml`.
 
+### Export: iReal's own dialect
+
+Import stays MusicXML (above). **Export** goes out in iReal's native dialect,
+because that is the only thing iReal Pro can read: a `irealb://` URL carrying
+`title=composer=style=key=…=music=…=bpm=repeats`, inside the `.html` playlist
+skeleton iReal's own exporter writes (`lib/ireal/`, surfaced as *iReal chart*
+on the Rehearse desk).
+
+The chord string is undocumented, so the writer is built from a real export
+whose MusicXML gave the ground truth, and a reader for the same dialect lives
+beside it — the two are tested by round trip rather than by hope. What the
+sample settled:
+
+- `*A` sections, `T44` meter, `|` bars, `{ }` repeat brackets, `Z` final bar.
+- A chord on beat 1 owns the bar: `C^7XyQ`. A chord that arrives later is
+  separated from the previous one by the distance it moved — one beat is `,`,
+  two beats are a space, three are `, ` — and the bar closes with a trailing
+  comma (`G7,W/A,W/B,W/G,`).
+- The music string is obfuscated in 50-character blocks (first five swap with
+  the last five, 10–23 swap with 39–26). The swap is its own inverse, so the
+  same routine unscrambles.
+
+Re-encoding a decoded real chart reproduces the same bars and chords; the
+differences are only compression (iReal writes `Kcl` for a repeated bar and
+brackets endings) and navigation (`D.S. al Coda`, segno, coda), which this
+side expands into literal bars on import and therefore writes out longhand.
+Melody, lyrics, drum/bass/colour instrumentation and performance effects do
+not cross over, and the desk says so when it writes the file instead of
+pretending they made it.
+
 ## Per-bar meter
 
 `BlueprintSection.meterMap` is a list of `{ bar, numerator, denominator }`

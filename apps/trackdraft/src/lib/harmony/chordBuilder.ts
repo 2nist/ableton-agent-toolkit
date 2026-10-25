@@ -2,7 +2,6 @@ import {
   MODE_DATA,
   FUNCTION_COLORS,
   CHORD_QUALITY_SUFFIX,
-  CHORD_QUALITY_GROUPS,
   PRESET_PROGRESSIONS,
   parseChordQuality,
   chordName,

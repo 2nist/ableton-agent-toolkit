@@ -34,3 +34,49 @@
    component) rather than auto — the styles below/above then apply to an
    always-present strip, so the workspace never shifts when a song starts
    or stops needing a scrollbar. */
+
+/* Printing a chart — the Rehearse desk's reason to exist on paper.
+   A lead sheet does not want the app around it: hide everything, then bring
+   back the chart itself with white paper, black ink and no page furniture.
+   Bar cells get real black rules because a printed chart is read from a
+   music stand, not a screen. */
+@media print {
+  body {
+    background: #fff !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .studio-chart,
+  .studio-chart * {
+    visibility: visible;
+  }
+  .studio-chart {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .studio-chart .hand-value,
+  .studio-chart b,
+  .studio-chart span {
+    color: #000 !important;
+  }
+  .studio-chart button {
+    border-color: #000 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .studio-chart .grid {
+    border-color: #000 !important;
+  }
+  .studio-chart .grid > * {
+    border-left-color: #000 !important;
+  }
+  @page {
+    margin: 12mm;
+  }
+}

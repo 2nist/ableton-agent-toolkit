@@ -1,4 +1,15 @@
-import { syncArrangementToSections, type BlueprintSong, type BlueprintSection } from "../types/blueprint";
+import {
+  barLengths,
+  meanBeatsPerBar,
+  syncArrangementToSections,
+  type BlueprintSong,
+  type BlueprintSection,
+  type Chord,
+  type LyricsTimelineEntry,
+  type MelodyTrack,
+  type MeterChange,
+  type TonicRegion,
+} from "../types/blueprint";
 import { buildEuclideanOutline, twoThreeCellCounts } from "@drum/library";
 import type { SongMap, MapSlot } from "../data/songMaps";
 import { honeycombTextToChords } from "./harmony/chordBuilder";
@@ -37,6 +48,402 @@ export function addSection(song: BlueprintSong, role: BlueprintSection["role"] =
 
 export function removeSection(song: BlueprintSong, sectionId: string): BlueprintSong {
   return syncArrangementToSections({ ...song, sections: song.sections.filter((s) => s.id !== sectionId) });
+}
+
+/** One section the chord stream was found to contain — see
+ *  `lib/harmony/segmentSections.ts`, which produces these from the chords. */
+export interface SectionSplit {
+  /** A, B, C … the pattern's letter, not a role. */
+  label: string;
+  chords: Chord[];
+  /** How many times this span plays in a row; 1 for a phrase that doesn't. */
+  repeats: number;
+}
+
+/**
+ * Whole bars per part, each one at least as long as its own chords.
+ *
+ * A part that ends mid-bar takes the next whole bar, and no rounding trick
+ * avoids it: making the parts add up to the source's own length would leave
+ * exactly those parts with fewer bars than their chords need — and a section
+ * is truncated at its declared length on export, so that "fix" quietly eats
+ * chords. The total can therefore grow (Layla: 77 → 83 across 18 parts); the
+ * form drawer says so before the split is applied.
+ */
+export function partBars(beatsList: readonly number[], beatsPerBar: number): number[] {
+  const perBar = Math.max(1, beatsPerBar);
+  return beatsList.map((beats) => Math.max(1, Math.ceil(Math.max(0, beats) / perBar - 0.001)));
+}
+
+
+/** Beats in one pass of a chord list. */
+function passBeats(chords: readonly Chord[]): number {
+  return chords.reduce((sum, chord) => sum + Math.max(0.25, chord.beats ?? 4), 0);
+}
+
+/**
+ * How many of `section`'s own bars `beats` covers. With a meter map the bars
+ * are not all the same length, so counting them against the mean is what made
+ * a four-bar head claim five; without one this is the plain `partBars` rule.
+ */
+function barsForBeats(section: BlueprintSection, beats: number): number {
+  const lengths = barLengths(section);
+  if (!section.meterMap || section.meterMap.length === 0 || lengths.length === 0) {
+    return partBars([beats], meanBeatsPerBar(section))[0];
+  }
+  let sum = 0;
+  let count = 0;
+  for (const length of lengths) {
+    sum += length;
+    count += 1;
+    if (sum >= beats - 0.001) break;
+  }
+  return Math.max(1, count);
+}
+
+/**
+ * Section-scoped data that is positioned in *time* — beats or bars from the
+ * section start. Copying it onto both halves of a split (or keeping only the
+ * first section's copy on a merge) writes the wrong music: a modulation at
+ * bar 4 does not happen twice, and a meter map's third bar is not the same
+ * bar in both halves. Everything below slices, clamps or shifts it instead.
+ */
+function sliceRegions(
+  regions: readonly TonicRegion[] | undefined,
+  fromBeat: number,
+  toBeat: number,
+): TonicRegion[] | undefined {
+  if (!regions || regions.length === 0) return undefined;
+  const inside = regions.filter((region) => region.startBeat < toBeat - 0.001);
+  if (inside.length === 0) return undefined;
+  // The home in force at the cut becomes the slice's opening region: the
+  // schema expects the first region of a section to start at 0.
+  const active = inside.filter((region) => region.startBeat <= fromBeat + 0.001).pop() ?? inside[0];
+  const kept: TonicRegion[] = [{ ...active, startBeat: 0 }];
+  for (const region of inside) {
+    if (region.startBeat <= fromBeat + 0.001) continue;
+    kept.push({ ...region, startBeat: region.startBeat - fromBeat });
+  }
+  return kept;
+}
+
+function shiftRegions(regions: readonly TonicRegion[] | undefined, byBeat: number): TonicRegion[] {
+  return (regions ?? []).map((region) => ({ ...region, startBeat: region.startBeat + byBeat }));
+}
+
+function sliceMeterMap(
+  map: readonly MeterChange[] | undefined,
+  fromBar: number,
+  toBar: number,
+): MeterChange[] | undefined {
+  if (!map || map.length === 0) return undefined;
+  const kept = map
+    .filter((entry) => entry.bar >= fromBar && entry.bar < toBar)
+    .map((entry) => ({ ...entry, bar: entry.bar - fromBar }));
+  return kept.length > 0 ? kept : undefined;
+}
+
+/** The written meter in force at `bar` — a bar that no change names. */
+function meterAt(
+  section: BlueprintSection,
+  bar: number,
+): { numerator: number; denPower: number } {
+  const change = (section.meterMap ?? []).filter((entry) => entry.bar <= bar).pop();
+  if (!change) return { numerator: section.timeSignatureNumerator, denPower: section.timeSignatureDenPower };
+  return { numerator: change.numerator, denPower: Math.max(0, Math.round(Math.log2(change.denominator))) };
+}
+
+function sliceNotes(
+  notes: readonly { startTime: number }[] | undefined,
+  fromBeat: number,
+  toBeat: number,
+): { startTime: number }[] {
+  return (notes ?? [])
+    .filter((note) => note.startTime >= fromBeat - 0.001 && note.startTime < toBeat - 0.001)
+    .map((note) => ({ ...note, startTime: Math.max(0, note.startTime - fromBeat) }));
+}
+
+/**
+ * A melody fragment loses its generator provenance: `params`/`seed` describe
+ * the whole line, and regenerating from them would overwrite the piece the
+ * user kept. Without them the track reads as the player's own (absent →
+ * "recorded"), which is exactly what a fragment is.
+ */
+function sliceMelody(
+  melody: MelodyTrack | undefined,
+  fromBeat: number,
+  toBeat: number,
+): MelodyTrack | undefined {
+  const notes = melody ? sliceNotes(melody.notes, fromBeat, toBeat) : [];
+  return notes.length > 0 ? ({ notes } as MelodyTrack) : undefined;
+}
+
+function mergeMelody(
+  first: MelodyTrack | undefined,
+  second: MelodyTrack | undefined,
+  firstBeats: number,
+): MelodyTrack | undefined {
+  const notes = [
+    ...(first?.notes ?? []),
+    ...(second?.notes ?? []).map((note) => ({ ...note, startTime: note.startTime + firstBeats })),
+  ].sort((left, right) => left.startTime - right.startTime);
+  return notes.length > 0 ? ({ notes } as MelodyTrack) : undefined;
+}
+
+function sliceLyrics(
+  timeline: readonly LyricsTimelineEntry[] | undefined,
+  fromBeat: number,
+  toBeat: number,
+): LyricsTimelineEntry[] | undefined {
+  if (!timeline || timeline.length === 0) return undefined;
+  const kept = timeline
+    .filter((entry) => entry.startBeat >= fromBeat - 0.001 && entry.startBeat < toBeat - 0.001)
+    .map((entry) => ({
+      ...entry,
+      startBeat: Math.max(0, entry.startBeat - fromBeat),
+      ...(entry.endBeat === undefined ? {} : { endBeat: Math.max(0, entry.endBeat - fromBeat) }),
+    }));
+  return kept.length > 0 ? kept : undefined;
+}
+
+/**
+ * Replace one section with the sections its own chord stream is made of.
+ *
+ * This is how a 77-bar "Unlabeled" import becomes the form it actually is:
+ * the harmony floor can only ever show a window, and the spine can only show
+ * one block, so the split is what makes the structure visible everywhere
+ * else in the app. The parent's role, velocity, meter and groove are carried
+ * onto every part (a detected split is about *boundaries*, not about
+ * re-labelling the material); lyrics — which have no way to be cut at a
+ * chord boundary — stay with the first part so nothing is lost.
+ */
+export function splitSection(song: BlueprintSong, sectionId: string, splits: readonly SectionSplit[]): BlueprintSong {
+  const index = song.sections.findIndex((entry) => entry.id === sectionId);
+  if (index === -1 || splits.length === 0) return song;
+  const parent = song.sections[index];
+
+  // Bars come from the parent's real bar lengths where it has a meter map.
+  const bars = splits.map((split) => barsForBeats(parent, passBeats(split.chords)));
+
+  // Where each part starts in the parent's own beats and bars — the offset
+  // everything time-positioned is sliced against.
+  const fromBeat = splits.map((_, position) =>
+    splits.slice(0, position).reduce((sum, split) => sum + passBeats(split.chords), 0),
+  );
+  const fromBar = bars.map((_, position) => bars.slice(0, position).reduce((sum, value) => sum + value, 0));
+
+  const created = splits.map((split, position) => {
+    const start = fromBeat[position];
+    const end = start + passBeats(split.chords);
+    const isHead = position === 0;
+    const opening = meterAt(parent, fromBar[position]);
+    return {
+      ...parent,
+      id: crypto.randomUUID(),
+      name: split.label,
+      bars: bars[position],
+      chords: split.chords,
+      // A tail half opens on whatever meter was in force at the cut, and its
+      // remaining meter changes move back with it.
+      ...(isHead
+        ? {}
+        : { timeSignatureNumerator: opening.numerator, timeSignatureDenPower: opening.denPower }),
+      tonicRegions: sliceRegions(parent.tonicRegions, start, end),
+      meterMap: sliceMeterMap(parent.meterMap, fromBar[position], fromBar[position] + bars[position]),
+      melody: sliceMelody(parent.melody, start, end),
+      lyricsTimeline: sliceLyrics(parent.lyricsTimeline, start, end),
+      // These describe the section as a whole and have no piecewise form:
+      // the first part keeps them, the rest carry none.
+      ...(isHead
+        ? { lyrics: parent.lyrics, transitionNote: parent.transitionNote }
+        : {
+            lyrics: undefined,
+            transitionNote: undefined,
+            harmonyMeterOutline: undefined,
+            drumMeterOutline: undefined,
+            drumVariationOutline: undefined,
+          }),
+    };
+  });
+
+  const sections = [...song.sections];
+  sections.splice(index, 1, ...created);
+  const synced = syncArrangementToSections({ ...song, sections });
+
+  // Consecutive passes of one pattern are not extra sections: they are the
+  // same section played again, which is exactly what `arrangement.repeats`
+  // is for. Syncing above reset these to 1, so write them back by id.
+  const repeatsById = new Map<string, number>(
+    created.map((section, position) => [section.id as string, Math.max(1, splits[position].repeats)]),
+  );
+  return {
+    ...synced,
+    arrangement: synced.arrangement.map((entry) => ({
+      ...entry,
+      repeats: repeatsById.get(entry.sectionId) ?? entry.repeats,
+    })),
+  };
+}
+
+/**
+ * Fold detected parts into the one above them, before anything is written.
+ *
+ * A reading is a proposal: a vamp of four-bar A's reads as one sixteen-bar A
+ * to the ear, and the song should never see a split nobody agreed with. Each
+ * fold concatenates the chords (expanding any `repeats` the part above had,
+ * because those passes are now literal) and re-derives whole bars.
+ */
+export function foldSectionSplits<T extends { chords: Chord[]; repeats: number; bars: number }>(
+  splits: readonly T[],
+  folded: readonly number[],
+  beatsPerBar: number,
+): T[] {
+  const into = new Set(folded);
+  const out: T[] = [];
+  splits.forEach((part, index) => {
+    if (index > 0 && into.has(index)) {
+      const previous = out[out.length - 1];
+      const passes = Math.max(1, previous.repeats);
+      const expand = (list: Chord[]) => (passes > 1 ? Array.from({ length: passes }, () => list).flat() : list);
+      const chords = [...expand(previous.chords), ...part.chords];
+      out[out.length - 1] = {
+        ...previous,
+        chords,
+        repeats: 1,
+        bars: partBars([chords.reduce((sum, chord) => sum + Math.max(0.25, chord.beats ?? 4), 0)], beatsPerBar)[0],
+      };
+    } else {
+      out.push({ ...part });
+    }
+  });
+  return out;
+}
+
+/**
+ * Cut this section in two at a chord — the manual counterpart to
+ * `segmentSections`, for the times the reading is off or you simply want a
+ * boundary somewhere it didn't put one.
+ *
+ * The cut is chord-aligned (a chord is never split in half): the chord you
+ * point at starts the second section. Bars are recomputed per part, so a cut
+ * that lands mid-bar grows the total by less than a bar — the same accounting
+ * `splitSection` documents.
+ */
+export function splitSectionAt(
+  song: BlueprintSong,
+  sectionId: string,
+  chordId: string,
+): BlueprintSong {
+  const section = song.sections.find((s) => s.id === sectionId);
+  if (!section) return song;
+  const cut = section.chords.findIndex((chord) => chord.id === chordId);
+  // A cut at the first chord would leave an empty section in front of it.
+  if (cut <= 0) return song;
+  const named = section.name.trim() !== "" && !/^unlabeled$/i.test(section.name.trim());
+  return splitSection(song, sectionId, [
+    { label: named ? `${section.name} A` : "A", chords: section.chords.slice(0, cut), repeats: 1 },
+    { label: named ? `${section.name} B` : "B", chords: section.chords.slice(cut), repeats: 1 },
+  ]);
+}
+
+/**
+ * Cut at a BAR rather than a chord — what a click on the section's bar strip
+ * means. The cut lands on the first chord at or after that bar, so a chord is
+ * never split in half; bar 1 would leave an empty section, so it is a no-op.
+ */
+export function splitSectionAtBar(song: BlueprintSong, sectionId: string, bar: number): BlueprintSong {
+  const section = song.sections.find((entry) => entry.id === sectionId);
+  if (!section || bar <= 0) return song;
+  // Bars are not all the same length once a section carries a meter map, so
+  // the cut is the sum of the bars before it rather than `bar × mean`.
+  const lengths = barLengths(section);
+  const beatsPerBar = meanBeatsPerBar(section);
+  const cutBeat =
+    lengths.length > 0
+      ? lengths.slice(0, Math.min(bar, lengths.length)).reduce((sum, length) => sum + length, 0)
+      : bar * beatsPerBar;
+  let cursor = 0;
+  const slots = section.chords.map((chord) => {
+    const start = cursor;
+    cursor += Math.max(0.25, chord.beats ?? 4);
+    return start;
+  });
+  const target = section.chords.find((_, index) => (slots[index] ?? 0) >= cutBeat - 0.001);
+  if (!target) return song;
+  return splitSectionAt(song, sectionId, target.id);
+}
+
+/**
+ * Glue a section onto the one after it — the undo of an over-eager split.
+ * Any repeats either side had are expanded into the chord list first, because
+ * `arrangement.repeats` belongs to a section that still exists; a merged block
+ * plays its own chords once, in order.
+ */
+export function mergeWithNext(song: BlueprintSong, sectionId: string): BlueprintSong {
+  const index = song.sections.findIndex((entry) => entry.id === sectionId);
+  if (index === -1 || index >= song.sections.length - 1) return song;
+  const first = song.sections[index];
+  const second = song.sections[index + 1];
+
+  const CHORD_CAP = 3000;
+  const repeatOf = (section: BlueprintSection) =>
+    Math.max(1, Math.floor(song.arrangement.find((entry) => entry.sectionId === section.id)?.repeats ?? 1));
+  const expand = (section: BlueprintSection) => {
+    const times = repeatOf(section);
+    const chords: Chord[] = [];
+    for (let pass = 0; pass < times && chords.length < CHORD_CAP; pass += 1) {
+      chords.push(...section.chords.map((chord) => ({ ...chord, id: pass === 0 ? chord.id : crypto.randomUUID() })));
+    }
+    return chords;
+  };
+
+  const firstChords = expand(first);
+  const chords = [...firstChords, ...expand(second)];
+  const beatsPerBar = meanBeatsPerBar(first);
+  const firstBeats = passBeats(firstChords);
+  // Bar offset for the second section's meter map (its bars move right by the
+  // bars the first one occupies); beat offset for its regions and melody.
+  const firstBars = partBars([firstBeats], beatsPerBar)[0];
+  // The second section's own titles/timings now sit AFTER the first: its
+  // meter changes move by the first's bar count, its regions and melody by
+  // the first's beats. `...first` alone would drop all of it.
+  const secondMeters = (second.meterMap ?? []).map((entry) => ({ ...entry, bar: entry.bar + firstBars }));
+  const merged: BlueprintSection = {
+    ...first,
+    bars: Math.max(1, partBars([passBeats(chords)], beatsPerBar)[0]),
+    chords,
+    lyrics: first.lyrics ?? second.lyrics,
+    meterMap: (() => {
+      const map = [...(first.meterMap ?? []), ...secondMeters];
+      return map.length > 0 ? map : undefined;
+    })(),
+    tonicRegions: (() => {
+      const regions = [...(first.tonicRegions ?? []), ...shiftRegions(second.tonicRegions, firstBeats)];
+      return regions.length > 0 ? regions : undefined;
+    })(),
+    melody: mergeMelody(first.melody, second.melody, firstBeats),
+    lyricsTimeline: (() => {
+      const timeline = [
+        ...(first.lyricsTimeline ?? []),
+        ...(second.lyricsTimeline ?? []).map((entry) => ({
+          ...entry,
+          startBeat: entry.startBeat + firstBeats,
+          ...(entry.endBeat === undefined ? {} : { endBeat: entry.endBeat + firstBeats }),
+        })),
+      ];
+      return timeline.length > 0 ? timeline : undefined;
+    })(),
+  };
+  const sections = [...song.sections];
+  sections.splice(index, 2, merged);
+  const synced = syncArrangementToSections({ ...song, sections });
+  // The repeats are in the chord list now, so the merged block plays once.
+  return {
+    ...synced,
+    arrangement: synced.arrangement.map((entry) =>
+      entry.sectionId === merged.id ? { ...entry, repeats: 1 } : entry,
+    ),
+  };
 }
 
 export function updateSection(

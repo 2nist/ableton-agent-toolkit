@@ -14,7 +14,7 @@
  * so inference only has to answer "which pitch class is home".
  */
 
-import { getChordIntervals, noteName, pitchClass, SCALE_INTERVALS } from "@music-theory/core";
+import { MODE_DATA, getChordIntervals, noteName, pitchClass, SCALE_INTERVALS } from "@music-theory/core";
 import type { ChordQuality, NoteName, ScaleType } from "@music-theory/core";
 import type { TonicRegion, TonicSource } from "@music-theory/song-blueprint";
 
@@ -267,37 +267,48 @@ export function degreeRelativeTo(
   rootPc: number,
   tonicPc: number,
   scale: ScaleType,
+  /** Which way to name a pitch that sits between two scale degrees. Only
+   *  breaks the tie — a pitch with one reading keeps it. */
+  spelling?: "sharp" | "flat",
 ): { deg: number; acc: number } {
   const intervals = SCALE_INTERVALS[scale] ?? SCALE_INTERVALS.ionian;
   const relative = (((rootPc - tonicPc) % 12) + 12) % 12;
   const exact = intervals.indexOf(relative);
   if (exact >= 0) return { deg: exact, acc: 0 };
 
-  let best = { deg: 0, acc: 0, distance: 13 };
+  // Every way this pitch could be written: raise the degree below it, or
+  // lower the degree above it. The nearer reading wins; when both are a
+  // semitone away the tie is what the author's spelling decides.
+  const readings: { deg: number; acc: number; distance: number }[] = [];
   intervals.forEach((interval, deg) => {
     const above = (relative - interval + 12) % 12;
     const below = (interval - relative + 12) % 12;
-    const candidates: { acc: number; distance: number }[] =
-      above <= below
-        ? [
-            { acc: 1, distance: above },
-            { acc: -1, distance: below },
-          ]
-        : [
-            { acc: -1, distance: below },
-            { acc: 1, distance: above },
-          ];
-    for (const candidate of candidates) {
-      if (candidate.distance > best.distance) continue;
-      if (candidate.distance === best.distance) {
-        const prefersSharp = candidate.acc === 1 && deg === 3;
-        const keepsFlat = candidate.acc === -1 && !(best.deg === 3 && best.acc === 1);
-        if (!prefersSharp && !keepsFlat) continue;
-      }
-      best = { deg, acc: candidate.acc, distance: candidate.distance };
-    }
+    if (above > 0) readings.push({ deg, acc: 1, distance: above });
+    if (below > 0) readings.push({ deg, acc: -1, distance: below });
   });
-  return { deg: best.deg, acc: best.acc };
+  const nearest = Math.min(...readings.map((reading) => reading.distance));
+  const tied = readings.filter((reading) => reading.distance === nearest);
+  // A name that needs a double accidental is not a name: B in D aeolian is
+  // "VI", never "♭♭VII", so those readings only survive if nothing else does.
+  const accents = (reading: { deg: number; acc: number }) => {
+    const label = MODE_DATA[scale]?.degrees[reading.deg] ?? "";
+    // A sharp on a degree the mode already flats CANCELS (♯ of ♭III is III),
+    // so count the net: it is a double accidental that has no name.
+    const inLabel = label.startsWith("♭") ? -1 : label.startsWith("♯") ? 1 : 0;
+    return Math.abs(inLabel + reading.acc);
+  };
+  const writable = tied.filter((reading) => accents(reading) <= 1);
+  const pool = writable.length > 0 ? writable : tied;
+
+  if (spelling) {
+    const wanted = pool.find((reading) => reading.acc === (spelling === "sharp" ? 1 : -1));
+    if (wanted) return { deg: wanted.deg, acc: wanted.acc };
+  }
+  // The house default: a raised fourth keeps its sharp, everything else flats.
+  const sharpFourth = pool.find((reading) => reading.acc === 1 && reading.deg === 3);
+  const flat = pool.find((reading) => reading.acc === -1);
+  const pick = sharpFourth ?? flat ?? pool[0];
+  return { deg: pick.deg, acc: pick.acc };
 }
 
 /** The regions in force for a section: what the author set, or what the key

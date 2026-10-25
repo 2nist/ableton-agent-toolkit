@@ -34,6 +34,12 @@ export interface SceneCamera {
   zoom: number;
   panX: number;
   panY: number;
+  /** Vertical scale relative to `zoom`. 1 is a true orthographic projection;
+   *  the locked front view stretches this so the ladder rows keep a readable
+   *  height while the time axis compresses to fit the window — the same
+   *  anisotropy the drums grid gets for free, because its lanes never scale.
+   *  Absent means 1. */
+  scaleY?: number;
 }
 
 export const DEFAULT_CAMERA: SceneCamera = {
@@ -50,6 +56,7 @@ export const MAX_PITCH = (78 * Math.PI) / 180;
 
 export function clampCamera(camera: SceneCamera): SceneCamera {
   return {
+    ...camera,
     yaw: camera.yaw,
     pitch: Math.max(-MAX_PITCH, Math.min(MAX_PITCH, camera.pitch)),
     zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, camera.zoom)),
@@ -87,10 +94,12 @@ export function projectPoint(
   const rotated = rotatePoint(point, camera);
   return {
     x: origin.x + rotated.x * camera.zoom + camera.panX,
-    y: origin.y - rotated.y * camera.zoom + camera.panY,
+    y: origin.y - rotated.y * camera.zoom * (camera.scaleY ?? 1) + camera.panY,
     depth: rotated.z,
   };
 }
+
+export type BoxFaceKind = "top" | "bottom" | "front" | "back" | "left" | "right";
 
 export interface SceneFace {
   /** Screen-space polygon. */
@@ -99,16 +108,18 @@ export interface SceneFace {
   depth: number;
   /** 0..1 lighting from the face normal: 1 faces the viewer. */
   shade: number;
+  /** Which face of the box this is — the top face is the duration handle. */
+  kind: BoxFaceKind;
 }
 
 /** Corner order for the six box faces (indices into `cubeCorners`). */
-const FACES: [number, number, number, number][] = [
-  [0, 1, 3, 2], // -y
-  [4, 5, 7, 6], // +y
-  [0, 1, 5, 4], // -z
-  [2, 3, 7, 6], // +z
-  [0, 2, 6, 4], // -x
-  [1, 3, 7, 5], // +x
+const FACES: { indices: [number, number, number, number]; kind: BoxFaceKind }[] = [
+  { indices: [0, 1, 3, 2], kind: "bottom" },
+  { indices: [4, 5, 7, 6], kind: "top" },
+  { indices: [0, 1, 5, 4], kind: "back" },
+  { indices: [2, 3, 7, 6], kind: "front" },
+  { indices: [0, 2, 6, 4], kind: "left" },
+  { indices: [1, 3, 7, 5], kind: "right" },
 ];
 
 /** The 8 corners of an axis-aligned box, in the FACES winding order. */
@@ -141,10 +152,15 @@ export function boxFaces(
   const corners = cubeCorners(center, size).map((corner) =>
     projectPoint(corner, camera, origin),
   );
-  return FACES.map(([a, b, c, d]) => {
+  return FACES.map(({ indices: [a, b, c, d], kind }) => {
     const points = [corners[a], corners[b], corners[c], corners[d]].map(({ x, y }) => ({ x, y }));
     const depth = (corners[a].depth + corners[b].depth + corners[c].depth + corners[d].depth) / 4;
-    return { points, depth, shade: 0.55 + 0.45 * viewerFacing(corners[a], corners[b], corners[c]) };
+    return {
+      points,
+      depth,
+      shade: 0.55 + 0.45 * viewerFacing(corners[a], corners[b], corners[c]),
+      kind,
+    };
   }).sort((left, right) => left.depth - right.depth);
 }
 
@@ -190,4 +206,77 @@ export function boxHeightForBeats(beats: number): number {
 export function trailFade(index: number, total: number): number {
   if (total <= 1) return 1;
   return 0.4 + 0.6 * (index / (total - 1));
+}
+
+
+/* ============================================================
+   CAMERA PRESETS
+   ------------------------------------------------------------
+   Front is the EDITING camera: with yaw 90° the z (time) axis is
+   horizontal on screen and the pitch axis is vertical, so a drag is
+   nearly 1:1. Three-quarter is for reading the space, Top for the
+   flat grid. All three keep the floor plane well away from edge-on,
+   which is what makes `unprojectToPlane` numerically stable.
+   ============================================================ */
+
+export const CAMERA_PRESETS = {
+  front: { yaw: Math.PI / 2, pitch: (58 * Math.PI) / 180, zoom: 1, panX: 0, panY: 0 },
+  threeQuarter: DEFAULT_CAMERA,
+  top: { yaw: 0, pitch: (84 * Math.PI) / 180, zoom: 1, panX: 0, panY: 0 },
+} satisfies Record<string, SceneCamera>;
+
+/**
+ * Where a screen point lands on a horizontal plane (a lane floor), in world
+ * x/z. Exact for the orthographic projection, so a drag can be resolved
+ * without ray-marching and without the depth ambiguity of 3D picking.
+ *
+ * Returns null when the camera looks nearly edge-on to the plane (|sin
+ * pitch| tiny): there is no stable answer there, and the caller should fall
+ * back to dragging along the screen axes.
+ */
+export interface PlanePoint {
+  /** World x (degree column). */
+  x: number;
+  /** World z (time). */
+  z: number;
+}
+
+export function unprojectToPlane(
+  screenX: number,
+  screenY: number,
+  planeY: number,
+  camera: SceneCamera,
+  origin: Vec2,
+): PlanePoint | null {
+  const cy = Math.cos(camera.yaw);
+  const sy = Math.sin(camera.yaw);
+  const cp = Math.cos(camera.pitch);
+  const sp = Math.sin(camera.pitch);
+  if (Math.abs(sp) < 0.2) return null;
+
+  const A = (screenX - origin.x) / camera.zoom;
+  const B =
+    (-(screenY - origin.y) / (camera.zoom * (camera.scaleY ?? 1)) - planeY * cp) / sp;
+  return { x: cy * A + sy * B, z: sy * A - cy * B };
+}
+
+/** Screen-space direction of one world axis at a point — the axis lock reads
+ *  these to decide whether a gesture is "degree" or "time". */
+export function screenAxis(
+  axis: "x" | "z",
+  at: Vec3,
+  camera: SceneCamera,
+  origin: Vec2,
+): Vec2 {
+  const step = 10;
+  const a = projectPoint(at, camera, origin);
+  const b = projectPoint(
+    axis === "x" ? { ...at, x: at.x + step } : { ...at, z: at.z + step },
+    camera,
+    origin,
+  );
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy) || 1;
+  return { x: dx / length, y: dy / length };
 }

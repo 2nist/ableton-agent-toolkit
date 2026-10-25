@@ -70,8 +70,6 @@ export function HarmonyTools() {
   const { song, updateCurrentSong, activeSection, effectiveKey, effectiveScale } = useHarmonyDockSection();
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
-  const honeycombMode = useHarmonySelectionStore((s) => s.honeycombMode);
-  const setHoneycombMode = useHarmonySelectionStore((s) => s.setHoneycombMode);
   // Which layers the progression preview sends — chords always, bass and
   // color opt-in via the toggles (default on for a fuller sketch).
   const [previewLayers, setPreviewLayers] = useState<{ bass: boolean; color: boolean }>({
@@ -331,8 +329,8 @@ export function HarmonyTools() {
         />
       </div>
 
-      {/* Preview layers + honeycomb view mode — wraps, because four modes plus
-          the two layer toggles overflowed the rail and pushed "3D" off-screen. */}
+      {/* Preview layers. The lens switch lives on the canvas now (the Compose
+          desk owns it), so the rail keeps only the two layer toggles. */}
       <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-1.5 border-b border-edge">
         {(["bass", "color"] as const).map((layer) => (
           <button
@@ -347,30 +345,6 @@ export function HarmonyTools() {
             onClick={() => setPreviewLayers((s) => ({ ...s, [layer]: !s[layer] }))}
           >
             {layer}
-          </button>
-        ))}
-        <span className="w-px h-4 bg-edge mx-1" />
-        {(["linear", "loop", "depth", "scene"] as const).map((mode) => (
-          <button
-            key={mode}
-            aria-pressed={honeycombMode === mode}
-            className={`font-mono text-2xs rounded px-2 py-1 border ${
-              honeycombMode === mode
-                ? "border-accent text-accent bg-accent/10"
-                : "border-edge text-inkMuted hover:text-ink"
-            }`}
-            title={
-              mode === "linear"
-                ? "One hex per chord (only immediate back-and-forth reuses a hex)"
-                : mode === "loop"
-                  ? "Collapse repeating vamps onto a single lap"
-                  : mode === "depth"
-                    ? "Depth (z = time): each chord steps back in depth, so repeats, runs and modulations all advance in one direction"
-                    : "3D scene: degree × alteration × time — drag to orbit, wheel to zoom, shift-drag to pan"
-            }
-            onClick={() => setHoneycombMode(mode)}
-          >
-            {mode === "linear" ? "Linear" : mode === "loop" ? "Loop" : mode === "depth" ? "Depth" : "3D"}
           </button>
         ))}
       </div>

@@ -412,7 +412,6 @@ describe("voicing", () => {
   });
 
   it("returns [0,4,7] for an invalid step (fallback)", () => {
-    const step = parseToken("???")!; // parseToken returns null for ???
     // Use a step that chordSemis rejects
     const badStep: HoneycombStep = {
       deg: 0,

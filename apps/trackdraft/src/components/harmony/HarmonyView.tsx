@@ -1,22 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { NOTE_TO_PC } from "@music-theory/core";
+import { NOTE_TO_PC, noteName, pitchClass } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
-import { meanBeatsPerBar, sectionDurationBeats, type Chord } from "../../types/blueprint";
+import {
+  sectionDurationBeats,
+  type BlueprintSection,
+  type Chord,
+  type TonicRegion,
+} from "../../types/blueprint";
 import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
-import TonicStrip from "./TonicStrip";
 import { effectiveTonicRegions } from "../../lib/harmony/tonic";
 import { resolveChordOccurrences } from "@drum/library";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
-import { updateSection } from "../../lib/sections";
+import {
+  mergeWithNext,
+  removeSection,
+  repeatsFor,
+  updateRepeats,
+  updateSection,
+  splitSection,
+  splitSectionAt,
+  splitSectionAtBar,
+  type SectionSplit,
+} from "../../lib/sections";
+import { sharedRepeats } from "../../lib/sectionSelection";
+import { useSectionShortcuts } from "./useSectionShortcuts";
+import SectionComparison from "./workspace/SectionComparison";
+import { useHarmonyWorkspaceStore } from "../../store/harmonyWorkspaceStore";
 import { sectionSpans } from "../../lib/arrangement";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
 import { useActiveChord } from "../../hooks/useActiveChord";
-import HoneycombWheel from "./HoneycombWheel";
-import ProgressionEditor from "./ProgressionEditor";
-import HarmonyScene from "./HarmonyScene";
-import FitStatus from "./FitStatus";
+import HarmonyWorkspace, { HarmonyDeskBar } from "./workspace/HarmonyWorkspace";
 import ModeInferenceCard from "./ModeInferenceCard";
 import { previewChord } from "../../lib/playback/previewMidi";
 
@@ -26,6 +41,7 @@ import { previewChord } from "../../lib/playback/previewMidi";
  *  registered once below) instead of a floating overlay + anchored
  *  popover — this view only owns section/chord *selection*, shared via
  *  `harmonySelectionStore` with the dock content that reacts to it. */
+
 export default function HarmonyView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
@@ -33,8 +49,6 @@ export default function HarmonyView() {
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
-  const honeycombMode = useHarmonySelectionStore((s) => s.honeycombMode);
-  const setHoneycombMode = useHarmonySelectionStore((s) => s.setHoneycombMode);
   const [tick, setTick] = useState<TransportTick | null>(null);
 
   // The canvas follows the transport: the chord under the playhead is
@@ -48,6 +62,49 @@ export default function HarmonyView() {
 
   const song = currentSong;
   const activeSection = song?.sections.find((s) => s.id === selectedSectionId) ?? song?.sections[0] ?? null;
+
+  /**
+   * Multi-section: every selected section is a band on one canvas, so their
+   * progressions can be read against the same bars instead of one at a time.
+   * Capped — past a handful of bands nobody is reading any more.
+   */
+  const desk = useHarmonyWorkspaceStore((s) => s.desk);
+  const selectedIds = useStudioSelectionStore((s) => s.selected);
+  const clearSectionSelection = useStudioSelectionStore((s) => s.clearSelection);
+  const reconcileSelection = useStudioSelectionStore((s) => s.reconcile);
+  const setSectionSelection = useStudioSelectionStore((s) => s.setSelection);
+  const extendSectionSelection = useStudioSelectionStore((s) => s.extendSelectionTo);
+  const sectionOrder = useMemo(() => (song?.sections ?? []).map((entry) => entry.id), [song?.sections]);
+
+  useSectionShortcuts({
+    order: sectionOrder,
+    focusedId: selectedSectionId,
+    onFocus: (sectionId) => setSelectedSectionId(sectionId),
+    onExtendTo: (sectionId) => extendSectionSelection(sectionId, sectionOrder),
+    onSelectAll: () => setSectionSelection(sectionOrder, selectedSectionId ?? sectionOrder[0] ?? null),
+    // Escape drops a multi-selection back to the focused section. With one
+    // section selected there is nothing to collapse, so it is left alone —
+    // Escape still belongs to whatever else is open.
+    onCollapse: () => {
+      if (selectedIds.length > 1 && selectedSectionId) setSelectedSectionId(selectedSectionId);
+    },
+  });
+
+  const stackAll = useMemo(
+    () => (song ? song.sections.filter((entry) => selectedIds.includes(entry.id)) : []),
+    [song, selectedIds],
+  );
+  // The stack is the compose view: Rehearse and Study are built around one
+  // section at a time (a scene, a table, a tension readout), and stacking
+  // them turned three bands into an eight-thousand-pixel scroll.
+  const stacked = desk === "compose" && stackAll.length > 1;
+
+  // A section can vanish under the selection (delete, split, template) — the
+  // store must not keep pointing at it.
+  useEffect(() => {
+    if (!song) return;
+    reconcileSelection(song.sections.map((entry) => entry.id));
+  }, [song, reconcileSelection]);
 
   useEffect(() => {
     setSelectedChordId(null);
@@ -83,6 +140,15 @@ export default function HarmonyView() {
     activeSpan?.durationBeats ?? 0,
     beatInSection,
   );
+
+  /**
+   * Where the chart's cursor sits. `beatInSection` is deliberately null once
+   * the transport leaves the focused section, so using it froze the cursor on
+   * the first bar for the rest of the tune; the chart is the whole song, so it
+   * follows the raw song beat and only falls back to the focused section when
+   * nothing has played yet.
+   */
+  const playheadBeat = tick ? tick.beat : (activeSpan?.startBeat ?? null);
 
   // A section can override the song's key/scale (modulation) — everything
   // downstream reads/writes against this effective value, never
@@ -121,6 +187,10 @@ export default function HarmonyView() {
 
   if (!song) return null;
 
+  const stackRepeats = sharedRepeats(stackAll.map((entry) => repeatsFor(song, entry.id)));
+  const stackBars = stackAll.reduce((sum, entry) => sum + Math.round(entry.bars * repeatsFor(song, entry.id)), 0);
+  const stackChords = stackAll.reduce((sum, entry) => sum + entry.chords.length, 0);
+
   /** True when a meter outline (drums/Bend grid) decides chord timing, so the
    *  chords' own `beats` are not what plays — the rhythm strip goes read-only. */
   const chordsFollowOutline = !!(
@@ -150,6 +220,156 @@ export default function HarmonyView() {
     updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, bars })));
   }
 
+  /** Bulk edits over the multi-selection — each one a single undo step. */
+  function setRepeatsOnSelection(repeats: number) {
+    const ids = stackAll.map((entry) => entry.id);
+    if (ids.length === 0) return;
+    updateCurrentSong((s) => ids.reduce((acc, id) => updateRepeats(acc, id, repeats), s));
+  }
+
+  function transposeSelection(semitones: number) {
+    const ids = new Set(stackAll.map((entry) => entry.id));
+    if (ids.size === 0 || semitones === 0) return;
+    updateCurrentSong((s) => ({
+      ...s,
+      sections: s.sections.map((sec) => {
+        if (!ids.has(sec.id)) return sec;
+        const base = sec.key ?? s.key;
+        const nextKey = noteName((pitchClass(base) + semitones + 12) % 12, base);
+        const shift = (name: NoteName) => noteName((pitchClass(name) + semitones + 12) % 12, nextKey);
+        return {
+          ...sec,
+          key: shift(base),
+          chords: sec.chords.map((chord) => ({ ...chord, root: shift(chord.root) })),
+          tonicRegions: sec.tonicRegions?.map((region) => ({ ...region, key: shift(region.key) })),
+        };
+      }),
+    }));
+  }
+
+  function deleteSelection() {
+    const ids = stackAll.map((entry) => entry.id);
+    if (ids.length === 0) return;
+    updateCurrentSong((s) => ids.reduce((acc, id) => removeSection(acc, id), s));
+    clearSectionSelection();
+  }
+
+  /**
+   * A structural edit replaces sections, so the selection has to be rebuilt
+   * from what still exists plus what the edit created — otherwise a split
+   * silently drops you back to one section and the strip disappears.
+   */
+  function reselectAfterEdit(previousSelection: readonly string[], previousIds: readonly string[]) {
+    const after = useSongStore.getState().currentSong();
+    if (!after) return;
+    const before = new Set(previousIds);
+    const survivors = previousSelection.filter((id) => after.sections.some((entry) => entry.id === id));
+    const created = after.sections.filter((entry) => !before.has(entry.id)).map((entry) => entry.id);
+    const keep = new Set([...survivors, ...created]);
+    const ordered = after.sections.map((entry) => entry.id).filter((id) => keep.has(id));
+    if (ordered.length === 0) return;
+    setSectionSelection(ordered, ordered[0]);
+  }
+
+  /** The form drawer's write: one section becomes the sections its own chord
+   *  stream contains. Structural, so it goes through the song store like any
+   *  other edit — one undo step puts the block back. */
+  function splitSectionOf(section: BlueprintSection, splits: SectionSplit[]) {
+    if (!song || splits.length === 0) return;
+    const previousSelection = selectedIds;
+    const previousIds = song.sections.map((entry) => entry.id);
+    updateCurrentSong((s) => splitSection(s, section.id, splits));
+    reselectAfterEdit(previousSelection, previousIds);
+    setSelectedChordId(null);
+  }
+
+  function splitIntoSectionParts(splits: SectionSplit[]) {
+    if (!activeSection) return;
+    splitSectionOf(activeSection, splits);
+  }
+
+  /** Cut at a bar of the strip — the same verb, expressed in bars. */
+  function splitSectionAtBarOf(section: BlueprintSection, bar: number) {
+    if (!song) return;
+    const previousSelection = selectedIds;
+    const previousIds = song.sections.map((entry) => entry.id);
+    updateCurrentSong((s) => splitSectionAtBar(s, section.id, bar));
+    reselectAfterEdit(previousSelection, previousIds);
+    setSelectedChordId(null);
+  }
+
+  /** The manual cut: this chord starts a new section. Structural, one undo. */
+  function splitSectionAtChordOf(section: BlueprintSection, chordId: string) {
+    if (!song) return;
+    const previousSelection = selectedIds;
+    const previousIds = song.sections.map((entry) => entry.id);
+    updateCurrentSong((s) => splitSectionAt(s, section.id, chordId));
+    reselectAfterEdit(previousSelection, previousIds);
+    setSelectedChordId(null);
+  }
+
+  /** Rename in place: a structure edit like any other, one undo step. */
+  function renameSectionOf(section: BlueprintSection, name: string) {
+    const trimmed = name.trim().slice(0, 40);
+    if (!trimmed || trimmed === section.name) return;
+    updateCurrentSong((s) => updateSection(s, section.id, (sec) => ({ ...sec, name: trimmed })));
+  }
+
+  /** Glue onto the next section — the undo of an over-eager split. */
+  function mergeSectionOf(section: BlueprintSection) {
+    if (!song) return;
+    const index = song.sections.findIndex((entry) => entry.id === section.id);
+    if (index < 0 || index >= song.sections.length - 1) return;
+    const previousSelection = selectedIds;
+    const previousIds = song.sections.map((entry) => entry.id);
+    updateCurrentSong((s) => mergeWithNext(s, section.id));
+    reselectAfterEdit(previousSelection, previousIds);
+  }
+
+  /** A rehearsal transpose writes once: every chord root, every section key
+   *  override and every authored tonic region move together, so the derived
+   *  roman numerals read exactly as they did before. One undo step. */
+  function transposeSong(semitones: number) {
+    if (semitones === 0) return;
+    updateCurrentSong((s) => {
+      const nextKey = noteName((pitchClass(s.key) + semitones + 12) % 12, s.key);
+      const shift = (name: NoteName) => noteName((pitchClass(name) + semitones + 12) % 12, nextKey);
+      return {
+        ...s,
+        key: nextKey,
+        sections: s.sections.map((sec) => ({
+          ...sec,
+          key: sec.key ? shift(sec.key) : undefined,
+          chords: sec.chords.map((chord) => ({ ...chord, root: shift(chord.root) })),
+          tonicRegions: sec.tonicRegions?.map((region) => ({ ...region, key: shift(region.key) })),
+        })),
+      };
+    });
+  }
+
+  /** Transpose ONE section (the ⌥ variant of a tonic drag, and the stack's
+   *  per-band control). */
+  function transposeSectionOf(section: BlueprintSection, semitones: number) {
+    if (semitones === 0) return;
+    const base = section.key ?? effectiveKey;
+    const nextKey = noteName((pitchClass(base) + semitones + 12) % 12, base);
+    const shift = (name: NoteName) => noteName((pitchClass(name) + semitones + 12) % 12, nextKey);
+    updateCurrentSong((s) =>
+      updateSection(s, section.id, (sec) => ({
+        ...sec,
+        key: nextKey,
+        chords: sec.chords.map((chord) => ({ ...chord, root: shift(chord.root) })),
+        tonicRegions: sec.tonicRegions?.map((region) => ({ ...region, key: shift(region.key) })),
+      })),
+    );
+  }
+
+  /** The same write, scoped to the section on screen. */
+  function transposeSection(semitones: number) {
+    if (!activeSection) return;
+    transposeSectionOf(activeSection, semitones);
+  }
+
   if (song.sections.length === 0) {
     return (
       <div className="p-4 max-w-5xl">
@@ -160,117 +380,126 @@ export default function HarmonyView() {
     );
   }
 
+  /** The desk props, built once: the multi-selection branch and the plain
+   *  one render the same workspace, and two copies of this list already
+   *  drifted apart once. */
+  /** The desk props, built once: the multi-selection branch and the plain one
+   *  render the same workspace, and two copies of this list drifted apart the
+   *  last time they were written out separately. */
+  const deskProps = activeSection
+    ? {
+        song,
+        section: activeSection,
+        keyName: effectiveKey,
+        scale: effectiveScale,
+        regions: effectiveRegions,
+        selectedChordId,
+        activeChordId,
+        playheadBeat,
+        outlineGoverned: chordsFollowOutline,
+        onSelectChord: setSelectedChordId,
+        onChangeChords: updateChords,
+        onChangeRhythm: updateRhythm,
+        onSetBars: setSectionBars,
+        onTransposeSong: transposeSong,
+        onTransposeSection: transposeSection,
+        onChangeRegions: (regions: TonicRegion[] | undefined) =>
+          updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, tonicRegions: regions }))),
+        onPreviewChord: (chord: Chord) => void previewChord(chord),
+        onSplitSection: splitIntoSectionParts,
+        onSplitSectionAt: (chordId: string) => splitSectionAtChordOf(activeSection, chordId),
+        onSplitSectionAtBar: (bar: number) => splitSectionAtBarOf(activeSection, bar),
+        onMergeWithNext:
+          song.sections.findIndex((entry) => entry.id === activeSection.id) < song.sections.length - 1
+            ? () => mergeSectionOf(activeSection)
+            : null,
+        onRenameSection: (name: string) => renameSectionOf(activeSection, name),
+      }
+    : null;
+
   return (
-    <div className="p-4 max-w-5xl space-y-3">
-      {/* Hex canvas — full room to wander now that the preview controls,
-         Linear/Loop toggle, and settings live in the dock's Tools panel.
-         The progression-fit status lives in this workspace's bottom-right. */}
-      <div className="relative border border-edge rounded-lg bg-scene overflow-hidden min-h-[420px] flex flex-col">
-        {/* View-mode switcher ON the canvas: the same control lives in the
-            dock's tools panel, but the inspector rail is narrow enough that a
-            fourth button could wrap out of sight — the canvas is where you
-            look, so the modes belong here too. */}
-        <div className="absolute right-2 top-2 z-20 flex gap-1">
-          {(["linear", "loop", "depth", "scene"] as const).map((mode) => (
+    <div className="p-3 space-y-2">
+      <HarmonyDeskBar />
+
+      {desk === "study" && stackAll.length > 1 ? (
+        <SectionComparison
+          song={song}
+          sections={stackAll}
+          onFocus={(sectionId) => setSelectedSectionId(sectionId)}
+        />
+      ) : !stacked && desk !== "compose" && stackAll.length > 1 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded border border-edge/60 bg-panel/60 px-2 py-1 font-mono text-[9px] text-inkMuted/70">
+          <span>
+            {stackAll.length} sections selected — this desk shows the focused one
+          </span>
+          <button
+            type="button"
+            onClick={clearSectionSelection}
+            className="rounded border border-edge px-1.5 hover:text-ink"
+          >
+            focus one
+          </button>
+        </div>
+      ) : stacked ? (
+        <div className="space-y-2">
+          {/* Bulk edits over the whole selection — one undo step each. */}
+          <div className="flex flex-wrap items-center gap-1.5 rounded border border-edge bg-panel px-2 py-1 font-mono text-[10px]">
+            <span className="font-semibold text-ink">{stackAll.length} sections selected</span>
+            <span className="text-inkMuted/70">
+              {stackBars} bars · {stackChords} chords · edits apply to all of them
+            </span>
+            <span className="mx-1 h-3 w-px bg-edge" />
+            <span className="text-inkMuted/60">repeats</span>
             <button
-              key={mode}
               type="button"
-              aria-pressed={honeycombMode === mode}
-              className={`rounded border px-1.5 py-0.5 text-[10px] font-mono ${
-                honeycombMode === mode
-                  ? "border-accent bg-accent/15 text-accent"
-                  : "border-edge/70 bg-well/80 text-inkMuted hover:text-ink"
-              }`}
-              onClick={() => setHoneycombMode(mode)}
-              title={
-                mode === "linear"
-                  ? "One hex per chord"
-                  : mode === "loop"
-                    ? "Collapse repeating vamps onto one lap"
-                    : mode === "depth"
-                      ? "Depth (z = time): every step advances"
-                      : "3D scene: degree × alteration × time"
-              }
+              onClick={() => setRepeatsOnSelection(Math.max(1, (stackRepeats ?? 1) - 1))}
+              className="rounded border border-edge px-1.5 hover:text-ink"
+              aria-label="One fewer pass"
+              title="Fewest passes is 1 — 0 would skip the section, which the spine menu still does per section"
             >
-              {mode === "linear" ? "Linear" : mode === "loop" ? "Loop" : mode === "depth" ? "Depth" : "3D"}
+              −
             </button>
-          ))}
+            <span className="w-5 text-center tabular-nums">{stackRepeats ?? "—"}</span>
+            <button
+              type="button"
+              onClick={() => setRepeatsOnSelection(Math.min(16, (stackRepeats ?? 1) + 1))}
+              className="rounded border border-edge px-1.5 hover:text-ink"
+              aria-label="One more pass"
+            >
+              +
+            </button>
+            <span className="mx-1 h-3 w-px bg-edge" />
+            <span className="text-inkMuted/60">transpose</span>
+            <button type="button" onClick={() => transposeSelection(-1)} className="rounded border border-edge px-1.5 hover:text-ink">
+              ♭
+            </button>
+            <button type="button" onClick={() => transposeSelection(1)} className="rounded border border-edge px-1.5 hover:text-ink">
+              ♯
+            </button>
+            <span className="ml-auto flex items-center gap-1">
+              <button
+                type="button"
+                onClick={clearSectionSelection}
+                className="rounded border border-edge px-1.5 hover:text-ink"
+                title="Back to one section"
+              >
+                focus one
+              </button>
+              <button
+                type="button"
+                onClick={deleteSelection}
+                className="rounded border border-danger/60 px-1.5 text-danger hover:bg-danger/10"
+              >
+                delete {stackAll.length}
+              </button>
+            </span>
+          </div>
+
+          {deskProps && <HarmonyWorkspace {...deskProps} />}
         </div>
-        <div className="flex-1 flex items-center justify-center p-4 pt-6">
-          {activeSection && honeycombMode === "scene" && (
-            <HarmonyScene
-              chords={activeSection.chords}
-              keyName={effectiveKey}
-              scale={effectiveScale}
-              selectedChordId={selectedChordId}
-              activeChordId={activeChordId}
-              onSelectChord={setSelectedChordId}
-              regions={activeSection.tonicRegions}
-            />
-          )}
-          {activeSection && honeycombMode !== "scene" && (
-            <HoneycombWheel
-              keyName={effectiveKey}
-              scale={effectiveScale}
-              chords={activeSection.chords}
-              beatsPerChord={activeSection.beatsPerChord}
-              selectedChordId={selectedChordId}
-              onSelectChord={setSelectedChordId}
-              onChangeChords={updateChords}
-              regions={effectiveRegions}
-              colorFlavor={activeSection.colorFlavor}
-              harmonyOutline={
-                activeSection.harmonyMeterOutline ??
-                (activeSection.harmonyFollowsDrums === false ? null : (activeSection.drumMeterOutline ?? null))
-              }
-              onPreviewChord={(chord) => void previewChord(chord)}
-            />
-          )}
-        </div>
-        {activeSection && (
-          <div className="px-3 pt-1.5">
-            <TonicStrip
-              chords={activeSection.chords}
-              regions={effectiveRegions}
-              stored={activeSection.tonicRegions}
-              keyName={effectiveKey}
-              scale={effectiveScale}
-              selectedChordId={selectedChordId}
-              onChange={(regions) =>
-                updateCurrentSong((s) =>
-                  updateSection(s, activeSection.id, (sec) => ({ ...sec, tonicRegions: regions })),
-                )
-              }
-            />
-          </div>
-        )}
-        {/* The progression + effect lanes live IN the canvas now (layout
-            grammar 2026-09-21: wide surfaces belong to the canvas, not a
-            bottom menu — the old dock's Menu panel died here). */}
-        {activeSection && (
-          <div className="border-t border-edge/60 bg-deep px-3 py-2">
-            <ProgressionEditor
-              key={activeSection.id}
-              chords={activeSection.chords}
-              keyName={effectiveKey}
-              scale={effectiveScale}
-              beatsPerBar={meanBeatsPerBar(activeSection)}
-              sectionBeats={sectionDurationBeats(activeSection)}
-              selectedChordId={selectedChordId}
-              activeChordId={activeChordId}
-              outlineGoverned={chordsFollowOutline}
-              regions={effectiveRegions}
-              onSelectChord={setSelectedChordId}
-              onChange={updateRhythm}
-            />
-          </div>
-        )}
-        {activeSection && (
-          <div className="flex items-center justify-end gap-2 px-3 py-1.5 border-t border-edge/60 bg-deep">
-            <FitStatus section={activeSection} onSetBars={setSectionBars} />
-          </div>
-        )}
-      </div>
+      ) : (
+        deskProps && <HarmonyWorkspace {...deskProps} />
+      )}
 
       {/* Borrowed-vs-modulate teaching moment — derived from the section's
           chords, anchored under the canvas, never blocks a chord add. */}

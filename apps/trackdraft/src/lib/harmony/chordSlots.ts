@@ -1,3 +1,4 @@
+import { chordCycleBeats, chordGapAfter, chordGapBefore } from "@drum/library";
 import type { Chord } from "../../types/blueprint";
 
 /**
@@ -19,7 +20,7 @@ export interface ChordSlot {
 
 export function chordSlotsForSection(chords: readonly Chord[], durationBeats: number): ChordSlot[] {
   if (chords.length === 0 || durationBeats <= 0) return [];
-  const cycleBeats = chords.reduce((sum, c) => sum + c.beats, 0);
+  const cycleBeats = chordCycleBeats(chords);
   if (cycleBeats <= 0) return []; // degenerate data — refuse rather than loop forever
 
   const slots: ChordSlot[] = [];
@@ -27,9 +28,14 @@ export function chordSlotsForSection(chords: readonly Chord[], durationBeats: nu
   while (cursor < durationBeats) {
     for (const chord of chords) {
       if (cursor >= durationBeats) break;
+      // A rest is a hole in the timeline: no slot is emitted for it, so both
+      // the playhead-follow readouts and the chart show silence, not the
+      // previous chord lingering.
+      cursor += chordGapBefore(chord);
+      if (cursor >= durationBeats) break;
       const chordBeats = Math.min(chord.beats, durationBeats - cursor);
       if (chordBeats > 0) slots.push({ chord, startBeat: cursor, durationBeats: chordBeats });
-      cursor += chord.beats;
+      cursor += chord.beats + chordGapAfter(chord);
     }
   }
   return slots;

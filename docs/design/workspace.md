@@ -687,6 +687,77 @@ jump-open included); the karaoke popout is untouched.
   cannot (e.g. `7#9b13`), which still export the base quality's intervals —
   documented, and pinned by a test.
 
+- **The pitch axis is a chromatic ladder (2026-10-24)**: the floor used to
+  draw seven degree rows with `♭ / ♮ / ♯` tiers stacked above and below the
+  floor — which meant a sharpened chord floated in the air instead of sitting
+  next to the note it lives beside, and an accidental was reachable only from
+  a menu. The axis is now the **twelve semitones of the octave**
+  (`STEP_W`, `LADDER_STEPS = 12`, `Node.step` = semitones above the tonic):
+  the seven scale steps are the destinations — solid rules, labelled with
+  their numerals — and the five rows between them are reachable but quiet
+  (thin dotted rules, no label). Dragging a box up or down walks the ladder;
+  ⌥-lane-dragging is gone because pitch *is* the row now. `ROW_SHARE` is
+  divided by twelve, so a plate that used to show seven comfortable rows
+  shows twelve shorter ones — hence a stacked band drops its tension strip
+  (a quarter of its height for a strip too small to read) and grew 262 → 306px.
+  Spelling became data: `Chord.spelling` (`"sharp" | "flat"`) pins ♯III
+  against ♭IV, which are the same pitch and different numbers. The floor
+  writes it from the direction of arrival (up = sharpened the row below, down
+  = flattened the row above), from the half of a chromatic row that was
+  clicked, and from the right-click menu's `spell` row (♯i / ♭ii). Names that
+  would need a double accidental — B in D aeolian as `♭♭VII` — are dropped,
+  so the menu only offers readings worth writing. Two long-standing
+  spelling bugs fell out of the same pass: modal numerals now come from the
+  mode's own label, so aeolian prints `♭VI`/`♭VII` instead of `VI`/`VII`, and
+  absolute names follow the *net* accidental (a ♯ on the mode's ♭III cancels
+  to the natural third, so F# is never printed Gb). `degreeRelativeTo` keeps
+  its shape — the store is still just `root` — so export, playback and
+  transposition never see any of this.
+- **Rehearse reads as a chart (2026-10-25)**: the desk was four stacked
+  blocks — a form list capped at eight entries, Now/Next cards, a controls row
+  and a per-section bar grid that wrapped at eight columns. A player on a
+  stand reads the *tune*, four bars to a line, so the desk is now one chart
+  (`StudioChart` over `layoutChart`): section letters with their names and
+  repeat counts, real bar rules, `%` where a bar repeats the one before it,
+  the sounding chord restated at the top of a bar whose change lands late,
+  meter written only where it changes, and a cursor that follows the
+  transport. Bar numbers sit in the margin, chords carry their numeral under
+  the symbol, and `@media print` hides the app so the chart prints as paper.
+  Everything positional comes from `layoutChart` (12 tests), so the component
+  only decides about type sizes — and the chart's names come from the
+  analysis, not from re-spelling the chord: a first cut printed `A#` for ♭VI
+  because it built names from `chord.root` instead of the transposed,
+  net-accidental analysis.
+  The transport under it is real: play/stop drives the app's (silent) clock,
+  `loop` plays the focused section on a loop region, and `count-in` clicks a
+  bar before the playhead starts. The click is MIDI — the app has no synth, so
+  it goes out on the drum channel of the selected port and says so when no
+  port is configured. Those three toggles used to be local state that
+  controlled nothing.
+- **Section structure lives on the ruler (2026-10-25)**: the harmony floor is
+  where a form gets edited, so the selection surface is the floor's own bar
+  ruler, not a second timeline. Bars carry `data-ruler-bar`; a pointerdown
+  starts a sweep and the sweep reads the bar spans captured at that moment,
+  resolving the pointer's bar by **x**. Hit-testing (`elementFromPoint`) was
+  the first implementation and it was wrong: the edit chip that appears on
+  pointerdown sat on the ruler row, so it swallowed the pointer and every drag
+  stopped at the anchor bar. The chip floats just under the ruler
+  (`top-6`) so the labels stay readable, and holds the verbs — `separate`,
+  `merge next`, `rename`, `×`. Two rejected designs stay rejected: stacked
+  per-section bands (unreadable at twelve rows) and a separate
+  `SectionTimeline` strip (a second copy of the same time axis).
+  Renaming is one component (`SectionNameInput`) in both the band and the
+  chip, so the same field means the same keys: Enter or leaving the field
+  keeps the name, Escape throws it away.
+  Detection got a coarsening pass for the same reason. Layla's 87-chord block
+  read as 18 look-alike parts at fine grain and 9 at medium because a vamp
+  that plays 4-4-5 bars cannot be a `repeats` run (`sameDurations` refuses the
+  fold). Neighbouring sections of the same material are now **stitched while
+  the stitched span still recurs** in the stream — the guard is what keeps two
+  coincidental look-alikes apart — which reads Layla's block as 12 parts
+  (fine) and 6 (medium, first section 15 bars), matching "a 16-bar vamp then
+  the same thing again" rather than nine stumps the user had to merge by hand.
+
 ## 8. Defaults chosen (veto-able)
 
 - Level-1 rows = **rich previews with light actions**, not lite editors

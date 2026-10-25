@@ -56,3 +56,42 @@ describe("chordSlotAt", () => {
     expect(chordSlotAt([], 0)).toBeNull();
   });
 });
+
+describe("chordSlotsForSection — rests", () => {
+  it("emits no slot during a rest, and keeps the chord before it whole", () => {
+    const chords = [makeChord("a", 4), { ...makeChord("b", 4), restAfter: 4 }];
+    const slots = chordSlotsForSection(chords, 24);
+    expect(slots.map((s) => [s.chord.id, s.startBeat, s.durationBeats])).toEqual([
+      ["a", 0, 4],
+      ["b", 4, 4],
+      ["a", 12, 4],
+      ["b", 16, 4],
+    ]);
+  });
+
+  it("a rest at the tail of the cycle shortens the loop", () => {
+    const chords = [{ ...makeChord("a", 2), restAfter: 6 }];
+    expect(chordSlotsForSection(chords, 16).map((s) => s.startBeat)).toEqual([0, 8]);
+  });
+
+  it("restBefore delays the first chord of every pass", () => {
+    const chords = [{ ...makeChord("a", 4), restBefore: 2 }];
+    expect(chordSlotsForSection(chords, 12).map((s) => s.startBeat)).toEqual([2, 8]);
+  });
+
+  it("a rest that runs past the section end leaves silence there", () => {
+    const chords = [makeChord("a", 2), { ...makeChord("b", 2), restAfter: 8 }];
+    const slots = chordSlotsForSection(chords, 6);
+    expect(slots.map((s) => [s.chord.id, s.startBeat])).toEqual([
+      ["a", 0],
+      ["b", 2],
+    ]);
+  });
+
+  it("chordSlotAt reports silence, not the previous chord", () => {
+    const chords = [makeChord("a", 2), { ...makeChord("b", 2), restAfter: 4 }];
+    const slots = chordSlotsForSection(chords, 16);
+    expect(chordSlotAt(slots, 1)?.chord.id).toBe("a");
+    expect(chordSlotAt(slots, 5)).toBeNull();
+  });
+});

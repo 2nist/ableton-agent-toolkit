@@ -16,7 +16,7 @@
  *    so the suggestion evaporates if the chord is deleted or resolved.
  */
 
-import { pitchClass, noteName, type NoteName, type ScaleType } from "@music-theory/core";
+import { getChordIntervals, pitchClass, noteName, type NoteName, type ScaleType } from "@music-theory/core";
 import type { Chord, TonicRegion } from "../../types/blueprint";
 import { resolveTonicAt } from "./tonic";
 
@@ -56,27 +56,23 @@ export interface ModeSuggestion {
   candidateId: string;
 }
 
-/** Pitch classes of a chord (root + triad intervals), 0-11. */
+/** Pitch classes of a chord (root + triadic tones and its seventh), 0-11.
+ *
+ *  Read from the core's own interval table rather than a local copy: the
+ *  hand-rolled version here mapped `dim` to a minor triad [0,3,7] and let
+ *  every unlisted quality fall through to a major triad, so a diatonic
+ *  vii° in a major key (E–G–B♭ in F) was reported as borrowed. Extension
+ *  colour tones are deliberately excluded — a 9 or ♯11 is a colour choice,
+ *  not evidence about the chord's home. */
 function chordPitchClasses(chord: Chord): number[] {
   const root = pitchClass(chord.root);
-  // Triad-quality intervals; enough to decide diatonic membership.
-  const q = chord.quality;
-  const intervals =
-    q === "min" || q === "min7" || q === "m7b5" || q === "dim"
-      ? [0, 3, 7]
-      : q === "aug"
-        ? [0, 4, 8]
-        : q === "sus2"
-          ? [0, 2, 7]
-          : q === "sus4"
-            ? [0, 5, 7]
-            : [0, 4, 7]; // maj / 7 / maj7 and default
-  const pcs = intervals.map((i) => (root + i) % 12);
-  if (q === "7" || q === "min7" || q === "maj7" || q === "m7b5") {
-    const seventh = q === "maj7" ? 11 : q === "m7b5" ? 10 : 10;
-    pcs.push((root + seventh) % 12);
+  const intervals = getChordIntervals(chord.quality);
+  const core = intervals.slice(0, 3).map((interval) => (root + interval) % 12);
+  const fourth = intervals[3];
+  if (typeof fourth === "number" && fourth >= 9 && fourth <= 11) {
+    core.push((root + fourth) % 12);
   }
-  return pcs;
+  return core;
 }
 
 /**

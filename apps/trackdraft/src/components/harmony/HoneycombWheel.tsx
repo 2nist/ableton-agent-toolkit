@@ -1,6 +1,6 @@
 import { useMemo, useCallback, useState } from "react";
 import { DEPTH_CELL_SCALE, depthOpacity, projectDepth } from "../../lib/harmony/depthView";
-import { pitchClass } from "@music-theory/core";
+import { parseChordQuality, pitchClass } from "@music-theory/core";
 import type { ScaleType, ChordQuality, NoteName } from "@music-theory/core";
 import { resolveFlavor, BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR } from "@platform/progression-engine";
 import { chordOnsetsForOutline, outlineBeatsPerBar } from "@drum/library";
@@ -33,14 +33,14 @@ const MIN_SCALE = 24;
 const MAX_SCALE = 56;
 const SCALE_KEY = "trackdraft-honeycomb-scale";
 
-function readScale(): number {
+function readScale(fallback = DEFAULT_SCALE): number {
   try {
     const raw = Number(localStorage.getItem(SCALE_KEY));
     if (Number.isFinite(raw) && raw >= MIN_SCALE && raw <= MAX_SCALE) return raw;
   } catch {
     /* a corrupt flag is not worth breaking the wheel over */
   }
-  return DEFAULT_SCALE;
+  return fallback;
 }
 
 interface HoneycombWheelProps {
@@ -72,6 +72,16 @@ interface HoneycombWheelProps {
    *  more than one, each chord is placed relative to the home in force at
    *  its own beat and the lattice re-roots at the modulation. */
   regions?: TonicRegion[];
+  /** Force a projection instead of reading the shared store — Compose pins
+   *  the map to `linear` so it is a stable instrument, not a mode switch. */
+  mode?: "linear" | "loop" | "depth" | "scene";
+  /** Read-only: no choice cells, so a Study surface can show the map without
+   *  offering an edit the desk cannot make. */
+  readOnly?: boolean;
+  /** Cell size when the user has never zoomed (Compose wants a bigger map). */
+  initialScale?: number;
+  /** Which diatonic variant a click on a choice cell places. */
+  newChordExtension?: "triad" | "seventh";
 }
 
 export default function HoneycombWheel({
@@ -87,9 +97,13 @@ export default function HoneycombWheel({
   harmonyOutline,
   onPreviewChord,
   regions,
+  mode,
+  readOnly = false,
+  initialScale,
+  newChordExtension = "triad",
 }: HoneycombWheelProps) {
   const P = usePalette();
-  const [scaleSize, setScaleSize] = useState<number>(() => readScale());
+  const [scaleSize, setScaleSize] = useState<number>(() => readScale(initialScale));
   const S = scaleSize;
 
   function changeScale(delta: number) {
@@ -204,7 +218,8 @@ export default function HoneycombWheel({
   // View mode lives in the shared selection store (not local state) so the
   // Linear/Loop toggle in the dock's Tools panel and the wheel stay in sync
   // without HarmonyView re-registering dock content on every toggle.
-  const viewMode = useHarmonySelectionStore((s) => s.honeycombMode);
+  const storeMode = useHarmonySelectionStore((s) => s.honeycombMode);
+  const viewMode = mode ?? storeMode;
   const displayWalk = useMemo(
     () => (viewMode === "loop" ? collapseRepeatsForLoopView(walk, steps) : walk),
     [viewMode, walk, steps],
@@ -232,13 +247,14 @@ export default function HoneycombWheel({
     // diatonic neighbours — so every scale degree is an addable choice cell
     // right away, rather than a single dead-end cell with nothing to click.
     if (displayWalk.length === 0) {
-      return [
+      const ring = [
         { q: 0, r: 0, d: 0, type: "choice" as const },
         ...DIRS.map(([a, b]) => ({ q: a, r: b, d: degreeAt(a, b), type: "choice" as const })),
       ];
+      return readOnly ? [] : ring;
     }
-    return cells;
-  }, [displayWalk, endStep]);
+    return readOnly ? cells.filter((cell) => cell.type !== "choice") : cells;
+  }, [displayWalk, endStep, readOnly]);
 
   const activeStep = useMemo(() => {
     if (!activeChordId) return -1;
@@ -371,21 +387,27 @@ export default function HoneycombWheel({
 
   const addChordAtDegree = useCallback((deg: number, region = 0) => {
     const home = homes[region] ?? homes[0];
-    const diatonic = home.diatonicByDegree[deg].triad;
-    const degreeLabel = diatonic.minor
+    const variant =
+      newChordExtension === "seventh"
+        ? home.diatonicByDegree[deg].seventh
+        : home.diatonicByDegree[deg].triad;
+    const degreeLabel = (variant.minor
       ? ROMAN_UP[deg].toLowerCase()
-      : ROMAN_UP[deg];
+      : ROMAN_UP[deg]) + (variant.suffix ?? "");
     const rootPc = home.intervals[deg];
+    const quality =
+      parseChordQuality(variant.suffix ?? "", variant.minor) ??
+      ((variant.minor ? "min" : "maj") as ChordQuality);
     const newChord = chordFromDegree(
-      home.keyPc, home.key, degreeLabel,
-      (diatonic.minor ? "min" : "maj") as ChordQuality,
+      home.keyPc, home.key, degreeLabel.replace(/°/g, ""),
+      quality,
       rootPc, beatsPerChord,
     );
     const updated = [...chords, newChord];
     onChangeChords(updated);
     onSelectChord(newChord.id);
     onPreviewChord?.(newChord);
-  }, [chords, homes, beatsPerChord, onChangeChords, onSelectChord, onPreviewChord]);
+  }, [chords, homes, beatsPerChord, newChordExtension, onChangeChords, onSelectChord, onPreviewChord]);
 
   const selectChordAtCell = useCallback((q: number, r: number) => {
     if (!displayWalk.length) return;

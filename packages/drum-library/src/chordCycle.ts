@@ -18,6 +18,34 @@
 
 import { chordOnsetsForOutline, type MeterOutline } from "./meter.js";
 
+/** The chord fields the cycle math reads. Structural (not the blueprint
+ *  type) so this package stays decoupled from the schema. */
+export interface CycledChord {
+  beats: number;
+  /** Silence after this chord, inside the cycle. Absent = 0. */
+  restAfter?: number;
+  /** Silence before this chord — only meaningful on the cycle's first
+   *  chord. Absent = 0. */
+  restBefore?: number;
+}
+
+const gap = (beats: number | undefined): number =>
+  typeof beats === "number" && Number.isFinite(beats) && beats > 0 ? beats : 0;
+
+/** Silence before a chord, in beats. */
+export const chordGapBefore = (chord: CycledChord): number => gap(chord.restBefore);
+
+/** Silence after a chord, in beats. */
+export const chordGapAfter = (chord: CycledChord): number => gap(chord.restAfter);
+
+/** One full pass through a progression, rests included — the length the
+ *  loop repeats on. */
+export const chordCycleBeats = (chords: readonly CycledChord[]): number =>
+  chords.reduce(
+    (sum, chord) => sum + chordGapBefore(chord) + Math.max(0, chord.beats) + chordGapAfter(chord),
+    0,
+  );
+
 /** One resolved chord placement in a section — `startTime`/`duration` in
  *  beats from the section start. `C` is the caller's chord type. */
 export interface ChordOccurrence<C = { beats: number }> {
@@ -29,7 +57,7 @@ export interface ChordOccurrence<C = { beats: number }> {
 /** The section fields the resolver reads — a structural subset of the
  *  blueprint schema's `BlueprintSection`, so both the app and the bridge
  *  pass their own section object straight in. */
-export interface ChordResolutionSource<C extends { beats: number }> {
+export interface ChordResolutionSource<C extends CycledChord> {
   harmonyMeterOutline?: MeterOutline | null;
   harmonyFollowsDrums?: boolean;
   drumMeterOutline?: MeterOutline | null;
@@ -45,8 +73,8 @@ export interface ChordResolutionSource<C extends { beats: number }> {
  * chord-driven generator (chords, bass, color) so they can't drift out of
  * sync with each other on the same section.
  */
-export function loopChordsToFill<C extends { beats: number }>(chords: C[], durationBeats: number, spacing = 1): ChordOccurrence<C>[] {
-  const cycleBeats = chords.reduce((sum, chord) => sum + chord.beats, 0);
+export function loopChordsToFill<C extends CycledChord>(chords: C[], durationBeats: number, spacing = 1): ChordOccurrence<C>[] {
+  const cycleBeats = chordCycleBeats(chords);
   if (cycleBeats <= 0) return [];
 
   const occurrences: ChordOccurrence<C>[] = [];
@@ -54,10 +82,16 @@ export function loopChordsToFill<C extends { beats: number }>(chords: C[], durat
   while (cursor < durationBeats) {
     for (const chord of chords) {
       if (cursor >= durationBeats) break;
+      // A rest is silence: advance the cursor and place no occurrence, so
+      // nothing sounds, nothing exports, and the next chord simply lands later.
+      cursor += chordGapBefore(chord);
+      if (cursor >= durationBeats) break;
+      // `spacing` is the Bend density nudge and re-times chords only — an
+      // authored rest is a placement, not a duration, so it never stretches.
       const span = chord.beats * spacing;
       const duration = Math.min(span, durationBeats - cursor);
       occurrences.push({ chord, startTime: cursor, duration });
-      cursor += span;
+      cursor += span + chordGapAfter(chord);
     }
   }
   return occurrences;
@@ -92,7 +126,7 @@ export function loopChordsOnOutline<C extends { beats: number }>(chords: C[], ou
  * Shared by every chord-driven generator so chords, bass and color can't
  * drift.
  */
-export function resolveChordOccurrences<C extends { beats: number }>(
+export function resolveChordOccurrences<C extends CycledChord>(
   section: ChordResolutionSource<C>,
   durationBeats: number,
   spacing = 1,
@@ -117,11 +151,14 @@ export function resolveChordOccurrences<C extends { beats: number }>(
 export function applySyncopation<C>(occurrences: ChordOccurrence<C>[], offset: number | undefined): ChordOccurrence<C>[] {
   if (!offset || offset <= 0) return occurrences;
   const starts = occurrences.map((o) => Math.max(0, Math.round((o.startTime - offset) * 10000) / 10000));
+  const round = (value: number) => Math.round(value * 10000) / 10000;
   return occurrences.map((o, i) => {
-    const end =
-      i < occurrences.length - 1
-        ? starts[i + 1]
-        : Math.round((o.startTime + o.duration) * 10000) / 10000; // last still reaches the section end
-    return { ...o, startTime: starts[i], duration: Math.max(0, Math.round((end - starts[i]) * 10000) / 10000) };
+    const naturalEnd = round(o.startTime + o.duration);
+    // Chords normally tile, so a push stretches each one up to the next
+    // onset instead of leaving a gap. A rest is exactly that gap, authored —
+    // so it must not be swallowed by the previous chord.
+    const restsAfter = i < occurrences.length - 1 && occurrences[i + 1].startTime - naturalEnd > 1e-6;
+    const end = i < occurrences.length - 1 && !restsAfter ? starts[i + 1] : naturalEnd;
+    return { ...o, startTime: starts[i], duration: Math.max(0, round(end - starts[i])) };
   });
 }

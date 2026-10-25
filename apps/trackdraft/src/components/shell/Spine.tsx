@@ -15,6 +15,7 @@ import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, s
 import { useSongStore } from "../../store/songStore";
 import { useDawTargetStore } from "../../store/dawTargetStore";
 import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { rangeIds } from "../../lib/sectionSelection";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { useInspectorStore } from "../../store/inspectorStore";
 import { classifySong } from "../../lib/classification";
@@ -73,7 +74,17 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   const handDrawn = P.handDrawn;
   const roleStyle = useRoleStyle();
   const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
+  const selectedSectionIds = useStudioSelectionStore((s) => s.selected);
   const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  const selectSection = useStudioSelectionStore((s) => s.selectSection);
+  const setSelection = useStudioSelectionStore((s) => s.setSelection);
+  /** Song order, for ⇧-ranges: spans repeat a section per pass, so the range
+   *  has to be measured against the section list, not the drawn blocks. */
+  const sectionOrder = useMemo(() => (song?.sections ?? []).map((entry) => entry.id), [song?.sections]);
+  /** Drag across blocks = pick the run under the pointer. Kept as a ref so a
+   *  sweep never re-renders on every pointer move. */
+  const sweepRef = useRef<{ from: string; moved: boolean } | null>(null);
+  const sweptRef = useRef(false);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
   const target = useDawTargetStore((s) => s.target);
   const navigate = useNavigate();
@@ -794,7 +805,35 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
             {/* Section blocks — true scale (width = bars × barPx), touching,
                 border-separated. Labels and coverage dots only render when
                 the block is wide enough to read them. */}
-            <div className="relative flex h-[34px]">
+            <div
+              className="relative flex h-[34px]"
+              onPointerDown={(e) => {
+                const block = (e.target as HTMLElement).closest("[data-spine-block]");
+                if (!block || (e.target as HTMLElement).closest("[data-resize-zone]")) return;
+                if (e.button !== 0) return;
+                // The flag lives for the gesture only: a sweep that ends
+                // outside the row leaves no click behind to consume it, and a
+                // stale flag would swallow the next plain click.
+                sweptRef.current = false;
+                sweepRef.current = { from: block.getAttribute("data-spine-block") ?? "", moved: false };
+              }}
+              onPointerMove={(e) => {
+                const sweep = sweepRef.current;
+                if (!sweep) return;
+                const block = (e.target as HTMLElement).closest("[data-spine-block]");
+                const id = block?.getAttribute("data-spine-block");
+                if (!id || id === sweep.from) return;
+                sweep.moved = true;
+                sweptRef.current = true;
+                setSelection(rangeIds(sectionOrder, sweep.from, id), id);
+              }}
+              onPointerUp={() => {
+                sweepRef.current = null;
+              }}
+              onPointerLeave={() => {
+                sweepRef.current = null;
+              }}
+            >
               {spans.map((span, i) => {
                 const prev = i > 0 ? spans[i - 1] : null;
                 return (
@@ -804,9 +843,17 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
                     song={song}
                     barPx={barPx}
                     selected={selectedSectionId === span.sectionId}
+                    inSelection={selectedSectionIds.includes(span.sectionId)}
                     live={liveIndex === i}
                     onSelect={(e) => {
-                      setSelectedSectionId(span.sectionId);
+                      // ⇧ extends from the anchor, ⌘ toggles — the same rule
+                      // the Studio timeline uses, both through one store.
+                      if (sweptRef.current) {
+                        sweptRef.current = false;
+                      } else {
+                        const mode = e.shiftKey ? "extend" : e.metaKey || e.ctrlKey ? "toggle" : "replace";
+                        selectSection(span.sectionId, mode, sectionOrder);
+                      }
                       playGrow(e.currentTarget as HTMLElement, roleStyle(span.section.role).bg);
                     }}
                     onMenu={(e) => openMenu(e, span)}
@@ -1050,6 +1097,7 @@ function SpineBlock({
   song,
   barPx,
   selected,
+  inSelection,
   live,
   onSelect,
   onMenu,
@@ -1060,7 +1108,10 @@ function SpineBlock({
   span: SectionSpan;
   song: BlueprintSong;
   barPx: number;
+  /** The focused section — the one single-section views follow. */
   selected: boolean;
+  /** Part of a multi-selection that also includes other sections. */
+  inSelection: boolean;
   live: boolean;
   onSelect: (e: ReactMouseEvent<HTMLButtonElement>) => void;
   onMenu: (e: ReactMouseEvent<HTMLButtonElement>) => void;
@@ -1093,8 +1144,14 @@ function SpineBlock({
   return (
     <button
       type="button"
+      data-spine-block={span.sectionId}
+      aria-pressed={inSelection}
       className={`relative shrink-0 h-full flex flex-col justify-center items-start overflow-hidden text-left border-r border-black/25 ${[
-        selected ? "ring-1 ring-accent ring-inset z-10" : "hover:brightness-110"
+        selected
+          ? "ring-1 ring-accent ring-inset z-10"
+          : inSelection
+            ? "ring-1 ring-accent/55 ring-inset z-10 brightness-110"
+            : "hover:brightness-110",
       ]}`}
       style={{ width: w, background: style.bg, color: style.text }}
       onClick={onSelect}
@@ -1106,6 +1163,7 @@ function SpineBlock({
         <>
           {canResizeLeft && (
             <span
+              data-resize-zone
               className="absolute left-0 top-0 bottom-0 cursor-ew-resize z-20 hover:bg-accent/30"
               style={{ width: edgeW }}
               onMouseDown={(e) => onResize(e, "left")}
@@ -1114,6 +1172,7 @@ function SpineBlock({
           )}
           {canResizeRight && (
             <span
+              data-resize-zone
               className="absolute right-0 top-0 bottom-0 cursor-ew-resize z-20 hover:bg-accent/30"
               style={{ width: edgeW }}
               onMouseDown={(e) => onResize(e, "right")}

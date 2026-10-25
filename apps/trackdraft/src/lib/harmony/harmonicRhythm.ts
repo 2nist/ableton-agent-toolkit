@@ -14,6 +14,7 @@
  * and therefore how many times the progression repeats).
  */
 
+import { chordGapAfter, chordGapBefore } from "@drum/library";
 import type { Chord } from "../../types/blueprint";
 
 /** Shortest chord the strip will produce, in beats. */
@@ -27,12 +28,20 @@ function round(value: number): number {
 }
 
 /** Beats in one pass through the progression — the length the list loops at. */
-export function cycleBeats(chords: Pick<Chord, "beats">[]): number {
-  return round(chords.reduce((sum, chord) => sum + Math.max(0, chord.beats), 0));
+export function cycleBeats(chords: Pick<Chord, "beats" | "restAfter" | "restBefore">[]): number {
+  return round(
+    chords.reduce(
+      (sum, chord) => sum + chordGapBefore(chord) + Math.max(0, chord.beats) + chordGapAfter(chord),
+      0,
+    ),
+  );
 }
 
 /** The cycle's length in bars (fractional for an odd cycle). */
-export function cycleBars(chords: Pick<Chord, "beats">[], beatsPerBar: number): number {
+export function cycleBars(
+  chords: Pick<Chord, "beats" | "restAfter" | "restBefore">[],
+  beatsPerBar: number,
+): number {
   if (beatsPerBar <= 0) return 0;
   return round(cycleBeats(chords) / beatsPerBar);
 }
@@ -91,9 +100,14 @@ export function redistributeBeats(
   const next = chords[index + 1];
   if (!current || !next) return chords;
   const step = grid > 0 ? grid : MIN_CHORD_BEATS;
-  const boundary = chords
-    .slice(0, index + 1)
-    .reduce((sum, chord) => sum + chord.beats, 0);
+  // The boundary is a beat POSITION, so any rests before it move it. Rests
+  // themselves never change: the two chords trade chord beats, and the
+  // silence stays where it was.
+  const boundary =
+    chords
+      .slice(0, index + 1)
+      .reduce((sum, chord) => sum + chordGapBefore(chord) + chord.beats + chordGapAfter(chord), 0) -
+    chordGapAfter(current);
   const lowest = boundary - current.beats + step;
   const highest = boundary + next.beats - step;
   const target = Math.min(

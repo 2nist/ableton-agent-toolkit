@@ -39,7 +39,6 @@ import {
   boxFaces,
   boxHeightForBeats,
   trailFade,
-  clampCamera,
   orbit,
   panBy,
   projectPoint,
@@ -199,12 +198,16 @@ export default function HarmonyScene({
     return { x: sum.x / nodes.length, y: sum.y / nodes.length, z: sum.z / nodes.length };
   }, [nodes]);
 
-  const renderCamera = { ...camera, zoom: effectiveZoom, panX: 0, panY: 0 };
+  const renderCamera = useMemo(
+    () => ({ ...camera, zoom: effectiveZoom, panX: 0, panY: 0 }),
+    [camera, effectiveZoom],
+  );
   const centre = projectPoint(centroid, renderCamera, { x: 0, y: 0 });
-  const origin = {
-    x: width / 2 - centre.x + camera.panX,
-    y: height / 2 - centre.y + camera.panY,
-  };
+  // Stable identity: every projection memo below depends on it.
+  const origin = useMemo(
+    () => ({ x: width / 2 - centre.x + camera.panX, y: height / 2 - centre.y + camera.panY }),
+    [width, height, centre.x, centre.y, camera.panX, camera.panY],
+  );
 
   const projected = useMemo(() => {
     const faces: (SceneFace & { node: Node; fade: number })[] = [];
@@ -217,7 +220,7 @@ export default function HarmonyScene({
     }
     faces.sort((left, right) => left.depth - right.depth);
     return faces;
-  }, [nodes, renderCamera, origin.x, origin.y]);
+  }, [nodes, renderCamera, origin]);
 
   const path = useMemo(
     () =>
@@ -225,7 +228,7 @@ export default function HarmonyScene({
         .map((node) => projectPoint(node.center, renderCamera, origin))
         .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
         .join(" "),
-    [nodes, renderCamera, origin.x, origin.y],
+    [nodes, renderCamera, origin],
   );
 
   const grid = useMemo(() => {
@@ -242,7 +245,7 @@ export default function HarmonyScene({
       lines.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, strong: step === 0 });
     }
     return lines;
-  }, [nodes.length, renderCamera, origin.x, origin.y]);
+  }, [nodes.length, renderCamera, origin]);
 
   /** How many chords sit on each accidental tier — a flat progression shows
    *  "♭ 0 / ♮ 4 / ♯ 0", which is exactly why nothing looks stacked. */
@@ -264,7 +267,7 @@ export default function HarmonyScene({
           label: diatonic.triad.minor ? ROMAN_UP[degree].toLowerCase() : ROMAN_UP[degree],
         };
       }),
-    [renderCamera, origin.x, origin.y, intervals],
+    [renderCamera, origin, intervals],
   );
 
   function handlePointerDown(event: React.PointerEvent<SVGSVGElement>) {
