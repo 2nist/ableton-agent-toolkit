@@ -28,17 +28,20 @@ export default function SongTable({ songs, sortKey, sortDir, onSort }: SongTable
     const sorted = [...songs].sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
+        // Imported and hand-built songs can arrive without timestamps, and a
+        // missing one used to take the whole dashboard down on the default
+        // sort — compare as text, with an absent value sorting first.
         case "title":
-          cmp = a.title.localeCompare(b.title);
+          cmp = (a.title ?? "").localeCompare(b.title ?? "");
           break;
         case "bpm":
-          cmp = a.bpm - b.bpm;
+          cmp = (a.bpm ?? 0) - (b.bpm ?? 0);
           break;
         case "updatedAt":
-          cmp = a.updatedAt.localeCompare(b.updatedAt);
+          cmp = (a.updatedAt ?? "").localeCompare(b.updatedAt ?? "");
           break;
         case "createdAt":
-          cmp = a.createdAt.localeCompare(b.createdAt);
+          cmp = (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
           break;
         case "confidence":
           cmp = (byConfidence.get(a.id) ?? 0) - (byConfidence.get(b.id) ?? 0);
