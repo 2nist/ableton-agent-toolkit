@@ -17,6 +17,7 @@
  */
 
 import type { NoteDescription } from "@ableton-extensions/sdk";
+import matrixData from "./data/bi-tonal-matrix.json" with { type: "json" };
 
 /** The anchor chord the color layer stacks on. */
 export interface BiTonalChord {
@@ -64,25 +65,28 @@ export interface GeneratedBiTonal {
   totalBeats: number;
 }
 
-/** The default flavor set, keyed by anchor quality. */
-export const BI_TONAL_MATRIX: BiTonalMatrix = {
-  major: {
-    cinematic_shimmer: { shift: 7, quality: "maj", label: "Maj9" },
-    sci_fi_wonder: { shift: 2, quality: "maj", label: "Maj13(#11)" },
-    bittersweet_drama: { shift: 11, quality: "min", label: "Maj9(#11)" },
-  },
-  minor: {
-    neo_soul_glow: { shift: 10, quality: "maj", label: "m11" },
-    ambient_ocean: { shift: 7, quality: "min", label: "m9" },
-  },
-  dominant_7th: {
-    altered_tension: { shift: 1, quality: "maj", label: "7(b9#9#11)" },
-  },
-};
+/**
+ * The default flavour set, keyed by anchor quality — EDITABLE DATA.
+ *
+ * It lives in `src/data/bi-tonal-matrix.json` so a writer can add a flavour
+ * (a shift plus a triad family) without touching the engine, and so the app can
+ * export it, edit it and import it back. The export is `let`, not `const`,
+ * because `setBiTonalMatrix` replaces it at runtime; ESM live bindings mean
+ * every importer sees the new table without being re-wired.
+ */
+export let BI_TONAL_MATRIX: BiTonalMatrix = matrixData as BiTonalMatrix;
+
+/** Replace the colour table (an imported file). Returns what it replaced, so a
+ *  caller can undo one level without keeping its own copy. */
+export function setBiTonalMatrix(next: BiTonalMatrix): BiTonalMatrix {
+  const previous = BI_TONAL_MATRIX;
+  BI_TONAL_MATRIX = next;
+  return previous;
+}
 
 /** The flavor used when a section/export doesn't specify one — a mellow
- *  minor-color recipe that sits comfortably over both major and minor
- *  progressions, so the Color track sounds sensible out of the box. */
+ *  colour recipe that resolves on every family (minor, major, dominant), so
+ *  the Color track sounds on every chord out of the box. */
 export const DEFAULT_COLOR_FLAVOR = "neo_soul_glow";
 
 /** Map a @music-theory chord quality to its bi-tonal family bucket. */

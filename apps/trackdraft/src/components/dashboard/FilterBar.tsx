@@ -1,7 +1,19 @@
+import { NOTE_TO_PC } from "@music-theory/core";
 import type { ConfidenceLevel } from "../../lib/confidence";
 import { getConfidenceLevels } from "../../lib/confidence";
 
-const ALL_KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+/**
+ * Every note name the app can store — sharps AND flats.
+ *
+ * This was a hand-written sharp-only list, so eight songs in the Beatles
+ * catalogue (Eb, Bb, Db, Ab) were silently filtered out of the dashboard by the
+ * default filter, and the key chips offered no way to reveal them. Derived from
+ * the theory engine's own vocabulary so it cannot drift again; sorted by pitch
+ * class, with enharmonic spellings adjacent.
+ */
+const ALL_KEYS = Object.keys(NOTE_TO_PC).sort(
+  (a, b) => (NOTE_TO_PC[a] ?? 0) - (NOTE_TO_PC[b] ?? 0) || a.localeCompare(b),
+);
 const ALL_SCALES = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
 
 export interface Filters {

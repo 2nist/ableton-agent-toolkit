@@ -957,6 +957,48 @@ export type SongInstruments = Partial<Record<StemName, StemInstrument>>;
  *  Song shape carried (title/key/tempo/sections/progression) with the
  *  concept-album blueprint fields lalo-chezia's source docs have but
  *  nothing currently surfaces. */
+/**
+ * A BEAT the writer saved — the figures themselves, not a reference to a
+ * built-in pattern.
+ *
+ * Stored per lane and per repeat, which is the shape a lane-by-lane build
+ * produces: kick from one pattern, snare from another. Keeping it as figures
+ * (rather than a pattern id plus overrides) means it survives a library
+ * re-bake — the notes you saved are the notes you get — and stays small: one
+ * bar of five lanes is a few dozen numbers, not a copy of the section.
+ *
+ * Two homes: `BlueprintSong.savedBeats` for beats that belong to this song, and
+ * the app's user-beat store for ones meant to be reachable from any song.
+ */
+export interface SavedBeat {
+  id: string;
+  name: string;
+  /** Loop length in bars. */
+  bars: number;
+  /** One repeat, per lane. Lanes with no content are absent, so applying a
+   *  saved beat only replaces the lanes it actually defines. */
+  lanes: Partial<Record<DrumLaneId, SavedBeatNote[]>>;
+}
+
+/** One hit inside a saved beat, relative to the start of the repeat. */
+export interface SavedBeatNote {
+  beat: number;
+  /** GM pitch — the authorities are the kit map, not a stored voice name. */
+  pitch: number;
+  velocity: number;
+}
+
+/**
+ * Per-song overrides of the engine's editable tables.
+ *
+ * A song may want its own colour flavours, genre feel or drum gestures without
+ * changing the tables every other song is written against. The override holds
+ * only the entries the song changes; at load time it is merged over the library
+ * table, which is itself merged over the shipped one — so a later library edit
+ * still reaches a song that overrides something else.
+ */
+export type SongTables = Partial<Record<"colour" | "styles" | "transitions", unknown>>;
+
 export interface BlueprintSong {
   id: string;
   title: string;
@@ -969,6 +1011,15 @@ export interface BlueprintSong {
 
   sections: BlueprintSection[];
   arrangement: ArrangementRepeat[];
+
+  /** Beats saved for THIS song — a nuanced pattern the writer built lane by
+   *  lane and wants to reuse inside the arrangement without adding a built-in
+   *  pattern for it. */
+  savedBeats?: SavedBeat[];
+
+  /** Table entries that apply to THIS song only, merged over the library
+   *  table on open. Absent means "the library's table, as-is". */
+  tables?: SongTables;
 
   /** When the clock source is Ableton, the Ableton transport beat that
    *  corresponds to "song beat 0" — subtract to get a song-relative

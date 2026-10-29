@@ -1,6 +1,7 @@
 import { ABLETON_SAFE_NOTES } from "./ableton.js";
 import type { PackedNote } from "./presetData.js";
 import { hashSeed, occurrenceSeed } from "./handoffs.js";
+import transitionCatalogData from "./data/transition-catalog.json" with { type: "json" };
 
 /**
  * Named transition models for the final span of a section (or the pickup
@@ -89,28 +90,25 @@ export interface TransitionFlavor {
 
 /** The transition catalog — every flavor each model can render. A seeded
  *  pick from here is what makes role-identical sections still vary. */
-export const TRANSITION_CATALOG: Record<TransitionModel, TransitionFlavor[]> = {
-  buildUp: [
-    { label: "16th hat ramp", gridBeats: 0.25, roll: 1, curve: 1 },
-    { label: "eighth+16th push", gridBeats: 0.25, roll: 2, curve: 1.2 },
-    { label: "32nd sprint", gridBeats: 0.125, roll: 1, curve: 1.5 },
-    { label: "slow burn", gridBeats: 0.5, roll: 1, curve: 0.7 },
-  ],
-  breakDown: [
-    { label: "3-stage thin", keepEvery: [1, 2, 4] },
-    { label: "fast drop", keepEvery: [1, 3, 3] },
-    { label: "long fade", keepEvery: [1, 1, 3] },
-  ],
-  cut: [
-    { label: "hard cut", stamp: true },
-    { label: "kick slam", stamp: false },
-  ],
-  dropOut: [
-    { label: "drop the kick", dropVoices: ["kick"] },
-    { label: "drop rhythm", dropVoices: ["kick", "snare"] },
-    { label: "kick+snare out", dropVoices: ["kick", "snare", "hat"] },
-  ],
-};
+/**
+ * The gesture vocabulary — EDITABLE DATA.
+ *
+ * `src/data/transition-catalog.json`: each model (build-up, fill, cut, …) maps
+ * to its named flavours. Exported/imported as a file like the colour and style
+ * tables, so the shapes a writer can drop into a transition are data rather
+ * than a compile-time constant.
+ */
+export let TRANSITION_CATALOG: Record<TransitionModel, TransitionFlavor[]> =
+  transitionCatalogData as Record<TransitionModel, TransitionFlavor[]>;
+
+/** Replace the gesture catalog (an imported file). */
+export function setTransitionCatalog(
+  next: Record<TransitionModel, TransitionFlavor[]>,
+): Record<TransitionModel, TransitionFlavor[]> {
+  const previous = TRANSITION_CATALOG;
+  TRANSITION_CATALOG = next;
+  return previous;
+}
 
 /** Resolve a catalog flavor for a model+index, falling back to flavor 0. */
 export function transitionFlavor(model: TransitionModel, flavorIndex: number): TransitionFlavor {
@@ -325,9 +323,13 @@ export function planSectionTransitions(sections: TransitionPlanInput[]): Section
 
     const seed = hashSeed(`${occurrenceSeed(section.sectionId, section.occurrenceIndex)}:transition:${model}`);
     const flavor = seed % TRANSITION_CATALOG[model].length;
-    // An intro's build is always a single bar (a 2-bar roll eats the intro);
-    // everywhere else 2 bars is a valid variation.
-    const bars = role === "intro" ? 1 : maxBars >= 2 && seed % 3 === 0 ? 2 : 1;
+    // A `cut` is a hard STOP, not a gap. Its span is how long the silence
+    // lasts, so it has to be the last 2-4 beats — one bar at most. A 2-bar
+    // cut is two bars of nothing and reads as the drums ending six bars into
+    // an eight-bar section, which is not what a cut means.
+    // An intro's build is likewise always a single bar (a 2-bar roll eats
+    // the intro); everywhere else 2 bars is a valid gesture length.
+    const bars = model === "cut" || role === "intro" ? 1 : maxBars >= 2 && seed % 3 === 0 ? 2 : 1;
     return { model, bars, flavor };
   });
 }

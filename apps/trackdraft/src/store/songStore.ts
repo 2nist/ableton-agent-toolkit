@@ -1,11 +1,9 @@
 import { create } from "zustand";
 import { type BlueprintSong, createEmptySong } from "../types/blueprint";
-import { createDebouncedWriter, readStorage, readRawStorage, writeRawStorage } from "./storage";
+import { createSongRepository, type SongRepositoryKind } from "../lib/persistence/songRepository";
+import { applySongTables } from "../lib/dataFiles";
 
-const STORAGE_KEY = "trackdraft-songs";
-const CURRENT_ID_KEY = "trackdraft-current-song-id";
 const MAX_HISTORY = 50;
-const AUTOSAVE_DEBOUNCE_MS = 1500;
 
 interface SongStoreState {
   songs: BlueprintSong[];
@@ -27,17 +25,36 @@ interface SongStoreState {
   canRedo: () => boolean;
 
   autoSave: () => void;
-  loadFromStorage: () => void;
+  /**
+   * Load the library from wherever it lives — the desktop app's library
+   * directory (which main seeds from the bundled catalogue on first run), or
+   * localStorage in a browser. Returns where it came from, for the shell's
+   * diagnostics, so nothing else has to ask whether a host exists.
+   */
+  hydrate: () => Promise<SongRepositoryKind>;
 }
 
-/** Debounced writers — one per persisted key, so a single autosave pass
- *  persists the songs list and the current-song id together (same debounce
- *  the store always had). The id is written RAW (unquoted), preserving the
- *  exact stored format `readRawStorage` expects. */
-const persistSongs = createDebouncedWriter<BlueprintSong[]>(STORAGE_KEY, AUTOSAVE_DEBOUNCE_MS);
-const persistCurrentId = createDebouncedWriter<string>(CURRENT_ID_KEY, AUTOSAVE_DEBOUNCE_MS, (id) =>
-  writeRawStorage(CURRENT_ID_KEY, id),
-);
+/** Where the library lives. Chosen once, at module load, so no store action
+ *  has to ask whether it is running in the desktop shell. */
+const repository = createSongRepository();
+
+/**
+ * The song layer of the engine tables.
+ *
+ * Tables are process-wide (the engine reads them from its packages' module
+ * state), so "this song only" means mirroring the open song's overrides into
+ * them whenever the open song changes — and putting the library's back when the
+ * song closes. Guarded by identity: `tables` only changes when it is edited, so
+ * the common case of typing in a field does not re-apply three tables.
+ */
+let appliedTables: BlueprintSong["tables"];
+function syncSongTables(): void {
+  const { songs, currentSongId } = useSongStore.getState();
+  const tables = songs.find((song) => song.id === currentSongId)?.tables;
+  if (tables === appliedTables) return;
+  appliedTables = tables;
+  applySongTables(tables);
+}
 
 export const useSongStore = create<SongStoreState>((set, get) => ({
   songs: [],
@@ -57,6 +74,7 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
       history: [song],
       historyIndex: 0,
     }));
+    syncSongTables();
     get().autoSave();
     return song;
   },
@@ -68,6 +86,7 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
       history: [song],
       historyIndex: 0,
     }));
+    syncSongTables();
     get().autoSave();
   },
 
@@ -75,6 +94,7 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
     const song = get().songs.find((s) => s.id === id);
     if (!song) return;
     set({ currentSongId: id, history: [song], historyIndex: 0 });
+    syncSongTables();
   },
 
   deleteSong: (id: string) => {
@@ -83,6 +103,7 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
       const currentSongId = state.currentSongId === id ? null : state.currentSongId;
       return { songs, currentSongId, history: [], historyIndex: -1 };
     });
+    syncSongTables();
     get().autoSave();
   },
 
@@ -102,6 +123,7 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
       history: historyNext,
       historyIndex: historyNext.length - 1,
     });
+    syncSongTables();
     get().autoSave();
   },
 
@@ -114,6 +136,7 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
       songs: songs.map((s) => (s.id === prevSong.id ? prevSong : s)),
       historyIndex: prevIndex,
     });
+    syncSongTables();
     // Persist the reverted state — without this, the last edit's debounced
     // save would land AFTER the undo and the undone edit resurrected on
     // reload (found 2026-09-22 while testing the workbench bars stepper:
@@ -130,6 +153,7 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
       songs: songs.map((s) => (s.id === nextSong.id ? nextSong : s)),
       historyIndex: nextIndex,
     });
+    syncSongTables();
     get().autoSave();
   },
 
@@ -137,21 +161,28 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
   canRedo: () => get().historyIndex < get().history.length - 1,
 
   autoSave: () => {
-    persistSongs.write(get().songs);
+    repository.scheduleSave(get().songs);
     const id = get().currentSongId;
-    if (id) persistCurrentId.write(id);
+    if (id) repository.writeCurrentId(id);
   },
 
-  loadFromStorage: () => {
-    const songs = readStorage<BlueprintSong[]>(STORAGE_KEY, []);
-    const storedCurrentId = readRawStorage(CURRENT_ID_KEY);
-    const currentSongId = songs.some((s) => s.id === storedCurrentId) ? storedCurrentId : null;
-    const current = songs.find((s) => s.id === currentSongId);
-    set({
-      songs,
-      currentSongId,
-      history: current ? [current] : [],
-      historyIndex: current ? 0 : -1,
-    });
+  hydrate: async () => {
+    adopt(await repository.load());
+    return repository.kind;
   },
 }));
+
+/** Install a freshly loaded library: current song from the persisted pointer,
+ *  falling back to the first song, with a clean undo history. */
+function adopt(songs: BlueprintSong[]): void {
+  const storedId = repository.readCurrentId();
+  const currentSongId = songs.some((song) => song.id === storedId) ? storedId : (songs[0]?.id ?? null);
+  const current = songs.find((song) => song.id === currentSongId) ?? null;
+  useSongStore.setState({
+    songs,
+    currentSongId,
+    history: current ? [current] : [],
+    historyIndex: current ? 0 : -1,
+  });
+  syncSongTables();
+}

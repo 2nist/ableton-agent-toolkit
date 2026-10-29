@@ -3,7 +3,10 @@ import { useRef, useState } from "react";
 /** What an inline rename settles on: the trimmed name, or null to cancel.
  *  Blank and unchanged both mean "leave it alone" — an empty section name is
  *  not something the spine or the picker can show. */
-export function resolveSectionName(current: string, next: string): string | null {
+export function resolveSectionName(
+  current: string,
+  next: string,
+): string | null {
   const trimmed = next.trim();
   return trimmed.length > 0 && trimmed !== current ? trimmed : null;
 }
@@ -20,7 +23,12 @@ type Props = {
  * Escape throws it away — the same rule in the band and in the bar sweep,
  * so both places read the same.
  */
-export function SectionNameInput({ name, onCommit, onCancel, className }: Props) {
+export function SectionNameInput({
+  name,
+  onCommit,
+  onCancel,
+  className,
+}: Props) {
   const [value, setValue] = useState(name);
   const settled = useRef(false);
 

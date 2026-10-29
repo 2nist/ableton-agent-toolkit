@@ -81,7 +81,7 @@ interface ParsedMidi {
 }
 
 /** Maps a MIDI key signature to a note name. */
-function midiKeyToNoteName(sharps: number, major: boolean): NoteName {
+function midiKeyToNoteName(sharps: number): NoteName {
   // Circle of fifths
   const sharpKeys: NoteName[] = ["C", "G", "D", "A", "E", "B", "F#"];
   const flatKeys: NoteName[] = ["C", "F", "Bb", "Eb", "Ab", "Db", "Gb"];
@@ -230,8 +230,6 @@ export function parseMidiBytes(bytes: Uint8Array): ParsedMidi {
   if (bytes[0] !== 0x4d || bytes[1] !== 0x54 || bytes[2] !== 0x68 || bytes[3] !== 0x64) {
     throw new Error("Not a valid MIDI file (missing MThd header)");
   }
-  const headerLen = readU32(bytes, 4);
-  const format = readU16(bytes, 8);
   const numTracks = readU16(bytes, 10);
   const ticksPerQuarter = readU16(bytes, 12);
 
@@ -345,7 +343,7 @@ export function parseMidiBytes(bytes: Uint8Array): ParsedMidi {
     ticksPerQuarter,
     tracks,
     tempo,
-    key: midiKeyToNoteName(keySigSharps, major),
+    key: midiKeyToNoteName(keySigSharps),
     scale: midiMode(major),
     timeSigNum,
     timeSigDen,

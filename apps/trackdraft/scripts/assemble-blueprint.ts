@@ -26,11 +26,6 @@ import type { ChordMiniAppResult, LrclibData } from "@music-theory/song-blueprin
 // Types
 // ---------------------------------------------------------------------------
 
-interface LoudnessPoint {
-  time: number;      // seconds
-  loudness: number;  // 0..1
-}
-
 interface EnergyRegion {
   label: "quiet" | "medium" | "loud";
   startTime: number;
@@ -146,7 +141,7 @@ function energyRegionsToSections(
   }
 
   // Map each merged region to a section role using position + energy heuristics
-  const candidates: SectionCandidate[] = merged.map((region, i) => {
+  const candidates: SectionCandidate[] = merged.map((region) => {
     const positionInSong = region.startTime / totalDuration; // 0..1
     const regionDuration = region.endTime - region.startTime;
 
@@ -207,33 +202,6 @@ function energyRegionsToSections(
   });
 
   return candidates;
-}
-
-// ---------------------------------------------------------------------------
-// Chord assignment
-// ---------------------------------------------------------------------------
-
-/** Assign chords to each section candidate based on time alignment. */
-function assignChordsToSections(
-  candidates: SectionCandidate[],
-  chords: Array<{ id: string; root: NoteName; quality: ChordQuality; romanNumeral: string; beats: number }>,
-  bpm: number,
-): SectionCandidate[] {
-  const secondsPerBeat = 60 / bpm;
-
-  // Convert chords from beats to cumulative seconds for time-based assignment.
-  // This is approximate since we don't have per-chord start_time from the raw format,
-  // but the per-second segments provide a rough mapping.
-  let cumulativeBeats = 0;
-  const chordTimes: Array<{ chord: typeof chords[0]; startSec: number }> = [];
-  for (const chord of chords) {
-    chordTimes.push({ chord, startSec: cumulativeBeats * secondsPerBeat });
-    cumulativeBeats += chord.beats;
-  }
-
-  return candidates.map((candidate) => {
-    return candidate; // chords are assigned separately at BlueprintSection creation time
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +328,7 @@ export function assembleBlueprint(
   const songChords = baseSong.sections[0]?.chords ?? [];
   let chordIndex = 0;
 
-  const sections: BlueprintSection[] = usable.map((candidate, i) => {
+  const sections: BlueprintSection[] = usable.map((candidate) => {
     const durationSec = candidate.endTime - candidate.startTime;
     const durationBeats = durationSec / secondsPerBeat;
     const bars = Math.max(4, Math.ceil(durationBeats / timeSigNum));

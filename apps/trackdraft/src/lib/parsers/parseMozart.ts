@@ -173,7 +173,7 @@ export function parseMozartLabel(
 
   // Right-to-left tonicisation chain: /V/ii means "of (V of ii)".
   const chain = label.split("/");
-  let core = chain[0];
+  const core = chain[0];
   const targets = chain.slice(1);
 
   let tonicPc = localKeyPc ?? sonataKeyPc;

@@ -27,6 +27,19 @@ export default function SongEditorLayout() {
   // moves, re-plan the live MIDI scheduler from the current playhead —
   // debounced so a slider drag coalesces into one re-plan instead of a
   // glitch per tick.
+  //
+  // The span map is refreshed FIRST and synchronously: the transport
+  // snapshots `sectionSpans` when playback starts, so without this a bar
+  // resize / split / reorder / delete made mid-playback leaves it reporting
+  // indices into an arrangement that no longer exists (the playhead then
+  // highlights the wrong section). `updateSong` never moves the playhead.
+  useEffect(() => {
+    if (getSongTransport().getIsPlaying()) {
+      const song = useSongStore.getState().currentSong();
+      if (song) getSongTransport().updateSong(song);
+    }
+  }, [songs]);
+
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const schedule = () => {
@@ -57,8 +70,13 @@ export default function SongEditorLayout() {
   // don't re-open the song and wipe the undo history.
   const currentSongId = useSongStore((s) => s.currentSongId);
   useEffect(() => {
-    if (song && songId && currentSongId !== songId) openSong(songId);
-  }, [song?.id, songId, currentSongId, openSong]);
+    // `songs` is the dependency that matters: hydration replaces it after the
+    // first child effect has already run against an empty list. The id guard
+    // keeps ordinary edits (which also replace `songs`) from re-opening the
+    // song and wiping the undo history.
+    const routedSongExists = songId != null && songs.some((entry) => entry.id === songId);
+    if (routedSongExists && songId && currentSongId !== songId) openSong(songId);
+  }, [songs, songId, currentSongId, openSong]);
 
   if (!song) {
     return (

@@ -42,13 +42,17 @@ const DARK: Tints = {
 };
 
 /** The same nine roles as poster-paint swatches: chalky fills with ink drawn
- *  on them (every pair ≥ 6:1), and the chorus as a solid ink block so it still
- *  reads as the anchor. */
+ *  on them (every pair ≥ 6:1), and the chorus as a solid amber block so it
+ *  still reads as the anchor — the dark theme's chorus accent (orange), on
+ *  light stock. Kept LIGHT (butter amber, not a deep tone): the block's
+ *  hand-lettered name takes the logsheet pen ink (`--ink-hand`, biro blue),
+ *  which was unreadable on the ink-black block this replaced (~2:1) and lands
+ *  6.3:1 here — the best name contrast of any role in the set. */
 const PAPER: Tints = {
   intro: { bg: "#DED8CA", text: "#3A342B" },
   verse: { bg: "#C9D2DC", text: "#232C36" },
   pre_chorus: { bg: "#E2D3BE", text: "#3F301A" },
-  chorus: { bg: "#26221B", text: "#F8F3E7" },
+  chorus: { bg: "#F6E3B0", text: "#3F301A" },
   bridge: { bg: "#D6CCE2", text: "#2E2440" },
   solo: { bg: "#CBDCCB", text: "#20341F" },
   breakdown: { bg: "#E4CCCA", text: "#402020" },

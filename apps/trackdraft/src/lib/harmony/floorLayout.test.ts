@@ -8,6 +8,7 @@ import {
   insertChordAt,
   floorLength,
   floorSlots,
+  floorSlotsFilled,
   moveChordTo,
   removeChord,
   resizeChordTo,
@@ -287,5 +288,48 @@ describe("rests as objects", () => {
     expect(closeRestAt(rippled, 1)).toBeTruthy();
     expect(spans(closeRestAt(rippled, 1))).toEqual(spans(rippled));
     expect(spans(extendIntoRestAt(rippled, 1))).toEqual(spans(rippled));
+  });
+});
+
+describe("floorSlotsFilled — the progression looped across the section", () => {
+  // 6 + 7 = 13 beats of progression inside a 16-beat (4-bar) section.
+  const short = [chord("c1", 3), chord("c2", 3), chord("c3", 7)];
+
+  it("fills the section instead of stopping at the end of one pass", () => {
+    // The exports loop a section's chord list to fill its bars; the floor used
+    // to draw one pass, so the tail of a section looked empty while the bass,
+    // colour and drum tracks were already back on chord one.
+    const slots = floorSlotsFilled(short, 16);
+    expect(slots.map((slot) => [slot.chord.id, slot.start, slot.end, slot.pass])).toEqual([
+      ["c1", 0, 3, 0],
+      ["c2", 3, 6, 0],
+      ["c3", 6, 13, 0],
+      ["c1", 13, 16, 1],
+    ]);
+  });
+
+  it("truncates the last repeat at the section's last bar", () => {
+    const slots = floorSlotsFilled(short, 14);
+    const last = slots[slots.length - 1]!;
+    expect(last.chord.id).toBe("c1");
+    expect(last.start).toBe(13);
+    expect(last.end).toBe(14);
+  });
+
+  it("leaves a section shorter than one pass as a single partial pass", () => {
+    // Never invents a repeat that the section has no room for, and never runs a
+    // box past the section's last bar.
+    const slots = floorSlotsFilled(short, 4);
+    expect(slots.map((slot) => [slot.chord.id, slot.end])).toEqual([
+      ["c1", 3],
+      ["c2", 4],
+    ]);
+  });
+
+  it("is one pass, unchanged, when the progression fills the section", () => {
+    const four = [chord("c1", 4), chord("c2", 4), chord("c3", 4), chord("c4", 4)];
+    const filled = floorSlotsFilled(four, 16).map((slot) => [slot.chord.id, slot.start, slot.end]);
+    expect(filled).toEqual(spans(four));
+    expect(filled).toHaveLength(4);
   });
 });

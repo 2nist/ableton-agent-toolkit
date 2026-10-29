@@ -8,7 +8,6 @@ import type { ReactElement, SVGProps } from "react";
  *  shapes (transport, dots). */
 export type IconName =
   | "workbench"
-  | "studio"
   | "structure"
   | "harmony"
   | "drums"
@@ -18,6 +17,7 @@ export type IconName =
   | "settings"
   | "mix"
   | "song"
+  | "sync"
   | "play"
   | "pause"
   | "stop"
@@ -43,7 +43,6 @@ const PATHS: Record<IconName, ReactElement> = {
     </>
   ),
   // Vertical bars — the arrangement on a time axis.
-  studio: <path d="M3 5.2v5.6M6 3.8v8.4M9 5.8v4.4M12 4.4v7.2" />,
   // Stacked layers — the section's form.
   structure: (
     <>
@@ -109,6 +108,13 @@ const PATHS: Record<IconName, ReactElement> = {
     </>
   ),
   // Info — song identity.
+  // Sync: a clock face — tempo and the transport it drives.
+  sync: (
+    <>
+      <circle cx="8" cy="8" r="5.2" />
+      <path d="M8 5.1V8l2.1 1.5" />
+    </>
+  ),
   song: (
     <>
       <circle cx="8" cy="8" r="5.8" />

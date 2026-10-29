@@ -22,6 +22,7 @@
 
 import { occurrenceSeed } from "./handoffs.js";
 import type { PackedNote, PackedVariant } from "./presetData.js";
+import styleRecipesData from "./data/style-recipes.json" with { type: "json" };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -435,15 +436,19 @@ export function applyStyleToVariant(variant: PackedVariant, profile: StyleProfil
 // StyleProfile, and the user bends from there.
 // ---------------------------------------------------------------------------
 
-/** Named style starting points. Each value is a full `StyleProfile` — a
- *  recipe sets the sliders; the sliders are the real control. */
-export const STYLE_RECIPES: Record<string, StyleProfile> = {
-  bossa: { energy: 0.25, density: 0.3, backbeat: 0.25, feel: 0.75, kit: 0.1, harmony: 0.85, tempo: 105 },
-  rock: { energy: 0.8, density: 0.8, backbeat: 0.9, feel: 0.15, kit: 0.45, harmony: 0.3, tempo: 135 },
-  trap: { energy: 0.7, density: 0.85, backbeat: 0.65, feel: 0.3, kit: 0.95, harmony: 0.4, tempo: 140 },
-  house: { energy: 0.65, density: 0.7, backbeat: 0.5, feel: 0.2, kit: 0.95, harmony: 0.5, tempo: 126 },
-  ballad: { energy: 0.2, density: 0.25, backbeat: 0.3, feel: 0.7, kit: 0.15, harmony: 0.8, tempo: 72 },
-  "math-rock": { energy: 0.6, density: 0.75, backbeat: 0.55, feel: 0.35, kit: 0.4, harmony: 0.5, tempo: 150 },
-  "neo-soul": { energy: 0.4, density: 0.5, backbeat: 0.4, feel: 0.8, kit: 0.3, harmony: 0.75, tempo: 82 },
-  pop: { energy: 0.6, density: 0.7, backbeat: 0.7, feel: 0.35, kit: 0.55, harmony: 0.55, tempo: 118 },
-};
+/**
+ * Named style starting points — EDITABLE DATA.
+ *
+ * `src/data/style-recipes.json`: each genre is a full `StyleProfile`, so a
+ * recipe sets the sliders and the sliders stay the real control. Imported by
+ * the app's Bend panel and its style browser, which is what makes it worth
+ * exporting as a file: add a genre, ship it, and it shows up in both.
+ */
+export let STYLE_RECIPES: Record<string, StyleProfile> = styleRecipesData as Record<string, StyleProfile>;
+
+/** Replace the genre map (an imported file). */
+export function setStyleRecipes(next: Record<string, StyleProfile>): Record<string, StyleProfile> {
+  const previous = STYLE_RECIPES;
+  STYLE_RECIPES = next;
+  return previous;
+}

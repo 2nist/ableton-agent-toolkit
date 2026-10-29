@@ -1,0 +1,80 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`planDrumStem — golden > a Bend style re-seeds the variant 1`] = `
+{
+  "36": 4,
+  "38": 8,
+  "42": 16,
+  "46": 1,
+}
+`;
+
+exports[`planDrumStem — golden > a meter change resolves one groove per bar length 1`] = `
+{
+  "36": 5,
+  "38": 10,
+  "42": 20,
+  "46": 1,
+}
+`;
+
+exports[`planDrumStem — golden > an outline without cell voices gets a default backbeat 1`] = `
+{
+  "36": 3,
+  "38": 3,
+  "42": 11,
+}
+`;
+
+exports[`planDrumStem — golden > authored blocks replace the groove in their range 1`] = `
+[
+  "36@1.5",
+  "36@2",
+  "36@4",
+  "36@6",
+]
+`;
+
+exports[`planDrumStem — golden > auto: a chorus is a different groove from a verse 1`] = `
+{
+  "36": 4,
+  "38": 8,
+  "42": 32,
+  "46": 1,
+}
+`;
+
+exports[`planDrumStem — golden > auto: the heuristic picks a groove from role + velocity 1`] = `
+{
+  "36": 4,
+  "38": 8,
+  "42": 16,
+  "46": 1,
+}
+`;
+
+exports[`planDrumStem — golden > explicit preset 1`] = `
+{
+  "36": 2,
+  "38": 4,
+  "42": 16,
+  "46": 1,
+}
+`;
+
+exports[`planDrumStem — golden > explicit variant picks that variant, not the seed's 1`] = `
+{
+  "36": 6,
+  "38": 6,
+  "42": 16,
+  "46": 2,
+}
+`;
+
+exports[`planDrumStem — golden > meter outline with cell voices beats the preset 1`] = `
+{
+  "36": 5,
+  "38": 3,
+  "42": 9,
+}
+`;

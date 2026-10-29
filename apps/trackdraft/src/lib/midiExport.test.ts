@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { songToMidi, planChordStem, planDrumStem, planBassStem, chordGluePreview } from "./midiExport";
-import { resolveChordOccurrences } from "@drum/library";
+import { PRESET_DATA, resolveChordOccurrences } from "@drum/library";
 import { sectionSpans } from "./arrangement";
 import { parseMidiBytes } from "./parsers/parseMidi";
 import { GM_ROUTING, routingFromProfile } from "./stems";
@@ -456,6 +456,14 @@ describe("planDrumStem — meter map", () => {
     // line from the second bar onwards.
     section.bars = 3;
     section.drumPattern = "standard";
+    // Pin the variant: which one the seed picks is bake data, and this test is
+    // about realignment, not about which groove came out. It needs a variant
+    // that states its downbeat with a kick — asking for one by name is what
+    // kept this green through a re-bake that changed the variant count.
+    const downbeatKick = (PRESET_DATA.standard?.variants ?? []).findIndex((v) =>
+      v.notes.some(([beat, pitch]) => beat < 0.001 && pitch === 36),
+    );
+    section.drumVariantIndex = Math.max(0, downbeatKick);
     section.meterMap = [
       { bar: 0, numerator: 1, denominator: 2 },
       { bar: 1, numerator: 4, denominator: 4 },

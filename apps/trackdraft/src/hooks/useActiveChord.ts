@@ -1,18 +1,36 @@
 import { useMemo } from "react";
-import {
-  resolveChordOccurrences,
-  resolveEffectiveStyle,
-  resolveNarrativeProfile,
-  narrativeHarmonySection,
-  styleSpacing,
-} from "@drum/library";
 import { activeChordIdAt } from "../lib/harmony/activeChord";
-import type { BlueprintSection, BlueprintSong } from "../types/blueprint";
+import { sectionOccurrences } from "../lib/harmony/sectionOccurrences";
+import type { ChordOccurrence } from "@drum/library";
+import type { BlueprintSection, BlueprintSong, Chord } from "../types/blueprint";
+
+/**
+ * The section's resolved chord occurrences — the EXPENSIVE half of "which
+ * chord is sounding": it resolves the effective style and the narrative's
+ * warped grid, then loops the progression across the section.
+ *
+ * Deliberately separate from the lookup (see `useActiveChord`) and memoized
+ * only on what actually changes the answer. Folding the playhead into the
+ * same memo (the old shape) re-ran all of the above at animation-frame rate
+ * to produce a value that changes twice a bar.
+ */
+export function useSectionOccurrences(
+  section: BlueprintSection | null,
+  song: BlueprintSong | null,
+  sectionBeats: number,
+): ChordOccurrence<Chord>[] {
+  return useMemo(
+    () => (section && song && sectionBeats > 0 ? sectionOccurrences(section, song, sectionBeats) : []),
+    [section, song, sectionBeats],
+  );
+}
 
 /**
  * The chord that is sounding at `beatInSection` (section-relative), or null
  * when the playhead is elsewhere. Shared by the workbench and the harmony
  * canvas so a highlight can never disagree with what the generators play.
+ *
+ * The per-tick cost is one scan of the already-resolved occurrences.
  */
 export function useActiveChord(
   section: BlueprintSection | null,
@@ -20,17 +38,6 @@ export function useActiveChord(
   sectionBeats: number,
   beatInSection: number | null,
 ): string | null {
-  return useMemo(() => {
-    if (!section || !song || sectionBeats <= 0) return null;
-    // Effective style + the narrative's warped grid: the highlight must sit on
-    // the same chord boundaries the export writes, or the app lights one chord
-    // while the file plays another.
-    const profile = resolveEffectiveStyle(section, song);
-    const occurrences = resolveChordOccurrences(
-      narrativeHarmonySection(section, resolveNarrativeProfile(section, song)),
-      sectionBeats,
-      styleSpacing(profile.density),
-    );
-    return activeChordIdAt(occurrences, beatInSection);
-  }, [section, song, sectionBeats, beatInSection]);
+  const occurrences = useSectionOccurrences(section, song, sectionBeats);
+  return activeChordIdAt(occurrences, beatInSection);
 }

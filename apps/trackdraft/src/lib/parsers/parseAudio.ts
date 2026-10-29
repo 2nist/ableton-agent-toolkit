@@ -12,15 +12,6 @@
 import type { BlueprintSong } from "../../types/blueprint";
 import type { NoteName } from "@music-theory/core";
 
-interface AudioMetadata {
-  duration: number;       // seconds
-  sampleRate: number;
-  numberOfChannels: number;
-  estimatedBpm: number;
-  estimatedKey: NoteName;
-  estimatedScale: string;
-}
-
 /** All note names for chromagram mapping. */
 const NOTE_NAMES: NoteName[] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 

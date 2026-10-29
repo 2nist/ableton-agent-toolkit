@@ -1,16 +1,21 @@
+import { useSyncExternalStore } from "react";
 import type { BlueprintSection } from "../../types/blueprint";
 import { BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR } from "@platform/progression-engine";
 import { DEFAULT_COLOR_OCTAVE } from "../../lib/colorStem";
+import { onTablesChanged, songTablesWith, tableSource, tablesVersion } from "../../lib/dataFiles";
+import { useSongStore } from "../../store/songStore";
 
 /** Every bi-tonal flavor in the engine's matrix, deduped to `[id, label]`
  *  — the options for the Color layer's flavor chips. */
-const COLOR_FLAVORS = Array.from(
-  new Map(
-    Object.values(BI_TONAL_MATRIX)
-      .flatMap((family) => Object.entries(family))
-      .map(([id, def]) => [id, def.label]),
-  ),
-);
+function colorFlavors(table: typeof BI_TONAL_MATRIX): [string, string][] {
+  return Array.from(
+    new Map(
+      Object.values(table)
+        .flatMap((family) => Object.entries(family))
+        .map(([id, def]) => [id, def.label]),
+    ),
+  );
+}
 
 /** The anchor is fixed at octave 4; the color voice's spread is how many
  *  octaves above it (`colorOctave - 4`). Range keeps the color layer a
@@ -29,6 +34,17 @@ interface ColorSettingsProps {
 export default function ColorSettings({ section, onChange }: ColorSettingsProps) {
   const flavor = section.colorFlavor ?? "";
   const octave = section.colorOctave ?? DEFAULT_COLOR_OCTAVE;
+
+  // The matrix is process-wide state that an imported table — or the open
+  // song's own override — can replace, so the chips are derived at render time
+  // from whichever table is in effect, not captured once at module load.
+  // Re-render on a table change (import, or the open song's override) and read
+  // the matrix fresh — it is a dozen entries, cheaper than a stale chip list.
+  useSyncExternalStore(onTablesChanged, tablesVersion);
+  const flavors = colorFlavors(BI_TONAL_MATRIX);
+  const colourScope = tableSource("colour");
+  const songTitle = useSongStore((state) => state.songs.find((s) => s.id === state.currentSongId)?.title ?? null);
+  const updateCurrentSong = useSongStore((state) => state.updateCurrentSong);
 
   const chip = (active: boolean) =>
     `font-mono text-2xs rounded px-2 py-1 border ${
@@ -52,14 +68,16 @@ export default function ColorSettings({ section, onChange }: ColorSettingsProps)
         >
           Default
         </button>
-        {COLOR_FLAVORS.map(([id, label]) => (
+        {flavors.map(([id, label]) => (
           <button
             key={id}
             className={chip(flavor === id)}
-            title={label}
+            title={`${id.replace(/_/g, " ")} — ${label}`}
             onClick={() => onChange((s) => ({ ...s, colorFlavor: id }))}
           >
-            {id.replace(/_/g, " ")}
+            {/* Chip shows the last word only (shimmer, wonder, …); the full
+                flavor name stays in the tooltip. */}
+            {id.slice(id.lastIndexOf("_") + 1)}
           </button>
         ))}
       </div>
@@ -88,6 +106,32 @@ export default function ColorSettings({ section, onChange }: ColorSettingsProps)
             +
           </button>
         </div>
+      </div>
+
+      <div className="flex items-center gap-1 mt-1.5 font-mono text-3xs uppercase tracking-wider text-inkMuted/50">
+        <span
+          title={
+            colourScope === "song"
+              ? "this song carries its own colour flavours, merged over the library table"
+              : colourScope === "shipped"
+                ? "the colour matrix that ships with the app"
+                : colourScope === "library"
+                  ? "loaded from <library>/tables/trackdraft.colour.json"
+                  : "saved in this browser's storage"
+          }
+        >
+          palette · {colourScope}
+        </span>
+        {colourScope === "song" && (
+          <button
+            type="button"
+            className="rounded px-1 border border-edge/70 hover:text-ink"
+            onClick={() => updateCurrentSong((song) => ({ ...song, tables: songTablesWith(song.tables, "colour", undefined) }))}
+            title={`Drop ${songTitle ?? "this song"}'s colour override and use the library's table`}
+          >
+            revert
+          </button>
+        )}
       </div>
     </div>
   );

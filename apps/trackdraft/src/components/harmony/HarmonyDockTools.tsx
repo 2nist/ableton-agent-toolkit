@@ -8,7 +8,7 @@ import { effectiveTonicRegions } from "../../lib/harmony/tonic";
 import { EuclidSliders, StepView } from "../drums/euclidEditor";
 import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import { updateSection } from "../../lib/sections";
 import { downloadSongMidi } from "../../lib/midiExport";
 import { previewProgression } from "../../lib/playback/previewMidi";
@@ -41,7 +41,7 @@ function inferRotation(outline: MeterOutline, n: number, k: number): number {
 function useHarmonyDockSection() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
+  const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
   const song = currentSong;
   const activeSection = song?.sections.find((s) => s.id === selectedSectionId) ?? song?.sections[0] ?? null;
 
@@ -280,7 +280,6 @@ export function HarmonyTools() {
             </p>
             <EuclidSliders
               n={hN}
-              denom={hDenom}
               k={hK}
               rotation={hRot}
               onChange={(nv, kv, rv) => setHarmonyOutline(buildEuclideanOutline(nv, hDenom, kv, rv))}

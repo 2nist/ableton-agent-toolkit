@@ -10,7 +10,7 @@ import {
 } from "@drum/library";
 import { useSongStore } from "../../../store/songStore";
 import { useTimeSelectionStore } from "../../../store/timeSelectionStore";
-import { useStudioSelectionStore } from "../../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../../store/focusedSectionStore";
 import { useDrumsDraftStore } from "../../../store/drumsDraftStore";
 import { updateSection } from "../../../lib/sections";
 import { sectionSpans, type SectionSpan } from "../../../lib/arrangement";
@@ -32,6 +32,19 @@ import {
 import { DRUM_LANES, laneColor } from "../laneStyle";
 import { VOICE_LABEL } from "../voiceStyle";
 import { usePalette } from "../../../theme/palette";
+import { withLaneFigure } from "./laneFigurePick";
+import {
+  addUserBeat,
+  beatsFile,
+  captureBeat,
+  loadUserBeats,
+  mergeBeats,
+  parseBeatsFile,
+  readUserBeats,
+  removeUserBeat,
+  writeUserBeats,
+  withSavedBeat,
+} from "../../../lib/drums/savedBeats";
 import GrooveShelf from "./GrooveShelf";
 import GrooveGlue from "./GrooveGlue";
 import LaneRow from "./LaneRow";
@@ -39,9 +52,10 @@ import LaneGutter from "./LaneGutter";
 import MarkerRail, { MARKER_BAND_H } from "./MarkerRail";
 import { sectionMarkers } from "./transitionMarkers";
 import SelectionEditorModal from "./SelectionEditorModal";
-import { BARS_PER_VIEW_OPTIONS, stepGridFor, type BarsPerView } from "./meterGrid";
+import { BARS_PER_VIEW_OPTIONS, stepGridFor, stepIndexOf, type BarsPerView } from "./meterGrid";
 import { laneHitsFor, peakVelocityByStep } from "./hitsCache";
-import { withToggledStep } from "./stepToggle";
+import { notesFromHits, withToggledStep } from "./stepToggle";
+import { applyGrooveChoice, grooveOf } from "../../../lib/drums/grooveModel";
 import { asStepParam } from "./stepParams";
 import { gestureLayerFor } from "./gestureLayer";
 import { auditionDrumHit } from "../../../lib/playback/previewMidi";
@@ -162,12 +176,27 @@ export default function DrumBlocksView() {
   const P = usePalette();
   const song = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
-  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  /**
+   * The library-wide saved beats. On the desktop these come from
+   * `<library>/tables/beats.json`; in a browser from localStorage. Either way the
+   * component only ever sees a list.
+   */
+  const [userBeats, setUserBeats] = useState(() => readUserBeats());
+  useEffect(() => {
+    let cancelled = false;
+    void loadUserBeats().then((beats) => {
+      if (!cancelled) setUserBeats(beats);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
   const draftSectionId = useDrumsDraftStore((s) => s.sectionId);
   const draftSection = useDrumsDraftStore((s) => s.section);
 
-  const [barsPerView, setBarsPerView] = useState<BarsPerView>(() => loadJson<BarsPerView>("trackdraft-drums-bars-view", "all"));
+  const [barsPerView, setBarsPerView] = useState<BarsPerView>(() => loadJson<BarsPerView>("trackdraft-drums-bars-view", 2));
   const [sel, setSel] = useState<BarSel | null>(null);
   const [copyArm, setCopyArm] = useState<BarSel | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -438,13 +467,23 @@ export default function DrumBlocksView() {
 
   // ---- draft plumbing ------------------------------------------------------------
 
+  /**
+   * A click on the grid is an EDIT, not a draft.
+   *
+   * This used to write into the drums draft store, which is cleared whenever
+   * the selected section changes — so toggling a step and then looking at the
+   * next section threw the toggle away. Direct manipulation has to land in the
+   * song immediately; the draft is for the preset audition modal, where
+   * Apply/Revert is the point.
+   */
   const writeSection = useCallback(
     (sectionId: string, base: BlueprintSection, mutate: (sec: BlueprintSection) => BlueprintSection) => {
-      const current = useDrumsDraftStore.getState();
-      const sec = current.sectionId === sectionId && current.section ? current.section : base;
-      useDrumsDraftStore.getState().setDraft(sectionId, mutate(sec));
+      useDrumsDraftStore.getState().clearDraft();
+      updateCurrentSong((song) =>
+        updateSection(song, sectionId, (sec) => mutate(sec ?? base)),
+      );
     },
-    [],
+    [updateCurrentSong],
   );
 
   /** M / S — a per-lane mixer flag on the section (draft → Apply). */
@@ -498,13 +537,14 @@ export default function DrumBlocksView() {
     (laneKey: DrumLaneId): Map<number, DrumBlockNote> => {
       const map = new Map<number, DrumBlockNote>();
       if (!section) return map;
-      const tol = Math.max(0.02, grid.stepBeats * 0.35);
       for (const b of section.drumBlocks ?? []) {
         if (b.mode !== "steps" || b.lane !== laneKey) continue;
         for (const n of b.notes ?? []) {
           const abs = b.startBeat + n.beat;
-          const idx = Math.round(abs / grid.stepBeats);
-          if (Math.abs(abs - idx * grid.stepBeats) > tol) continue;
+          // Cell membership by the shared index — no snap gate. A note a few
+          // thousandths off (a legacy authored copy) still belongs to the
+          // cell it is drawn in, and must stay editable there.
+          const idx = stepIndexOf(abs, grid.stepBeats);
           const prev = map.get(idx);
           if (!prev || n.velocity > prev.velocity) map.set(idx, n);
         }
@@ -565,7 +605,7 @@ export default function DrumBlocksView() {
             offsetBeats: n.offsetBeats, durBeats: n.durBeats, prob: n.prob, ratchet: n.ratchet, flam: n.flam,
           },
           value0: spec.read(n, grid.stepBeats, laneKey) ?? spec.rest,
-          stepIdx: Math.round(abs / grid.stepBeats),
+          stepIdx: stepIndexOf(abs, grid.stepBeats),
         });
       }
     }
@@ -628,13 +668,15 @@ export default function DrumBlocksView() {
     const start = existing ? existing.startBeat : d.stepBeat;
     const end = existing ? existing.endBeat : round4(d.stepBeat + grid.stepBeats);
     const laneHits = hits?.get(d.laneKey) ?? [];
-    const tol = Math.max(0.02, grid.stepBeats * 0.35);
-    const onStep = laneHits.filter((h) => Math.abs(h.beat - d.stepBeat) < tol);
+    const stepIdx = stepIndexOf(d.stepBeat, grid.stepBeats);
+    // Cell ownership, not a point tolerance: the same function the drawing
+    // uses, so a click can only ever edit the cell under the pointer.
+    const onStep = laneHits.filter((h) => stepIndexOf(h.beat, grid.stepBeats) === stepIdx);
     let notes: DrumBlockNote[];
     const voice = () => DRUM_LANE_PRIMARY[d.laneKey] as DrumVoiceName;
     if (existing && (existing.notes?.length ?? 0) > 0) {
       notes = (existing.notes ?? []).map((n) => ({ ...n }));
-      let target = notes.find((n) => Math.abs(start + n.beat - d.stepBeat) < tol);
+      let target = notes.find((n) => stepIndexOf(start + n.beat, grid.stepBeats) === stepIdx);
       if (!target) {
         if (onStep.length === 0) {
           // an empty step: a click/drag at a height CREATES the hit there
@@ -644,7 +686,8 @@ export default function DrumBlocksView() {
           target = { beat: round4(d.stepBeat - start), voice: voice(), velocity: newHitVelocity(d) };
         } else {
           const loudest = onStep.reduce((a, b) => (b.velocity > a.velocity ? b : a));
-          target = { beat: round4(loudest.beat - start), voice: loudest.voice as DrumVoiceName, velocity: loudest.velocity };
+          // On the CELL's beat, not the corpus hit's microtiming.
+          target = { beat: round4(d.stepBeat - start), voice: loudest.voice as DrumVoiceName, velocity: loudest.velocity };
         }
         notes.push(target);
       }
@@ -654,7 +697,7 @@ export default function DrumBlocksView() {
       notes = [{ beat: 0, voice: voice(), velocity: newHitVelocity(d) }];
       spec.write(notes[0], d.value, grid.stepBeats, d.laneKey);
     } else {
-      notes = onStep.map((h) => ({ beat: round4(h.beat - start), voice: h.voice as DrumVoiceName, velocity: h.velocity }));
+      notes = notesFromHits(onStep, start, grid.stepBeats);
       const loudest = notes.reduce((a, b) => (b.velocity > a.velocity ? b : a));
       spec.write(loudest, d.value, grid.stepBeats, d.laneKey);
     }
@@ -777,7 +820,16 @@ export default function DrumBlocksView() {
       if (d.param === "vel") {
         const v = velocityAt(d.y, d.cellTop, d.cellH);
         if (v <= 2) {
-          if (has) toggleStep(d.laneKey, d.stepBeat);
+          // Pressing a cell's floor on a hit removes it. On an EMPTY cell the
+          // same press used to return silently — a click that does nothing at
+          // all, which reads as a broken cell. It adds at the neutral
+          // velocity instead.
+          if (has) {
+            toggleStep(d.laneKey, d.stepBeat);
+            return;
+          }
+          toggleStep(d.laneKey, d.stepBeat);
+          auditionStep(d.laneKey, d.stepBeat);
           return;
         }
         commitVelocity({ ...d, moved: true, value: v, addIfEmpty: true });
@@ -895,7 +947,8 @@ export default function DrumBlocksView() {
 
   const regenerate = useMemo(() => {
     if (!song || !anchorSpan || !section) return null;
-    const pattern = section.drumPattern ?? inferPatternForSection(section, song);
+    const source = grooveOf(section);
+    const pattern = source.kind === "preset" ? source.pattern : inferPatternForSection(section, song);
     const preset = PRESET_DATA[pattern];
     const all = preset?.variants ?? [];
     if (all.length <= 1) return null;
@@ -998,7 +1051,14 @@ export default function DrumBlocksView() {
     );
   }
 
-  const currentPattern = section.drumPattern ?? inferPatternForSection(section, song);
+  const shelfSource = grooveOf(section);
+  // The shelf needs a concrete pattern to highlight; a muted section shows
+  // nothing highlighted rather than pretending to be a groove.
+  const currentPattern = shelfSource.kind === "preset"
+    ? shelfSource.pattern
+    : shelfSource.kind === "muted"
+      ? undefined
+      : inferPatternForSection(section, song);
   const hasDraft = !!draftSection && draftSectionId === anchorSpan.section.id;
   const barLabel = sel ? `${Math.min(sel.fromBar, sel.toBar) + 1}–${Math.max(sel.fromBar, sel.toBar) + 1}` : "";
   const gridLines = Array.from({ length: sectionBars + 1 }).map((_, b) => b * barPx);
@@ -1011,14 +1071,88 @@ export default function DrumBlocksView() {
       <GrooveShelf
         span={anchorSpan}
         section={section}
-        current={currentPattern}
-        onPick={(pattern) => {
-          writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({
-            ...sec,
-            drumPattern: pattern as BlueprintSection["drumPattern"],
-            drumVariantIndex: 0,
-            drumMeterOutline: undefined,
-          }));
+        current={currentPattern ?? null}
+        songBeats={song?.savedBeats ?? []}
+        userBeats={userBeats}
+        onPickSaved={(beat) => {
+          writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => withSavedBeat(sec, beat));
+          setSelectedSectionId(anchorSpan.section.id);
+        }}
+        onSaveBeat={(name, target) => {
+          if (!anchorSpan) return;
+          const beat = captureBeat(anchorSpan.section, name, { song: song ?? undefined, occurrenceIndex: anchorSpan.occurrenceIndex });
+          if (!beat) return;
+          if (target === "song") {
+            // Song-scoped: lives on the song, travels with it.
+            updateCurrentSong((current) => ({
+              ...current,
+              savedBeats: [
+                ...(current.savedBeats ?? []).filter((b) => b.name !== beat.name),
+                { ...beat, id: `song-${beat.id}` },
+              ],
+            }));
+          } else {
+            setUserBeats(addUserBeat(beat));
+          }
+        }}
+        onExportBeats={() => {
+          // One file, both scopes, so a colleague gets the beats that matter.
+          const all = [...(song?.savedBeats ?? []), ...userBeats];
+          const blob = new Blob([JSON.stringify(beatsFile(all), null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "trackdraft.beats.json";
+          link.click();
+          URL.revokeObjectURL(url);
+        }}
+        onImportBeats={() => {
+          const input = document.createElement("input");
+          input.type = "file";
+          input.accept = ".json,application/json";
+          input.onchange = async () => {
+            const file = input.files?.[0];
+            if (!file) return;
+            try {
+              const incoming = parseBeatsFile(await file.text());
+              if (incoming.length === 0) return;
+              const { beats } = mergeBeats([...readUserBeats(), ...(song?.savedBeats ?? [])], incoming);
+              // Imported beats join the library list, so every song can reach them.
+              const libraryOnly = beats.filter((beat) => !(song?.savedBeats ?? []).some((mine) => mine.id === beat.id));
+              writeUserBeats(libraryOnly);
+              setUserBeats(libraryOnly);
+            } catch {
+              /* a malformed file simply does not import */
+            }
+          };
+          input.click();
+        }}
+        onDeleteSaved={(beat, target) => {
+          if (target === "song") {
+            updateCurrentSong((current) => ({
+              ...current,
+              savedBeats: (current.savedBeats ?? []).filter((b) => b.id !== beat.id),
+            }));
+          } else {
+            setUserBeats(removeUserBeat(beat.id));
+          }
+        }}
+        onPick={(pattern, variant, lane) => {
+          writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => {
+            // LANE PICK: replace that one drum and keep the rest of the beat.
+            // Assembling a groove kick-by-kick is the whole reason the lens has
+            // a per-lane scope — swapping the entire pattern here would throw
+            // away the kick the writer just chose.
+            if (lane !== null) {
+              const picked = PRESET_DATA[pattern]?.variants[variant];
+              return picked ? withLaneFigure(sec, { lane, variant: picked }) : sec;
+            }
+            // WHOLE-BEAT PICK: replaces the groove, so the rhythm blocks
+            // authored against the old one go with it, and it carries the
+            // VARIANT the card was drawn from so the shape you clicked is the
+            // shape you get.
+            return applyGrooveChoice(sec, { kind: "preset", pattern, variant });
+          });
           setSelectedSectionId(anchorSpan.section.id);
         }}
       />

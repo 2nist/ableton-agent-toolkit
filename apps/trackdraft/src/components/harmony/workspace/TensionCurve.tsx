@@ -28,15 +28,18 @@ export default function TensionCurve({
   const step = values.length > 1 ? innerW / (values.length - 1) : 0;
 
   const points = values.map((value, index) => ({
-    x: positions?.[index] !== undefined
-      ? padX + Math.max(0, Math.min(1, positions[index] ?? 0)) * innerW
-      : padX + (values.length > 1 ? index * step : innerW / 2),
+    x:
+      positions?.[index] !== undefined
+        ? padX + Math.max(0, Math.min(1, positions[index] ?? 0)) * innerW
+        : padX + (values.length > 1 ? index * step : innerW / 2),
     y: padY + (1 - Math.max(0, Math.min(1, value))) * innerH,
     value,
     label: labels[index] ?? "",
   }));
 
-  const path = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  const path = points
+    .map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+    .join(" ");
 
   return (
     <svg

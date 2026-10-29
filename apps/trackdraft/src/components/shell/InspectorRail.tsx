@@ -10,6 +10,7 @@ import { HarmonyTools, HarmonyLayers } from "../harmony/HarmonyDockTools";
 import LyricsDockTools from "../lyrics/LyricsDockTools";
 import BendPanel from "../style/BendPanel";
 import SongInfoPanel from "../details/SongInfoPanel";
+import SyncFacet from "./SyncFacet";
 
 /** The inspector's facets — one per instrument/system. Icons are the
  *  shared SVG set (components/common/Icon). */
@@ -20,33 +21,33 @@ const FACETS: { id: InspectorTab; icon: IconName; label: string }[] = [
   { id: "lyrics", icon: "lyrics", label: "Lyrics — metre, rhyme & writing context" },
   { id: "mix", icon: "mix", label: "Mix / Bend — the style lens" },
   { id: "song", icon: "song", label: "Song info" },
+  { id: "sync", icon: "sync", label: "Sync — clock, MIDI out & Live" },
 ];
 
 /** Which facets apply per view (user rule 2026-09-21: "the right menu
  *  should have some context to the view… only showing tabs that have
- *  controls that can effect that view"). The workbench keeps all six —
+ *  controls that can effect that view"). The workbench keeps every facet —
  *  every element is in its workspace; specialised views keep their own
- *  instrument plus section context and song identity. Arriving at a view
+ *  instrument plus section context and song identity, and Sync is on all of
+ *  them because the clock and the MIDI port affect every view. Arriving at a view
  *  whose list doesn't include the active facet switches to the view's
  *  DEFAULT facet (below); a deliberate engagement (e.g. clicking a chord
  *  on the spine while in the Drums view) still reveals its facet — the
  *  visible set is allowed ∪ {active}, so a tool you just reached for is
  *  never hidden. */
 const VIEW_FACETS: Record<string, InspectorTab[]> = {
-  workbench: ["structure", "drums", "harmony", "lyrics", "mix", "song"],
-  studio: ["structure", "mix", "song"],
-  structure: ["structure", "song"],
-  harmony: ["harmony", "structure", "song"],
-  drums: ["drums", "structure", "song"],
-  lyrics: ["lyrics", "structure", "song"],
-  melody: ["structure", "mix", "song"],
-  library: ["song"],
-  settings: ["song"],
+  workbench: ["structure", "drums", "harmony", "lyrics", "mix", "song", "sync"],
+  structure: ["structure", "song", "sync"],
+  harmony: ["harmony", "structure", "song", "sync"],
+  drums: ["drums", "structure", "song", "sync"],
+  lyrics: ["lyrics", "structure", "song", "sync"],
+  melody: ["structure", "mix", "song", "sync"],
+  library: ["song", "sync"],
+  settings: ["song", "sync"],
 };
 
 /** The facet a view opens on when the active one isn't in its list. */
 const VIEW_DEFAULT: Record<string, InspectorTab> = {
-  studio: "mix",
   harmony: "harmony",
   drums: "drums",
   lyrics: "lyrics",
@@ -134,6 +135,7 @@ export default function InspectorRail() {
             )}
             {tab === "mix" && <BendPanel />}
             {tab === "song" && <SongInfoPanel />}
+            {tab === "sync" && <SyncFacet />}
           </div>
         </>
       ) : (

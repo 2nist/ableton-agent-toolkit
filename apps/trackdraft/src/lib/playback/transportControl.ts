@@ -174,13 +174,16 @@ let stagedRefresh: {
   clock: SchedulerClock | null;
 } | null = null;
 
-/** Drop any pending staged re-plan. Playback restarts (play/loop/stop/
- *  pause) clear the transport's `nextBarCb`, which would orphan the slot —
- *  a later `liveRefresh` must not fold into a dead slot (it would return
- *  without re-registering, silently swallowing the edit) and a newly
- *  engaged section loop must not be clobbered by an old one. */
+/** Drop any pending staged re-plan — and the transport callback that would
+ *  fire it. Playback restarts (play/loop/stop/pause) must leave no orphan
+ *  behind: a later `liveRefresh` must not fold into a dead slot (it would
+ *  return without re-registering, silently swallowing the edit), a newly
+ *  engaged section loop must not be clobbered by an old one, and an
+ *  abandoned callback must not re-start the scheduler from a cancelled
+ *  stage. `cancelNextBar` is the half that used to be left implicit. */
 function clearStagedRefresh(): void {
   stagedRefresh = null;
+  getSongTransport().cancelNextBar();
 }
 
 export async function liveRefresh(song: BlueprintSong): Promise<void> {
@@ -195,18 +198,26 @@ export async function liveRefresh(song: BlueprintSong): Promise<void> {
   if (!output) return;
 
   // A re-plan is already queued for this bar — fold the edit into it and
-  // let the latest song apply when the boundary arrives.
+  // let the latest song apply when the boundary arrives. This mutates the
+  // SAME stage object the queued callback captured (identity, not a copy),
+  // so the fold is what fires; a cancelled stage is nulled instead, which
+  // the callback detects.
   if (stagedRefresh) {
     stagedRefresh.song = song;
     return;
   }
 
   const atBeat = transport.getNextBarBeat();
-  stagedRefresh = { atBeat, song, output, routing, target, loop: scheduler.loopRegion, clock: scheduler.activeClock };
+  // The callback captures THIS stage by identity. Resolving through the
+  // module slot instead let a callback whose stage had already been
+  // replaced or cancelled apply whatever happened to be in the slot when
+  // the bar boundary arrived — a re-plan for an edit the user had undone.
+  const stage = { atBeat, song, output, routing, target, loop: scheduler.loopRegion, clock: scheduler.activeClock };
+  stagedRefresh = stage;
   transport.onNextBar(() => {
-    const s = stagedRefresh;
+    if (stagedRefresh !== stage) return;
     stagedRefresh = null;
-    if (!s) return;
+    const s = stage;
     // The target may have changed mid-bar (e.g. switched to File only).
     if (!targetStreamsMidi(s.target)) return;
     const opts = streamOptions(s.target, { startBeat: s.atBeat });

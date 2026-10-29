@@ -277,7 +277,12 @@ export default function DesignLab() {
         <Link to="/" className="text-inkMuted text-sm hover:text-ink">
           ← Back to Dashboard
         </Link>
-        <h1 className="text-lg font-semibold mb-1 mt-2">Design Lab</h1>
+        <div className="mb-1 mt-2 flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-lg font-semibold">Design Lab</h1>
+          <Link to="/studio-log" className="rounded border border-edge bg-panel px-3 py-1.5 text-xs text-ink hover:bg-panelAlt">
+            Open the light Studio Log theme study →
+          </Link>
+        </div>
         <p className="text-sm text-inkMuted max-w-3xl">
           Our shared design surface. Everything below renders the <em>current</em> code — real tokens, real button
           recipes harvested from the app, real density patterns. Play here, then tell Copilot what you like

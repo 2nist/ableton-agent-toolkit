@@ -15,6 +15,7 @@ const MIRRORED: [keyof Palette, string][] = [
   ["label", "--c-label"],
   ["grid", "--c-grid"],
   ["cream", "--c-cream"],
+  ["select", "--c-select"],
 ];
 
 const css = readFileSync(resolve(__dirname, "themes.css"), "utf8");

@@ -27,7 +27,9 @@ export default function RehearseDesk({
   const toggleNashville = useHarmonyWorkspaceStore((s) => s.toggleNashville);
   const resetDisplay = useHarmonyWorkspaceStore((s) => s.resetDisplay);
   const transport = useHarmonyWorkspaceStore((s) => s.transport);
-  const setTransportToggle = useHarmonyWorkspaceStore((s) => s.setTransportToggle);
+  const setTransportToggle = useHarmonyWorkspaceStore(
+    (s) => s.setTransportToggle,
+  );
   const chartLayout = useHarmonyWorkspaceStore((s) => s.chartLayout);
   const setChartLayout = useHarmonyWorkspaceStore((s) => s.setChartLayout);
 
@@ -43,11 +45,18 @@ export default function RehearseDesk({
   });
 
   const soundingKey =
-    display.transpose === 0 ? keyName : noteName((pitchClass(keyName) + display.transpose + 12) % 12, keyName);
+    display.transpose === 0
+      ? keyName
+      : noteName((pitchClass(keyName) + display.transpose + 12) % 12, keyName);
   const shapeShift = display.transpose - display.capo;
   const shapeKey =
-    shapeShift === 0 ? keyName : noteName((pitchClass(keyName) + shapeShift + 12) % 12, keyName);
-  const bars = Math.max(1, Math.round(sectionDurationBeats(section) / beatsPerBar));
+    shapeShift === 0
+      ? keyName
+      : noteName((pitchClass(keyName) + shapeShift + 12) % 12, keyName);
+  const bars = Math.max(
+    1,
+    Math.round(sectionDurationBeats(section) / beatsPerBar),
+  );
   const countIn = rehearsal.countInBeat;
 
   return (
@@ -57,24 +66,37 @@ export default function RehearseDesk({
           <button
             type="button"
             onClick={rehearsal.isPlaying ? rehearsal.stop : rehearsal.play}
+            disabled={rehearsal.clockBlocked}
             className={`rounded border px-2 py-0.5 font-mono text-[10px] font-semibold ${
-              rehearsal.isPlaying
-                ? "border-accent bg-accent/15 text-accent"
-                : "border-edge text-inkMuted hover:text-ink"
+              rehearsal.clockBlocked
+                ? "border-edge/60 text-inkMuted/40 cursor-not-allowed"
+                : rehearsal.isPlaying
+                  ? "border-accent bg-accent/15 text-accent"
+                  : "border-edge text-inkMuted hover:text-ink"
             }`}
-            title="Move the playhead through the chart. The app's clock is silent — sound comes from your instrument or from the click."
+            title={
+              rehearsal.clockBlocked
+                ? "Live is driving the transport — start and stop it in Live. This desk cannot move the playhead while Live is the target."
+                : "Move the playhead through the chart. The app's clock is silent — sound comes from your instrument or from the click."
+            }
           >
             {rehearsal.isPlaying ? "■ stop" : "▶ play"}
           </button>
           {countIn !== null && (
-            <span className="font-mono text-[13px] font-semibold tabular-nums text-accent" title="Count-in bar">
+            <span
+              className="font-mono text-[13px] font-semibold tabular-nums text-accent"
+              title="Count-in bar"
+            >
               {countIn}
             </span>
           )}
         </span>
 
         <Control label="Before the downbeat">
-          <Toggle on={transport.countIn} onClick={() => setTransportToggle("countIn")}>
+          <Toggle
+            on={transport.countIn}
+            onClick={() => setTransportToggle("countIn")}
+          >
             count-in
           </Toggle>
           <Toggle
@@ -142,10 +164,14 @@ export default function RehearseDesk({
                 key={count}
                 type="button"
                 aria-pressed={chartLayout.barsPerSystem === count}
-                onClick={() => setChartLayout({ barsPerSystem: count as 4 | 8 })}
+                onClick={() =>
+                  setChartLayout({ barsPerSystem: count as 4 | 8 })
+                }
                 title={`${count} bars to a line`}
                 className={`px-1.5 py-0.5 font-mono text-[10px] ${
-                  chartLayout.barsPerSystem === count ? "bg-accent/15 text-accent" : "text-inkMuted hover:text-ink"
+                  chartLayout.barsPerSystem === count
+                    ? "bg-accent/15 text-accent"
+                    : "text-inkMuted hover:text-ink"
                 }`}
               >
                 {count}
@@ -176,7 +202,8 @@ export default function RehearseDesk({
         </Control>
 
         <span className="ml-auto font-mono text-[9px] text-inkMuted/70">
-          sounding {soundingKey} {scale} · shapes in {shapeKey} · {section.name} {bars} bars
+          sounding {soundingKey} {scale} · shapes in {shapeKey} · {section.name}{" "}
+          {bars} bars
         </span>
       </div>
 
@@ -197,7 +224,11 @@ export default function RehearseDesk({
           {losses.length === 0
             ? "iReal chart written — chords, bars, sections and repeats all made it."
             : `iReal chart written. Not carried: ${losses.join(", ")}.`}
-          <button type="button" onClick={() => setLosses(null)} className="ml-2 text-accent hover:underline">
+          <button
+            type="button"
+            onClick={() => setLosses(null)}
+            className="ml-2 text-accent hover:underline"
+          >
             dismiss
           </button>
         </p>
@@ -205,8 +236,10 @@ export default function RehearseDesk({
 
       <p className="font-mono text-[9px] text-inkMuted/60">
         Display only: transpose {display.transpose >= 0 ? "+" : ""}
-        {display.transpose} · capo {display.capo} · {display.simplify ? "triads" : "full extensions"} ·{" "}
-        {display.nashville ? "numbers" : "roman numerals"} — the song is untouched until commit.
+        {display.transpose} · capo {display.capo} ·{" "}
+        {display.simplify ? "triads" : "full extensions"} ·{" "}
+        {display.nashville ? "numbers" : "roman numerals"} — the song is
+        untouched until commit.
       </p>
     </div>
   );
@@ -215,7 +248,9 @@ export default function RehearseDesk({
 function Control({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-center gap-1.5 border-r border-edge/50 pr-3 last:border-r-0 last:pr-0">
-      <span className="font-mono text-[8px] uppercase tracking-[0.12em] text-inkMuted/70">{label}</span>
+      <span className="font-mono text-[8px] uppercase tracking-[0.12em] text-inkMuted/70">
+        {label}
+      </span>
       <div className="flex items-center gap-1">{children}</div>
     </div>
   );
@@ -239,7 +274,9 @@ function Stepper({
       >
         −
       </button>
-      <span className="min-w-[30px] text-center font-mono text-[11px] tabular-nums">{value}</span>
+      <span className="min-w-[30px] text-center font-mono text-[11px] tabular-nums">
+        {value}
+      </span>
       <button
         type="button"
         onClick={onIncrement}
@@ -271,7 +308,9 @@ function Toggle({
       onClick={onClick}
       title={title}
       className={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${
-        on ? "border-accent bg-accent/15 text-accent" : "border-edge text-inkMuted hover:text-ink"
+        on
+          ? "border-accent bg-accent/15 text-accent"
+          : "border-edge text-inkMuted hover:text-ink"
       } ${muted ? "opacity-60" : ""}`}
     >
       {children}

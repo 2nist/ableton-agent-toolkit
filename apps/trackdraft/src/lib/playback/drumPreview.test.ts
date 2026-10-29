@@ -6,6 +6,7 @@ import {
   resolveSectionVoiceNecklaces,
   resolveSectionVariant,
   resolveVoiceNecklaces,
+  seededVariantIndex,
   inferPatternForSection,
   inferGrooveOverride,
 } from "./drumPreview";
@@ -89,10 +90,12 @@ describe("resolveDrumHits", () => {
 const SEVEN_EIGHT: MeterOutline = { cellBeats: 0.5, cells: [2, 2, 3], label: "1 2 1 2 1 2 3" };
 
 describe("resolveOutlineVoiceNecklaces", () => {
-  it("with no cellVoices, every onset is a closed-hat click", () => {
+  it("with no cellVoices, still splits into a backbeat — not a click", () => {
+    // It used to collapse to one closed-hat necklace: apply a Euclidean groove,
+    // and the kick and snare the editor shows you never appear.
     const necklaces = resolveOutlineVoiceNecklaces(SEVEN_EIGHT)!;
-    expect(necklaces).toHaveLength(1);
-    expect(necklaces[0].voice).toBe("closedHat");
+    const voices = necklaces.map((n) => n.voice).sort();
+    expect(voices).toEqual(["closedHat", "kick", "snare"]);
   });
 
   it("with cellVoices, splits into separate kick/snare/hat necklaces", () => {
@@ -145,33 +148,27 @@ describe("seeded variant selection (the 'same drums everywhere' fix)", () => {
     expect(new Set(notes).size).toBeGreaterThan(1);
   });
 
-  it("keeps the clean downbeat groove as the single most common pick — without dominating", () => {
-    // Variant 0 (snare exactly on beats 1 & 3, no flams) is the most likely
-    // single outcome, but a 2026-09 catalog audit measured the old 60%
-    // weight flattening whole songs (46/194 dominated by one combo), so the
-    // contract is now: the clean groove is the MODE, not a majority.
-    const snarePitch = 38;
-    const variants = Array.from({ length: 120 }, (_, i) =>
-      resolveSectionVariant(makeSection({ id: `verse-${i}` }))!,
+  it("keeps the default variant as the single most common pick — without dominating", () => {
+    // Variant 0 is the pattern's own authored groove (a real 2 & 4 backbeat
+    // now — it used to be a shared "clean downbeat" with the snare on 1 & 3,
+    // which meant a third of all auto picks had no backbeat at all). The
+    // contract this pins is the DISTRIBUTION: variant 0 is the mode, but a
+    // 2026-09 catalog audit measured the old 60% weight flattening whole
+    // songs (46/194 dominated by one combo), so it must not be a majority.
+    const pattern = inferPatternForSection(makeSection());
+    const picks = Array.from({ length: 200 }, (_, i) =>
+      seededVariantIndex(pattern, makeSection({ id: `verse-${i}` }), undefined, 0),
     );
-    const isClean = (v: { notes: number[][] }) => {
-      const snares = v.notes.filter((n) => n[1] === snarePitch).map((n) => n[0]);
-      return snares.length === 2 && snares[0] === 0 && snares[1] === 2;
-    };
-    const cleanCount = variants.filter(isClean).length;
-    // The mode: no other single variant shape reaches this count.
-    const byShape = new Map<string, number>();
-    for (const v of variants) {
-      const key = v.notes.join("|");
-      byShape.set(key, (byShape.get(key) ?? 0) + 1);
-    }
-    const topCount = Math.max(...byShape.values());
-    expect(cleanCount).toBe(topCount);
-    // Bounded: present but not flattening the spread.
-    expect(cleanCount).toBeGreaterThan(variants.length * 0.15);
-    expect(cleanCount).toBeLessThan(variants.length * 0.5);
+    const defaults = picks.filter((index) => index === 0).length;
+    expect(defaults).toBeGreaterThan(picks.length * 0.15);
+    expect(defaults).toBeLessThan(picks.length * 0.5);
+    // And it is the MODE — no other single variant beats it.
+    const counts = new Map<number, number>();
+    for (const index of picks) counts.set(index!, (counts.get(index!) ?? 0) + 1);
+    expect(defaults).toBe(Math.max(...counts.values()));
+    // ...while the rest of the pool still gets used.
+    expect(counts.size).toBeGreaterThan(5);
   });
-
   it("is deterministic: same section id + occurrence → the same variant", () => {
     const first = resolveSectionVariant(makeSection({ id: "sec-x" }), undefined, 0)!;
     const second = resolveSectionVariant(makeSection({ id: "sec-x" }), undefined, 0)!;

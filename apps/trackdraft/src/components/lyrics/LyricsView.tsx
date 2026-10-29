@@ -1,6 +1,6 @@
 import { useSongStore } from "../../store/songStore";
 import { useLyricsSelectionStore } from "../../store/lyricsSelectionStore";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import { updateSection } from "../../lib/sections";
 import LyricsEditor from "./LyricsEditor";
 import LyricDocumentView from "./LyricDocumentView";
@@ -8,8 +8,8 @@ import LyricDocumentView from "./LyricDocumentView";
 export default function LyricsView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
-  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
   const mode = useLyricsSelectionStore((s) => s.mode);
   const setMode = useLyricsSelectionStore((s) => s.setMode);
 

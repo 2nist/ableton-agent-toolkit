@@ -36,8 +36,8 @@ export function SliderRow({ label, min, max, value, display, onChange }: {
 
 /** Length (n) / Density (k) / Offset (rotation) — the intuitive way to
  *  author "k pulses spread as evenly as possible across n steps". */
-export function EuclidSliders({ n, denom, k, rotation, onChange }: {
-  n: number; denom: number; k: number; rotation: number;
+export function EuclidSliders({ n, k, rotation, onChange }: {
+  n: number; k: number; rotation: number;
   onChange: (n: number, k: number, r: number) => void;
 }) {
   const validCounts = twoThreeCellCounts(n);

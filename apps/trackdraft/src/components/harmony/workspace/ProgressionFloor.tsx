@@ -1,15 +1,47 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { SCALE_INTERVALS, pitchClass, type ChordQuality, type NoteName, type ScaleType } from "@music-theory/core";
-import type { Chord, TonicRegion } from "../../../types/blueprint";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  SCALE_INTERVALS,
+  pitchClass,
+  type ChordQuality,
+  type NoteName,
+  type ScaleType,
+} from "@music-theory/core";
+import type {
+  BlueprintSection,
+  BlueprintSong,
+  Chord,
+  TonicRegion,
+} from "../../../types/blueprint";
+import { sectionDurationBeats } from "../../../types/blueprint";
 import type { HarmonyAnalysis } from "../../../lib/harmony/analysis";
 import type { DetectedSection } from "../../../lib/harmony/segmentSections";
 import { rootForStep, scaleStepSemitones } from "../../../lib/harmony/analysis";
 import { setTonicAt } from "../../../lib/harmony/tonic";
-import { withBass, withQuality, withSpreadToggled, withSubstitution } from "../../../lib/harmony/chordEdits";
-import { BARS_PER_VIEW_OPTIONS, type BarsPerView } from "../../drums/blocks/meterGrid";
+import {
+  withBass,
+  withQuality,
+  withSpreadToggled,
+  withSubstitution,
+} from "../../../lib/harmony/chordEdits";
+import { nextPerformanceEffect } from "../../../lib/harmony/progressionEdits";
+import {
+  bassVoiceMarks,
+  colorVoiceMarks,
+} from "../../../lib/harmony/voiceLayers";
+import {
+  BARS_PER_VIEW_OPTIONS,
+  type BarsPerView,
+} from "../../drums/blocks/meterGrid";
 import {
   floorLength,
-  floorSlots,
+  floorSlotsFilled,
   removeChord,
   restsBetween,
   setRestAfter,
@@ -24,9 +56,17 @@ import {
   type Vec3,
 } from "../../../lib/harmony/scene3d";
 import { usePalette } from "../../../theme/palette";
-import { useStudioSelectionStore } from "../../../store/studioSelectionStore";
-import TensionCurve from "./TensionCurve";
-import { BEAT_Z, BOX_X, STEP_W, TENSION_H, computeFloorFit } from "./useFloorFit";
+import { useFocusedSectionStore } from "../../../store/focusedSectionStore";
+import EffectsLane, { type EffectChip } from "./EffectsLane";
+import VoicesLane from "./VoicesLane";
+import {
+  BEAT_Z,
+  BOX_X,
+  FOOT_H,
+  FOOT_H_VOICES,
+  STEP_W,
+  computeFloorFit,
+} from "./useFloorFit";
 import { useFloorGestures, type Gesture } from "./useFloorGestures";
 import { spellingReadings } from "./floorLabel";
 import type { Node, Preview } from "./floorTypes";
@@ -73,22 +113,45 @@ const VIEW_KEY = "trackdraft-harmony-bars-view";
  *  into a plate that is only seven rows tall. */
 const DEFAULT_BARS_VIEW: BarsPerView = 4;
 
+const FOOT_TAB_KEY = "trackdraft-harmony-foot-tab";
+
+/** Which lane the foot band opens on. Remembered, because the overlay is the
+ *  only place the generated voices are drawn: losing that to a reload looked
+ *  exactly like the bass and colour layers had stopped working. */
+function loadFootTab(): "effects" | "voices" {
+  try {
+    return localStorage.getItem(FOOT_TAB_KEY) === "voices"
+      ? "voices"
+      : "effects";
+  } catch {
+    return "effects";
+  }
+}
+
 function loadBarsView(): BarsPerView {
   try {
     const raw = localStorage.getItem(VIEW_KEY);
     if (raw === "all") return "all";
     const n = Number(raw);
-    return BARS_PER_VIEW_OPTIONS.includes(n as BarsPerView) ? (n as BarsPerView) : DEFAULT_BARS_VIEW;
+    return BARS_PER_VIEW_OPTIONS.includes(n as BarsPerView)
+      ? (n as BarsPerView)
+      : DEFAULT_BARS_VIEW;
   } catch {
     return DEFAULT_BARS_VIEW;
   }
 }
 
-
 export interface ProgressionFloorProps {
   /** The whole song, for the section dropdown (parity with the drums band). */
   sections: { id: string; name: string }[];
   sectionId: string;
+  /** The section itself — the foot band's Voices tab edits its bass/colour
+   *  profiles, which are section-scoped rather than per chord. */
+  section: BlueprintSection;
+  /** For the generated-voice overlay: the Bend style and narrative decide the
+   *  chord spacing the bass line uses, so the marks need the same inputs the
+   *  export gets. */
+  song: BlueprintSong;
   chords: Chord[];
   analysis: HarmonyAnalysis;
   keyName: NoteName;
@@ -103,11 +166,22 @@ export interface ProgressionFloorProps {
   onPreviewChord?: (chord: Chord) => void;
   onTranspose: (semitones: number, wholeSong: boolean) => void;
   onChangeRegions: (regions: TonicRegion[] | undefined) => void;
+  /** Write the SECTION (bass/colour profiles) rather than its chords — what
+   *  the foot band's Voices tab edits. */
+  onChangeSection?: (
+    updater: (section: BlueprintSection) => BlueprintSection,
+  ) => void;
   /** A beat the next palette chord should fill — set by clicking a rest or
    *  empty floor, cleared as soon as the chord lands. */
   /** Place a chord: the floor resolves WHERE the click landed (a ladder step,
    *  its beat and its spelling), the desk decides what quality that means. */
-  onPlaceChord: (degree: number, accidental: number, beat: number, span: number, spelling?: "sharp" | "flat") => void;
+  onPlaceChord: (
+    degree: number,
+    accidental: number,
+    beat: number,
+    span: number,
+    spelling?: "sharp" | "flat",
+  ) => void;
   /** This section's name — the starting value for an inline rename. */
   sectionName?: string;
   /** The swept-selection verbs: everything a bar range can mean, done here
@@ -127,10 +201,6 @@ export interface ProgressionFloorProps {
    *  whole view stays one bounded page instead of a stack of blocks. */
   tools?: ReactNode;
   status?: ReactNode;
-  /** Tension per chord of the whole section. The floor windows it itself so
-   *  the strip always describes the bars on screen — an 87-chord section drew
-   *  eighty-seven labels into forty-six pixels. */
-  tension?: { values: number[]; labels: string[] };
   /** Ghost boundaries for a proposed split (`segmentChordStream`). Null or
    *  absent means no preview is open. */
   segments?: readonly DetectedSection[] | null;
@@ -139,12 +209,19 @@ export interface ProgressionFloorProps {
   onExtensionChange: (extension: FloorExtension) => void;
   /** What the section's groove glue would do to the chord onsets, in beats.
    *  Computed by the export's own pocket, so this is a preview, not a guess. */
-  glue: { offsets: number[]; strength: number; meanMs: number; slots: number } | null;
+  glue: {
+    offsets: number[];
+    strength: number;
+    meanMs: number;
+    slots: number;
+  } | null;
 }
 
 export default function ProgressionFloor({
   sections,
   sectionId,
+  section,
+  song,
   chords,
   analysis,
   keyName,
@@ -172,8 +249,8 @@ export default function ProgressionFloor({
   glue,
   tools,
   status,
-  tension,
   segments,
+  onChangeSection,
 }: ProgressionFloorProps) {
   const P = usePalette();
   const frameRef = useRef<HTMLDivElement>(null);
@@ -186,22 +263,34 @@ export default function ProgressionFloor({
    *  stray drag places a chord instead of swinging the room. Tilt is opt-in. */
   const locked = preset === "front";
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(
+    null,
+  );
   /** Inline rename from the swept-bar overlay: the draft name while typing. */
   const [sweepRenaming, setSweepRenaming] = useState(false);
-  const [restMenu, setRestMenu] = useState<{ beat: number; x: number; y: number } | null>(null);
+  const [restMenu, setRestMenu] = useState<{
+    beat: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const [width, setWidth] = useState(900);
   const [readout, setReadout] = useState(
     "drag a chord · up and down walks the twelve steps · right-click for quality",
   );
   const [tonicSteps, setTonicSteps] = useState(0);
   const [showGlue, setShowGlue] = useState(true);
+  /** The foot band is editable now, not a readout: one lane at a time. */
+  const [footTab, setFootTab] = useState<"effects" | "voices">(loadFootTab);
+  const footH = footTab === "voices" ? FOOT_H_VOICES : FOOT_H;
   const plateRef = useRef<HTMLDivElement>(null);
   const [stageH, setStageH] = useState(420);
-  const [storedBarsView, setStoredBarsView] = useState<BarsPerView>(loadBarsView);
+  const [storedBarsView, setStoredBarsView] =
+    useState<BarsPerView>(loadBarsView);
   const barsPerView = storedBarsView;
   const [firstBar, setFirstBar] = useState(0);
-  const setSelectedSectionId = useStudioSelectionStore((state) => state.setSelectedSectionId);
+  const setSelectedSectionId = useFocusedSectionStore(
+    (state) => state.setSelectedSectionId,
+  );
 
   /**
    * The plate owns the rest of the viewport. Measured from the plate's own top
@@ -212,10 +301,12 @@ export default function ProgressionFloor({
   useEffect(() => {
     const plate = plateRef.current;
     if (!plate) return;
-    const host = (plate.closest("main") as HTMLElement | null) ?? document.documentElement;
+    const host =
+      (plate.closest("main") as HTMLElement | null) ?? document.documentElement;
 
     const measure = () => {
-      const hostRect = host === document.documentElement ? null : host.getBoundingClientRect();
+      const hostRect =
+        host === document.documentElement ? null : host.getBoundingClientRect();
       const top = plate.getBoundingClientRect().top;
       const bottom = hostRect ? hostRect.bottom : window.innerHeight;
       // Leave room for the readout row under the plate.
@@ -243,18 +334,34 @@ export default function ProgressionFloor({
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
-    const observer = new ResizeObserver(() => setWidth(frame.clientWidth || 900));
+    const observer = new ResizeObserver(() =>
+      setWidth(frame.clientWidth || 900),
+    );
     setWidth(frame.clientWidth || 900);
     observer.observe(frame);
     return () => observer.disconnect();
   }, []);
 
-  const slots = useMemo(() => floorSlots(chords), [chords]);
   const cycleBeats = useMemo(() => floorLength(chords), [chords]);
+  /**
+   * How much time the section actually holds. The BARS are authoritative: the
+   * chord list is one pass through the progression and the players loop it to
+   * fill the section, so a 25-beat progression in a 7-bar section really does
+   * come back to chord one for its last three beats. Never shorter than one
+   * pass, though — a chord just written must not fall off the plate.
+   */
+  const spanBeats = Math.max(sectionDurationBeats(section), cycleBeats);
+  const slots = useMemo(
+    () => floorSlotsFilled(chords, spanBeats),
+    [chords, spanBeats],
+  );
   const rests = useMemo(() => restsBetween(chords), [chords]);
-  /** The section's length in bars, generous enough to keep drop room past the
-   *  last chord (the drums' bars-per-view model, on a harmony grid). */
-  const sectionBeats = Math.max(cycleBeats, beatsPerBar * Math.max(2, ELBOW_BARS));
+  /** The plate's own width in beats: the span, plus drop room past the last
+   *  chord (the drums' bars-per-view model, on a harmony grid). */
+  const sectionBeats = Math.max(
+    spanBeats,
+    beatsPerBar * Math.max(2, ELBOW_BARS),
+  );
   const bars = Math.max(1, Math.ceil(sectionBeats / beatsPerBar));
   const barsShown = barsPerView === "all" ? bars : Math.min(bars, barsPerView);
   const lastFirstBar = Math.max(0, bars - barsShown);
@@ -262,14 +369,17 @@ export default function ProgressionFloor({
   const windowBeats = barsShown * beatsPerBar;
   const windowStart = windowFirstBar * beatsPerBar;
   /** Every beat becomes a z coordinate inside the current window. */
-  const zOf = useCallback((beat: number) => (beat - windowStart) * BEAT_Z, [windowStart]);
+  const zOf = useCallback(
+    (beat: number) => (beat - windowStart) * BEAT_Z,
+    [windowStart],
+  );
 
   /** Boxes on the floor: x = semitones above the tonic, y = height, z = time. */
   const nodes = useMemo<Node[]>(() => {
     const tonic = pitchClass(keyName);
     return slots.map((slot) => {
       const event = analysis.events[slot.index];
-      const beats = Math.max(FLOOR_STEP, slot.chord.beats);
+      const beats = Math.max(FLOOR_STEP, slot.end - slot.start);
       const depth = Math.max(MIN_DEPTH, beats * BEAT_Z - 3);
       const height = boxHeightForBeats(beats);
       const step = (((pitchClass(slot.chord.root) - tonic) % 12) + 12) % 12;
@@ -281,13 +391,19 @@ export default function ProgressionFloor({
         step,
         degree: event?.degree ?? 0,
         accidental: event?.accidental ?? 0,
-        center: { x: step * STEP_W, y: height / 2, z: zOf(slot.start) + depth / 2 },
+        center: {
+          x: step * STEP_W,
+          y: height / 2,
+          z: zOf(slot.start) + depth / 2,
+        },
         size: { x: BOX_X, y: height, z: depth },
+        pass: slot.pass ?? 0,
       };
     });
   }, [slots, analysis, zOf, keyName]);
 
-  const selectedNode = nodes.find((node) => node.chord.id === selectedChordId) ?? null;
+  const selectedNode =
+    nodes.find((node) => node.chord.id === selectedChordId) ?? null;
 
   /**
    * Only the window is painted. A 77-bar section holds 87 chords and every one
@@ -298,7 +414,9 @@ export default function ProgressionFloor({
   const visibleNodes = useMemo(
     () =>
       nodes.filter(
-        (node) => node.start + node.beats > windowStart + 0.001 && node.start < windowStart + windowBeats - 0.001,
+        (node) =>
+          node.start + node.beats > windowStart + 0.001 &&
+          node.start < windowStart + windowBeats - 0.001,
       ),
     [nodes, windowStart, windowBeats],
   );
@@ -315,15 +433,33 @@ export default function ProgressionFloor({
         locked,
         barsShown,
         beatsPerBar,
+        footHeight: footH,
       }),
-    [camera, width, windowBeats, windowStart, nodes, stageH, locked, barsShown, beatsPerBar],
+    [
+      camera,
+      width,
+      windowBeats,
+      windowStart,
+      nodes,
+      stageH,
+      locked,
+      barsShown,
+      beatsPerBar,
+      footH,
+    ],
   );
 
   // Memoised: these two are in the dependency list of every projection
   // callback, so rebuilding them each render rebuilt (and re-ran) the whole
   // scene on any state change — a selection, a hover, a readout string.
   const renderCamera = useMemo<SceneCamera>(
-    () => ({ ...camera, zoom: camera.zoom * fit.zoom, scaleY: fit.scaleY, panX: 0, panY: 0 }),
+    () => ({
+      ...camera,
+      zoom: camera.zoom * fit.zoom,
+      scaleY: fit.scaleY,
+      panX: 0,
+      panY: 0,
+    }),
     [camera, fit.zoom, fit.scaleY],
   );
   const origin = useMemo(
@@ -337,8 +473,14 @@ export default function ProgressionFloor({
   );
 
   /** Put a chord on a ladder step, naming the pitch the way the author meant. */
-  function withPitch(chord: Chord, step: number, spelling?: "sharp" | "flat"): Chord {
-    const natural = (SCALE_INTERVALS[scale] ?? SCALE_INTERVALS.ionian).includes(step % 12);
+  function withPitch(
+    chord: Chord,
+    step: number,
+    spelling?: "sharp" | "flat",
+  ): Chord {
+    const natural = (SCALE_INTERVALS[scale] ?? SCALE_INTERVALS.ionian).includes(
+      step % 12,
+    );
     return {
       ...chord,
       root: rootForStep(keyName, scale, step, spelling),
@@ -346,7 +488,14 @@ export default function ProgressionFloor({
     };
   }
 
-  const { onPointerDown, onPointerMove, onPointerUp, onContextMenu, onWheel, onTonicPointerDown } = useFloorGestures(
+  const {
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onContextMenu,
+    onWheel,
+    onTonicPointerDown,
+  } = useFloorGestures(
     {
       svgRef,
       frameRef,
@@ -396,14 +545,26 @@ export default function ProgressionFloor({
     onBarRange({ from: anchor, to: anchor });
     // Read the bar spans once: hit-testing by x keeps the sweep working even
     // when the sweep's own controls or a chord box sit over the ruler.
-    const spans = Array.from(document.querySelectorAll("[data-ruler-bar]")).map((rect) => {
-      const box = rect.getBoundingClientRect();
-      return { bar: Number(rect.getAttribute("data-ruler-bar")), left: box.left, right: box.right };
-    });
+    const spans = Array.from(document.querySelectorAll("[data-ruler-bar]")).map(
+      (rect) => {
+        const box = rect.getBoundingClientRect();
+        return {
+          bar: Number(rect.getAttribute("data-ruler-bar")),
+          left: box.left,
+          right: box.right,
+        };
+      },
+    );
     const move = (moveEvent: PointerEvent) => {
-      const under = spans.find((span) => moveEvent.clientX >= span.left && moveEvent.clientX < span.right);
+      const under = spans.find(
+        (span) =>
+          moveEvent.clientX >= span.left && moveEvent.clientX < span.right,
+      );
       if (!under) return;
-      onBarRange({ from: Math.min(anchor, under.bar), to: Math.max(anchor, under.bar) });
+      onBarRange({
+        from: Math.min(anchor, under.bar),
+        to: Math.max(anchor, under.bar),
+      });
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
@@ -414,7 +575,11 @@ export default function ProgressionFloor({
   }
 
   function applyQuality(chordId: string, quality: ChordQuality) {
-    onChangeChords(chords.map((chord) => (chord.id === chordId ? withQuality(chord, quality) : chord)));
+    onChangeChords(
+      chords.map((chord) =>
+        chord.id === chordId ? withQuality(chord, quality) : chord,
+      ),
+    );
     setMenu(null);
     const chord = chords.find((candidate) => candidate.id === chordId);
     if (chord) onPreviewChord?.({ ...chord, quality });
@@ -424,23 +589,42 @@ export default function ProgressionFloor({
   function applySpelling(chordId: string, spelling: "sharp" | "flat") {
     const node = nodes.find((candidate) => candidate.chord.id === chordId);
     if (!node) return;
-    onChangeChords(chords.map((chord) => (chord.id === chordId ? withPitch(chord, node.step, spelling) : chord)));
+    onChangeChords(
+      chords.map((chord) =>
+        chord.id === chordId ? withPitch(chord, node.step, spelling) : chord,
+      ),
+    );
     setMenu(null);
   }
 
   function applyRest(chordId: string, beats: number) {
     const node = nodes.find((candidate) => candidate.chord.id === chordId);
     if (!node) return;
-    const current = Math.max(0, (slots[node.index + 1]?.start ?? node.start + node.beats) - (node.start + node.beats));
+    const current = Math.max(
+      0,
+      (slots[node.index + 1]?.start ?? node.start + node.beats) -
+        (node.start + node.beats),
+    );
     onChangeChords(setRestAfter(chords, chordId, Math.max(0, current + beats)));
   }
 
-  const previewNode = preview ? nodes.find((node) => node.chord.id === preview.id) ?? null : null;
+  const previewNode = preview
+    ? (nodes.find((node) => node.chord.id === preview.id) ?? null)
+    : null;
 
   const faces = useMemo(() => {
-    const list: { face: ReturnType<typeof boxFaces>[number]; node: Node; isPreview: boolean }[] = [];
+    const list: {
+      face: ReturnType<typeof boxFaces>[number];
+      node: Node;
+      isPreview: boolean;
+    }[] = [];
     for (const node of visibleNodes) {
-      for (const face of boxFaces(node.center, node.size, renderCamera, origin)) {
+      for (const face of boxFaces(
+        node.center,
+        node.size,
+        renderCamera,
+        origin,
+      )) {
         list.push({ face, node, isPreview: false });
       }
     }
@@ -450,8 +634,17 @@ export default function ProgressionFloor({
       const depth = Math.max(MIN_DEPTH, beats * BEAT_Z - 3);
       const height = boxHeightForBeats(beats);
       const start = preview.start ?? previewNode.start;
-      const center = { x: step * STEP_W, y: height / 2, z: zOf(start) + depth / 2 };
-      for (const face of boxFaces(center, { x: BOX_X, y: height, z: depth }, renderCamera, origin)) {
+      const center = {
+        x: step * STEP_W,
+        y: height / 2,
+        z: zOf(start) + depth / 2,
+      };
+      for (const face of boxFaces(
+        center,
+        { x: BOX_X, y: height, z: depth },
+        renderCamera,
+        origin,
+      )) {
         list.push({ face, node: previewNode, isPreview: true });
       }
     }
@@ -472,208 +665,303 @@ export default function ProgressionFloor({
   const density = useMemo(() => {
     const a = projectPoint({ x: 0, y: 0, z: 0 }, renderCamera, origin);
     const b = projectPoint({ x: STEP_W, y: 0, z: 0 }, renderCamera, origin);
-    const c = projectPoint({ x: 0, y: 0, z: beatsPerBar * BEAT_Z }, renderCamera, origin);
+    const c = projectPoint(
+      { x: 0, y: 0, z: beatsPerBar * BEAT_Z },
+      renderCamera,
+      origin,
+    );
     // The SCALED pitch: rows wear the vertical scale, bars don't.
-    return { rowPx: Math.abs(b.y - a.y) * fit.scaleY, barPx: Math.abs(c.x - a.x) };
+    return {
+      rowPx: Math.abs(b.y - a.y) * fit.scaleY,
+      barPx: Math.abs(c.x - a.x),
+    };
   }, [renderCamera, origin, beatsPerBar, fit.scaleY]);
 
   const rulerStep = Math.max(1, Math.ceil(18 / Math.max(1, density.barPx)));
 
-  const tensionStrip = useMemo(() => {
-    if (!tension) return null;
-    const ordered = visibleNodes.slice().sort((left, right) => left.start - right.start);
-    const values = ordered.map((node) => tension.values[node.index] ?? 0);
-    const step = Math.max(1, Math.ceil(26 / Math.max(8, width / Math.max(1, ordered.length))));
-    const labels = ordered.map((node, position) =>
-      position % step === 0 ? (tension.labels[node.index] ?? "") : "",
-    );
-    // Time-aligned with the boxes above: the strip is the same axis, read as
-    // tension instead of degree, so a point sits under the chord it describes.
-    const positions = ordered.map(
-      (node) => project({ x: 0, y: 0, z: (node.start + node.beats / 2) * BEAT_Z }).x / Math.max(1, width),
-    );
-    return { values, labels, positions };
-  }, [tension, visibleNodes, width, project]);
+  /**
+   * The foot band's per-chord slots — projected from the SAME camera and
+   * origin as the boxes above, so a chip is physically under its chord and a
+   * click lands on what the eye pointed at.
+   */
+  const effectChips = useMemo<EffectChip[]>(
+    () =>
+      visibleNodes.map((node) => ({
+        key: `${node.chord.id}-${node.start}`,
+        chordId: node.chord.id,
+        x0: project({ x: 0, y: 0, z: node.start * BEAT_Z }).x,
+        x1: project({ x: 0, y: 0, z: (node.start + node.beats) * BEAT_Z }).x,
+        style: node.chord.performance?.style,
+        roman: analysis.events[node.index]?.roman ?? "",
+      })),
+    [visibleNodes, project, analysis],
+  );
+
+  /**
+   * The Voices overlay: only while that tab is open, and only in the locked
+   * front view — with 2-5 marks per chord the tilted views would collide, and
+   * the overlay exists to be read against the pitch axis, which the front view
+   * is the one that shows straight.
+   */
+  const voicesOverlay = useMemo(() => {
+    if (footTab !== "voices" || !locked) return null;
+    // The marks and the boxes are resolved from the same tiled pass, so there
+    // is exactly one mark per box — the loop's partial final repeat included.
+    return {
+      bass: bassVoiceMarks(section, keyName, song),
+      color: colorVoiceMarks(section, keyName, song),
+    };
+  }, [footTab, locked, section, keyName, song]);
+
+  /** none → strum → pulse → arp → none, one undo step per click. */
+  const cycleEffect = useCallback(
+    (chordId: string) => {
+      onChangeChords(
+        chords.map((chord) =>
+          chord.id === chordId
+            ? {
+                ...chord,
+                performance: nextPerformanceEffect(chord.performance),
+              }
+            : chord,
+        ),
+      );
+    },
+    [chords, onChangeChords],
+  );
 
   const tonicSemitones = scaleStepSemitones(scale, tonicSteps);
-  const activeRegions = regions.filter((region) => region.source === "authored").length;
+  const activeRegions = regions.filter(
+    (region) => region.source === "authored",
+  ).length;
 
   return (
     <div ref={frameRef} className="relative">
       <FloorBand
-          keyName={keyName}
-          scale={scale}
-          tonicSteps={tonicSteps}
-          tonicSemitones={tonicSemitones}
-          onTonicPointerDown={(event) => onTonicPointerDown(event, setTonicSteps)}
-          homeRoot={selectedNode?.chord.root ?? null}
-          onHome={() => {
-            if (!selectedNode) return;
-            onChangeRegions(
-              setTonicAt(regions, { startBeat: selectedNode.start, key: selectedNode.chord.root, scale }),
-            );
-            setReadout(`home from beat ${selectedNode.start + 1} · ${selectedNode.chord.root}`);
-          }}
-          onFollow={() => {
-            onChangeRegions(undefined);
-            setReadout("following the chords — inference picks the homes again");
-          }}
-          activeRegions={activeRegions}
-          sections={sections}
-          sectionId={sectionId}
-          onSectionChange={(id) => {
-            setSelectedSectionId(id);
-            setFirstBar(0);
-          }}
-          barsPerView={barsPerView}
-          onBarsViewChange={(view) => {
-            setStoredBarsView(view);
-            setFirstBar(0);
-            try {
-              localStorage.setItem(VIEW_KEY, String(view));
-            } catch {
-              /* a view preference is never worth breaking the floor over */
-            }
-          }}
-          bars={bars}
-          barsShown={barsShown}
-          windowFirstBar={windowFirstBar}
-          lastFirstBar={lastFirstBar}
-          onFirstBar={setFirstBar}
-          extension={extension}
-          onExtensionChange={onExtensionChange}
-          preset={preset}
-          onPresetChange={(next) => {
-            setCamera(CAMERA_PRESETS[next]);
-            setPreset(next);
-          }}
-          locked={locked}
-          onMergeWithNext={onMergeWithNext}
-          onRenameSection={onRenameSection}
-          chordCount={chords.length}
-          cycleBeats={cycleBeats}
-          tools={tools}
-        />
+        keyName={keyName}
+        scale={scale}
+        tonicSteps={tonicSteps}
+        tonicSemitones={tonicSemitones}
+        onTonicPointerDown={(event) => onTonicPointerDown(event, setTonicSteps)}
+        homeRoot={selectedNode?.chord.root ?? null}
+        onHome={() => {
+          if (!selectedNode) return;
+          onChangeRegions(
+            setTonicAt(regions, {
+              startBeat: selectedNode.start,
+              key: selectedNode.chord.root,
+              scale,
+            }),
+          );
+          setReadout(
+            `home from beat ${selectedNode.start + 1} · ${selectedNode.chord.root}`,
+          );
+        }}
+        onFollow={() => {
+          onChangeRegions(undefined);
+          setReadout("following the chords — inference picks the homes again");
+        }}
+        activeRegions={activeRegions}
+        sections={sections}
+        sectionId={sectionId}
+        onSectionChange={(id) => {
+          setSelectedSectionId(id);
+          setFirstBar(0);
+        }}
+        barsPerView={barsPerView}
+        onBarsViewChange={(view) => {
+          setStoredBarsView(view);
+          setFirstBar(0);
+          try {
+            localStorage.setItem(VIEW_KEY, String(view));
+          } catch {
+            /* a view preference is never worth breaking the floor over */
+          }
+        }}
+        bars={bars}
+        barsShown={barsShown}
+        windowFirstBar={windowFirstBar}
+        lastFirstBar={lastFirstBar}
+        onFirstBar={setFirstBar}
+        extension={extension}
+        onExtensionChange={onExtensionChange}
+        preset={preset}
+        onPresetChange={(next) => {
+          setCamera(CAMERA_PRESETS[next]);
+          setPreset(next);
+        }}
+        locked={locked}
+        onMergeWithNext={onMergeWithNext}
+        onRenameSection={onRenameSection}
+        chordCount={chords.length}
+        cycleBeats={cycleBeats}
+        tools={tools}
+      />
 
       <div
         ref={plateRef}
         className="relative overflow-hidden rounded border border-edge bg-deep"
         style={{ height: fit.height }}
       >
-      {barRange && onBarRange && (
-        <div className="pointer-events-auto absolute left-2 top-6 z-20 flex items-center gap-1 rounded border border-accent/70 bg-panel/95 px-1 py-0.5 font-mono text-[9px] text-accent shadow">
-          <span className="tabular-nums">
-            bar{barRange.from === barRange.to ? "" : "s"} {barRange.from + 1}
-            {barRange.from === barRange.to ? "" : `–${barRange.to + 1}`}
-          </span>
-          {onSplitSectionAtBar && (
+        {barRange && onBarRange && (
+          <div className="pointer-events-auto absolute left-2 top-6 z-20 flex items-center gap-1 rounded border border-accent/70 bg-panel/95 px-1 py-0.5 font-mono text-[9px] text-accent shadow">
+            <span className="tabular-nums">
+              bar{barRange.from === barRange.to ? "" : "s"} {barRange.from + 1}
+              {barRange.from === barRange.to ? "" : `–${barRange.to + 1}`}
+            </span>
+            {onSplitSectionAtBar && (
+              <button
+                type="button"
+                disabled={barRange.from === 0}
+                onClick={() => {
+                  onSplitSectionAtBar(barRange.from);
+                  onBarRange(null);
+                }}
+                title="Start a new section at this bar"
+                className="rounded border border-accent/60 px-1 disabled:opacity-40"
+              >
+                separate
+              </button>
+            )}
+            {onMergeWithNext && (
+              <button
+                type="button"
+                onClick={() => {
+                  onMergeWithNext();
+                  onBarRange(null);
+                }}
+                title="Glue this section onto the next one"
+                className="rounded border border-accent/60 px-1"
+              >
+                merge next
+              </button>
+            )}
+            {onRenameSection && !sweepRenaming && (
+              <button
+                type="button"
+                onClick={() => setSweepRenaming(true)}
+                title="Rename this section"
+                className="rounded border border-accent/60 px-1"
+              >
+                rename
+              </button>
+            )}
+            {onRenameSection && sweepRenaming && (
+              <SectionNameInput
+                name={sectionName ?? ""}
+                onCommit={(name) => {
+                  onRenameSection(name);
+                  setSweepRenaming(false);
+                  onBarRange(null);
+                }}
+                onCancel={() => setSweepRenaming(false)}
+                className="w-28 rounded border border-accent bg-panel px-1 py-0 text-[9px] text-ink outline-none"
+              />
+            )}
             <button
               type="button"
-              disabled={barRange.from === 0}
               onClick={() => {
-                onSplitSectionAtBar(barRange.from);
-                onBarRange(null);
-              }}
-              title="Start a new section at this bar"
-              className="rounded border border-accent/60 px-1 disabled:opacity-40"
-            >
-              separate
-            </button>
-          )}
-          {onMergeWithNext && (
-            <button
-              type="button"
-              onClick={() => {
-                onMergeWithNext();
-                onBarRange(null);
-              }}
-              title="Glue this section onto the next one"
-              className="rounded border border-accent/60 px-1"
-            >
-              merge next
-            </button>
-          )}
-          {onRenameSection && !sweepRenaming && (
-            <button
-              type="button"
-              onClick={() => setSweepRenaming(true)}
-              title="Rename this section"
-              className="rounded border border-accent/60 px-1"
-            >
-              rename
-            </button>
-          )}
-          {onRenameSection && sweepRenaming && (
-            <SectionNameInput
-              name={sectionName ?? ""}
-              onCommit={(name) => {
-                onRenameSection(name);
                 setSweepRenaming(false);
                 onBarRange(null);
               }}
-              onCancel={() => setSweepRenaming(false)}
-              className="w-28 rounded border border-accent bg-panel px-1 py-0 text-[9px] text-ink outline-none"
-            />
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              setSweepRenaming(false);
-              onBarRange(null);
-            }}
-            title="Clear the bar selection"
-            className="rounded border border-accent/60 px-1"
-          >
-            ×
-          </button>
-        </div>
-      )}
-      <FloorScene
-        svgRef={svgRef}
-        width={width}
-        height={fit.height}
-        fit={fit}
-        palette={P}
-        project={project}
-        zOf={zOf}
-        beatsPerBar={beatsPerBar}
-        windowStart={windowStart}
-        windowFirstBar={windowFirstBar}
-        barRange={barRange ?? null}
-        onBarPointerDown={beginBarSweep}
-        scale={scale}
-        rests={rests}
-        segments={segments}
-        cycleBeats={cycleBeats}
-        density={density}
-        rulerStep={rulerStep}
-        path={path}
-        faces={faces}
-        visibleNodes={visibleNodes}
-        selectedChordId={selectedChordId}
-        activeChordId={activeChordId}
-        analysis={analysis}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onContextMenu={onContextMenu}
-        onWheel={onWheel}
-      />
+              title="Clear the bar selection"
+              className="rounded border border-accent/60 px-1"
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <FloorScene
+          svgRef={svgRef}
+          width={width}
+          height={fit.height}
+          fit={fit}
+          palette={P}
+          project={project}
+          zOf={zOf}
+          beatsPerBar={beatsPerBar}
+          windowStart={windowStart}
+          windowFirstBar={windowFirstBar}
+          barRange={barRange ?? null}
+          onBarPointerDown={beginBarSweep}
+          scale={scale}
+          rests={rests}
+          segments={segments}
+          cycleBeats={cycleBeats}
+          density={density}
+          rulerStep={rulerStep}
+          path={path}
+          faces={faces}
+          visibleNodes={visibleNodes}
+          selectedChordId={selectedChordId}
+          activeChordId={activeChordId}
+          analysis={analysis}
+          voices={voicesOverlay}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onContextMenu={onContextMenu}
+          onWheel={onWheel}
+        />
 
-      {tensionStrip && (
+        {/* The foot band. It used to be a tension readout, which on a real song
+          was a flat 0.50 line for 86% of its chords — 46px of the primary
+          canvas spent saying "nothing happening". Tension still exists: it is
+          drawn ON the chord boxes (a hot box glows) and fully in Study. This
+          space is now editable. */}
         <div
-          className="absolute inset-x-0 bottom-0 border-t border-edge/60 bg-deep"
-          style={{ height: TENSION_H }}
+          className="absolute inset-x-0 bottom-0 flex flex-col border-t border-edge/60 bg-deep"
+          style={{ height: footH }}
         >
-          <TensionCurve
-            values={tensionStrip.values}
-            labels={tensionStrip.labels}
-            positions={tensionStrip.positions}
-            width={Math.max(320, width)}
-            height={TENSION_H - 4}
-          />
+          <div className="flex shrink-0 items-center gap-0.5 px-2 pt-0.5 font-mono text-[9px] uppercase tracking-[0.1em]">
+            {(["effects", "voices"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                aria-pressed={footTab === tab}
+                onClick={() => {
+                  setFootTab(tab);
+                  try {
+                    localStorage.setItem(FOOT_TAB_KEY, tab);
+                  } catch {
+                    /* a view preference is never worth breaking the floor over */
+                  }
+                }}
+                className={`rounded px-1.5 py-0.5 ${
+                  footTab === tab
+                    ? "bg-panel text-ink"
+                    : "text-inkMuted/60 hover:text-ink"
+                }`}
+                title={
+                  tab === "effects"
+                    ? "Each chord's performance: none · strum · pulse · arp — click a chord to cycle"
+                    : "This section's generated voices: bass register/motion/rhythm, and the colour layer"
+                }
+              >
+                {tab}
+              </button>
+            ))}
+            <span className="ml-auto normal-case tracking-normal text-inkMuted/50">
+              {footTab === "effects"
+                ? "click a chord to cycle none · strum · pulse · arp — a glowing box is high tension"
+                : locked
+                  ? "bars are the bass line · one circle per chord, on its colour chord's row"
+                  : "voices draw in the front view — the tilted views would collide them"}
+            </span>
+          </div>
+          <div className="min-h-0 flex-1">
+            {footTab === "effects" ? (
+              <EffectsLane
+                chips={effectChips}
+                width={Math.max(320, width)}
+                height={footH - 18}
+                onCycle={cycleEffect}
+              />
+            ) : onChangeSection ? (
+              <VoicesLane section={section} onChange={onChangeSection} />
+            ) : null}
+          </div>
         </div>
-      )}
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-2 font-mono text-[9px] text-inkMuted/70">
@@ -689,8 +977,12 @@ export default function ProgressionFloor({
             className={`rounded border px-1.5 py-0.5 ${showGlue ? "border-accent bg-accent/15 text-accent" : "border-edge hover:text-ink"}`}
           >
             {(() => {
-              const moving = glue.offsets.filter((offset) => Math.abs(offset) > 0.0005);
-              const worst = moving.length ? Math.round(Math.max(...moving.map(Math.abs)) * 500) : 0;
+              const moving = glue.offsets.filter(
+                (offset) => Math.abs(offset) > 0.0005,
+              );
+              const worst = moving.length
+                ? Math.round(Math.max(...moving.map(Math.abs)) * 500)
+                : 0;
               return moving.length === 0
                 ? `⛓ glue C ${Math.round(glue.strength * 100)}% · your onsets sit on the pocket`
                 : `⛓ glue C ${Math.round(glue.strength * 100)}% · ${moving.length}/${glue.offsets.length} onsets move · worst ${worst}ms`;
@@ -716,67 +1008,116 @@ export default function ProgressionFloor({
         />
       )}
 
-      {menu && (() => {
-        const node = nodes.find((candidate) => candidate.chord.id === menu.id);
-        if (!node) return null;
-        const event = analysis.events[node.index];
-        return (
-          <ChordMenu
-            node={node}
-            event={event}
-            x={menu.x}
-            y={menu.y}
-            keyName={keyName}
-            scale={scale}
-            onQuality={(quality) => applyQuality(menu.id, quality)}
-            onBass={(inversion) => {
-              onChangeChords(chords.map((chord) => (chord.id === menu.id ? withBass(chord, inversion) : chord)));
-              setMenu(null);
-            }}
-            onToggleSpread={() => {
-              onChangeChords(chords.map((chord) => (chord.id === menu.id ? withSpreadToggled(chord) : chord)));
-              setMenu(null);
-            }}
-            onSubstitution={(pick) => {
-              onChangeChords(chords.map((chord) => (chord.id === menu.id ? withSubstitution(chord, pick) : chord)));
-              setMenu(null);
-            }}
-            spellings={(() => {
-              if ((SCALE_INTERVALS[scale] ?? SCALE_INTERVALS.ionian).includes(node.step % 12)) return null;
-              const readings = spellingReadings(keyName, scale, node.step, node.chord.quality);
-              if (!readings.sharp || !readings.flat) return null;
-              return { sharp: readings.sharp, flat: readings.flat };
-            })()}
-            activeSpelling={node.accidental < 0 ? "flat" : node.accidental > 0 ? "sharp" : null}
-            onSpelling={(spelling) => applySpelling(menu.id, spelling)}
-            onNudgeRest={(delta) => applyRest(menu.id, delta)}
-            onDelete={() => {
-              onChangeChords(removeChord(chords, menu.id));
-              onSelectChord(null);
-              setMenu(null);
-            }}
-            onRunUp={(span) => {
-              onPlaceChord(node.degree, node.accidental, Math.max(0, node.start - span), span);
-              setMenu(null);
-              setReadout(`run up: ${span}b before ${event?.roman ?? "this chord"}`);
-            }}
-            onRehome={() => {
-              // The same pitches, counted from this chord instead. Nothing sounds different.
-              onChangeRegions([{ startBeat: node.start, key: node.chord.root, scale, source: "authored" }]);
-              setReadout(`tonic region at beat ${node.start + 1} · ${node.chord.root}`);
-            }}
-            onSplitHere={
-              onSplitSectionAt
-                ? () => {
-                    onSplitSectionAt(node.chord.id);
-                    setReadout(`section starts at beat ${node.start + 1}`);
-                  }
-                : undefined
-            }
-            onClose={() => setMenu(null)}
-          />
-        );
-      })()}
+      {menu &&
+        (() => {
+          const node = nodes.find(
+            (candidate) => candidate.chord.id === menu.id,
+          );
+          if (!node) return null;
+          const event = analysis.events[node.index];
+          return (
+            <ChordMenu
+              node={node}
+              event={event}
+              x={menu.x}
+              y={menu.y}
+              keyName={keyName}
+              scale={scale}
+              onQuality={(quality) => applyQuality(menu.id, quality)}
+              onBass={(inversion) => {
+                onChangeChords(
+                  chords.map((chord) =>
+                    chord.id === menu.id ? withBass(chord, inversion) : chord,
+                  ),
+                );
+                setMenu(null);
+              }}
+              onToggleSpread={() => {
+                onChangeChords(
+                  chords.map((chord) =>
+                    chord.id === menu.id ? withSpreadToggled(chord) : chord,
+                  ),
+                );
+                setMenu(null);
+              }}
+              onSubstitution={(pick) => {
+                onChangeChords(
+                  chords.map((chord) =>
+                    chord.id === menu.id
+                      ? withSubstitution(chord, pick)
+                      : chord,
+                  ),
+                );
+                setMenu(null);
+              }}
+              spellings={(() => {
+                if (
+                  (SCALE_INTERVALS[scale] ?? SCALE_INTERVALS.ionian).includes(
+                    node.step % 12,
+                  )
+                )
+                  return null;
+                const readings = spellingReadings(
+                  keyName,
+                  scale,
+                  node.step,
+                  node.chord.quality,
+                );
+                if (!readings.sharp || !readings.flat) return null;
+                return { sharp: readings.sharp, flat: readings.flat };
+              })()}
+              activeSpelling={
+                node.accidental < 0
+                  ? "flat"
+                  : node.accidental > 0
+                    ? "sharp"
+                    : null
+              }
+              onSpelling={(spelling) => applySpelling(menu.id, spelling)}
+              onNudgeRest={(delta) => applyRest(menu.id, delta)}
+              onDelete={() => {
+                onChangeChords(removeChord(chords, menu.id));
+                onSelectChord(null);
+                setMenu(null);
+              }}
+              onRunUp={(span) => {
+                onPlaceChord(
+                  node.degree,
+                  node.accidental,
+                  Math.max(0, node.start - span),
+                  span,
+                );
+                setMenu(null);
+                setReadout(
+                  `run up: ${span}b before ${event?.roman ?? "this chord"}`,
+                );
+              }}
+              onRehome={() => {
+                // The same pitches, counted from this chord instead. Nothing sounds different.
+                onChangeRegions([
+                  {
+                    startBeat: node.start,
+                    key: node.chord.root,
+                    scale,
+                    source: "authored",
+                  },
+                ]);
+                setReadout(
+                  `tonic region at beat ${node.start + 1} · ${node.chord.root}`,
+                );
+              }}
+              onSplitHere={
+                onSplitSectionAt
+                  ? () => {
+                      onSplitSectionAt(node.chord.id);
+                      setReadout(`section starts at beat ${node.start + 1}`);
+                    }
+                  : undefined
+              }
+              onClose={() => setMenu(null)}
+            />
+          );
+        })()}
     </div>
   );
 }

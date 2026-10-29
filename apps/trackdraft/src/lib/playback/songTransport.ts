@@ -9,11 +9,19 @@ import type { BlueprintSong } from "../../types/blueprint";
 export interface TransportTick {
   beat: number;
   isPlaying: boolean;
-  /** Index into the `SectionSpan[]` that was current when the tick fired,
-   *  or -1 when stopped/before the first span. Consumers that already have
-   *  their own `sectionSpans(song)` (e.g. ArrangementTimeline) can index
-   *  straight into it rather than re-deriving which span this is. */
+  /** Index into the `SectionSpan[]` this transport snapshotted when playback
+   *  started, or -1 when stopped/before the first span. Kept for consumers
+   *  that have no song to re-derive spans from (the popout over
+   *  BroadcastChannel); anything with the live song should resolve through
+   *  `spanIndexForTick`, because editing the arrangement mid-playback makes
+   *  this index alias a different section. */
   sectionIndex: number;
+  /** Identity of the span sounding at this tick — stable across edits, so
+   *  it is what every in-app consumer resolves against. Null when the tick
+   *  is outside every span. */
+  sectionId?: string | null;
+  /** Which repeat pass of `sectionId`, or -1 outside every span. */
+  occurrenceIndex?: number;
 }
 
 /** Playback position/loop for `SongTransport.play()` — lets a caller start
@@ -47,6 +55,11 @@ function sectionIndexAt(spans: SectionSpan[], beat: number): number {
   return spans.findIndex((s) => beat >= s.startBeat && beat < s.startBeat + s.durationBeats);
 }
 
+/** A subscriber that throws must not take the playhead down with it, and
+ *  must not be silently swallowed either (a dead playhead needs a lead). */
+function reportTickListenerError(error: unknown): void {
+  console.error("[songTransport] a tick listener threw; other subscribers continued", error);
+}
 /** Walks a song's full arrangement (`sectionSpans`) and advances a
  *  song-relative beat position at display refresh rate — a silent
  *  playhead for reviewing arrangement/timing while editing. TrackDraft
@@ -79,6 +92,9 @@ class SongTransport {
   private nextBarCb: (() => void) | null = null;
   private nextBarAt = -1;
   private tickListeners = new Set<(tick: TransportTick) => void>();
+  /** Guard + queue for `emit` — see its doc. */
+  private emitting = false;
+  private emitQueue: TransportTick[] = [];
   private abletonUnsub: (() => void) | null = null;
   /** The clock following Live in this mode — owned here (not by the MIDI
    *  scheduler) so `stop()` can dispose it; the scheduler gets its own. */
@@ -112,22 +128,24 @@ class SongTransport {
 
   /** Start a silent playhead scrub through `song` — no audio, see the class
    *  doc. Any playback already in progress (this song or another) is
-   *  stopped first. If `clockSource` is "ableton" this is a no-op —
-   *  Ableton sync must use syncToAbleton(). An explicit `opts.startBeat`
-   *  seeks; without one, a paused beat is resumed (see `pause()`). */
-  play(song: BlueprintSong, opts: PlayOptions = {}): void {
-    if (this.clockSource === "ableton") return;
+   *  stopped first. Returns false without doing anything when
+   *  `clockSource` is "ableton" — Ableton sync must use `syncToAbleton()`,
+   *  and callers need to know their request was refused rather than
+   *  assume they are playing. An explicit `opts.startBeat` seeks; without
+   *  one, a paused beat is resumed (see `pause()`). */
+  play(song: BlueprintSong, opts: PlayOptions = {}): boolean {
+    if (this.clockSource === "ableton") return false;
     // Capture the resume position BEFORE stop() (which clears it): an
     // explicit startBeat wins, otherwise a paused beat resumes.
     const resumeBeat = opts.startBeat !== undefined ? Math.max(0, opts.startBeat) : (this.pausedBeat ?? 0);
     this.stop();
     this.spans = sectionSpans(song);
-    if (this.spans.length === 0) return;
+    if (this.spans.length === 0) return false;
 
     this.secPerBeat = 60 / song.bpm;
     const lastSpan = this.spans[this.spans.length - 1];
     this.totalBeats = lastSpan.startBeat + lastSpan.durationBeats;
-    if (this.totalBeats <= 0) return;
+    if (this.totalBeats <= 0) return false;
 
     const startBeat = resumeBeat;
     this.loopStart = opts.loopStart ?? startBeat;
@@ -157,11 +175,53 @@ class SongTransport {
         this.stop();
         return;
       }
-      this.emit({ beat, isPlaying: true, sectionIndex: sectionIndexAt(this.spans, beat) });
+      this.emit(this.tickAt(beat, true));
       this.schedulerId = requestAnimationFrame(tickLoop);
     };
 
     this.schedulerId = requestAnimationFrame(tickLoop);
+    return true;
+  }
+
+  /** Build a tick for `beat`, carrying the span's IDENTITY as well as its
+   *  index so consumers never have to trust a stale position. */
+  private tickAt(beat: number, isPlaying: boolean): TransportTick {
+    const index = sectionIndexAt(this.spans, beat);
+    const span = index >= 0 ? this.spans[index] : null;
+    return {
+      beat,
+      isPlaying,
+      sectionIndex: index,
+      sectionId: span?.sectionId ?? null,
+      occurrenceIndex: span?.occurrenceIndex ?? -1,
+    };
+  }
+
+  /**
+   * Re-derive the span map and song length from `song` WITHOUT moving the
+   * playhead — call this after any edit that adds, removes, reorders or
+   * resizes a section while playback is running.
+   *
+   * Without it the transport keeps reporting `sectionIndex` values from the
+   * arrangement as it was when playback started, and every consumer that
+   * re-derives spans from the live song aliases a different section (see
+   * `spanIndexForTick`). A tempo change re-anchors the wall clock at the
+   * current beat so the playhead stays continuous instead of jumping.
+   */
+  updateSong(song: BlueprintSong): void {
+    const spans = sectionSpans(song);
+    if (spans.length === 0) return; // a song mid-edit with no sections yet
+    const lastSpan = spans[spans.length - 1];
+    const totalBeats = lastSpan.startBeat + lastSpan.durationBeats;
+    if (totalBeats <= 0) return;
+
+    if (this.isPlaying) {
+      const beat = this.currentBeat();
+      this.startedAtMs = performance.now() - beat * (60 / song.bpm) * 1000;
+    }
+    this.spans = spans;
+    this.secPerBeat = 60 / song.bpm;
+    this.totalBeats = totalBeats;
   }
 
   /** The playhead beat right now — the same folded value the tick loop
@@ -191,7 +251,7 @@ class SongTransport {
       this.schedulerId = null;
     }
     this.isPlaying = false;
-    this.emit({ beat, isPlaying: false, sectionIndex: sectionIndexAt(this.spans, beat) });
+    this.emit(this.tickAt(beat, false));
   }
 
   /** Whether playback is paused — `play()` will resume from the held beat
@@ -213,7 +273,7 @@ class SongTransport {
    *  note. Uses the current section's beats-per-bar; never returns a beat
    *  past the song end (or the loop region's end when looping). */
   getNextBarBeat(): number {
-    let beat = this.currentBeat();
+    const beat = this.currentBeat();
     const span = this.spans[sectionIndexAt(this.spans, beat)];
     let next = this.totalBeats;
     if (span) {
@@ -232,6 +292,15 @@ class SongTransport {
   onNextBar(cb: () => void): void {
     this.nextBarCb = cb;
     this.nextBarAt = this.getNextBarBeat();
+  }
+
+  /** Drop a queued `onNextBar` callback without touching playback — for
+   *  when the edit it was staged for no longer applies. `play()`/`stop()`
+   *  already clear the slot; this makes the cancellation explicit for
+   *  callers that cancel a stage while the transport keeps running. */
+  cancelNextBar(): void {
+    this.nextBarCb = null;
+    this.nextBarAt = -1;
   }
 
   /** The beat playback will resume from, or null when not paused. */
@@ -277,7 +346,7 @@ class SongTransport {
         // Live's transport is stopped: report it once so the UI drops out of
         // "playing", but hold the last beat rather than rewinding to the top.
         const held = this.syncedBeat ?? 0;
-        this.emit({ beat: held, isPlaying: false, sectionIndex: sectionIndexAt(this.spans, held) });
+        this.emit(this.tickAt(held, false));
         return;
       }
       this.syncedBeat = beat;
@@ -289,7 +358,7 @@ class SongTransport {
         this.nextBarCb = null;
         cb();
       }
-      this.emit({ beat, isPlaying: true, sectionIndex: sectionIndexAt(this.spans, beat) });
+      this.emit(this.tickAt(beat, true));
     };
 
     // Bridge messages land exactly on the beat — emit on those as well as on
@@ -339,13 +408,39 @@ class SongTransport {
     const wasPlaying = this.isPlaying;
     this.isPlaying = false;
     if (wasPlaying) {
-      this.emit({ beat: 0, isPlaying: false, sectionIndex: -1 });
+      this.emit({ beat: 0, isPlaying: false, sectionIndex: -1, sectionId: null, occurrenceIndex: -1 });
     }
   }
 
+  /**
+   * Fan a tick out to every subscriber.
+   *
+   * Delivery is queued rather than recursive: a listener that calls
+   * `stop()`/`pause()` (the rehearsal desk and the spine both do) re-enters
+   * `emit`, and without the queue the remaining listeners would receive the
+   * stop tick BEFORE the play tick they were about to get — an out-of-order
+   * state that is very hard to diagnose from the UI. Each listener is also
+   * isolated, so one broken subscriber cannot freeze every other playhead.
+   */
   private emit(tick: TransportTick): void {
-    for (const listener of this.tickListeners) listener(tick);
-    this.getChannel().postMessage(tick);
+    this.emitQueue.push(tick);
+    if (this.emitting) return;
+    this.emitting = true;
+    try {
+      while (this.emitQueue.length > 0) {
+        const next = this.emitQueue.shift()!;
+        for (const listener of Array.from(this.tickListeners)) {
+          try {
+            listener(next);
+          } catch (error) {
+            reportTickListenerError(error);
+          }
+        }
+        this.getChannel().postMessage(next);
+      }
+    } finally {
+      this.emitting = false;
+    }
   }
 }
 

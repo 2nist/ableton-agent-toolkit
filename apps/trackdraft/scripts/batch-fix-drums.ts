@@ -32,6 +32,7 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { resolveRoot } from "./lib/catalogPaths";
 
 const APP_DIR = process.cwd();
 if (!fs.existsSync(path.join(APP_DIR, "scripts", "output", "catalog"))) {
@@ -47,7 +48,7 @@ const CACHE_ROOT = process.env.DRUM_CACHE ?? path.join(os.homedir(), "trackdraft
 const STEMS_DIR = path.join(CACHE_ROOT, "stems");
 const ANALYSES_DIR = path.join(CACHE_ROOT, "analyses");
 const REPORT_PATH = path.join(APP_DIR, "scripts", "output", "drums-batch-report.json");
-const DEFAULT_AUDIO_ROOT = "/Users/Matthew/beatles data/audio";
+const DEFAULT_AUDIO_ROOT = resolveRoot("beatlesAudio").path ?? "";
 const DEFAULT_DEMUCS = path.join(os.homedir(), ".pyenv", "versions", "chord-extractor-env", "bin", "demucs");
 
 // ---------------------------------------------------------------------------
@@ -145,7 +146,7 @@ function matchScore(target: string, cand: string): number {
   };
   const compact = (s: string) => s.split(" ").join("");
   const deSingled = (s: string) => s.split(" ").filter((t) => t.length > 1).join("");
-  let best = Math.max(viaCompact(compact(target), compact(cand)), viaCompact(deSingled(target), deSingled(cand)));
+  const best = Math.max(viaCompact(compact(target), compact(cand)), viaCompact(deSingled(target), deSingled(cand)));
   // Token overlap fallback, max-denominator so a short candidate can't
   // fake a match against a long title.
   const A = new Set(target.split(" "));

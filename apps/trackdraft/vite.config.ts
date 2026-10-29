@@ -4,6 +4,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { vitePluginSaveSandboxLayout } from "@devkit/puck-engine";
+import { kindForFile } from "./src/lib/importKinds";
 
 const CATALOG_DIR = path.join(import.meta.dirname, "scripts", "output", "catalog");
 
@@ -29,37 +30,13 @@ function resolveYtDlpPath(): string {
 
 const YT_DLP_PATH = resolveYtDlpPath();
 
-function fileTypeInfo(file: string): { category: string; loadable: boolean } {
-  const ext = path.extname(file).toLowerCase();
-  switch (ext) {
-    case ".json":
-      return { category: "blueprint", loadable: true };
-    case ".jcrd":
-      return { category: "jcrd", loadable: true };
-    case ".mp3":
-    case ".wav":
-    case ".aif":
-    case ".aiff":
-    case ".flac":
-    case ".ogg":
-      return { category: "audio", loadable: true };
-    case ".mid":
-    case ".midi":
-      return { category: "midi", loadable: true };
-    case ".musicxml":
-    case ".xml":
-      return { category: "musicxml", loadable: true };
-    case ".txt":
-    case ".lrc":
-    case ".md":
-      return { category: "lyrics", loadable: true };
-    case ".als":
-    case ".ablx":
-      return { category: "ableton", loadable: false };
-    default:
-      return { category: "unknown", loadable: false };
-  }
-}
+/**
+ * Import-kind classification lives in `src/lib/importKinds.ts` and is shared
+ * with the Electron preload/main path and the parser router — one mapping, so
+ * the dev directory browser and the packaged import dialog can't disagree.
+ */
+const fileTypeInfo = kindForFile;
+
 
 function localDirPlugin(): Plugin {
   return {

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSongStore } from "../../store/songStore";
 import { readSongFile, downloadLibraryBackup, readLibraryBackupFile } from "../../lib/exportImport";
@@ -6,12 +6,117 @@ import { extractVideoId } from "../../lib/youtube";
 import { assembleBlueprint } from "../../lib/youtubeFullImport";
 import type { ChordMiniAppResult, LrclibData } from "../../lib/youtubeFullImport";
 import { syncLibraryToFolder } from "../../lib/exportImport";
+import { parseHostFile } from "../../lib/parsers";
+import { getHost, isElectronHost } from "../../lib/host";
+
+// ---------------------------------------------------------------------------
+// Import pipeline
+// ---------------------------------------------------------------------------
+
+type FullImportPayload = {
+  title?: string;
+  artist?: string;
+  chordMiniData?: ChordMiniAppResult;
+  lrclibData?: Record<string, unknown>;
+};
+
+/**
+ * Metadata → audio → analysis → lyrics, from whichever host we're in.
+ *
+ * Desktop asks the main process (no dev server exists there); the browser
+ * still reads the dev server's progress stream. Both end in the same payload,
+ * so the assembly below is written once.
+ */
+async function runFullImport(
+  videoId: string,
+  onProgress: (update: ProgressStep) => void,
+): Promise<FullImportPayload> {
+  const host = getHost();
+  if (host) {
+    const result = await host.youtubeFullImport(videoId, (update) => onProgress(update));
+    return {
+      title: result.title,
+      artist: result.artist,
+      chordMiniData: result.chordMiniData as ChordMiniAppResult,
+      lrclibData: (result.lrclibData ?? undefined) as Record<string, unknown> | undefined,
+    };
+  }
+
+  const res = await fetch("/__youtube-full-import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ videoId }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? `Server returned ${res.status}`);
+  }
+
+  // Read SSE stream for progress updates
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("No response body");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let resultData: FullImportPayload = {};
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    let currentEvent = "";
+    for (const line of lines) {
+      if (line.startsWith("event: ")) {
+        currentEvent = line.slice(7).trim();
+      } else if (line.startsWith("data: ")) {
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (currentEvent === "progress") {
+            onProgress({ step: data.step as string, message: data.message as string });
+            if (data.step === "analyze") {
+              resultData.chordMiniData = data as unknown as ChordMiniAppResult;
+            }
+          } else if (currentEvent === "error") {
+            throw new Error(data.error as string);
+          } else if (currentEvent === "result") {
+            resultData = { ...resultData, ...data };
+          }
+        } catch (parseErr) {
+          if (parseErr instanceof Error && parseErr.message !== "Unexpected end of JSON input") {
+            throw parseErr;
+          }
+        }
+      }
+    }
+  }
+
+  return resultData;
+}
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 type ProgressStep = { step: string; message: string } | null;
+
+/** Raw ChordMiniApp analysis for a picked file — host-aware like the import. */
+async function analyzeAudioFile(file: File): Promise<ChordMiniAppResult> {
+  const host = getHost();
+  if (host) {
+    return (await host.analyzeAudio(new Uint8Array(await file.arrayBuffer()))) as ChordMiniAppResult;
+  }
+  const res = await fetch("/__chordmini-analyze", { method: "POST", body: file });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Server returned ${res.status}`);
+  }
+  return (await res.json()) as ChordMiniAppResult;
+}
 
 export default function ActionBar() {
   const createNewSong = useSongStore((s) => s.createNewSong);
@@ -27,6 +132,42 @@ export default function ActionBar() {
   const [youtubeLoading, setYoutubeLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [progressStep, setProgressStep] = useState<ProgressStep>(null);
+  /** Desktop builds import through a native dialog, which is the only path
+   *  that can reach MIDI / MusicXML / .als — the dev server's file endpoint
+   *  does not exist in a packaged app. */
+  const hasHost = isElectronHost();
+
+  async function handleHostImport() {
+    const host = getHost();
+    if (!host) return;
+    try {
+      const files = await host.pickFiles({ multiple: true });
+      if (files.length === 0) return;
+      let lastId: string | null = null;
+      const failures: string[] = [];
+      for (const file of files) {
+        const result = await parseHostFile(file);
+        if (result.ok) {
+          importSong(result.song);
+          lastId = result.song.id;
+        } else {
+          failures.push(`${file.name}: ${result.error}`);
+        }
+      }
+      setImportError(failures.length > 0 ? failures.join("\n") : null);
+      if (lastId) navigate(`/song/${lastId}`);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Failed to import file.");
+    }
+  }
+
+  // File → Import Song… (Cmd/Ctrl+O) runs the same path as the button.
+  useEffect(() => {
+    const host = getHost();
+    if (!host?.onMenuImport) return;
+    return host.onMenuImport(() => void handleHostImport());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleImportFile(file: File) {
     try {
@@ -68,63 +209,7 @@ export default function ActionBar() {
     setProgressStep({ step: "start", message: "Starting…" });
 
     try {
-      const res = await fetch("/__youtube-full-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoId }),
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? `Server returned ${res.status}`);
-      }
-
-      // Read SSE stream for progress updates
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response body");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let resultData: {
-        title?: string;
-        artist?: string;
-        chordMiniData?: ChordMiniAppResult;
-        lrclibData?: Record<string, unknown>;
-      } = {};
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        let currentEvent = "";
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            currentEvent = line.slice(7).trim();
-          } else if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (currentEvent === "progress") {
-                setProgressStep({ step: data.step as string, message: data.message as string });
-                if (data.step === "analyze") {
-                  resultData.chordMiniData = data as unknown as ChordMiniAppResult;
-                }
-              } else if (currentEvent === "error") {
-                throw new Error(data.error as string);
-              } else if (currentEvent === "result") {
-                resultData = { ...resultData, ...data };
-              }
-            } catch (parseErr) {
-              if (parseErr instanceof Error && parseErr.message !== "Unexpected end of JSON input") {
-                throw parseErr;
-              }
-            }
-          }
-        }
-      }
+      const resultData = await runFullImport(videoId, (update) => setProgressStep(update));
 
       if (!resultData.title || !resultData.chordMiniData) {
         throw new Error("Import completed but returned no data");
@@ -153,15 +238,7 @@ export default function ActionBar() {
     setAnalyzing(true);
     setImportError(null);
     try {
-      const res = await fetch("/__chordmini-analyze", {
-        method: "POST",
-        body: file,
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? `Server returned ${res.status}`);
-      }
-      const json = await res.json() as ChordMiniAppResult;
+      const json = await analyzeAudioFile(file);
       if (!json.chords || json.chords.length === 0) {
         setImportError("ChordMiniApp returned no chords — the audio may be too quiet or silent.");
         return;
@@ -205,6 +282,15 @@ export default function ActionBar() {
             Create
           </button>
         </form>
+          {hasHost && (
+            <button
+              className="bg-accent text-accentInk font-medium px-3 py-1 rounded text-xs"
+              onClick={() => void handleHostImport()}
+              title="Import a song from disk — .json, .mid, .musicxml, .als, audio (BPM/key) or .lrc/.txt lyrics"
+            >
+              Import file…
+            </button>
+          )}
           <button
             className="border border-edge rounded px-3 py-1 text-xs text-inkMuted hover:text-ink hover:bg-panelAlt"
             onClick={() => fileInputRef.current?.click()}

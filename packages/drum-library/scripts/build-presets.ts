@@ -10,7 +10,16 @@
  * `drumClips.ts` picks one deterministically per section and tiles it.
  *
  * Run after `npm run extract -- --all`:
- *   npx tsx scripts/build-presets.ts
+ *   NODE_OPTIONS=--max-old-space-size=10240 npx tsx scripts/build-presets.ts
+ *
+ * The heap flag is not optional on the full corpus: 8.5M segments parsed as
+ * objects overrun the default ~4 GB and V8 dies in JsonParse.
+ *
+ * Then — always — re-run the Zappa mint, which appends the odd-meter
+ * material this four-four corpus cannot provide:
+ *   npx tsx scripts/mint-zappa.ts
+ * This file rewrites presets-data.json from scratch, so skipping that step
+ * silently deletes `78` and thins `54`/`68`.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -41,7 +50,22 @@ const OUT_PATH = path.join(import.meta.dirname, "..", "src", "presets-data.json"
  * pattern·variant). More variants = more per-song variety AND a finer-grained
  * `rankPatternMatches` (the Match… panel scores every variant).
  */
-const VARIANTS_PER_PRESET = 24;
+const VARIANTS_PER_PRESET = 160;
+
+/**
+ * Cap per corpus style family inside one pattern.
+ *
+ * 48 slots filled purely by seed would all land in rock and pop — they are
+ * 20k of the 45k takes — and the other fifteen families would be invisible
+ * even though selection can now ask for them (see `style-family.ts`). The
+ * quota is what turns "48 variants of standard" into "up to 10 each of rock,
+ * funk, jazz, soul, latin, country, punk…".
+ *
+ * 10, not 6: a song draws from its own family AND its neighbours, and at 6
+ * the rock neighbourhood came back with 13 variants for `standard` — thinner
+ * than the undifferentiated pool it replaced. At 10 it is ~34.
+ */
+const VARIANTS_PER_STYLE = 16;
 
 /**
  * Candidate pool size passed to `selectGroove`, kept independent of
@@ -52,8 +76,53 @@ const VARIANTS_PER_PRESET = 24;
  * (per limb, further narrowed by the offset-by-limb-index spread in
  * `selectGroove`) collide often. A larger, decoupled pool gives each seed
  * more room to land somewhere genuinely different.
+ *
+ * Raised 64 → 256 when VARIANTS_PER_PRESET went to 48: at 64 the pool
+ * saturated, and 48 seeds produced fewer variants than every pattern had
+ * before (standard 37, driving 27) because seeds kept landing on takes
+ * already baked.
  */
-const POOL_SIZE = 64;
+const POOL_SIZE = 640;
+
+/**
+ * Musical validity filter on a baked variant.
+ *
+ * A drum track is a dialogue between kick and backbeat. When accent snare
+ * hits outnumber kicks by more than this, the take is a fill, a rudimental
+ * exercise, or a ghost-heavy passage whose accents got promoted — none of
+ * which is a groove you want looping under a verse. The corpus has plenty of
+ * each, so filtering at bake time is cheaper than teaching every runtime
+ * consumer to distrust the data.
+ *
+ * Measured post-fold: `intense` previously baked 18 variants averaging 2.55×
+ * snare:kick (1.77× ignoring ghosts), which reads as a snare solo.
+ */
+const MAX_ACCENT_SNARE_PER_KICK = 1.8;
+/** Below this many kicks per bar a "groove" has no pulse to follow. */
+const MIN_KICKS_PER_BAR = 0.5;
+
+const KICK_PITCH = 36;
+/** 38 centre + 39 rimshot both read as backbeat. */
+const SNARE_PITCHES = new Set([38, 39]);
+/** E-GMD ghost notes live below this; they are not accents. */
+const GHOST = 45;
+
+function musicality(
+  packed: readonly PackedNote[],
+  lengthBeats: number,
+  beatsPerBar: number,
+): { ok: boolean; reason?: string } {
+  const bars = Math.max(0.25, lengthBeats / (beatsPerBar || 4));
+  let kick = 0;
+  let accentSnare = 0;
+  for (const [, pitch, velocity] of packed) {
+    if (pitch === KICK_PITCH) kick++;
+    else if (SNARE_PITCHES.has(pitch) && velocity >= GHOST) accentSnare++;
+  }
+  if (kick / bars < MIN_KICKS_PER_BAR) return { ok: false, reason: "no pulse" };
+  if (kick > 0 && accentSnare / kick > MAX_ACCENT_SNARE_PER_KICK) return { ok: false, reason: "snare-led" };
+  return { ok: true };
+}
 
 async function main(): Promise<void> {
   const takesPath = path.join(DATA_DIR, "takes.json");
@@ -68,7 +137,26 @@ async function main(): Promise<void> {
   }
 
   const takeSummaries = JSON.parse(fs.readFileSync(takesPath, "utf8"));
-  const segments = await readNdjson<Segment>(segmentsPath);
+  const allSegments = await readNdjson<Segment>(segmentsPath);
+
+  /**
+   * Groove presets are mined from `beat_type: beat` takes ONLY.
+   *
+   * E-GMD labels every performance as a beat or a fill, and that label is
+   * authoritative — it is the drummer's own statement of what they were asked
+   * to play, which beats any heuristic we can run over the notes. Mining
+   * grooves from fill takes is what made `intense` 81% tom runs and forced the
+   * runtime to carry a tom-share rule; with the label available, the filter
+   * belongs here, once, instead of in every consumer. Fills are baked
+   * separately below from the `beat_type: fill` rows, where they belong.
+   */
+  const segments = allSegments.filter((segment) => {
+    const summary = (takeSummaries as Record<string, { beatType?: string }>)[segment.takeId];
+    return summary?.beatType !== "fill";
+  });
+  console.log(
+    `kept ${segments.length} of ${allSegments.length} beat-type segments (fills excluded)`,
+  );
 
   // build-library.ts writes takes as a summary map (no notes), not a `Take[]`
   // — reload the actual notes from the raw MIDI is unnecessary here because
@@ -91,6 +179,8 @@ async function main(): Promise<void> {
 
     const variants: PackedVariant[] = [];
     const seen = new Set<string>();
+    const rejections = new Map<string, number>();
+    const styleCounts = new Map<string, number>();
 
     for (let i = 0; i < VARIANTS_PER_PRESET; i++) {
       const spec = selectGroove(index, pattern, { seed: `${pattern}:${i}`, poolSize: POOL_SIZE });
@@ -118,7 +208,45 @@ async function main(): Promise<void> {
       const anyRef = spec.feet ?? spec.snare ?? spec.cymbals ?? spec.toms;
       const beatsPerBar = anyRef ? (index.takes.get(anyRef.takeId)?.beatsPerBar ?? 4) : 4;
 
+      // ONE OR TWO WHOLE BARS. The segment index holds windows up to eight bars,
+      // and a bigger pool started selecting them: `standard` came back with
+      // 32-beat loops. A loop longer than two bars does not repeat inside a
+      // four-bar phrase, which is the same "the groove never comes back"
+      // failure the pattern pool was rebuilt to fix — so the length is a bake
+      // gate, not a runtime hope. `drumMusicality.test.ts` asserts it again.
+      const bars = lengthBeats / (beatsPerBar || 4);
+      if (bars > 2 + 1e-6 || Math.abs(bars - Math.round(bars)) > 1e-6) {
+        rejections.set("not 1-2 whole bars", (rejections.get("not 1-2 whole bars") ?? 0) + 1);
+        continue;
+      }
+
+      // Reject takes that are not grooves (see `musicality`). Pitch-filtered
+      // presets (kick_only) are exempt: they have no snare by definition.
+      if (!preset.pitchFilter) {
+        const check = musicality(packed, lengthBeats, beatsPerBar);
+        if (!check.ok) {
+          const reason = check.reason ?? "other";
+          rejections.set(reason, (rejections.get(reason) ?? 0) + 1);
+          continue;
+        }
+      }
+
+      // Style diversity: the first limb's take names the tradition. Limbs can
+      // come from different takes, so this is the dominant one, which is what
+      // a listener hears as "that's a funk groove".
+      const styleTake = anyRef ? index.takes.get(anyRef.takeId) : undefined;
+      const style = styleTake ? styleTake.style.split("/")[0] : undefined;
+      if (style) {
+        const used = styleCounts.get(style) ?? 0;
+        if (used >= VARIANTS_PER_STYLE) {
+          rejections.set("style full", (rejections.get("style full") ?? 0) + 1);
+          continue;
+        }
+        styleCounts.set(style, used + 1);
+      }
+
       variants.push({
+        ...(style ? { style } : {}),
         lengthBeats,
         beatsPerBar,
         notes: packed,
@@ -137,7 +265,9 @@ async function main(): Promise<void> {
     }
 
     if (variants.length > 0) presets[pattern] = { variants };
-    console.log(`  ${pattern}: ${variants.length} variants (${Date.now() - started}ms)`);
+    const rejected = [...rejections.entries()].map(([r, n]) => `${r}×${n}`).join(" ");
+    const styles = [...styleCounts.entries()].map(([st, n]) => `${st}×${n}`).join(" ");
+    console.log(`  ${pattern}: ${variants.length} variants (${Date.now() - started}ms)${styles ? `  [${styles}]` : ""}${rejected ? `  rejected: ${rejected}` : ""}`);
   }
 
   console.log("extracting corpus fills...");

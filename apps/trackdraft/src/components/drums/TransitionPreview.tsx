@@ -19,6 +19,7 @@ import {
 import { voiceColor, VOICE_LABEL, VOICE_ORDER } from "./voiceStyle";
 import { useTransitionColors, TRANSITION_LABEL } from "./transitionStyle";
 import { usePalette, withAlpha } from "../../theme/palette";
+import { stepIndexOf } from "../../lib/drums/stepMath";
 
 const round4 = (n: number): number => Math.round(n * 10000) / 10000;
 
@@ -95,7 +96,9 @@ export default function TransitionPreview({
     for (const [beat, pitch] of generated) {
       const v = voiceOf(pitch);
       if (!v) continue;
-      const step = Math.min(totalSteps - 1, Math.round(beat / gridBeats));
+      // Shared beat → cell mapping: a transition preview must land on the same
+      // step the editor would write it to.
+      const step = Math.min(totalSteps - 1, Math.max(0, stepIndexOf(beat, gridBeats)));
       const list = byVoice.get(v) ?? [];
       if (!list.includes(step)) list.push(step);
       byVoice.set(v, list);

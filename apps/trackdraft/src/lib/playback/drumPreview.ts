@@ -1,21 +1,14 @@
 import {
-  PRESET_DATA,
-  inferPatternForGenre,
   tileGrooveVaried,
   voiceOf,
-  outlineBeatsPerBar,
-  outlineToClickPattern,
-  outlineToGroovePattern,
+  outlineVariantFor,
   numerator as outlineNumerator,
   euclidOnsetSteps,
-  hashSeed,
-  occurrenceSeed,
-  pickVariantIndexFor,
-  songSignalsFor,
-  hasBend,
-  resolveEffectiveStyle,
-  hasNarrative,
-  styleSeed,
+  presetVariantAt,
+  selectSectionGroove,
+  seededVariantIndexFor,
+  inferPatternForSection,
+  grooveOf,
   type DrumPattern,
   type PackedVariant,
   type PackedNote,
@@ -87,15 +80,8 @@ export function resolveDrumHits(
    *  than the section's full duration. */
   totalBeatsOverride?: number,
 ): ScheduledDrumHit[] | null {
-  const preset = PRESET_DATA[pattern];
-  if (!preset || preset.variants.length === 0) return null;
-
-  const index = variantIndex !== undefined
-    ? Math.max(0, Math.min(variantIndex, preset.variants.length - 1))
-    : 0;
-
-  const variant: PackedVariant = preset.variants[index];
-  if (variant.notes.length === 0) return null;
+  const variant = resolveVariant(pattern, variantIndex);
+  if (!variant) return null;
 
   // Scale peak velocity to the section's velocity preset (same formula as
   // the extension's drumClips.ts scaleToVelocityPreset).
@@ -152,13 +138,7 @@ export function resolveVariant(
   pattern: DrumPattern,
   variantIndex: number | undefined,
 ): PackedVariant | null {
-  const preset = PRESET_DATA[pattern];
-  if (!preset || preset.variants.length === 0) return null;
-  const index = variantIndex !== undefined
-    ? Math.max(0, Math.min(variantIndex, preset.variants.length - 1))
-    : 0;
-  const variant = preset.variants[index];
-  return variant.notes.length === 0 || variant.lengthBeats <= 0 ? null : variant;
+  return presetVariantAt(pattern, variantIndex);
 }
 
 /** Groups a flat `PackedNote[]` + its own loop length into one
@@ -188,6 +168,26 @@ function groupNotesByVoice(notes: PackedNote[], loopBeats: number, steps?: numbe
 }
 
 /**
+ * Union of a lane family's member voices, as one necklace.
+ *
+ * The HAT lane, for example, shows closed and open hats together. `steps` is
+ * the largest grid any member reports (shared within a span — outline
+ * numerator / loop sixteenths). Lives here rather than in a component because
+ * both the line view and the step grid read it.
+ */
+export function unionVoiceHits(
+  voices: readonly KitVoice[],
+  necklaces: VoiceNecklace[] | null,
+): { hits: number[]; steps?: number } | null {
+  if (!necklaces) return null;
+  const member = necklaces.filter((n) => voices.includes(n.voice) && n.count > 0);
+  if (member.length === 0) return null;
+  const hits = Array.from(new Set(member.flatMap((m) => m.hits))).sort((a, b) => a - b);
+  const steps = member.reduce((max, m) => Math.max(max, m.steps ?? 0), 0) || undefined;
+  return { hits, steps };
+}
+
+/**
  * Splits a `(pattern, variantIndex)` groove into one `VoiceNecklace` per
  * drum voice actually present in it, for a read-only per-voice
  * rhythm-necklace preview. Returns `null` under the same conditions
@@ -210,50 +210,34 @@ export function resolveVoiceNecklaces(
 /**
  * Same idea as `resolveVoiceNecklaces`, for a `drumMeterOutline` instead
  * of a named preset — a real kick/snare groove when the outline carries
- * `cellVoices`, a plain accented closed-hat click otherwise. Exactly
- * mirrors `extensions/trackdraft-bridge/src/drumClips.ts`'s
- * `outlineVariant`, so what TrackDraft previews here is what the export
- * actually produces, not an approximation of it.
+ * `cellVoices`, a plain accented closed-hat click otherwise. Uses the same
+ * `outlineVariantFor` the exports do, so what TrackDraft previews here is
+ * what they actually produce, not an approximation of it (minus the
+ * humanisation only an export applies).
  */
 export function resolveOutlineVoiceNecklaces(outline: MeterOutline): VoiceNecklace[] | null {
-  const notes = outline.cellVoices ? outlineToGroovePattern(outline, outline.cellVoices) : outlineToClickPattern(outline);
-  return groupNotesByVoice(notes, outlineBeatsPerBar(outline), outlineNumerator(outline));
+  const variant = outlineVariantFor(outline);
+  return groupNotesByVoice(variant.notes, variant.lengthBeats, outlineNumerator(outline));
 }
 
 /**
  * The effective variant index for a section's pattern — an explicit
  * `drumVariantIndex` wins (the user's manual pick); otherwise a
- * deterministic pick seeded by the section id + occurrence, EXACTLY like
- * `extensions/trackdraft-bridge/src/drumClips.ts`'s export path. The old
- * fallback resolved every auto section to variant 0, which made every
- * song's drums identical — the same hi-hat/snare/kick everywhere. Returns
- * `undefined` only when the pattern has no resolvable preset. */
+ * deterministic pick seeded by the section id + occurrence. Both branches
+ * live in `@drum/library`'s `seededVariantIndexFor` (shared with the Ableton
+ * bridge, so the two can't pick different grooves); this wrapper only
+ * supplies the two schema-side numbers the library deliberately doesn't
+ * compute. Returns `undefined` when the pattern has no resolvable preset.
+ */
 export function seededVariantIndex(pattern: DrumPattern, section: BlueprintSection, song?: SongSignals, occurrenceIndex = 0): number | undefined {
-  const preset = PRESET_DATA[pattern];
-  if (!preset || preset.variants.length === 0) return undefined;
-  if (section.drumVariantIndex !== undefined) {
-    return Math.max(0, Math.min(section.drumVariantIndex, preset.variants.length - 1));
-  }
-  // A bend re-seeds the variant deterministically ("controls, not dice" —
-  // the same slider positions always pick the same groove); no bend → the
-  // classic occurrence seed, so existing songs keep their exact output.
-  // A bend OR a narrative re-seeds the pick ("controls, not dice") — a
-  // narrative that raises energy should also change which groove is drawn,
-  // not just how it is styled.
-  const seed =
-    hasBend(section, song) || hasNarrative(section, song)
-      ? styleSeed(resolveEffectiveStyle(section, song), section.id, occurrenceIndex)
-      : occurrenceSeed(section.id, occurrenceIndex);
-  // Meter-aware: a section in an odd meter draws the mined variants that
-  // are actually in that meter (the Zappa material) instead of corpus 4/4
-  // grooves that would drift against the barline. 4/4 sections are
-  // untouched — every variant is compatible there.
-  return pickVariantIndexFor(
-    hashSeed(seed),
-    preset.variants,
-    sectionDurationBeats(section),
-    beatsPerBar(section),
-  );
+  return seededVariantIndexFor({
+    pattern,
+    section,
+    song,
+    occurrenceIndex,
+    durationBeats: sectionDurationBeats(section),
+    beatsPerBar: beatsPerBar(section),
+  });
 }
 
 /** Builds a single-voice `VoiceNecklace` from a free-form Euclidean
@@ -278,13 +262,21 @@ function euclidToVoiceNecklace(pat: EuclidPattern, voice: KitVoice): VoiceNeckla
  * section is in. `song` feeds the heuristic fallback — same signals the
  * bridge uses (pass the whole `BlueprintSong`, not `song.concept`). */
 export function resolveSectionVoiceNecklaces(section: BlueprintSection, song?: SongSignals, occurrenceIndex = 0): VoiceNecklace[] | null {
-  let base: VoiceNecklace[] | null;
-  if (section.drumMeterOutline) {
-    base = resolveOutlineVoiceNecklaces(section.drumMeterOutline);
-  } else {
-    const pattern = section.drumPattern ?? inferPatternForSection(section, song);
-    base = resolveVoiceNecklaces(pattern, seededVariantIndex(pattern, section, song, occurrenceIndex));
-  }
+  // Resolve through the ONE section entry point and split the notes it
+  // returns. The three-way priority (outline > preset > heuristic) lives in
+  // `resolveSectionVariant`; re-deriving it here is how the two paths drift.
+  const variant = resolveSectionVariant(section, song, occurrenceIndex);
+  const source = grooveOf(section);
+  // `steps` is the necklace's reference grid, and it is source-dependent by
+  // design: an odd-meter outline reads in its own numerator (7 for 7/8),
+  // a named preset in 16ths. Collapsing both to 16ths silently redrew every
+  // odd-meter necklace with twice the ticks.
+  const steps = source.kind === "outline"
+    ? outlineNumerator(source.outline)
+    : variant
+      ? Math.max(1, Math.round(variant.lengthBeats * 4))
+      : undefined;
+  const base = variant ? groupNotesByVoice(variant.notes, variant.lengthBeats, steps) : null;
   const overrides = section.drumVoicePatterns;
   if (!overrides) return base;
   const overrideVoices = (Object.keys(overrides) as KitVoice[]).filter((v) => overrides[v]);
@@ -298,21 +290,41 @@ export function resolveSectionVoiceNecklaces(section: BlueprintSection, song?: S
 }
 
 /**
- * A section's own `PackedVariant`, mirroring the same three-way priority
- * as `resolveSectionVoiceNecklaces` and `extensions/trackdraft-bridge/src/
- * drumClips.ts`'s `outlineVariant`/pattern resolution — for anything (like
- * handoff-fill planning) that needs the variant itself, not its onsets
- * already split by voice.
+ * A section's own `PackedVariant` — the ONE groove-selection path, shared
+ * with the Ableton bridge (`selectSectionGroove` in `@drum/library`), so what
+ * TrackDraft previews and exports cannot differ from what "Send to Ableton"
+ * renders. For anything (like handoff-fill planning) that needs the variant
+ * itself, not its onsets already split by voice.
+ *
+ * Notes come back UN-humanised: the step grid must draw the exact grid, so
+ * humanisation belongs to the exporter (see `midiExport.ts`'s `planDrumStem`).
  */
 export function resolveSectionVariant(section: BlueprintSection, song?: SongSignals, occurrenceIndex = 0): PackedVariant | null {
-  if (section.drumMeterOutline) {
-    const outline = section.drumMeterOutline;
-    const bpb = outlineBeatsPerBar(outline);
-    const notes = outline.cellVoices ? outlineToGroovePattern(outline, outline.cellVoices) : outlineToClickPattern(outline);
-    return { lengthBeats: bpb, beatsPerBar: bpb, notes, source: { origin: "synth", generator: outline.cellVoices ? "outline-groove" : "outline-click" } };
-  }
-  const pattern = section.drumPattern ?? inferPatternForSection(section, song);
-  return resolveVariant(pattern, seededVariantIndex(pattern, section, song, occurrenceIndex));
+  return selectSectionGroove({
+    section,
+    song,
+    occurrenceIndex,
+    durationBeats: sectionDurationBeats(section),
+    beatsPerBar: beatsPerBar(section),
+  });
+}
+
+/**
+ * The groove a MUTED section would get if the heuristic chose — previews only.
+ *
+ * `resolveSectionVariant` correctly returns null for `drumPattern: "none"`,
+ * which left the console's step grid empty and unable to say anything. This
+ * resolves the inferred pattern instead, so a muted section can show what one
+ * click would bring, labelled as a preview. It never affects playback/export.
+ */
+export function resolvePreviewVariant(
+  section: BlueprintSection,
+  song?: SongSignals,
+  occurrenceIndex = 0,
+): { variant: PackedVariant; pattern: DrumPattern } | null {
+  const pattern = inferPatternForSection(section, song);
+  const variant = resolveVariant(pattern, seededVariantIndex(pattern, section, song, occurrenceIndex));
+  return variant ? { variant, pattern } : null;
 }
 
 /** Every selectable named pattern — "auto" (`undefined`, deferring to
@@ -320,42 +332,25 @@ export function resolveSectionVariant(section: BlueprintSection, song?: SongSign
  *  top of this list, distinct from `"none"` here (an explicit "no drums"
  *  choice). Canonical list `SectionCard`'s picker and `DrumPatternTools`'
  *  picker both read from, so adding a preset means updating one place. */
-export const DRUM_PATTERN_OPTIONS: DrumPattern[] = [
-  "none", "kick_only", "standard", "half_time", "driving", "bridge_sparse", "intense", "dnb", "78", "68", "54",
-];
+export { DRUM_PATTERN_OPTIONS } from "../drums/patternOptions";
 
 /** How many baked variants a pattern has — 0 for "auto"/undefined, so a
  *  stepper can safely disable itself without a separate null check. */
-export function variantCount(pattern: DrumPattern | undefined): number {
-  return pattern ? (PRESET_DATA[pattern]?.variants.length ?? 0) : 0;
-}
+export { variantCount } from "../drums/patternOptions";
 
 /**
- * Heuristic pattern for a section — the same fallback `planDrumClips`
- * uses, exported so both `midiExport.ts` and (previously) live playback
- * can choose between explicit and inferred patterns consistently.
+ * Heuristic pattern for a section — the same fallback `planDrumClips` uses,
+ * now living in `@drum/library` so the app and the Ableton bridge share one
+ * heuristic instead of two annotated "must match" copies.
  *
- * `song` is the *song's* self-description (title/concept/notes/bpm — the
- * same `InferSong` subset the bridge feeds `inferDrumPattern`, extracted
- * through the shared `songSignalsFor`) — optional and omittable so every
- * existing caller keeps compiling, but every caller that has a `song` in
- * scope should pass it. Callers that don't pass it silently fall back to
- * "acoustic" for every song regardless of what it actually describes —
- * and, worse, miss the bpm/notes signals the bridge sees, which is
- * exactly the drift this parameter closes. */
-export function inferPatternForSection(section: BlueprintSection, song?: SongSignals): DrumPattern {
-  return inferPatternForGenre(
-    {
-      role: section.role,
-      velocity: section.velocity,
-      name: section.name,
-      timeSignatureNumerator: section.timeSignatureNumerator,
-      timeSignatureDenominator: 2 ** section.timeSignatureDenPower,
-    },
-    songSignalsFor(song),
-    song?.genre,
-  );
-}
+ * `song` is the *song's* self-description (genre/title/concept/notes/bpm —
+ * the `InferSong` subset the bridge feeds `inferDrumPattern`). Optional so
+ * every existing caller keeps compiling, but every caller with a `song` in
+ * scope should pass it: without it the heuristic falls back to "acoustic" for
+ * every song regardless of what it actually describes, and misses the
+ * bpm/notes signals the bridge sees — exactly the drift this parameter closes.
+ */
+export { inferPatternForSection };
 
 /** The section's effective drum voice as a short display label — what will
  *  actually play, honoring the song's genre (Groove DNA) and the section's
@@ -364,13 +359,17 @@ export function inferPatternForSection(section: BlueprintSection, song?: SongSig
  *  `euclid · N` (N = its onset count), an explicit `drumPattern` shows that
  *  name, and otherwise the heuristic resolves the family. */
 export function drumFamilyLabel(section: BlueprintSection, song?: SongSignals): string {
-  if (section.drumMeterOutline) {
-    const num = section.drumMeterOutline.cells.reduce((a, b) => a + b, 0);
-    return `euclid · ${num}`;
+  const source = grooveOf(section);
+  switch (source.kind) {
+    case "outline":
+      return `euclid · ${source.outline.cells.reduce((a, b) => a + b, 0)}`;
+    case "muted":
+      return "muted";
+    case "preset":
+      return source.pattern;
+    case "auto":
+      return inferPatternForSection(section, song);
   }
-  if (section.drumPattern === "none") return "muted";
-  if (section.drumPattern) return section.drumPattern;
-  return inferPatternForSection(section, song);
 }
 
 /**

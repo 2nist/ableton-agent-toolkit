@@ -70,10 +70,12 @@
     background: transparent !important;
     box-shadow: none !important;
   }
-  .studio-chart .grid {
+  /* `.chart-grid`, not Tailwind's `.grid`: the bar grid gets real black rules,
+     not every layout grid that happens to sit inside the chart. */
+  .studio-chart .chart-grid {
     border-color: #000 !important;
   }
-  .studio-chart .grid > * {
+  .studio-chart .chart-grid > * {
     border-left-color: #000 !important;
   }
   @page {

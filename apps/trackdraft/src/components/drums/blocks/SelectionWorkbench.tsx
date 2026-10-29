@@ -51,7 +51,9 @@ export default function SelectionWorkbench(props: SelectionWorkbenchProps) {
   const { span, section, range, onWrite, onVelocityOp, onFlatten, onRegenerate, hasDraft, onApply, onCancel } = props;
   const [panel, setPanel] = useState<Mode>("euclid");
 
-  const lanes = (range?.laneKeys ?? []) as DrumLaneId[];
+  // Memoized: this array is a dependency of six hooks below, and a fresh
+  // array each render would invalidate all of them.
+  const lanes = useMemo(() => (range?.laneKeys ?? []) as DrumLaneId[], [range?.laneKeys]);
   const nBeats = range ? Math.max(1, Math.round(range.endBeat - range.startBeat)) : 1;
 
   const existingEuclid = useMemo(

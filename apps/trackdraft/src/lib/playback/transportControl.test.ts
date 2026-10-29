@@ -14,6 +14,8 @@ const transport = vi.hoisted(() => ({
   getBeat: vi.fn(() => 12.5),
   getNextBarBeat: vi.fn(() => 16),
   onNextBar: vi.fn(),
+  cancelNextBar: vi.fn(),
+  updateSong: vi.fn(),
   isPaused: vi.fn(() => false),
   getPausedBeat: vi.fn(() => null),
   play: vi.fn(),

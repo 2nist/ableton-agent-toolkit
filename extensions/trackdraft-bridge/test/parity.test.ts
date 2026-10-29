@@ -4,6 +4,13 @@
  * stem (chords / bass / drums / color) and the drift-prone inputs (fast
  * bpm → dnb via the heuristic, odd meters, Euclidean drum outlines).
  *
+ * Drum GROOVE SELECTION is no longer two implementations held in agreement —
+ * both sides call `@drum/library`'s `selectSectionGroove` /
+ * `exportSectionVariant` / `sectionDrumInput`. What these drum cases still
+ * guard is the layer above: each side's own span/section derivation
+ * (`sectionSpans` vs the bridge's), its velocity mapping, and the `.mid` vs
+ * clip note projection.
+ *
  * The app and the bridge are separate packages that deliberately don't
  * depend on each other, so this test lives in the bridge suite and imports
  * the app's PURE stem planners by relative path. Vitest transpiles them;

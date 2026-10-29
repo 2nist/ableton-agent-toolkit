@@ -12,7 +12,7 @@
  *  loaded from. */
 export function getBridgeHost(): string {
   if (typeof window === "undefined") return "127.0.0.1";
-  const host = window.location.hostname;
+  const host = window.location?.hostname ?? "";
   if (!host || host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]") {
     return "127.0.0.1";
   }

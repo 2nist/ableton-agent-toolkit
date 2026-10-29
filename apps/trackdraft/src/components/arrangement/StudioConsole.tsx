@@ -9,14 +9,19 @@ import {
   narrativeHarmonySection,
   styleSpacing,
 } from "@drum/library";
-import { sectionSpans } from "../../lib/arrangement";
+import { sectionSpans, spanIndexForTick } from "../../lib/arrangement";
 import { useRoleStyle } from "../../lib/roleColors";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
-import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playback/drumPreview";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
+import {
+  drumFamilyLabel,
+  resolvePreviewVariant,
+  resolveSectionVariant,
+} from "../../lib/playback/drumPreview";
+import { grooveOf } from "../../lib/drums/grooveModel";
 import HexReadout from "../harmony/HexReadout";
-import NecklaceRow from "../drums/NecklaceRow";
+import StepGrid from "../drums/StepGrid";
 import MelodyStaff from "../melody/MelodyStaff";
 import type { BlueprintSong } from "../../types/blueprint";
 import TapeLabel from "../common/TapeLabel";
@@ -63,7 +68,7 @@ export default function StudioConsole({ song }: { song: BlueprintSong }) {
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
   const id = songId ?? song.id;
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
+  const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
   const spans = useMemo(() => sectionSpans(song), [song]);
   const [tick, setTick] = useState<TransportTick | null>(null);
 
@@ -75,7 +80,8 @@ export default function StudioConsole({ song }: { song: BlueprintSong }) {
 
   // Follow the playhead while playing; otherwise the section the user
   // clicked (the Bend-panel target); first section as a last resort.
-  const liveSpan = tick?.isPlaying && tick.sectionIndex >= 0 && tick.sectionIndex < spans.length ? spans[tick.sectionIndex] : null;
+  const liveSpanIndex = tick?.isPlaying ? spanIndexForTick(spans, tick) : -1;
+  const liveSpan = liveSpanIndex >= 0 ? spans[liveSpanIndex] : null;
   const activeSpan = liveSpan ?? spans.find((sp) => sp.sectionId === selectedSectionId) ?? spans[0] ?? null;
   const isLive = liveSpan !== null && activeSpan === liveSpan;
 
@@ -109,11 +115,19 @@ export default function StudioConsole({ song }: { song: BlueprintSong }) {
     return activeSpan.section.chords.find((c) => c.id === activeChordId) ?? null;
   }, [activeChordId, activeSpan]);
 
-  // The section's resolved drum groove (outline, preset, or genre-inferred)
-  // — what will actually play for this pass of the section.
-  const necklaces = useMemo(() => {
+  // The section's resolved groove for this pass. A muted section resolves to
+  // nothing by design, so it falls back to the INFERRED groove as a preview —
+  // an empty pane taught the user nothing.
+  const drums = useMemo(() => {
     if (!activeSpan) return null;
-    return resolveSectionVoiceNecklaces(activeSpan.section, song, activeSpan.occurrenceIndex);
+    const section = activeSpan.section;
+    const source = grooveOf(section);
+    if (source.kind === "muted") {
+      const preview = resolvePreviewVariant(section, song, activeSpan.occurrenceIndex);
+      return preview ? { variant: preview.variant, pattern: preview.pattern as string, preview: true } : null;
+    }
+    const variant = resolveSectionVariant(section, song, activeSpan.occurrenceIndex);
+    return variant ? { variant, pattern: drumFamilyLabel(section, song), preview: false } : null;
   }, [activeSpan, song]);
 
   if (!activeSpan) return null;
@@ -124,7 +138,7 @@ export default function StudioConsole({ song }: { song: BlueprintSong }) {
   const effScale: ScaleType = section.scale ?? song.scale;
   const melody = section.melody?.notes?.length ? [...section.melody.notes].sort((a, b) => a.startTime - b.startTime) : null;
   const drumLabel = drumFamilyLabel(section, song);
-  const genreTag = song.genre && !section.drumPattern && !section.drumMeterOutline ? song.genre : null;
+  const genreTag = song.genre && grooveOf(section).kind === "auto" ? song.genre : null;
 
   const jump = (tab: string) => navigate(`/song/${id}/${tab}?section=${section.id}`);
   const progressPct = isLive && tick && activeSpan ? Math.min(1, Math.max(0, (tick.beat - activeSpan.startBeat) / activeSpan.durationBeats)) : null;
@@ -175,11 +189,18 @@ export default function StudioConsole({ song }: { song: BlueprintSong }) {
         </Pane>
 
         <Pane title="Drums" hint={drumLabel} onOpen={() => jump("drums")}>
-          {necklaces ? (
-            <NecklaceRow necklaces={necklaces} />
+          {drums ? (
+            <div className="w-full">
+              <StepGrid notes={drums.variant.notes} beatsPerBar={drums.variant.beatsPerBar} dim={drums.preview} />
+              {drums.preview && (
+                <p className="mt-1 text-3xs text-inkMuted/70 italic font-mono text-center px-2">
+                  Muted — previewing the inferred “{drums.pattern}” groove. Pick one in Drums to use it.
+                </p>
+              )}
+            </div>
           ) : (
             <p className="text-2xs text-inkMuted/60 italic font-mono text-center px-2">
-              {section.drumPattern === "none" ? "Muted — no kit on this section." : "No resolvable groove yet — head to Drums."}
+              No resolvable groove yet — head to Drums.
             </p>
           )}
           {genreTag && (

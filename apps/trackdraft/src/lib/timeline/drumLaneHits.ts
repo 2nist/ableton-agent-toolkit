@@ -1,4 +1,6 @@
 import {
+  ABLETON_SAFE_NOTES,
+  applyCyclicDevelopment,
   applyDrumBlocks,
   audibleLanes,
   DRUM_LANE_VOICES,
@@ -82,9 +84,22 @@ export function resolveSectionLaneHits(
     }
   }
 
-  // 2. Compile authored blocks on top — same function, same seed, same
+  // 2. The 4-bar cycle the export applies (open hat in bar 2, a turned-over
+  //    kick on the last eighth of bar 4). This is STRUCTURAL, not the
+  //    inaudible velocity drift skipped above — if the export plays it, the
+  //    dots have to show it.
+  const developed = applyCyclicDevelopment(tiled, {
+    beatsPerBar: beatsPerBar(section),
+    durationBeats: duration,
+    velocityTarget: target,
+    openHatPitch: ABLETON_SAFE_NOTES.openHat,
+    closedHatPitch: ABLETON_SAFE_NOTES.closedHat,
+    kickPitch: ABLETON_SAFE_NOTES.kick,
+  });
+
+  // 3. Compile authored blocks on top — same function, same seed, same
   //    velocity target as both export paths.
-  const compiled = applyDrumBlocks(tiled, (section.drumBlocks ?? []) as DrumBlock[], {
+  const compiled = applyDrumBlocks(developed, (section.drumBlocks ?? []) as DrumBlock[], {
     durationBeats: duration,
     beatsPerBar: beatsPerBar(section),
     velocityTarget: target,

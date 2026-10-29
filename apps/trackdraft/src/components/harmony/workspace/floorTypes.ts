@@ -14,6 +14,9 @@ export interface Node {
   accidental: number;
   center: Vec3;
   size: Vec3;
+  /** Which loop pass this box is: 0 the first time through the progression.
+   *  Later passes are the same chord sounding again, drawn as such. */
+  pass?: number;
 }
 
 /** A live drag preview, drawn as a ghost box instead of the real one. */

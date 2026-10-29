@@ -1,5 +1,5 @@
 import { useSongStore } from "../../store/songStore";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import { STYLE_RECIPES, resolveStyleProfile } from "../../lib/style/bend";
 import type { BlueprintSection } from "../../types/blueprint";
 import Knob from "../common/Knob";
@@ -123,7 +123,7 @@ function Block({ title, hint, children }: { title: string; hint?: string; childr
 export default function BendPanel() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
+  const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
 
   if (!currentSong) return null;
   const song = currentSong;

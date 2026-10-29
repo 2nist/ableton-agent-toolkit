@@ -2,8 +2,9 @@
   "name": "trackdraft",
   "private": true,
   "version": "0.1.0",
-  "description": "TrackDraft — songwriting productivity app (rebuild). Structure, harmony, and lyrics authoring for concept-album blueprint data, built on @music-theory/core and @music-theory/song-structure.",
+  "description": "TrackDraft \u2014 songwriting productivity app (rebuild). Structure, harmony, and lyrics authoring for concept-album blueprint data, built on @music-theory/core and @music-theory/song-structure.",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "predev": "npm run generate-puck",
     "dev": "npm run predev && vite",
@@ -14,7 +15,24 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "ingest": "tsx scripts/ingest-lalo-chezia.ts",
-    "start": "bash start-all.sh"
+    "catalog:ingest:beatles": "tsx scripts/ingest-beatles-catalog.ts",
+    "catalog:ingest:mcgill": "tsx scripts/ingest-mcgill-catalog.ts",
+    "catalog:ingest:rock": "tsx scripts/ingest-rock-corpus-catalog.ts",
+    "catalog:ingest:lalo": "tsx scripts/ingest-lalo-chezia.ts",
+    "catalog:repair": "tsx scripts/repair-catalog.ts",
+    "catalog:triage": "tsx scripts/triage-catalog.ts",
+    "catalog:audit": "tsx scripts/audit-catalog.ts",
+    "catalog:manifest": "tsx scripts/build-catalog-manifest.ts",
+    "catalog:pack:starter": "tsx scripts/pack-starter-catalog.ts",
+    "start": "bash start-all.sh",
+    "electron": "npm run build && electron .",
+    "electron:dev": "TRACKDRAFT_DEV_URL=http://localhost:5183 electron .",
+    "bundle:catalog": "tsx scripts/bundle-catalog.ts",
+    "electron:test-build": "npm run build && npm run catalog:pack:starter -- --profile internal --acknowledge-restricted --force --source beatles && npm run bundle:catalog -- --from scripts/output/catalog-internal --allow-internal",
+    "electron:test": "npm run electron:test-build && electron .",
+    "package:mac": "node scripts/package-mac.mjs",
+    "package:mac:arm64": "node scripts/package-mac.mjs --arch arm64",
+    "icon": "electron scripts/make-icon.cjs"
   },
   "dependencies": {
     "@devkit/puck-engine": "0.1.0",
@@ -47,6 +65,7 @@
     "typescript": "^5.9.3",
     "vite": "^5.0.8",
     "vitest": "^3.0.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "electron": "^33.0.0"
   }
 }

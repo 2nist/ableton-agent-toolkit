@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useDirectoryStore, type DirectoryConfig } from "../../store/directoryStore";
+import { useDirectoryStore } from "../../store/directoryStore";
+import { getHost } from "../../lib/host";
 
 interface DirSetupModalProps {
   open: boolean;
@@ -16,6 +17,7 @@ export default function DirSetupModal({ open, onClose }: DirSetupModalProps) {
   const [newPath, setNewPath] = useState("");
   const [newLabel, setNewLabel] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
+  const host = getHost();
 
   if (!open) return null;
 
@@ -99,13 +101,31 @@ export default function DirSetupModal({ open, onClose }: DirSetupModalProps) {
           <div className="border border-edge rounded p-3 space-y-2 bg-canvas">
             <span className="text-xs font-medium text-inkMuted">Add Directory</span>
             <div className="space-y-2">
-              <input
-                className="w-full bg-panel border border-edge rounded px-2 py-1.5 text-xs"
-                placeholder="Path (e.g. scripts/output)"
-                value={newPath}
-                onChange={(e) => setNewPath(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-              />
+              <div className="flex gap-1">
+                <input
+                  className="flex-1 min-w-0 bg-panel border border-edge rounded px-2 py-1.5 text-xs"
+                  placeholder={host ? "Path — or choose a folder" : "Path (e.g. scripts/output)"}
+                  value={newPath}
+                  onChange={(e) => setNewPath(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+                />
+                {/* The desktop app only reads folders the user granted it, so a
+                    typed path can't work there — the picker is what creates
+                    the grant. */}
+                {host && (
+                  <button
+                    type="button"
+                    className="shrink-0 border border-edge rounded px-2 py-1 text-xs text-inkMuted hover:text-ink"
+                    onClick={async () => {
+                      const picked = await host.pickDirectory();
+                      if (picked) setNewPath(picked);
+                    }}
+                    title="Choose a folder — grants the app read access to it"
+                  >
+                    Choose…
+                  </button>
+                )}
+              </div>
               <input
                 className="w-full bg-panel border border-edge rounded px-2 py-1.5 text-xs"
                 placeholder="Label (optional)"

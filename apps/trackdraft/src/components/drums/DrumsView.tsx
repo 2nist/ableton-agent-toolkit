@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useSongStore } from "../../store/songStore";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
 import { updateSection } from "../../lib/sections";
@@ -8,6 +8,7 @@ import { beatsPerBar, type BlueprintSection, type BlueprintSong, type DrumTransi
 import {
   resolveSectionVoiceNecklaces,
   resolveSectionVariant,
+  unionVoiceHits,
   inferPatternForSection,
   velocityNumber,
   seededVariantIndex,
@@ -92,20 +93,12 @@ const trackBottom = (li: number): number => TOP_PAD + (li + 1) * TRACK_H;
 // black dot per beat, clickable to drop/move/remove a detour at that spot.
 const DETOUR_Y = TOP_PAD + DRUM_LANES.length * TRACK_H + TRACK_H / 2;
 
-/** Union of a lane's member voices' onsets in one resolved span — the
- *  lane's own necklace. The HAT lane, for example, shows closed and open
- *  hats together; `steps` is the largest grid any member reports (shared
- *  within a span — outline numerator / loop sixteenths). */
+/** The lane's own necklace — member voices unioned (see `unionVoiceHits`). */
 function laneNecklace(
   lane: DrumLane,
   necklaces: VoiceNecklace[] | null,
 ): { hits: number[]; steps?: number } | null {
-  if (!necklaces) return null;
-  const member = necklaces.filter((n) => lane.voices.includes(n.voice) && n.count > 0);
-  if (member.length === 0) return null;
-  const hits = Array.from(new Set(member.flatMap((m) => m.hits))).sort((a, b) => a - b);
-  const steps = member.reduce((max, m) => Math.max(max, m.steps ?? 0), 0) || undefined;
-  return { hits, steps };
+  return unionVoiceHits(lane.voices, necklaces);
 }
 
 interface ResolvedSpan {
@@ -278,9 +271,9 @@ export default function DrumsView({
   const SECTION_ROLE_COLOR = useSectionRoleColors();
   const TRANSITION_COLOR = useTransitionColors();
   const song = useSongStore((s) => s.currentSong());
-  const storedSelection = useStudioSelectionStore((s) => s.selectedSectionId);
+  const storedSelection = useFocusedSectionStore((s) => s.selectedSectionId);
   const selectedSectionId = highlightSectionId ?? storedSelection;
-  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
 
   // Horizontal zoom — stretches/shrinks the bar width so the whole song
   // fits on screen or a few bars get detail. Local to the view, not

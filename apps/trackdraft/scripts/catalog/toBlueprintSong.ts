@@ -1,3 +1,4 @@
+import { deriveSectionVelocities } from "./velocity.js";
 import { pitchClass } from "@music-theory/core";
 import type { NoteName, ChordQuality, ScaleType } from "@music-theory/core";
 import type { BlueprintSection, BlueprintSong, Chord, LyricsTimelineEntry, SectionRole } from "@music-theory/song-blueprint";
@@ -133,9 +134,26 @@ export interface ToBlueprintSongOptions {
   raw: RawCatalogSong;
   lyricLines?: LrcLine[];
   hasSyncedLyrics: boolean;
+  /**
+   * The corpus's own style family, stamped onto `song.genre`.
+   *
+   * Not an invention: a rock corpus is rock and the Billboard charts are pop,
+   * and the field is what `styleFamilyFor` reads to pick drum performances
+   * from the matching tradition. It is also user-visible in the Bend panel's
+   * "Groove DNA" and removable there, so a wrong default is one click from
+   * gone — which is the right place for it. Left undefined for corpora whose
+   * style genuinely isn't known.
+   */
+  genre?: string;
 }
 
-export function catalogSongToBlueprintSong({ id, raw, lyricLines, hasSyncedLyrics }: ToBlueprintSongOptions): BlueprintSong {
+export function catalogSongToBlueprintSong({
+  id,
+  raw,
+  lyricLines,
+  hasSyncedLyrics,
+  genre,
+}: ToBlueprintSongOptions): BlueprintSong {
   const warnings = [...raw.warnings];
   const now = new Date().toISOString();
 
@@ -297,13 +315,28 @@ export function catalogSongToBlueprintSong({ id, raw, lyricLines, hasSyncedLyric
       bars: finalBars,
       chords,
       beatsPerChord: mostCommonBeats,
-      drumPattern: "standard",
-      velocity: "mf",
+      // Deliberately NOT stamped. `drumPattern` is the *user's* override slot;
+      // writing "standard" here made every ingested section play the same
+      // groove and switched off `inferDrumPattern` — which is what turns a
+      // chorus into `driving` and an intro into `bridge_sparse`. A catalogue
+      // audit found all 653 ingested sections on `standard` for exactly this
+      // reason (see scripts/audit-patterns.ts).
+      // Replaced below by `deriveSectionVelocities` — a flat "mf" made the
+      // inference's quiet/loud branches unreachable for the whole catalogue.
+      velocity: "mf" as const,
       timeSignatureNumerator: DEFAULT_TIME_SIG_NUMERATOR,
       timeSignatureDenPower: 2,
       lyrics: linesInSection.length ? linesInSection.map((l) => l.text).join("\n") : undefined,
       lyricsTimeline,
     };
+  });
+
+  // Dynamics come from the arrangement's shape (see catalog/velocity.ts),
+  // not from a constant: intro under, chorus on top, breakdown dropped out,
+  // final chorus the peak.
+  const velocities = deriveSectionVelocities(sections);
+  sections.forEach((section, i) => {
+    section.velocity = velocities[i]!;
   });
 
   if (sections.some((s) => s.chords.length === 0)) {
@@ -318,6 +351,7 @@ export function catalogSongToBlueprintSong({ id, raw, lyricLines, hasSyncedLyric
     key,
     scale,
     bpm,
+    ...(genre ? { genre } : {}),
     timeSignatureNumerator: DEFAULT_TIME_SIG_NUMERATOR,
     timeSignatureDenominator: 4,
     sections,

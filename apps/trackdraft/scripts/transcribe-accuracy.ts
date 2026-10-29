@@ -89,7 +89,6 @@ if (verbose && process.argv.includes("--sets") && gt.sections?.length) {
   const dominant = (a: Analysis, lane: string, from: number, to: number): Set<number> => {
     const counts = new Array(steps).fill(0);
     for (let b = from; b < to; b++) for (let s = 0; s < steps; s++) if (cell(a, b, lane, s)) counts[s]++;
-    const max = Math.max(...counts);
     const threshold = Math.max(2, Math.ceil(0.5 * Math.max(1, to - from)));
     const set = new Set<number>();
     counts.forEach((c, s) => { if (c >= threshold && c > 0) set.add(s); });

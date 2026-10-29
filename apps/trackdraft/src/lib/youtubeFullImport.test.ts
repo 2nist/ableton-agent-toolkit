@@ -199,7 +199,7 @@ describe("chordMiniAppToBlueprintSong", () => {
   });
 
   it("defaults key to C when missing", () => {
-    const { key, ...noKey } = minimalAnalysis;
+    const { key: _key, ...noKey } = minimalAnalysis;
     const song = chordMiniAppToBlueprintSong(noKey as ChordMiniAppResult, "Test");
     expect(song.key).toBe("C");
   });
@@ -302,7 +302,7 @@ describe("chordMiniAppToBlueprintSong", () => {
   });
 
   it("handles missing chords array", () => {
-    const { chords, ...noChords } = minimalAnalysis;
+    const { chords: _chords, ...noChords } = minimalAnalysis;
     const song = chordMiniAppToBlueprintSong(noChords as ChordMiniAppResult, "Test");
     expect(song.sections.length).toBe(0);
   });

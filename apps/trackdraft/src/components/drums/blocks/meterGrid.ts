@@ -24,6 +24,10 @@ export const BARS_PER_VIEW_OPTIONS: BarsPerView[] = [1, 2, 4, 8, 16, "all"];
 
 const isInt = (n: number): boolean => Math.abs(n - Math.round(n)) < 1e-6;
 
+// The beat → cell mapping is shared with every other drum surface; see
+// lib/drums/stepMath.ts for why it must be one function.
+export { STEP_SNAP, stepIndexOf } from "../../../lib/drums/stepMath";
+
 export interface StepGrid {
   /** How many steps one bar of THIS meter is divided into. */
   stepsPerBar: number;

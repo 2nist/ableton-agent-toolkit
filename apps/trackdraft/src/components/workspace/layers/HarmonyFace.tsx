@@ -1,9 +1,8 @@
-import { useMemo } from "react";
-import { resolveChordOccurrences } from "@drum/library";
 import { pitchClass } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
-import type { BlueprintSection } from "../../../types/blueprint";
+import type { BlueprintSection, BlueprintSong } from "../../../types/blueprint";
 import { chordDisplayName } from "../../../lib/harmony/chordBuilder";
+import { useSectionOccurrences } from "../../../hooks/useActiveChord";
 import { FaceFrame, useSectionGrid } from "./LayerGrid";
 
 /** The harmony layer's arrangement face: the progression as it will play,
@@ -11,6 +10,7 @@ import { FaceFrame, useSectionGrid } from "./LayerGrid";
  *  selects its beat span, so the drums/melody rows highlight the same time. */
 export default function HarmonyFace({
   section,
+  song,
   keyName,
   selectedChordId,
   activeChordId,
@@ -18,6 +18,7 @@ export default function HarmonyFace({
   onOpen,
 }: {
   section: BlueprintSection;
+  song: BlueprintSong | null;
   keyName: NoteName;
   selectedChordId: string | null;
   activeChordId: string | null;
@@ -25,10 +26,10 @@ export default function HarmonyFace({
   onOpen: () => void;
 }) {
   const { durationBeats, beatsPerBar, barPx, setRange } = useSectionGrid();
-  const occurrences = useMemo(
-    () => (section.chords.length > 0 ? resolveChordOccurrences(section, durationBeats) : []),
-    [section, durationBeats],
-  );
+  // The styled, narrative-aware resolution — the same one the playback
+  // highlight uses. Drawing from a plain resolution put the boxes on a
+  // different grid than the highlight whenever the style re-timed the cycle.
+  const occurrences = useSectionOccurrences(section, song, durationBeats);
 
   if (occurrences.length === 0) {
     return (

@@ -1,11 +1,11 @@
 /**
  * YouTube URL / search → BlueprintSong bridge.
- * Phase 1: metadata + LRCLIB lyrics (no audio analysis deps).
- * Phase 2 (future): full ChordMiniApp audio analysis pipeline.
+ * Metadata + LRCLIB lyrics live here; the full audio-analysis pipeline is in
+ * `lib/youtubeFullImport.ts` + `components/dashboard/ActionBar.tsx`.
  */
 
+import { getHost } from "./host";
 import type { BlueprintSong } from "../types/blueprint";
-import type { LyricsTimelineEntry } from "@music-theory/song-blueprint";
 import { parseSyncedLyrics } from "@music-theory/song-blueprint";
 import { pickLyricsMatch, searchQueries, type LyricsCandidate } from "./lyrics/lrclibMatch";
 export { parseSyncedLyrics };
@@ -131,9 +131,20 @@ export async function getLrclibById(id: number): Promise<LrclibResult | null> {
 }
 
 /**
- * Fetch YouTube video metadata via our Vite endpoint.
+ * YouTube video metadata.
+ *
+ * Desktop gets it from the main process (there is no dev server to ask); the
+ * browser build still uses the Vite endpoint.
  */
 export async function fetchYoutubeMetadata(videoId: string): Promise<YoutubeMetadata | null> {
+  const host = getHost();
+  if (host) {
+    try {
+      return await host.youtubeMeta(videoId);
+    } catch {
+      return null;
+    }
+  }
   try {
     const res = await fetch(`/__youtube-meta?videoId=${encodeURIComponent(videoId)}`);
     if (!res.ok) return null;

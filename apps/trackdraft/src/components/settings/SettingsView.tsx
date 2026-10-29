@@ -7,9 +7,10 @@ import {
   useDawTargetStore,
   type DawTarget,
 } from "../../store/dawTargetStore";
-import MidiSetupPanel from "../studio/MidiSetupPanel";
-import MidiTemplateGuide from "../studio/MidiTemplateGuide";
-import ExportMenu from "../studio/ExportMenu";
+import DataFilesSection from "./DataFilesSection";
+import MidiSetupPanel from "./MidiSetupPanel";
+import MidiTemplateGuide from "./MidiTemplateGuide";
+import ExportMenu from "./ExportMenu";
 import DirSetupModal from "../dashboard/DirSetupModal";
 import TapeLabel from "../common/TapeLabel";
 
@@ -143,6 +144,9 @@ export default function SettingsView() {
           </button>
         </div>
       </section>
+
+      {/* Data files — the engine's editable tables */}
+      <DataFilesSection />
 
       {/* Labs & tools — developed surfaces outside the song editor */}
       <section className="border border-edge rounded-lg bg-panel overflow-hidden">

@@ -12,7 +12,7 @@ import { useSongStore } from "../../store/songStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { effectiveTonicRegions } from "../../lib/harmony/tonic";
 import { resolveChordOccurrences } from "@drum/library";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import {
   mergeWithNext,
   removeSection,
@@ -46,8 +46,8 @@ export default function HarmonyView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const [searchParams] = useSearchParams();
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
-  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
   const [tick, setTick] = useState<TransportTick | null>(null);
 
@@ -69,11 +69,11 @@ export default function HarmonyView() {
    * Capped — past a handful of bands nobody is reading any more.
    */
   const desk = useHarmonyWorkspaceStore((s) => s.desk);
-  const selectedIds = useStudioSelectionStore((s) => s.selected);
-  const clearSectionSelection = useStudioSelectionStore((s) => s.clearSelection);
-  const reconcileSelection = useStudioSelectionStore((s) => s.reconcile);
-  const setSectionSelection = useStudioSelectionStore((s) => s.setSelection);
-  const extendSectionSelection = useStudioSelectionStore((s) => s.extendSelectionTo);
+  const selectedIds = useFocusedSectionStore((s) => s.selected);
+  const clearSectionSelection = useFocusedSectionStore((s) => s.clearSelection);
+  const reconcileSelection = useFocusedSectionStore((s) => s.reconcile);
+  const setSectionSelection = useFocusedSectionStore((s) => s.setSelection);
+  const extendSectionSelection = useFocusedSectionStore((s) => s.extendSelectionTo);
   const sectionOrder = useMemo(() => (song?.sections ?? []).map((entry) => entry.id), [song?.sections]);
 
   useSectionShortcuts({
@@ -405,6 +405,11 @@ export default function HarmonyView() {
         onTransposeSection: transposeSection,
         onChangeRegions: (regions: TonicRegion[] | undefined) =>
           updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, tonicRegions: regions }))),
+        // Section-scoped, unlike the chord/region writers above: the foot
+        // band's Voices tab edits the generated bass and colour layers, which
+        // belong to the section as a whole.
+        onChangeSection: (updater: (sec: BlueprintSection) => BlueprintSection) =>
+          updateCurrentSong((s) => updateSection(s, activeSection.id, updater)),
         onPreviewChord: (chord: Chord) => void previewChord(chord),
         onSplitSection: splitIntoSectionParts,
         onSplitSectionAt: (chordId: string) => splitSectionAtChordOf(activeSection, chordId),

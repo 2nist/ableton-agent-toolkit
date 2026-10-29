@@ -5,6 +5,7 @@ import { resolveSectionVariant } from "../../../lib/playback/drumPreview";
 import { sectionDurationBeats, type BlueprintSection, type BlueprintSong } from "../../../types/blueprint";
 import type { SectionSpan } from "../../../lib/arrangement";
 import { sectionMarkers } from "./transitionMarkers";
+import { grooveOf } from "../../../lib/drums/grooveModel";
 
 /**
  * Notes this close together are the same hit. The export planner applies the
@@ -66,10 +67,17 @@ for (const lane of Object.keys(DRUM_LANE_VOICES) as DrumLaneId[]) {
  * `useMemo` in the view cannot cover this alone: `spans` is rebuilt per render.
  */
 function signature(section: BlueprintSection, start: number): string {
+  const groove = grooveOf(section);
+  const grooveKey =
+    groove.kind === "outline"
+      ? `outline:${JSON.stringify(groove.outline)}`
+      : groove.kind === "preset"
+        ? `preset:${groove.pattern}:${groove.variant ?? ""}`
+        : groove.kind;
   return [
     start,
     sectionDurationBeats(section),
-    section.drumPattern ?? "",
+    grooveKey,
     section.drumVariationStartBeat ?? "",
     section.drumVariationBars ?? "",
     section.drumVariationOutline ? JSON.stringify(section.drumVariationOutline) : "",

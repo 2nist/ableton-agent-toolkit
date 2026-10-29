@@ -26,7 +26,6 @@ import { normalizeTitle } from "./catalog/normalizeTitle.js";
 
 const MCGILL_ROOT = process.env.MCGILL_ROOT ?? "/Users/Matthew/mcgill_jcrd_salami_Billboard";
 const LYRICS_DIR = path.join(MCGILL_ROOT, "lyrics_from_lrclib");
-const BACKUP_DIR = path.join(LYRICS_DIR, "_refresh_backup");
 const TRIAGE_REPORT = path.join(import.meta.dirname, "output", "mcgill-triage-report.json");
 const REPORT_PATH = path.join(import.meta.dirname, "output", "lrclib-refresh-report.json");
 
@@ -260,7 +259,7 @@ async function main(): Promise<void> {
   const rows: RefreshRow[] = [];
   let syncedFound = 0;
   let plainGained = 0;
-  let instruct = 0;
+  const instruct = 0;
   let none = 0;
 
   for (const t of targets) {

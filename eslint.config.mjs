@@ -18,6 +18,11 @@ export default tseslint.config(
       "**/puck.generated.tsx",
       "**/generated/**",
       "**/scripts/output/**",
+      // Local Python venvs live in the repo but are not our source: without
+      // this, `npm run lint` walks ~430 MB of site-packages (and reports a
+      // warning from a vendored urllib3 worker).
+      "**/.whisper-venv/**",
+      "**/__pycache__/**",
       "**/e-gmd-v1.0.0/**",
       "archive/**",
     ],

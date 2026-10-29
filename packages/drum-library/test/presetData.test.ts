@@ -25,49 +25,87 @@ describe("PRESET_DATA (merged library)", () => {
         expect(variant.lengthBeats, pattern).toBeGreaterThan(0);
         expect(variant.beatsPerBar, pattern).toBeGreaterThan(0);
         expect(variant.notes.length, pattern).toBeGreaterThan(0);
-        expect(["egmd", "synth", "zappa"], pattern).toContain(variant.source.origin);
+        expect(["egmd", "synth", "zappa", "curated"], pattern).toContain(variant.source.origin);
       }
     }
   });
 
-  it("machine idioms are synth-only; odd meters mix corpus and synth", () => {
+  it("machine idioms are synth-only", () => {
     for (const pattern of ["four_on_floor", "trap", "breakbeat", "dnb"] as const) {
       expect(PRESET_DATA[pattern]!.variants.every((v) => v.source.origin === "synth"), pattern).toBe(true);
     }
-    // 78 was synth-only because the corpus had none — the Zappa mint now
-    // supplies real 7/8 grooves, so the family is synth + zappa (never egmd).
-    expect(PRESET_DATA["78"]!.variants.some((v) => v.source.origin === "synth")).toBe(true);
-    expect(PRESET_DATA["78"]!.variants.some((v) => v.source.origin === "zappa")).toBe(true);
-    expect(PRESET_DATA["78"]!.variants.every((v) => v.source.origin !== "egmd")).toBe(true);
-    // 54/68 must have at least the synthesized supplement.
-    expect(PRESET_DATA["54"]!.variants.some((v) => v.source.origin === "synth")).toBe(true);
-    expect(PRESET_DATA["68"]!.variants.some((v) => v.source.origin === "synth")).toBe(true);
   });
 
-  it("acoustic staples stay corpus-sourced behind the clean downbeat default (mined material may follow)", () => {
-    for (const pattern of ["standard", "half_time", "driving", "intense", "bridge_sparse"] as const) {
+  it("every pattern leads with authored material carrying corpus feel", () => {
+    // The authored banks come FIRST, so the pattern's own character — and the
+    // default variant — is written material. Mined takes may follow, but only
+    // the ones that pass `selectableMined`'s gate: same meter, whole 1-2 bars,
+    // density inside the authored band, no toms. `drumMusicality` holds that
+    // gate for the whole pool.
+    for (const pattern of ["kick_only", "standard", "half_time", "driving", "bridge_sparse", "intense", "78", "54", "68"] as const) {
       const variants = PRESET_DATA[pattern]!.variants;
-      // Variant 0 is the synthesized clean downbeat groove (snare on the
-      // downbeats) — the auto default; every variant behind it is baked
-      // corpus material or mined Zappa material (origin "zappa").
-      expect(variants[0]!.source.origin, `${pattern} variant 0`).toBe("synth");
-      expect(
-        variants.slice(1).every((v) => v.source.origin === "egmd" || v.source.origin === "zappa"),
-        pattern,
-      ).toBe(true);
-      // A wholesale synth takeover (the machine-idiom policy) must not
-      // creep into the acoustic families.
-      expect(variants.slice(1).some((v) => v.source.origin === "synth"), pattern).toBe(false);
+      const curated = variants.filter((v) => v.source.origin === "curated");
+      expect(curated.length, pattern).toBeGreaterThanOrEqual(3);
+      // every authored variant precedes every corpus take
+      const lastAuthored = variants.map((v) => v.source.origin).lastIndexOf("curated");
+      const firstMined = variants.findIndex((v) => v.source.origin === "egmd" || v.source.origin === "zappa");
+      if (firstMined !== -1) expect(firstMined, `${pattern} leads with authored material`).toBeGreaterThan(lastAuthored);
     }
   });
 
-  it("the clean downbeat default puts the snare exactly on the downbeats (1 & 3 in 4/4), no flams", () => {
-    const snare = ABLETON_SAFE_NOTES.snare;
-    const { notes } = PRESET_DATA.standard!.variants[0]!;
-    const snareHits = notes.filter((n) => n[1] === snare).map((n) => n[0]);
-    // Exactly two snare hits in the 4-beat loop, on beats 1 and 3.
-    expect(snareHits).toEqual([0, 2]);
+  it("and the corpus takes it offers are the ones that pass the gate", () => {
+    // More options, not more noise: the appended takes are still whole-bar
+    // grooves in the pattern's own density band.
+    const withCorpus = (["standard", "driving", "intense", "half_time"] as const).filter((p) =>
+      PRESET_DATA[p]!.variants.some((v) => v.source.origin === "egmd" || v.source.origin === "zappa"),
+    );
+    expect(withCorpus.length, "at least one pattern should offer corpus takes").toBeGreaterThan(0);
+    for (const pattern of withCorpus) {
+      const variant = PRESET_DATA[pattern]!.variants.find((v) => v.source.origin === "egmd" || v.source.origin === "zappa")!;
+      const bars = variant.lengthBeats / variant.beatsPerBar;
+      expect(bars).toBeGreaterThanOrEqual(1 - 1e-6);
+      expect(bars).toBeLessThanOrEqual(2 + 1e-6);
+      expect(Math.abs(bars - Math.round(bars))).toBeLessThan(1e-6);
+      expect(variant.notes.length).toBeGreaterThan(0);
+    }
   });
+
+  it("variant 0 — the auto default — is that pattern's own authored groove", () => {
+    // It used to be a shared "clean downbeat" (snare on 1 & 3) prepended to
+    // every acoustic bank, which meant a third of all auto picks ignored the
+    // pattern name AND had no backbeat. Now each bank's own first variant is
+    // the default.
+    for (const pattern of ["standard", "half_time", "driving", "intense", "bridge_sparse", "kick_only"] as const) {
+      const variant = PRESET_DATA[pattern]!.variants[0]!;
+      expect(variant.source.origin, `${pattern} variant 0`).toBe("curated");
+      expect(variant.source.generator, pattern).toContain(`${pattern}#0`);
+    }
+  });
+
+  it("the default backbeat sits on 2 and 4, not on the downbeats", () => {
+    const snare = ABLETON_SAFE_NOTES.snare;
+    for (const pattern of ["standard", "driving", "intense"] as const) {
+      const beats = PRESET_DATA[pattern]!.variants[0]!.notes
+        // Ghost notes are snares too; the BACKBEAT is the loud ones.
+        .filter((n) => n[1] === snare && n[2] > 45)
+        .map((n) => n[0]);
+      expect(beats, `${pattern} snare`).toHaveLength(2);
+      // Within a few ms of beats 2 and 4 (the feel layer microtimes them).
+      expect(Math.abs(beats[0]! - 1), pattern).toBeLessThan(0.05);
+      expect(Math.abs(beats[1]! - 3), pattern).toBeLessThan(0.05);
+    }
+  });
+
+  it("the half-time default puts its single backbeat on beat 3", () => {
+    const snare = ABLETON_SAFE_NOTES.snare;
+    const beats = PRESET_DATA.half_time!.variants[0]!.notes
+      .filter((n) => n[1] === snare && n[2] > 45)
+      .map((n) => n[0]);
+    expect(beats).toHaveLength(1);
+    expect(Math.abs(beats[0]! - 2)).toBeLessThan(0.05);
+  });
+
+
 
   it("kick_only contains only kick hits, no leaked pedal-hat/cymbal notes", () => {
     // The "feet" limb it draws from legitimately includes the pedal hi-hat

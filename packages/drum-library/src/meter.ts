@@ -228,6 +228,26 @@ export function buildEuclideanOutline(
 }
 
 /**
+ * The cell voices an outline gets when nobody assigned any: kick on the bar's
+ * first cell, snare at its halfway point, hats everywhere else.
+ *
+ * Without this an outline resolves to `outlineToClickPattern` — a bare click
+ * track, hats and nothing else. That is a metronome, not a drum pattern: you
+ * apply a Euclidean groove, the grid fills with hi-hats, and the kick and snare
+ * you can see in the UI never appear. The cell-voice editor still overrides
+ * every one of these assignments.
+ */
+export function defaultCellVoices(cells: readonly number[]): CellVoice[] {
+  if (cells.length === 0) return [];
+  const halfway = Math.floor(cells.length / 2);
+  return cells.map((_, index) => {
+    if (index === 0) return "kick";
+    if (index === halfway && halfway > 0) return "snare";
+    return "hat";
+  });
+}
+
+/**
  * Concatenate outlines into one larger meter — how the PDF builds
  * large/irregular meters like 25/16 (7+11+7, per the PDF's own opening
  * example) or 27/16 (7+9+11, "Mayday Macedonia"): as a sequence of smaller

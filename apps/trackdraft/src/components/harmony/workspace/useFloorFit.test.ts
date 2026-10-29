@@ -8,7 +8,7 @@ import {
   PAD,
   ROW_SHARE,
   RULER_H,
-  TENSION_H,
+  FOOT_H,
   computeFloorFit,
   type FitNode,
 } from "./useFloorFit";
@@ -16,7 +16,7 @@ import {
 const front = CAMERA_PRESETS.front;
 const rowSine = Math.sin(front.pitch);
 const plate = { width: 1340, stageH: 680 };
-const sceneH = plate.stageH - RULER_H - TENSION_H - 20;
+const sceneH = plate.stageH - RULER_H - FOOT_H - 20;
 const targetPitch = (sceneH * ROW_SHARE) / LADDER_STEPS;
 
 /** One chord on the tonic row, so the bounds have real content. */
@@ -90,7 +90,7 @@ describe("computeFloorFit", () => {
       const top = rowY(result, 6);
       const bottom = rowY(result, 0);
       expect(top).toBeGreaterThanOrEqual(RULER_H - 1);
-      expect(bottom).toBeLessThanOrEqual(result.height - TENSION_H + 1);
+      expect(bottom).toBeLessThanOrEqual(result.height - FOOT_H + 1);
       expect(top).toBeLessThan(bottom);
     }
   });

@@ -27,8 +27,10 @@ import type {
   LyricMetricalRow,
   SectionRole,
 } from "../src/types/blueprint";
+import { requireRoot } from "./lib/catalogPaths";
 
-const SOURCE_ROOT = "/Users/Matthew/lalo-chezia/lalo-chezia/docs/source_material/songs";
+// From LALO_CHEZIA_ROOT — see scripts/lib/catalogPaths.ts.
+const SOURCE_ROOT = requireRoot("laloChezia");
 const OUTPUT_DIR = join(import.meta.dirname, "output");
 
 const ROLE_MAP: Record<string, SectionRole> = {
@@ -137,7 +139,6 @@ function parseArrangement(text: string): ParsedArrangement {
       bars,
       chords,
       beatsPerChord,
-      drumPattern: "standard",
       velocity: "mf",
       timeSignatureNumerator: result.timeSigNumerator ?? 4,
       timeSignatureDenPower: 2,

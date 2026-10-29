@@ -29,3 +29,8 @@ __pycache__/
 
 # Portable build bundles (regenerate with scripts/serve-dist.mjs)
 apps/trackdraft/release/
+# Electron packaging stage (rebuilt by scripts/package-mac.mjs)
+apps/trackdraft/build/electron-stage/
+
+# Local scratch probes (not part of the build)
+apps/trackdraft/.tmp/

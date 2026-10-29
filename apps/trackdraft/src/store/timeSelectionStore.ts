@@ -58,6 +58,28 @@ export function selectionForSection(sectionId: string | null | undefined): TimeS
   return selection;
 }
 
+/**
+ * The selection clamped to the section's CURRENT length, or null when it
+ * belongs to a different section.
+ *
+ * Coordinates are section-relative, but nothing rewrites a stored range when
+ * the section changes length — a bar resize, a split, or a template apply
+ * can leave `endBeat` past the new `durationBeats`, and every range-driven
+ * edit would then overrun the section. Clamping at the read boundary fixes
+ * that without writing back into a global store from a render.
+ */
+export function selectionWithin(
+  selection: TimeSelection | null,
+  sectionId: string,
+  durationBeats: number,
+): TimeSelection | null {
+  if (!selection || selection.sectionId !== sectionId || durationBeats <= 0) return null;
+  const endBeat = Math.min(selection.endBeat, durationBeats);
+  const startBeat = Math.min(selection.startBeat, endBeat);
+  if (startBeat === selection.startBeat && endBeat === selection.endBeat) return selection;
+  return { ...selection, startBeat, endBeat };
+}
+
 /** Range in the shape the drums tools already consume. */
 export function drumRangeForSection(
   sectionId: string | null | undefined,

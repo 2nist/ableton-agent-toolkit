@@ -9,7 +9,7 @@
  * so the server has to be plain Node (>=18) + the files themselves.
  *
  * It's a single-page app, so an unknown path without a file extension returns
- * index.html — otherwise a refresh on /song/<id>/studio 404s.
+ * index.html — otherwise a refresh on /song/<id>/workbench 404s.
  *
  * Usage:
  *   node serve.mjs                       # serve ./ on 5183

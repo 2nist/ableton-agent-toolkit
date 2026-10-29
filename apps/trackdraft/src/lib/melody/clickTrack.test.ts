@@ -48,7 +48,6 @@ class FakeAudioContext {
     };
   });
 }
-const ctx = new FakeAudioContext();
 vi.stubGlobal("AudioContext", FakeAudioContext);
 
 function fire(beat: number, isPlaying = true): void {

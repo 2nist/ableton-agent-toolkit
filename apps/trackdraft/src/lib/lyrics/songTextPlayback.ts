@@ -1,7 +1,7 @@
 import type { BlueprintSong } from "../../types/blueprint";
 import type { NoteName } from "@music-theory/core";
 import { NOTE_TO_PC, pitchClass } from "@music-theory/core";
-import type { SectionSpan } from "../arrangement";
+import { spanIndexForTick, type SectionSpan } from "../arrangement";
 import { chordSlotAt, chordSlotsForSection } from "../harmony/chordSlots";
 import { chordDisplayName } from "../harmony/chordBuilder";
 import type { TransportTick } from "../playback/songTransport";
@@ -38,8 +38,11 @@ export function playbackPosFor(
   model: SongTextModel,
   tick: TransportTick,
 ): SongTextPlayPos | null {
-  if (tick.sectionIndex < 0 || tick.sectionIndex >= spans.length) return null;
-  const span = spans[tick.sectionIndex];
+  // Identity first: the tick's positional index is only valid against the
+  // arrangement the transport snapshotted at play time.
+  const spanIndex = spanIndexForTick(spans, tick);
+  if (spanIndex < 0) return null;
+  const span = spans[spanIndex];
   const block = model.blocks.find((b) => b.section.id === span.sectionId);
   if (!block) return null;
 

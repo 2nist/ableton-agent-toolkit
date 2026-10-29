@@ -227,9 +227,15 @@ export async function readSongFile(file: File): Promise<BlueprintSong> {
   return parseImportedSong(raw);
 }
 
-// Follows the page host — 127.0.0.1 when opened locally, the Mac's LAN IP
-// when opened from an iPad via `start-all.sh lan`.
-const ABLETON_BRIDGE_URL = getBridgeHttpBase();
+/** Follows the page host — 127.0.0.1 when opened locally, the Mac's LAN IP
+ *  when opened from an iPad via `start-all.sh lan`.
+ *
+ *  Resolved per call rather than at module load: a module-scope `window.location`
+ *  read made this file unimportable anywhere without a browser (node scripts,
+ *  tests), and `parseHostFile` imports it lazily on the import path. */
+function abletonBridgeUrl(): string {
+  return getBridgeHttpBase();
+}
 
 /** Post the full song blueprint to the osc-bridge's REST API so it lands in
  *  the extension's storage directory — no manual sync-script step needed.
@@ -237,7 +243,7 @@ const ABLETON_BRIDGE_URL = getBridgeHttpBase();
  *  notification; this is a deliberate fire-and-forget for the common case
  *  but returns the response so the UI can give feedback. */
 export async function pushSongToAbleton(song: BlueprintSong): Promise<{ status: string; title: string }> {
-  const res = await fetch(`${ABLETON_BRIDGE_URL}/api/push-song`, {
+  const res = await fetch(`${abletonBridgeUrl()}/api/push-song`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(song),
@@ -252,7 +258,7 @@ export async function pushSongToAbleton(song: BlueprintSong): Promise<{ status: 
 /** Sends a command to the bridge's command queue — used for actions that
  *  don't carry a full blueprint payload (setTempo, etc.). */
 export async function sendAbletonCommand(action: string, payload: Record<string, unknown> = {}): Promise<void> {
-  await fetch(`${ABLETON_BRIDGE_URL}/api/command`, {
+  await fetch(`${abletonBridgeUrl()}/api/command`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, ...payload }),

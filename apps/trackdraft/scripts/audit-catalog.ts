@@ -1,11 +1,11 @@
 /**
- * Full 5-dimension quality audit for the Beatles catalog.
+ * Full 6-dimension quality audit for the Beatles catalog.
  *
  * Run:  npx tsx scripts/audit-catalog.ts
  *
  * Reads every .trackdraft.json in scripts/output/catalog/, correlates
  * with its JCRD source and LRCLIB match, scores sections / chords /
- * timing / lyrics / honeycomb-walk coverage, and writes a single
+ * timing / lyrics / honeycomb-walk / drums coverage, and writes a single
  * catalog-audit.json with per-song scores, tier classifications, and
  * actionable flags.
  */
@@ -14,6 +14,8 @@ import * as path from "node:path";
 import { NOTE_TO_PC, SCALE_INTERVALS } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { BlueprintSong, BlueprintSection } from "../src/types/blueprint";
+import { resolveSectionVariant } from "../src/lib/playback/drumPreview";
+import { resolveRoot } from "./lib/catalogPaths";
 
 // ----------------------------------------------------------------- types
 
@@ -40,6 +42,7 @@ export interface SongAuditResult {
   timing: DimensionScore;
   lyrics: DimensionScore;
   honeycomb: DimensionScore;
+  drums: DimensionScore;
 }
 
 export interface CatalogAuditSummary {
@@ -412,8 +415,10 @@ interface JcrdRef {
 }
 
 function loadJcrdIndex(): Map<string, JcrdRef> {
-  const jcrdDir = "/Users/Matthew/Beatles Data/Beatles-Chords";
-  if (!fs.existsSync(jcrdDir)) return new Map();
+  // Reference charts from BEATLES_CHORDS_DIR — absent is fine (the audit then
+  // has nothing to compare against), which is why this is resolveRoot, not requireRoot.
+  const jcrdDir = resolveRoot("beatlesChords").path;
+  if (!jcrdDir || !fs.existsSync(jcrdDir)) return new Map();
 
   const index = new Map<string, JcrdRef>();
   for (const file of fs.readdirSync(jcrdDir)) {
@@ -465,6 +470,91 @@ function findJcrdMatch(bpTitle: string, index: Map<string, JcrdRef>): JcrdRef | 
 
 // --------------------------------------------------------------- tier
 
+/**
+ * Drums — the dimension the audit was missing.
+ *
+ * Scores the groove that will actually play, not the field that is set:
+ * `drumPattern: "none"` everywhere means silence, and a section left on
+ * "auto" is fine (the heuristic assigns by role) but is reported so an
+ * all-inferred song is visible in the QC rather than invisible.
+ *
+ * Ghost notes are the specific thing this catches: the E-GMD takes carry
+ * 40-46% snare hits below velocity 45, and drawn identically they read as a
+ * backbeat twice as busy as the kick. The audit measures the accents
+ * separately so that reads as the health signal it is, not as noise.
+ */
+function scoreDrums(song: BlueprintSong): DimensionScore {
+  const issues: string[] = [];
+  let score = 1.0;
+
+  const sections = song.sections ?? [];
+  if (sections.length === 0) return { score: 1.0, issues };
+
+  let muted = 0;
+  let inferred = 0;
+  let kick = 0;
+  let snare = 0;
+  let ghostSnare = 0;
+  let unresolved = 0;
+
+  for (const section of sections) {
+    if (section.drumPattern === "none") {
+      muted++;
+      continue;
+    }
+    if (!section.drumPattern && !section.drumMeterOutline) inferred++;
+    const variant = resolveSectionVariant(section as never, song as never, 0);
+    if (!variant) {
+      unresolved++;
+      continue;
+    }
+    for (const [, pitch, velocity] of variant.notes) {
+      if (pitch === 36) kick++;
+      else if (pitch === 38) {
+        snare++;
+        if (velocity < 45) ghostSnare++;
+      }
+    }
+  }
+
+  const playing = sections.length - muted;
+
+  if (muted === sections.length) {
+    issues.push("drums muted on every section");
+    score -= 0.55;
+  } else if (muted > 0) {
+    const share = muted / sections.length;
+    issues.push(`${muted} of ${sections.length} sections have no drums`);
+    score -= Math.min(0.25, share * 0.5);
+  }
+
+  if (unresolved > 0) {
+    issues.push(`${unresolved} section(s) resolve to no groove`);
+    score -= Math.min(0.2, unresolved * 0.1);
+  }
+
+  if (snare > 0) {
+    const ghostShare = ghostSnare / snare;
+    if (ghostShare > 0.6) {
+      issues.push(`snare is ${Math.round(ghostShare * 100)}% ghost notes — reads as a wall of hits`);
+      score -= 0.2;
+    }
+    const accents = snare - ghostSnare;
+    if (kick > 0 && accents / kick > 2) {
+      issues.push(`backbeat outnumbers the kick ${(accents / kick).toFixed(1)}×`);
+      score -= 0.15;
+    }
+  }
+
+  if (playing > 0 && inferred === playing && inferred === sections.length) {
+    // Not a fault — the heuristic is the intended default — but a reader of
+    // the QC should be able to see that nothing was hand-chosen.
+    issues.push("all drums are inferred (no explicit pattern)");
+  }
+
+  return { score: Math.max(0, Math.round(score * 100) / 100), issues };
+}
+
 function classifyTier(confidence: number): "high" | "review" | "manual" {
   if (confidence >= 0.85) return "high";
   if (confidence >= 0.65) return "review";
@@ -476,9 +566,13 @@ function classifyTier(confidence: number): "high" | "review" | "manual" {
 const WEIGHTS: Record<string, number> = {
   sections: 0.15,
   chords: 0.25,
-  timing: 0.15,
+  timing: 0.10,
   lyrics: 0.30,
-  honeycomb: 0.15,
+  honeycomb: 0.10,
+  // Drums are a first-class element of a blueprint, not a garnish: a song
+  // where every section is muted, or where the backbeat is a wall of ghost
+  // notes, plays wrong even when the chords are perfect.
+  drums: 0.10,
 };
 
 function main(): void {
@@ -508,13 +602,15 @@ function main(): void {
     const timing = scoreTiming(song);
     const lyrics = scoreLyrics(song, lyricSource === "synced");
     const honeycomb = scoreHoneycomb(song);
+    const drums = scoreDrums(song);
 
     const confidence =
       sections.score * WEIGHTS.sections +
       chords.score * WEIGHTS.chords +
       timing.score * WEIGHTS.timing +
       lyrics.score * WEIGHTS.lyrics +
-      honeycomb.score * WEIGHTS.honeycomb;
+      honeycomb.score * WEIGHTS.honeycomb +
+      drums.score * WEIGHTS.drums;
 
     songs.push({
       file,
@@ -534,6 +630,7 @@ function main(): void {
       timing,
       lyrics,
       honeycomb,
+      drums,
     });
   }
 
@@ -541,7 +638,7 @@ function main(): void {
   for (const s of songs) tierCounts[s.tier]++;
 
   const dimAverages: Record<string, number> = {};
-  for (const dim of ["sections", "chords", "timing", "lyrics", "honeycomb"]) {
+  for (const dim of ["sections", "chords", "timing", "lyrics", "honeycomb", "drums"]) {
     dimAverages[dim] =
       Math.round(
         (songs.reduce((sum, s) => sum + (s as any)[dim].score, 0) / songs.length) * 1000,
@@ -594,7 +691,8 @@ function main(): void {
     " ch=" + dimAverages.chords.toFixed(2) +
     " tm=" + dimAverages.timing.toFixed(2) +
     " ly=" + dimAverages.lyrics.toFixed(2) +
-    " hc=" + dimAverages.honeycomb.toFixed(2),
+    " hc=" + dimAverages.honeycomb.toFixed(2) +
+    " dr=" + dimAverages.drums.toFixed(2),
   );
 }
 

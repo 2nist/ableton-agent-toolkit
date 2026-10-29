@@ -1,0 +1,43 @@
+{
+  "major": {
+    "cinematic_shimmer": {
+      "shift": 7,
+      "quality": "maj",
+      "label": "Maj9"
+    },
+    "sci_fi_wonder": {
+      "shift": 2,
+      "quality": "maj",
+      "label": "Maj13(#11)"
+    },
+    "bittersweet_drama": {
+      "shift": 11,
+      "quality": "min",
+      "label": "Maj9(#11)"
+    },
+    "neo_soul_glow": {
+      "shift": 7,
+      "quality": "maj",
+      "label": "9"
+    }
+  },
+  "minor": {
+    "neo_soul_glow": {
+      "shift": 10,
+      "quality": "maj",
+      "label": "m11"
+    },
+    "ambient_ocean": {
+      "shift": 7,
+      "quality": "min",
+      "label": "m9"
+    }
+  },
+  "dominant_7th": {
+    "altered_tension": {
+      "shift": 1,
+      "quality": "maj",
+      "label": "7(b9#9#11)"
+    }
+  }
+}

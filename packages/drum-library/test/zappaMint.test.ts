@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BAKED_PRESETS,
   FILL_DATA,
   PRESET_DATA,
   PRESET_META,
@@ -9,6 +10,7 @@ import {
   pickVariantIndexFor,
   type PackedVariant,
 } from "../src/index.js";
+import { selectSectionGroove } from "../src/grooveSelect.js";
 
 type VariantLike = Pick<PackedVariant, "lengthBeats" | "beatsPerBar">;
 const v = (lengthBeats: number, beatsPerBar = 4): VariantLike => ({ lengthBeats, beatsPerBar });
@@ -61,8 +63,10 @@ describe("pickVariantIndexFor — meter-aware variant pick", () => {
 });
 
 describe("minted Zappa material (data-driven)", () => {
+  // The mint is FEEL now: curated patterns replace the mined note content in
+  // `PRESET_DATA`, so anything auditing the mined material reads the bake.
   const zappa: Array<{ pattern: string; index: number; variant: PackedVariant }> = [];
-  for (const [pattern, preset] of Object.entries(PRESET_DATA)) {
+  for (const [pattern, preset] of Object.entries(BAKED_PRESETS)) {
     if (!preset) continue;
     preset.variants.forEach((variant, index) => {
       if (variant.source.origin === "zappa") zappa.push({ pattern, index, variant });
@@ -74,28 +78,50 @@ describe("minted Zappa material (data-driven)", () => {
     expect(zappa.length).toBeGreaterThan(30);
   });
 
-  it("every mined odd meter has verse, chorus and outro coverage", () => {
+  it("every mined odd meter resolves to a groove in that meter", () => {
     const meters = new Set(zappa.map(({ variant }) => variant.beatsPerBar));
     for (const meter of meters) {
       if (Math.abs(meter - 4) < 0.01) continue;
-      for (const family of ["standard", "driving", "half_time"] as const) {
-        const variants = PRESET_DATA[family]?.variants ?? [];
-        const compatible = compatibleVariantIndices(variants, meter * 4, meter);
-        expect(compatible.length, `${family} @ ${meter} beats/bar`).toBeGreaterThan(0);
-      }
+      // Same derivation the schema's `meterForLength` uses.
+      const denominator = [4, 8, 16, 2].find((d) => Math.abs((meter * d) / 4 - Math.round((meter * d) / 4)) < 1e-9) ?? 4;
+      const numerator = Math.round((meter * denominator) / 4);
+      const variant = selectSectionGroove({
+        section: {
+          id: `s${meter}`,
+          role: "verse",
+          velocity: "mf",
+          name: "V",
+          timeSignatureNumerator: numerator,
+          timeSignatureDenPower: Math.log2(denominator),
+        },
+        song: { genre: "rock" },
+        durationBeats: meter * 4,
+        beatsPerBar: meter,
+      });
+      expect(variant, `${numerator}/${denominator}`).toBeTruthy();
+      expect(Math.abs(variant!.beatsPerBar - meter), `${numerator}/${denominator}`).toBeLessThan(1e-6);
     }
   });
 
-  it("a 7/8 section's seeded picks always land a 7/8 groove", () => {
-    const preset = PRESET_DATA.standard;
-    expect(preset).toBeTruthy();
-    const compatible = compatibleVariantIndices(preset!.variants, 14, 3.5);
-    expect(compatible.length).toBeGreaterThan(0);
-    for (let seed = 0; seed < 200; seed++) {
-      const index = pickVariantIndexFor(seed, preset!.variants, 14, 3.5);
-      const variant = preset!.variants[index];
-      expect(Math.abs(variant.beatsPerBar - 3.5)).toBeLessThan(0.01);
+  it("a 7/8 section always resolves to a 7/8 groove, seeded or authored", () => {
+    const section = { id: "v", role: "verse", velocity: "mf", name: "V", timeSignatureNumerator: 7, timeSignatureDenPower: 3 };
+    const request = { song: { genre: "rock" }, durationBeats: 28, beatsPerBar: 3.5 };
+    for (let occurrenceIndex = 0; occurrenceIndex < 40; occurrenceIndex++) {
+      const variant = selectSectionGroove({ section: { ...section, id: `v${occurrenceIndex}` }, occurrenceIndex, ...request });
+      expect(variant, `occurrence ${occurrenceIndex}`).toBeTruthy();
+      expect(Math.abs(variant!.beatsPerBar - 3.5), `occurrence ${occurrenceIndex}`).toBeLessThan(1e-6);
     }
+    // An explicitly chosen pattern in the WRONG meter must not drift either.
+    const forced = selectSectionGroove({ section: { ...section, drumPattern: "standard" }, occurrenceIndex: 0, ...request });
+    expect(Math.abs(forced!.beatsPerBar - 3.5)).toBeLessThan(1e-6);
+    const forcedOther = selectSectionGroove({
+      section: { id: "x", role: "verse", velocity: "mf", name: "V", timeSignatureNumerator: 4, timeSignatureDenPower: 2, drumPattern: "78" },
+      occurrenceIndex: 0,
+      song: { genre: "rock" },
+      durationBeats: 32,
+      beatsPerBar: 4,
+    });
+    expect(Math.abs(forcedOther!.beatsPerBar - 4)).toBeLessThan(1e-6);
   });
 
   it("zappa fills are pooled by their meter and reach their own grooves", () => {

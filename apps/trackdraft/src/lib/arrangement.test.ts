@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sectionSpans, totalBars } from "./arrangement";
+import { sectionSpans, spanForTick, spanIndexForTick, totalBars } from "./arrangement";
 import type { BlueprintSong, BlueprintSection, ArrangementRepeat } from "../types/blueprint";
 
 function makeSection(overrides: Partial<BlueprintSection> & { id: string }): BlueprintSection {
@@ -125,5 +125,50 @@ describe("sectionSpans — meter map", () => {
       [0, 0],
       [2, 9],
     ]);
+  });
+});
+
+describe("spanIndexForTick", () => {
+  it("resolves by section identity rather than the tick's stale index", () => {
+    const spans = sectionSpans(makeSong([makeSection({ id: "a", bars: 2 }), makeSection({ id: "b", bars: 2 })], []));
+    const tick = { beat: 4, sectionIndex: 0, sectionId: "a", occurrenceIndex: 0 };
+    expect(spanIndexForTick(spans, tick)).toBe(0);
+
+    // `a` was deleted while the transport was still playing, so index 0 now
+    // names `b`. Identity resolution must report "gone", never "b".
+    const afterDelete = sectionSpans(makeSong([makeSection({ id: "b", bars: 2 })], []));
+    expect(spanIndexForTick(afterDelete, tick)).toBe(-1);
+    expect(spanForTick(afterDelete, tick)).toBeNull();
+  });
+
+  it("keeps the same section when an earlier one grows under the playhead", () => {
+    const before = sectionSpans(makeSong([makeSection({ id: "a", bars: 1 }), makeSection({ id: "b", bars: 3 })], []));
+    const tick = { beat: 6, sectionIndex: 1, sectionId: "b", occurrenceIndex: 0 };
+    expect(spanIndexForTick(before, tick)).toBe(1);
+
+    // `a` grows from 1 to 3 bars: `b` now starts at beat 12, so its index is
+    // unchanged but its POSITION moved — the span must follow the section.
+    const after = sectionSpans(makeSong([makeSection({ id: "a", bars: 3 }), makeSection({ id: "b", bars: 3 })], []));
+    expect(spanIndexForTick(after, tick)).toBe(1);
+    expect(spanForTick(after, tick)?.startBeat).toBe(12);
+  });
+
+  it("picks the right repeat pass of a repeated section", () => {
+    const spans = sectionSpans(makeSong([makeSection({ id: "chorus", bars: 2 })], [{ sectionId: "chorus", repeats: 3 }]));
+    expect(spans).toHaveLength(3);
+    expect(spanIndexForTick(spans, { beat: 9, sectionId: "chorus", occurrenceIndex: 1 })).toBe(1);
+    expect(spanIndexForTick(spans, { beat: 9, sectionId: "chorus", occurrenceIndex: 2 })).toBe(2);
+  });
+
+  it("falls back to the pass containing the beat when the named pass is gone", () => {
+    const spans = sectionSpans(makeSong([makeSection({ id: "chorus", bars: 2 })], [{ sectionId: "chorus", repeats: 3 }]));
+    expect(spanIndexForTick(spans, { beat: 9, sectionId: "chorus", occurrenceIndex: 5 })).toBe(1);
+  });
+
+  it("still honours a hand-built tick that carries only an index", () => {
+    const spans = sectionSpans(makeSong([makeSection({ id: "a", bars: 2 }), makeSection({ id: "b", bars: 2 })], []));
+    expect(spanIndexForTick(spans, { beat: 9, sectionIndex: 1 })).toBe(1);
+    expect(spanIndexForTick(spans, { beat: 9, sectionIndex: 7 })).toBe(-1);
+    expect(spanIndexForTick(spans, { beat: 9, sectionIndex: -1 })).toBe(-1);
   });
 });

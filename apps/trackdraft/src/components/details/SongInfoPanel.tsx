@@ -68,12 +68,10 @@ function TextField({
 }
 
 function ListField({
-  label,
   items,
   onChange,
   placeholder,
 }: {
-  label: string;
   items: string[];
   onChange: (items: string[]) => void;
   placeholder: string;
@@ -229,7 +227,6 @@ export default function SongInfoPanel() {
           </summary>
           <div className="mt-1.5">
             <ListField
-              label="Instrumentation"
               items={song.notes?.instrumentation ?? []}
               onChange={(instrumentation) => updateCurrentSong((s) => ({ ...s, notes: { ...s.notes, instrumentation } }))}
               placeholder="No instrumentation notes yet."
@@ -242,7 +239,6 @@ export default function SongInfoPanel() {
           </summary>
           <div className="mt-1.5">
             <ListField
-              label="Additional ideas"
               items={song.additionalIdeas ?? []}
               onChange={(additionalIdeas) => updateCurrentSong((s) => ({ ...s, additionalIdeas }))}
               placeholder="No additional ideas yet."
@@ -253,7 +249,6 @@ export default function SongInfoPanel() {
           <summary className="text-2xs cursor-pointer select-none text-inkMuted hover:text-ink">References</summary>
           <div className="mt-1.5">
             <ListField
-              label="References"
               items={song.references ?? []}
               onChange={(references) => updateCurrentSong((s) => ({ ...s, references }))}
               placeholder="No references yet."

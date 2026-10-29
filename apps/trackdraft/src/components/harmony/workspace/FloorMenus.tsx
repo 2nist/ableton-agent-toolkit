@@ -2,8 +2,15 @@ import { useState } from "react";
 import type { ChordQuality, NoteName, ScaleType } from "@music-theory/core";
 import type { Chord } from "../../../types/blueprint";
 import type { HarmonyEvent } from "../../../lib/harmony/analysis";
-import { bassOptions, substitutionOptions } from "../../../lib/harmony/chordEdits";
-import { closeRestAt, extendIntoRestAt, FLOOR_STEP } from "../../../lib/harmony/floorLayout";
+import {
+  bassOptions,
+  substitutionOptions,
+} from "../../../lib/harmony/chordEdits";
+import {
+  closeRestAt,
+  extendIntoRestAt,
+  FLOOR_STEP,
+} from "../../../lib/harmony/floorLayout";
 import { QUALITIES, chordLabel } from "./floorLabel";
 import type { Node } from "./floorTypes";
 
@@ -20,7 +27,15 @@ export interface RestMenuProps {
 }
 
 /** The menu on a silence: give it to the chord before, or take it out. */
-export function RestMenu({ beat, x, y, chords, onChangeChords, onClose, onReadout }: RestMenuProps) {
+export function RestMenu({
+  beat,
+  x,
+  y,
+  chords,
+  onChangeChords,
+  onClose,
+  onReadout,
+}: RestMenuProps) {
   return (
     <div
       className="absolute z-30 w-[170px] rounded border border-edge bg-panel p-1 shadow-lg"
@@ -54,7 +69,9 @@ export function RestMenu({ beat, x, y, chords, onChangeChords, onClose, onReadou
       >
         remove rest
       </button>
-      <div className="mt-1 px-1 font-mono text-[8px] text-inkMuted/60">or click it to place a chord</div>
+      <div className="mt-1 px-1 font-mono text-[8px] text-inkMuted/60">
+        or click it to place a chord
+      </div>
     </div>
   );
 }
@@ -109,10 +126,15 @@ export function ChordMenu({
 }: ChordMenuProps) {
   const [hoverQuality, setHoverQuality] = useState<ChordQuality | null>(null);
 
-  const picks = event ? substitutionOptions(node.chord, event, keyName, scale) : [];
+  const picks = event
+    ? substitutionOptions(node.chord, event, keyName, scale)
+    : [];
   // A run up to THIS chord eats the tail of whatever comes before, so the
   // chord being run up to never moves.
-  const runUpSpan = Math.min(2, Math.max(FLOOR_STEP, node.start > 0 ? node.start : node.beats - FLOOR_STEP));
+  const runUpSpan = Math.min(
+    2,
+    Math.max(FLOOR_STEP, node.start > 0 ? node.start : node.beats - FLOOR_STEP),
+  );
 
   return (
     <div
@@ -122,13 +144,26 @@ export function ChordMenu({
     >
       <div className="mb-1 flex items-baseline gap-1 px-1">
         <b className="font-mono text-[11px] text-ink">{event?.roman}</b>
-        <span className="hand-value text-base leading-none text-accent">{event?.absoluteName}</span>
+        <span className="hand-value text-base leading-none text-accent">
+          {event?.absoluteName}
+        </span>
         <span className="ml-auto font-mono text-[8px] text-inkMuted">
           {node.start + 1}–{node.start + node.beats}
         </span>
       </div>
-      <div className={`mb-1 px-1 font-mono text-[9px] ${hoverQuality ? "text-track" : "text-inkMuted/60"}`}>
-        → {hoverQuality ? chordLabel(keyName, scale, node.degree, node.accidental, hoverQuality) : event?.absoluteName ?? ""}
+      <div
+        className={`mb-1 px-1 font-mono text-[9px] ${hoverQuality ? "text-track" : "text-inkMuted/60"}`}
+      >
+        →{" "}
+        {hoverQuality
+          ? chordLabel(
+              keyName,
+              scale,
+              node.degree,
+              node.accidental,
+              hoverQuality,
+            )
+          : (event?.absoluteName ?? "")}
       </div>
       <div className="flex flex-wrap gap-0.5">
         {QUALITIES.map((quality) => (
@@ -139,7 +174,9 @@ export function ChordMenu({
             onMouseEnter={() => setHoverQuality(quality)}
             onMouseLeave={() => setHoverQuality(null)}
             className={`rounded border px-1 py-0.5 font-mono text-[9px] ${
-              node.chord.quality === quality ? "border-accent bg-accent/15 text-accent" : "border-edge text-inkMuted hover:text-ink"
+              node.chord.quality === quality
+                ? "border-accent bg-accent/15 text-accent"
+                : "border-edge text-inkMuted hover:text-ink"
             }`}
           >
             {quality}
@@ -147,7 +184,9 @@ export function ChordMenu({
         ))}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-0.5 border-t border-edge/60 pt-1">
-        <span className="mr-1 font-mono text-[8px] uppercase tracking-wider text-inkMuted/70">bass</span>
+        <span className="mr-1 font-mono text-[8px] uppercase tracking-wider text-inkMuted/70">
+          bass
+        </span>
         {bassOptions(node.chord).map((option) => (
           <button
             key={option.inversion}
@@ -179,7 +218,9 @@ export function ChordMenu({
 
       {picks.length > 0 && (
         <div className="mt-1 flex flex-wrap items-center gap-0.5 border-t border-edge/60 pt-1">
-          <span className="mr-1 font-mono text-[8px] uppercase tracking-wider text-inkMuted/70">sub</span>
+          <span className="mr-1 font-mono text-[8px] uppercase tracking-wider text-inkMuted/70">
+            sub
+          </span>
           {picks.map((pick) => (
             <button
               key={`${pick.root}-${pick.quality}`}
@@ -197,7 +238,9 @@ export function ChordMenu({
       <div className="mt-1 flex items-center gap-0.5 border-t border-edge/60 pt-1">
         {spellings && (
           <>
-            <span className="mr-1 font-mono text-[8px] uppercase tracking-wider text-inkMuted/70">spell</span>
+            <span className="mr-1 font-mono text-[8px] uppercase tracking-wider text-inkMuted/70">
+              spell
+            </span>
             {(["sharp", "flat"] as const).map((option) => (
               <button
                 key={option}
@@ -205,7 +248,9 @@ export function ChordMenu({
                 title="The same pitch, named the other way — the number in the chart changes, the sound does not"
                 onClick={() => onSpelling(option)}
                 className={`rounded border px-1.5 py-0.5 font-mono text-[9px] ${
-                  activeSpelling === option ? "border-accent bg-accent/15 text-accent" : "border-edge text-inkMuted hover:text-ink"
+                  activeSpelling === option
+                    ? "border-accent bg-accent/15 text-accent"
+                    : "border-edge text-inkMuted hover:text-ink"
                 }`}
               >
                 {spellings[option]}
@@ -213,11 +258,21 @@ export function ChordMenu({
             ))}
           </>
         )}
-        <span className="ml-1 font-mono text-[8px] uppercase tracking-wider text-inkMuted/70">rest</span>
-        <button type="button" onClick={() => onNudgeRest(-FLOOR_STEP)} className="rounded border border-edge px-1 py-0.5 font-mono text-[9px] text-inkMuted hover:text-ink">
+        <span className="ml-1 font-mono text-[8px] uppercase tracking-wider text-inkMuted/70">
+          rest
+        </span>
+        <button
+          type="button"
+          onClick={() => onNudgeRest(-FLOOR_STEP)}
+          className="rounded border border-edge px-1 py-0.5 font-mono text-[9px] text-inkMuted hover:text-ink"
+        >
           −
         </button>
-        <button type="button" onClick={() => onNudgeRest(FLOOR_STEP)} className="rounded border border-edge px-1 py-0.5 font-mono text-[9px] text-inkMuted hover:text-ink">
+        <button
+          type="button"
+          onClick={() => onNudgeRest(FLOOR_STEP)}
+          className="rounded border border-edge px-1 py-0.5 font-mono text-[9px] text-inkMuted hover:text-ink"
+        >
           +
         </button>
         <button

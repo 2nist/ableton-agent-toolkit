@@ -3,7 +3,7 @@ import { create } from "zustand";
 /** The inspector's facets — the focused object's tools, one per
  *  instrument/system (layout grammar, user decision 2026-09-21: RIGHT =
  *  the contextual inspector). */
-export type InspectorTab = "structure" | "drums" | "harmony" | "lyrics" | "mix" | "song";
+export type InspectorTab = "structure" | "drums" | "harmony" | "lyrics" | "mix" | "song" | "sync";
 
 interface InspectorState {
   tab: InspectorTab;

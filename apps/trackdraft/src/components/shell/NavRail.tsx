@@ -10,7 +10,6 @@ import Icon, { type IconName } from "../common/Icon";
  *  they mean the same thing. */
 const VIEWS: { to: string; label: string; icon: IconName; divider?: boolean }[] = [
   { to: "workbench", label: "Workbench β", icon: "workbench" },
-  { to: "studio", label: "Studio", icon: "studio" },
   { to: "structure", label: "Structure", icon: "structure" },
   { to: "harmony", label: "Harmony", icon: "harmony" },
   { to: "drums", label: "Drums", icon: "drums" },

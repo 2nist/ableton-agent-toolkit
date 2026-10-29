@@ -15,9 +15,12 @@ import { parseLrc } from "./catalog/lrc.js";
 import { normalizeTitle } from "./catalog/normalizeTitle.js";
 import { catalogSongToBlueprintSong } from "./catalog/toBlueprintSong.js";
 
-const CHORDS_DIR = "/Users/Matthew/beatles data/Beatles-Chords";
-const LRCLIB_DIR = "/Users/Matthew/beatles data/lyrics_from_lrclib";
-const OUTPUT_DIR = process.env.CATALOG_OUTPUT_DIR ?? path.join(import.meta.dirname, "output", "catalog");
+// Corpus roots come from the environment (BEATLES_CHORDS_DIR / BEATLES_LYRICS_DIR)
+// so this ingest is reproducible off one machine — see scripts/lib/catalogPaths.ts.
+import { OUTPUT_DIRS, requireRoot, resolveRoot } from "./lib/catalogPaths";
+const CHORDS_DIR = requireRoot("beatlesChords");
+const LRCLIB_DIR = resolveRoot("beatlesLyrics").path;
+const OUTPUT_DIR = OUTPUT_DIRS.beatles;
 
 interface LrclibMatch {
   trackName: string;
@@ -34,6 +37,10 @@ function slugify(title: string): string {
 
 function loadLrclibIndex(): Map<string, LrclibMatch> {
   const index = new Map<string, LrclibMatch>();
+  if (!LRCLIB_DIR) {
+    console.warn("[ingest-beatles] BEATLES_LYRICS_DIR is not set — importing chords without lyrics.");
+    return index;
+  }
   for (const file of fs.readdirSync(LRCLIB_DIR)) {
     if (!file.endsWith(".json")) continue;
     const data = JSON.parse(fs.readFileSync(path.join(LRCLIB_DIR, file), "utf8")) as LrclibMatch;
@@ -90,7 +97,14 @@ function main() {
       : undefined;
 
     const id = `beatles-${slugify(parsed.title)}`;
-    const song = catalogSongToBlueprintSong({ id, raw: parsed, lyricLines, hasSyncedLyrics });
+    const song = catalogSongToBlueprintSong({
+      id,
+      raw: parsed,
+      lyricLines,
+      hasSyncedLyrics,
+      // Beatles-era rock/pop — E-GMD's rock family is the right performance pool.
+      genre: "rock",
+    });
 
     fs.writeFileSync(path.join(OUTPUT_DIR, `${id}.trackdraft.json`), JSON.stringify(song, null, 2));
 

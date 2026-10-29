@@ -87,3 +87,77 @@ export function tileGrooveVaried(
   }
   return tiled;
 }
+
+// ---------------------------------------------------------------------------
+// Cyclic development
+// ---------------------------------------------------------------------------
+
+/**
+ * The 4-bar cycle — how a groove DEVELOPS without stopping repeating.
+ *
+ * Tiling gives you the same bar N times, and `tileGrooveVaried` only shades
+ * velocities. A drummer playing eight bars of a verse does something else as
+ * well: bar 2 opens the hat up, bar 4 turns the last eighth over into the
+ * next cycle. That is not a fill (fills come from `FILL_DATA`) and it is not
+ * random — it is the same turnaround every time, which is exactly what makes
+ * it feel like a groove rather than a loop.
+ *
+ * Pure and deterministic: the same tiled notes in give the same notes out, so
+ * the preview grid, the .mid and the Ableton plan all agree.
+ *
+ * Additions are gated on what the groove already plays, so a `kick_only`
+ * pulse never sprouts a hi-hat and a hatless groove never gets an open hat.
+ */
+export interface CycleOptions {
+  beatsPerBar: number;
+  durationBeats: number;
+  /** Bars per cycle. Default 4. */
+  cycleBars?: number;
+  velocityTarget: number;
+  openHatPitch: number;
+  closedHatPitch: number;
+  kickPitch: number;
+}
+
+/** Two hits closer than this are the same hit — don't stack a second one. */
+const CYCLE_EPSILON = 0.06;
+
+export function applyCyclicDevelopment(notes: DrumNote[], options: CycleOptions): DrumNote[] {
+  const { beatsPerBar, durationBeats, velocityTarget, openHatPitch, closedHatPitch, kickPitch } = options;
+  const cycleBars = Math.max(2, options.cycleBars ?? 4);
+  if (beatsPerBar <= 0 || durationBeats <= beatsPerBar) return notes;
+
+  const hasHat = notes.some((n) => n.pitch === openHatPitch || n.pitch === closedHatPitch);
+  const hasKick = notes.some((n) => n.pitch === kickPitch);
+  if (!hasHat && !hasKick) return notes;
+
+  const out = notes.map((n) => ({ ...n }));
+  const occupied = (beat: number, pitch: number): boolean =>
+    out.some((n) => n.pitch === pitch && Math.abs(n.beat - beat) < CYCLE_EPSILON);
+  const add = (beat: number, pitch: number, velocity: number): void => {
+    if (beat >= durationBeats - 1e-9 || occupied(beat, pitch)) return;
+    out.push({ beat: round4(beat), pitch, velocity });
+  };
+
+  const lastEighth = Math.max(0.25, beatsPerBar - 0.5);
+  for (let bar = 0; bar < Math.ceil(durationBeats / beatsPerBar - 1e-9); bar++) {
+    const barStart = bar * beatsPerBar;
+    if (barStart >= durationBeats - 1e-9) break;
+    const inCycle = bar % cycleBars;
+
+    // Second bar of the cycle: open the hat on the last eighth.
+    if (inCycle === 1 && hasHat) {
+      add(barStart + lastEighth, openHatPitch, Math.round(velocityTarget * 0.72));
+    }
+    // Last bar of the cycle: turn the last eighth over into the next cycle.
+    if (inCycle === cycleBars - 1 && hasKick) {
+      add(barStart + lastEighth, kickPitch, Math.round(velocityTarget * 0.8));
+    }
+  }
+
+  return out.sort((a, b) => a.beat - b.beat || a.pitch - b.pitch);
+}
+
+function round4(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}

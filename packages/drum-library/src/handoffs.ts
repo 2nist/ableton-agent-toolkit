@@ -1,4 +1,5 @@
 import type { PackedNote, PackedVariant } from "./presetData.js";
+import { styleAffinity } from "./style-family.js";
 
 /**
  * Fill variants keyed by beats-per-bar (as a string, e.g. `"4"`, `"3.5"`),
@@ -67,6 +68,33 @@ export function fillPool(variant: PackedVariant, fills: FillLibrary): PackedVari
   const fallback = variant.source.origin === "synth" ? fills.acoustic : fills.synth;
   const pool = preferred[key] ?? [];
   return pool.length > 0 ? pool : (fallback[key] ?? []);
+}
+
+/** Hits per bar of a variant's own loop — the density a fill has to answer. */
+function densityPerBar(variant: Pick<PackedVariant, "notes" | "lengthBeats" | "beatsPerBar">): number {
+  const bars = variant.lengthBeats / Math.max(variant.beatsPerBar, 1e-9);
+  return variant.notes.length / Math.max(bars, 1e-9);
+}
+
+/**
+ * The fills that actually answer this groove.
+ *
+ * `fillPool` matches family and meter; that is not enough. A `bridge_sparse`
+ * groove runs at 6 hits per bar, and the same pool holds fills at 25 — the
+ * fill then sounds like a different song arriving early, and the section it
+ * was meant to lead into gets buried. Selecting by density (at least as busy
+ * as the groove, at most ~2.5x) keeps the gesture legible. When nothing
+ * matches — a very sparse or a very busy groove — the whole pool is used
+ * rather than losing the fill entirely.
+ */
+export function fillsForGroove(pool: PackedVariant[], variant: PackedVariant): PackedVariant[] {
+  const groove = densityPerBar(variant);
+  if (groove <= 0) return pool;
+  const suited = pool.filter((fill) => {
+    const density = densityPerBar(fill);
+    return density >= groove * 0.9 && density <= groove * 2.5;
+  });
+  return suited.length > 0 ? suited : pool;
 }
 
 /**
@@ -144,16 +172,36 @@ export function compatibleVariantIndices(
  */
 export function pickVariantIndexFor(
   seed: number,
-  variants: ReadonlyArray<Pick<PackedVariant, "lengthBeats" | "beatsPerBar">>,
+  variants: ReadonlyArray<Pick<PackedVariant, "lengthBeats" | "beatsPerBar" | "style">>,
   sectionBeats: number,
   barBeats: number,
+  /**
+   * Which pass of this section this is (0 = first). The clean-downbeat
+   * default is a *statement* — it belongs on the first time through. Repeats
+   * spread across the pool instead, so a chorus that comes round again isn't
+   * the identical two-bar cell for the fourth time. A catalogue audit found
+   * the unconditional 35% bias put 36% of all sections on variant 0.
+   */
+  occurrenceIndex = 0,
+  /**
+   * The song's corpus style family ("funk", "rock", "latin"…). When the pool
+   * holds any variants from that tradition, selection is restricted to them;
+   * when it doesn't (odd meters, synth idioms, a style the bake had no
+   * material for), the full pool is used rather than returning nothing.
+   */
+  style?: string,
 ): number {
   if (variants.length <= 1) return 0;
   const compatible = compatibleVariantIndices(variants, sectionBeats, barBeats);
-  const pool = compatible.length > 0 ? compatible : variants.map((_, index) => index);
+  const base = compatible.length > 0 ? compatible : variants.map((_, index) => index);
+  // Prefer the song's own family, then its musical neighbours (see
+  // `styleAffinity`) — one family alone is too thin to draw from.
+  const affinity = new Set(styleAffinity(style));
+  const styled = affinity.size > 0 ? base.filter((index) => affinity.has(variants[index]?.style ?? "")) : [];
+  const pool = styled.length > 0 ? styled : base;
   if (pool.length === 1) return pool[0];
   const cleanSlot = pool.indexOf(0);
-  if (cleanSlot >= 0 && seed % 100 < 35) return 0;
+  if (cleanSlot >= 0 && occurrenceIndex === 0 && seed % 100 < 35) return 0;
   const spread = cleanSlot >= 0 ? pool.filter((index) => index !== 0) : pool;
   return spread[seed % spread.length];
 }
@@ -216,7 +264,8 @@ export function planSectionHandoffFills(
       const pool = fillPool(variant, fills);
       if (pool.length > 0) {
         const seed = occurrenceSeed(sectionId, occurrenceIndex);
-        const fill = pool[hashSeed(`${seed}:fill`) % pool.length];
+        const suited = fillsForGroove(pool, variant);
+        const fill = suited[hashSeed(`${seed}:fill`) % suited.length];
         const nextTarget = next.velocityTarget;
         // Build toward a louder section; ease into a quieter one.
         const fillTarget = nextTarget >= velocityTarget ? Math.max(velocityTarget, nextTarget) : Math.round(velocityTarget * 0.85);

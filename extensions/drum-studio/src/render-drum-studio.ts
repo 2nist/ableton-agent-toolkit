@@ -102,6 +102,16 @@ export const PATTERN_LABELS: Record<Exclude<DrumPattern, "none">, string> = {
   four_on_floor: "Four on the Floor",
   trap: "Trap",
   breakbeat: "Breakbeat",
+  motown: "Motown",
+  boom_bap: "Boom Bap",
+  train_beat: "Train Beat",
+  bossa: "Bossa Nova",
+  reggae: "Reggae",
+  disco: "Disco",
+  afrobeat: "Afrobeat",
+  punk: "Punk",
+  ballad: "Ballad",
+  second_line: "Second Line",
 };
 
 export const BAR_OPTIONS = [1, 2, 4, 8, 16, 32];

@@ -32,7 +32,6 @@ import type {
   ChordMiniAppResult,
   LrclibData,
 } from "@music-theory/song-blueprint";
-import type { BlueprintSong } from "../src/types/blueprint";
 
 // ---------------------------------------------------------------------------
 // Configuration

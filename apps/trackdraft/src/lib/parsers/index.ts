@@ -5,8 +5,9 @@
  * auto-detects section boundaries from repeated lyric patterns (chorus detection).
  */
 
-import type { BlueprintSong, BlueprintSection } from "../../types/blueprint";
+import type { BlueprintSong } from "../../types/blueprint";
 import type { DirectoryEntry } from "../../store/directoryStore";
+import { getHost, hostFileKind, type HostFile } from "../host";
 import { parseMidiBytes, midiToBlueprintSong } from "./parseMidi";
 import { audioToBlueprintSong, textToBlueprintSong } from "./parseAudio";
 import { parseMcgillJcrd, parseRockCorpusJcrd } from "./parseJcrd";
@@ -14,7 +15,7 @@ import { parseMozartJcrd } from "./parseMozart";
 import { parseChartFileName, parseCorpusFileName } from "./corpusFileName";
 import { searchLrclib, parseSyncedLyrics } from "../youtube";
 import { buildLyricDocument, detectRepeatedBlocks, assignLinesToSection, mergeLinesIntoSection } from "../lyrics/sectionize";
-import { alsToBlueprintSong } from "./parseAbleton";
+import { alsToBlueprintSong, alsXmlToBlueprintSong } from "./parseAbleton";
 import { musicXmlToBlueprintSong } from "./parseMusicXml";
 
 /** The choCo Mozart conversion: Roman-numeral chord labels, a `partition`
@@ -194,8 +195,21 @@ async function enrichWithLrclib(song: BlueprintSong): Promise<BlueprintSong> {
   return song;
 }
 
-export async function parseFile(dirPath: string, entry: DirectoryEntry): Promise<ParseResult> {
-  const baseName = entry.file.replace(/\.[^.]+$/, "");
+/** How to read a picked file's bytes — the ONLY difference between the dev
+ *  server's `/__local-file` endpoint and the Electron host's IPC bridge. */
+export interface FileContentReader {
+  text(): Promise<string>;
+  json(): Promise<unknown>;
+  bytes(): Promise<ArrayBuffer>;
+  /** `.als` only. Present when the host can gunzip for us (Electron, which
+   *  owns Node); absent in the browser, where `alsToBlueprintSong` falls back
+   *  to `node:zlib` — the reason `.als` only ever worked under `vite dev`. */
+  alsXml?(): Promise<string>;
+}
+
+/** Title (and, when the name encodes one, artist) from a file name. */
+export function titleForFile(fileName: string): { title: string; fileNameArtist?: string } {
+  const baseName = fileName.replace(/\.[^.]+$/, "");
   // Corpus names carry artist/title/year (`ABBA_DancingQueen_1976`); everything
   // else falls back to the file name with separators loosened. The parsed form
   // matters for the lyrics lookup, which cannot find "ABBA DancingQueen 1976".
@@ -204,68 +218,117 @@ export async function parseFile(dirPath: string, entry: DirectoryEntry): Promise
   // naming — `Title - Artist`, camelCase, kebab-case — so the lyrics lookup
   // and the library get a real title instead of "EchidnasArf(OfYou)".
   const chart = corpus ? null : parseChartFileName(baseName);
-  const title = corpus?.title ?? chart?.title ?? baseName.replace(/[-_]/g, " ");
-  const fileNameArtist = corpus?.artist ?? chart?.artist;
+  return {
+    title: corpus?.title ?? chart?.title ?? baseName.replace(/[-_]/g, " "),
+    fileNameArtist: corpus?.artist ?? chart?.artist,
+  };
+}
+
+/** Every parser, dispatched by kind. Shared by the directory browser and the
+ *  desktop import dialog so the two can never drift. */
+async function songFromContent(
+  kind: DirectoryEntry["type"],
+  read: FileContentReader,
+  title: string,
+): Promise<BlueprintSong> {
+  switch (kind) {
+    case "blueprint": {
+      const raw = await read.json();
+      // Three JSON flavours share the same .json extension and all have
+      // `source` + `sections` with no `arrangement`, so they are told apart
+      // by their chord vocabulary: the choCo/Mozart files label chords with
+      // Roman numerals only (and carry `partition`/`time_signature`), while
+      // McGill names absolute chords.
+      if (isMozartJcrd(raw)) return parseMozartJcrd(raw);
+      if (raw && typeof raw === "object" && "source" in raw && "sections" in raw && !("arrangement" in raw)) {
+        return parseMcgillJcrd(raw);
+      }
+      const { parseImportedSong } = await import("../exportImport");
+      return parseImportedSong(raw);
+    }
+    case "jcrd":
+      return parseRockCorpusJcrd(await read.json());
+    case "midi": {
+      const buffer = await read.bytes();
+      return midiToBlueprintSong(parseMidiBytes(new Uint8Array(buffer)), title);
+    }
+    case "audio":
+      return audioToBlueprintSong(await read.bytes(), title);
+    case "lyrics":
+      return textToBlueprintSong(await read.text(), title);
+    case "ableton":
+      // Prefer the host's decompressed XML; only the browser falls back to zlib.
+      return read.alsXml
+        ? alsXmlToBlueprintSong(await read.alsXml(), title)
+        : alsToBlueprintSong(await read.bytes(), title);
+    case "musicxml":
+      return musicXmlToBlueprintSong(await read.text(), title);
+    default: {
+      const raw = await read.json();
+      if (raw && typeof raw === "object" && "sections" in raw && "source" in raw) {
+        return parseMcgillJcrd(raw);
+      }
+      throw new Error(`No parser for file type: ${kind}`);
+    }
+  }
+}
+
+/** Shared tail: artist from the file name, then lyric enrichment. */
+async function finishSong(song: BlueprintSong, fileNameArtist?: string): Promise<ParseResult> {
+  if (fileNameArtist && !song.artist) song.artist = fileNameArtist;
+  return { ok: true, song: await enrichWithLrclib(song) };
+}
+
+/** Parse a file listed by the dev server's directory browser. */
+export async function parseFile(dirPath: string, entry: DirectoryEntry): Promise<ParseResult> {
+  const { title, fileNameArtist } = titleForFile(entry.file);
   try {
     const res = await fetch(`/__local-file?dir=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(entry.file)}`);
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
-    let song: BlueprintSong;
+    const song = await songFromContent(
+      entry.type,
+      {
+        text: () => res.clone().text(),
+        json: () => res.clone().json(),
+        bytes: () => res.clone().arrayBuffer(),
+      },
+      title,
+    );
+    return await finishSong(song, fileNameArtist);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Unknown parse error" };
+  }
+}
 
-    switch (entry.type) {
-      case "blueprint": {
-        const raw = await res.json();
-        // Three JSON flavours share the same .json extension and all have
-        // `source` + `sections` with no `arrangement`, so they are told apart
-        // by their chord vocabulary: the choCo/Mozart files label chords with
-        // Roman numerals only (and carry `partition`/`time_signature`), while
-        // McGill names absolute chords.
-        if (isMozartJcrd(raw)) {
-          song = parseMozartJcrd(raw);
-        } else if (raw && typeof raw === "object" && "source" in raw && "sections" in raw && !("arrangement" in raw)) {
-          song = parseMcgillJcrd(raw);
-        } else {
-          const { parseImportedSong } = await import("../exportImport");
-          song = parseImportedSong(raw);
-        }
-        break;
-      }
-      case "jcrd": {
-        const raw = await res.json();
-        song = parseRockCorpusJcrd(raw);
-        break;
-      }
-      case "midi": {
-        const buffer = await res.arrayBuffer();
-        song = midiToBlueprintSong(parseMidiBytes(new Uint8Array(buffer)), title);
-        break;
-      }
-      case "audio": {
-        song = await audioToBlueprintSong(await res.arrayBuffer(), title);
-        break;
-      }
-      case "lyrics": {
-        song = textToBlueprintSong(await res.text(), title);
-        break;
-      }
-      case "ableton": {
-        song = await alsToBlueprintSong(await res.arrayBuffer(), title);
-        break;
-      }
-      case "musicxml": {
-        song = musicXmlToBlueprintSong(await res.text(), title);
-        break;
-      }
-      default: {
-        const raw = await res.json();
-        if (raw && typeof raw === "object" && "sections" in raw && "source" in raw) {
-          song = parseMcgillJcrd(raw);
-        } else {
-          throw new Error(`No parser for file type: ${entry.type}`);
-        }
-      }
-    }
-    if (fileNameArtist && !song.artist) song.artist = fileNameArtist;
-    return { ok: true, song: await enrichWithLrclib(song) };
+/**
+ * Parse a file the user picked in the desktop host's native dialog.
+ *
+ * Same parsers, same title/artist inference, same lyric enrichment as the
+ * directory browser — only the byte source differs. This is the path that
+ * makes MIDI, MusicXML and `.als` importable in a packaged build, where the
+ * dev server's `/__local-file` endpoint does not exist.
+ */
+export async function parseHostFile(file: HostFile): Promise<ParseResult> {
+  const host = getHost();
+  if (!host) return { ok: false, error: "No desktop host available to read that file." };
+  const { title, fileNameArtist } = titleForFile(file.name);
+  try {
+    const song = await songFromContent(
+      hostFileKind(file),
+      {
+        text: () => host.readText(file.path),
+        json: async () => JSON.parse(await host.readText(file.path)),
+        bytes: async () => {
+          const bytes = await host.readBytes(file.path);
+          // `Uint8Array` over IPC → ArrayBuffer for the parsers. Slice copies
+          // into a standalone buffer (the view may reference a larger pool).
+          return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+        },
+        alsXml: () => host.readAlsXml(file.path),
+      },
+      title,
+    );
+    return await finishSong(song, fileNameArtist);
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Unknown parse error" };
   }

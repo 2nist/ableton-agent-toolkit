@@ -238,6 +238,9 @@ function main(): void {
         raw: parsed,
         lyricLines,
         hasSyncedLyrics,
+        // McGill's corpus is the Billboard Hot 100 — chart pop/rock, so the
+        // pop family is the right performance pool.
+        genre: "pop",
       });
 
       if (!args.dry) {

@@ -44,10 +44,6 @@ vi.mock("./abletonClock", () => ({
 
 const { getSongTransport, TRANSPORT_CHANNEL_NAME } = await import("./songTransport");
 
-function makeChord(overrides: Partial<Chord> & { beats: number }): Chord {
-  return { id: Math.random().toString(36), romanNumeral: "I", root: "C", quality: "maj", ...overrides };
-}
-
 function makeSection(overrides: Partial<BlueprintSection> & { id: string; chords: Chord[] }): BlueprintSection {
   return {
     name: overrides.id,
@@ -449,6 +445,135 @@ describe("SongTransport.syncToAbleton", () => {
     expect(onBar).not.toHaveBeenCalled();
     vi.advanceTimersByTime(200);
     expect(onBar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("SongTransport tick identity and delivery", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    // The Ableton-following block above leaves the singleton slaved to Live
+    // (stop() deliberately keeps that connection), and play() refuses to
+    // start under it — put the app's own clock back.
+    getSongTransport().clockSource = "internal";
+  });
+
+  afterEach(() => {
+    getSongTransport().stop();
+    vi.useRealTimers();
+  });
+
+  it("carries the span's id and repeat pass alongside the index", () => {
+    const song = makeSong([
+      makeSection({ id: "a", bars: 2, chords: [] }),
+      makeSection({ id: "b", bars: 2, chords: [] }),
+    ]);
+    const ticks: { beat: number; sectionIndex: number; sectionId?: string | null; occurrenceIndex?: number }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
+
+    getSongTransport().play(song);
+    vi.advanceTimersByTime(100);
+    expect(ticks[ticks.length - 1]).toMatchObject({ sectionIndex: 0, sectionId: "a", occurrenceIndex: 0 });
+
+    vi.advanceTimersByTime(4000);
+    expect(ticks[ticks.length - 1]).toMatchObject({ sectionIndex: 1, sectionId: "b", occurrenceIndex: 0 });
+
+    unsub();
+  });
+
+  it("updateSong re-points ticks at the edited arrangement without moving the playhead", () => {
+    // `a` is 4 bars (16 beats) and `b` follows it.
+    const song = makeSong([
+      makeSection({ id: "a", bars: 4, chords: [] }),
+      makeSection({ id: "b", bars: 4, chords: [] }),
+    ]);
+    const ticks: { beat: number; sectionId?: string | null }[] = [];
+    const unsub = getSongTransport().onTick((t) => ticks.push(t));
+
+    getSongTransport().play(song);
+    vi.advanceTimersByTime(6000); // beat 12, inside `a`
+
+    // `a` is trimmed to 1 bar while playing: beat 12 now belongs to `b`
+    // (which still runs to beat 20, so playback does not end here).
+    const edited = makeSong([
+      makeSection({ id: "a", bars: 1, chords: [] }),
+      makeSection({ id: "b", bars: 4, chords: [] }),
+    ]);
+    getSongTransport().updateSong(edited);
+    vi.advanceTimersByTime(100);
+
+    expect(ticks[ticks.length - 1].sectionId).toBe("b");
+    // The playhead itself did not jump: only the mapping changed.
+    expect(getSongTransport().getBeat()).toBeCloseTo(12.2, 0);
+
+    unsub();
+  });
+
+  it("updateSong keeps the beat continuous across a tempo change", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 120);
+    getSongTransport().play(song);
+    vi.advanceTimersByTime(2000); // beat 4 at 120bpm
+    const before = getSongTransport().getBeat();
+
+    getSongTransport().updateSong(makeSong([makeSection({ id: "a", bars: 8, chords: [] })], 60));
+    expect(getSongTransport().getBeat()).toBeCloseTo(before, 1);
+
+    // At half the tempo the next 2s advance only 2 beats, not 4.
+    vi.advanceTimersByTime(2000);
+    expect(getSongTransport().getBeat()).toBeCloseTo(before + 2, 0);
+  });
+
+  it("delivers a listener's stop tick after the tick it interrupted", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })]);
+    const seen: string[] = [];
+    const label = (playing: boolean) => (playing ? "playing" : "stopped");
+
+    const stopper = getSongTransport().onTick((t) => {
+      seen.push(`stopper:${label(t.isPlaying)}`);
+      if (t.isPlaying && seen.length === 1) getSongTransport().stop();
+    });
+    const watcher = getSongTransport().onTick((t) => seen.push(`watcher:${label(t.isPlaying)}`));
+
+    getSongTransport().play(song);
+    vi.advanceTimersByTime(100);
+
+    stopper();
+    watcher();
+    // Everyone sees the playing tick before anyone sees the stop it caused.
+    expect(seen).toEqual(["stopper:playing", "watcher:playing", "stopper:stopped", "watcher:stopped"]);
+  });
+
+  it("isolates a throwing listener so the other playheads keep moving", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })]);
+    const reported = vi.spyOn(console, "error").mockImplementation(() => {});
+    const beats: number[] = [];
+
+    const bad = getSongTransport().onTick(() => {
+      throw new Error("boom");
+    });
+    const good = getSongTransport().onTick((t) => beats.push(t.beat));
+
+    getSongTransport().play(song);
+    vi.advanceTimersByTime(1000);
+
+    bad();
+    good();
+
+    expect(beats.length).toBeGreaterThan(1);
+    // Asserted before restoring: mockRestore clears the recorded calls.
+    expect(reported).toHaveBeenCalled();
+    reported.mockRestore();
+  });
+
+  it("cancelNextBar drops a queued on-grid callback but keeps playing", () => {
+    const song = makeSong([makeSection({ id: "a", bars: 8, chords: [] })]);
+    const onBar = vi.fn();
+    getSongTransport().play(song);
+    getSongTransport().onNextBar(onBar);
+    getSongTransport().cancelNextBar();
+
+    vi.advanceTimersByTime(3000);
+    expect(onBar).not.toHaveBeenCalled();
+    expect(getSongTransport().getIsPlaying()).toBe(true);
   });
 });
 

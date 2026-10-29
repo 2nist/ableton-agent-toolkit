@@ -4,7 +4,7 @@ import type { BlueprintSong } from "../../types/blueprint";
 import { beatsPerBar } from "../../types/blueprint";
 import type { SectionSpan } from "../../lib/arrangement";
 import { useTimeSelectionStore } from "../../store/timeSelectionStore";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import DrumsView, { CLASSIC_BAR_PX } from "../drums/DrumsView";
 
 /** The six lane families a picked range covers — the same ids the Blocks
@@ -40,7 +40,7 @@ export default function DrumLineEmbed({
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
   const id = songId ?? song.id;
-  const setSharedSection = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  const setSharedSection = useFocusedSectionStore((s) => s.setSelectedSectionId);
   const setRange = useTimeSelectionStore((s) => s.setSelection);
 
   // Measure the crop box so the fitted zoom keeps the whole focused

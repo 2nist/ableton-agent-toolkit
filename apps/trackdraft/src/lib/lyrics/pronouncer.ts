@@ -66,7 +66,7 @@ export function createDatamusePronouncer(options: {
   const storageKey = options.storageKey ?? null;
   const fetchImpl = options.fetchImpl ?? fetch;
 
-  let cache: PronCache = storageKey ? readStorage<PronCache>(storageKey, {}) : {};
+  const cache: PronCache = storageKey ? readStorage<PronCache>(storageKey, {}) : {};
   let version = 0;
   const listeners = new Set<() => void>();
   /** Words currently being fetched — dedupes overlapping `ensure()` calls. */

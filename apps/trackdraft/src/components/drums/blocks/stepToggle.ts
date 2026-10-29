@@ -4,8 +4,41 @@ import { DRUM_LANE_PRIMARY } from "@drum/library";
 import { resolveSectionLaneHits } from "../../../lib/timeline/drumLaneHits";
 import { upsertModeBlocks } from "./selectionMath";
 import type { DrumLaneId } from "../../../types/blueprint";
+import { stepIndexOf } from "./meterGrid";
 
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
+/**
+ * One note per step for the hits a block covers, excluding `skipStep`.
+ *
+ * Corpus hits sit a few thousandths off the grid (`1.0146` for beat 1) and a
+ * coarse view can hold several of them in one step. Copying those beats
+ * verbatim wrote notes at 0.0146 and 0.9958 — notes in the wrong cell, which
+ * is the "I clicked one cell and it changed another" report. Collapsing each
+ * step to its own beat, keeping the loudest hit's voice and velocity, is what
+ * the grid is actually showing.
+ */
+export function notesFromHits(
+  hits: readonly { beat: number; voice: string; velocity: number }[],
+  start: number,
+  stepSize: number,
+  skipStep?: number,
+): DrumBlockNote[] {
+  const byStep = new Map<number, { voice: string; velocity: number }>();
+  for (const h of hits) {
+    const step = stepIndexOf(h.beat, stepSize);
+    if (skipStep !== undefined && step === skipStep) continue;
+    const prev = byStep.get(step);
+    if (!prev || h.velocity > prev.velocity) byStep.set(step, { voice: h.voice, velocity: h.velocity });
+  }
+  return [...byStep.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([step, best]) => ({
+      beat: round4(step * stepSize - start),
+      voice: best.voice as DrumVoiceName,
+      velocity: best.velocity,
+    }));
+}
+
 
 /**
  * Flip one step on a lane — the write both sequencer views share.
@@ -44,9 +77,13 @@ export function stepToggleBlock({
   );
   const start = existing ? existing.startBeat : beat;
   const end = existing ? existing.endBeat : round4(beat + stepSize);
-  const tol = Math.max(0.02, stepSize * 0.35);
   const inRange = laneHits.filter((h) => h.beat >= start - 1e-9 && h.beat < end - 1e-9);
-  const hasHit = inRange.some((h) => Math.abs(h.beat - beat) < tol);
+  // "This cell" means the cell the view DRAWS — same index function, so a
+  // click always acts on what is visible under the pointer. Off-grid hits
+  // (drawn as diamonds) are not this cell's to remove.
+  const stepIdx = stepIndexOf(beat, stepSize);
+  const ownsHit = (h: { beat: number }) => stepIndexOf(h.beat, stepSize) === stepIdx;
+  const hasHit = laneHits.some(ownsHit);
 
   const newHit = (): DrumBlockNote => {
     const avg = inRange.length > 0
@@ -63,16 +100,11 @@ export function stepToggleBlock({
   let notes: DrumBlockNote[];
   if (existing && existing.notes && existing.notes.length > 0) {
     const authored = existing.notes;
-    const rest = authored
-      .filter((n) => Math.abs(start + n.beat - beat) >= tol)
-      .map((n) => ({ ...n }));
+    const rest = authored.filter((n) => !ownsHit({ beat: start + n.beat })).map((n) => ({ ...n }));
     notes = hasHit ? rest : [...rest, newHit()];
   } else {
-    notes = [];
-    for (const h of inRange) {
-      if (Math.abs(h.beat - beat) < tol) continue;
-      notes.push({ beat: round4(h.beat - start), voice: h.voice as DrumVoiceName, velocity: h.velocity });
-    }
+    // Materialise the block's other steps so later edits stay note-wise.
+    notes = notesFromHits(inRange, start, stepSize, stepIdx);
     if (!hasHit) notes.push(newHit());
   }
 

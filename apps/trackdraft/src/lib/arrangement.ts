@@ -68,3 +68,60 @@ export function totalBars(spans: SectionSpan[]): number {
   if (!last) return 0;
   return last.startBar + last.bars;
 }
+
+/** The identifying half of a transport tick — where it is, without trusting
+ *  an array position. */
+export interface TickPosition {
+  beat: number;
+  /** Identity of the span the tick fired in. Every tick `SongTransport`
+   *  emits carries it; only hand-built ticks (pure helpers, tests) omit it,
+   *  and those fall back to `sectionIndex`. */
+  sectionId?: string | null;
+  /** Which repeat pass, so a section that plays three times is never
+   *  guessed at. -1 when the tick sits outside every span. */
+  occurrenceIndex?: number;
+  /** Positional index into the transport's OWN span snapshot. */
+  sectionIndex?: number;
+}
+
+function containsBeat(span: SectionSpan, beat: number): boolean {
+  return beat >= span.startBeat && beat < span.startBeat + span.durationBeats;
+}
+
+/**
+ * Index of the span `tick` belongs to in `spans` (which callers derive from
+ * the LIVE song), or -1.
+ *
+ * `sectionIndex` is an index into the span map the transport snapshotted when
+ * playback started. Resizing a section's bars, reordering, splitting or
+ * deleting one mid-playback therefore makes that index alias a DIFFERENT
+ * section — the playhead jumps to another block and the harmony highlight
+ * lands on another section's chord, silently. Resolving by identity can only
+ * fail (return -1), never point somewhere wrong, so identity wins whenever
+ * the tick carries it.
+ */
+export function spanIndexForTick(spans: SectionSpan[], tick: TickPosition): number {
+  if (!tick.sectionId) {
+    const index = tick.sectionIndex ?? -1;
+    return index >= 0 && index < spans.length ? index : -1;
+  }
+
+  const wantedPass = tick.occurrenceIndex ?? 0;
+  let containing = -1;
+  for (let index = 0; index < spans.length; index += 1) {
+    const span = spans[index];
+    if (span.sectionId !== tick.sectionId) continue;
+    if (span.occurrenceIndex === wantedPass) return index;
+    if (containing < 0 && containsBeat(span, tick.beat)) containing = index;
+  }
+  if (containing >= 0) return containing;
+  // The pass itself is gone (its repeat count was lowered) but the section
+  // still exists — report its first pass rather than dropping the playhead.
+  return spans.findIndex((span) => span.sectionId === tick.sectionId);
+}
+
+/** The span `tick` belongs to, or null when the song no longer contains it. */
+export function spanForTick(spans: SectionSpan[], tick: TickPosition): SectionSpan | null {
+  const index = spanIndexForTick(spans, tick);
+  return index >= 0 ? spans[index] : null;
+}

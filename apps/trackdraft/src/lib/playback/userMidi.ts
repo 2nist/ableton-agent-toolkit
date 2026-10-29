@@ -13,10 +13,7 @@
 import { useSongStore } from "../../store/songStore";
 import { getSongTransport } from "./songTransport";
 import { getAbletonClock } from "./abletonClock";
-import type {
-  BlueprintSong,
-  BlueprintSection,
-} from "../../types/blueprint";
+import type { BlueprintSong } from "../../types/blueprint";
 import type { ChordQuality, ScaleType } from "@music-theory/core";
 
 // ---------------------------------------------------------------------------
@@ -239,7 +236,6 @@ function handleMidiMessage(event: MIDIMessageEvent) {
   const bytes = event.data;
   if (!bytes || bytes.length < 2) return;
   const status = bytes[0]!;
-  const data1 = bytes[1]!;
   const data2 = bytes.length > 2 ? bytes[2]! : 0;
 
   const channel = status & 0x0f; // 0-based

@@ -10,16 +10,16 @@
  * Structural copies of the schema types keep this file import-free.
  */
 import type { DrumBlock, ImportedSection } from "./gridToBlocks.js";
+import type { DrumPattern as EngineDrumPattern } from "../presets.js";
 
 /** types.ts:30 / VELOCITY_MAP types.ts:34. */
 export type VelocityPreset = "ppp" | "pp" | "p" | "mp" | "mf" | "f" | "ff" | "fff";
 export const VELOCITY_MAP: Record<VelocityPreset, number> = {
   ppp: 32, pp: 48, p: 64, mp: 80, mf: 96, f: 112, ff: 120, fff: 127,
 };
-/** types.ts:4 — the presets a base pattern can be. */
-export type DrumPattern =
-  | "none" | "kick_only" | "standard" | "half_time" | "driving"
-  | "bridge_sparse" | "intense" | "dnb" | "78" | "68" | "54";
+/** The presets a base pattern can be — re-exported from the engine's own union
+ *  so an import can carry any pattern the app can store. */
+export type DrumPattern = EngineDrumPattern;
 
 export function nearestVelocityPreset(v: number): VelocityPreset {
   let best: VelocityPreset = "mf";

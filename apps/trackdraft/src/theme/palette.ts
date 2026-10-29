@@ -113,7 +113,7 @@ const LOGSHEET: Palette = {
   cream: "#26221B",
   handDrawn: true,
   labelFont: "'Courier Prime', 'Courier New', monospace",
-  penFont: "'Reenie Beanie', 'Segoe Script', cursive",
+  penFont: "'Reenie Beanie', 'Segoe Script', 'Bradley Hand', cursive",
   voices: {
     kick: "#A03A31",
     snare: "#5E6672",

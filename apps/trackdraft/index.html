@@ -4,23 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TrackDraft</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Honeycomb/Drums canvases reference 'IBM Plex Mono' inline without
-         this ever being loaded, so it was silently falling back to plain
-         monospace in every real browser. -->
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
-    <!-- The studio-log theme's four voices: printed form (typewriter),
-         handwritten values (pencil), tape labels (marker). Loaded up front
-         rather than on theme switch — a late font swap would reflow the
-         cockpit a second after you toggled it. -->
-    <link
-      href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Reenie+Beanie&family=Permanent+Marker&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Fonts are self-hosted (src/theme/fonts.css) so the packaged app
+         renders identically offline and makes no third-party request. -->
   </head>
   <body class="bg-canvas text-ink">
     <div id="root"></div>

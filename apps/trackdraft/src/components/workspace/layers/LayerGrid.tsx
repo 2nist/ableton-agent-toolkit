@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useTimeSelectionStore, type TimeSelection } from "../../../store/timeSelectionStore";
+import { selectionWithin, useTimeSelectionStore, type TimeSelection } from "../../../store/timeSelectionStore";
 import { useTimeViewportStore } from "../../../store/timeViewportStore";
 import { usePalette } from "../../../theme/palette";
 
@@ -62,9 +62,13 @@ export function SectionGridProvider({
   const containerRef = useRef<HTMLDivElement>(null);
   const [measuredWidth, setMeasuredWidth] = useState(0);
   const snap = useTimeViewportStore((s) => s.snap);
-  const selection = useTimeSelectionStore((s) =>
+  const rawSelection = useTimeSelectionStore((s) =>
     s.selection && s.selection.sectionId === sectionId ? s.selection : null,
   );
+  // Clamped to THIS section's current length: a resize or split can leave a
+  // stored range reaching past the end, and the rows would draw a highlight
+  // over bars that no longer exist.
+  const selection = selectionWithin(rawSelection, sectionId, durationBeats);
 
   useEffect(() => {
     const el = containerRef.current;

@@ -1,13 +1,14 @@
+import { grooveOf } from "../../lib/drums/grooveModel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
-import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
+import { sectionSpans, spanIndexForTick, totalBars, type SectionSpan } from "../../lib/arrangement";
 import { useRoleStyle } from "../../lib/roleColors";
 import { classifySong } from "../../lib/classification";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import { rangeIds } from "../../lib/sectionSelection";
 import { drumFamilyLabel } from "../../lib/playback/drumPreview";
 import type { BlueprintSong } from "../../types/blueprint";
@@ -43,12 +44,15 @@ function blockLefts(spans: SectionSpan[]): number[] {
  *  whichever span it falls in — null when stopped or the tick's beat
  *  doesn't land in any span (e.g. a moment before playback fully starts). */
 function playheadX(spans: SectionSpan[], lefts: number[], tick: TransportTick | null): number | null {
-  if (!tick || !tick.isPlaying || tick.sectionIndex < 0) return null;
-  const span = spans[tick.sectionIndex];
-  if (!span) return null;
+  if (!tick || !tick.isPlaying) return null;
+  // By identity — a tick's positional index refers to the arrangement as it
+  // was when playback started, which any edit since then has invalidated.
+  const index = spanIndexForTick(spans, tick);
+  if (index < 0) return null;
+  const span = spans[index];
   const width = Math.max(MIN_BLOCK_WIDTH, span.durationBeats * PX_PER_BEAT);
   const progress = span.durationBeats > 0 ? (tick.beat - span.startBeat) / span.durationBeats : 0;
-  return lefts[tick.sectionIndex] + Math.max(0, Math.min(1, progress)) * width;
+  return lefts[index] + Math.max(0, Math.min(1, progress)) * width;
 }
 
 /** Compact, click-to-reveal form indicator in the timeline's own header —
@@ -59,7 +63,9 @@ function playheadX(spans: SectionSpan[], lefts: number[], tick: TransportTick | 
  *  this same screen is which *real, named songs* share this exact shape —
  *  so that's the only thing the disclosure reveals. */
 function FormDisclosure({ song }: { song: BlueprintSong }) {
-  const { form, label, isNewForm, match } = classifySong(song);
+  // The taxonomy match is a full form scan; the timeline re-renders on every
+  // transport tick, so it must not run per frame.
+  const { form, label, isNewForm, match } = useMemo(() => classifySong(song), [song]);
   const exemplars = form?.exemplars ?? [];
   const support = form?.provenance.derivedFrom?.support;
 
@@ -107,16 +113,16 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
   const roleStyle = useRoleStyle();
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
-  const selectedSectionIds = useStudioSelectionStore((s) => s.selected);
-  const selectSection = useStudioSelectionStore((s) => s.selectSection);
-  const setSelection = useStudioSelectionStore((s) => s.setSelection);
+  const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
+  const selectedSectionIds = useFocusedSectionStore((s) => s.selected);
+  const selectSection = useFocusedSectionStore((s) => s.selectSection);
+  const setSelection = useFocusedSectionStore((s) => s.setSelection);
   /** Song order for ⇧-ranges and sweeps — spans repeat a section per pass,
    *  the range is measured against the sections themselves. */
   const sectionOrder = useMemo(() => song.sections.map((entry) => entry.id), [song.sections]);
   const sweepRef = useRef<{ from: string; moved: boolean } | null>(null);
   const sweptRef = useRef(false);
-  const spans = sectionSpans(song);
+  const spans = useMemo(() => sectionSpans(song), [song]);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [tick, setTick] = useState<TransportTick | null>(null);
 
@@ -246,7 +252,7 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
                     title="This section's drums — edit in Drums"
                   >
                     {drum}
-                    {song.genre && !section.drumPattern && !section.drumMeterOutline ? (
+                    {song.genre && grooveOf(section).kind === "auto" ? (
                       <span className="text-accent/80"> · {song.genre}</span>
                     ) : null}
                   </button>

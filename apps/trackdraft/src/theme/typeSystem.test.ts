@@ -72,10 +72,18 @@ describe("type system — app and prototype agree", () => {
   });
 
   it("uses the same marker on tape", () => {
-    // the app names it in the tape recipe; the mock in --marker
+    // the app names it in the tape recipe (via --marker-pen); the mock in --marker
     const appTape = APP_CSS.match(/\.tape-label \{[\s\S]*?font-family:\s*([^;]+);/);
     expect(appTape).not.toBeNull();
-    expect(firstFamily(appTape![1])).toBe(firstFamily(mockToken("marker")));
+    // The recipe points at a token; resolve the indirection so the voice
+    // itself is compared, not the variable's name.
+    const value = appTape![1].trim();
+    const varRef = value.match(/^var\((--[\w-]+)\)$/);
+    const stack = varRef
+      ? APP_CSS.match(new RegExp(`${varRef[1]}:\\s*([^;]+);`))?.[1].trim()
+      : value;
+    expect(stack).toBeDefined();
+    expect(firstFamily(stack!)).toBe(firstFamily(mockToken("marker")));
   });
 
   it("writes in the same ink", () => {

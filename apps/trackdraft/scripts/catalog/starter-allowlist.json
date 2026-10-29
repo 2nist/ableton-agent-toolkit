@@ -1,0 +1,5 @@
+{
+  "$comment": "Songs allowed into the SHIPPED starter catalogue. A song is included only when it is listed here WITH \"attested\": true — an explicit claim by the packager that they hold the rights to redistribute it. Everything else is excluded, including every corpus in scripts/output (Beatles / McGill / Rock Corpus / Lalo Chezia are all restricted; see scripts/catalog/sources.ts). Add entries as {\"songId\": \"local-my-tune\", \"attested\": true, \"note\": \"written by me, 2026\"}.",
+  "format": 1,
+  "songs": []
+}

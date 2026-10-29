@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { meanBeatsPerBar, sectionDurationBeats, type Chord } from "../../../types/blueprint";
+import {
+  meanBeatsPerBar,
+  sectionDurationBeats,
+  type Chord,
+} from "../../../types/blueprint";
 import { deriveEvent, rootForDegree } from "../../../lib/harmony/analysis";
 import { MODE_DATA } from "@music-theory/core";
 import { floorSlots, insertChordAt } from "../../../lib/harmony/floorLayout";
@@ -38,6 +42,7 @@ export default function ComposeDesk({
   onTransposeSong,
   onTransposeSection,
   onChangeRegions,
+  onChangeSection,
   onSplitSection,
   onSplitSectionAt,
   onSplitSectionAtBar,
@@ -45,7 +50,9 @@ export default function ComposeDesk({
   onRenameSection,
 }: HarmonyDeskProps) {
   const [extension, setExtension] = useState<"triad" | "seventh">("triad");
-  const [drawer, setDrawer] = useState<"none" | "map" | "rhythm" | "form">("none");
+  const [drawer, setDrawer] = useState<"none" | "map" | "rhythm" | "form">(
+    "none",
+  );
   /** What just happened, said out loud: a split rewrites the song, and the
    *  only other evidence is the section list quietly getting longer. */
   const [notice, setNotice] = useState<string | null>(null);
@@ -56,7 +63,10 @@ export default function ComposeDesk({
   }, [notice]);
 
   const beatsPerBar = Math.max(1, meanBeatsPerBar(section));
-  const barCount = Math.max(1, Math.round(sectionDurationBeats(section) / beatsPerBar));
+  const barCount = Math.max(
+    1,
+    Math.round(sectionDurationBeats(section) / beatsPerBar),
+  );
   /** Coarse ↔ fine: how long a block has to be before the reader may call it
    *  a part. Two bars finds every phrase, eight finds only the big ones. */
   const [grain, setGrain] = useState<"fine" | "medium" | "coarse">("medium");
@@ -83,11 +93,21 @@ export default function ComposeDesk({
   const chordSlices = useCallback(
     (startBeat: number, endBeat: number) => {
       const picked = section.chords
-        .map((chord, index) => ({ chord, index, start: slots[index]?.start ?? 0 }))
-        .filter((entry) => entry.start >= startBeat - 0.001 && entry.start < endBeat - 0.001);
+        .map((chord, index) => ({
+          chord,
+          index,
+          start: slots[index]?.start ?? 0,
+        }))
+        .filter(
+          (entry) =>
+            entry.start >= startBeat - 0.001 && entry.start < endBeat - 0.001,
+        );
       return {
         chords: picked.map((entry) => entry.chord),
-        romans: picked.map((entry) => analysis.events[entry.index]?.roman ?? entry.chord.romanNumeral),
+        romans: picked.map(
+          (entry) =>
+            analysis.events[entry.index]?.roman ?? entry.chord.romanNumeral,
+        ),
       };
     },
     [section.chords, slots, analysis.events],
@@ -99,14 +119,22 @@ export default function ComposeDesk({
       segmentation.sections.map((part) => ({
         ...part,
         ...chordSlices(part.startBeat, part.endBeat),
-        startBar: Math.max(0, Math.min(barCount - 1, Math.round(part.startBeat / beatsPerBar))),
-        endBar: Math.max(1, Math.min(barCount, Math.round(part.endBeat / beatsPerBar))),
+        startBar: Math.max(
+          0,
+          Math.min(barCount - 1, Math.round(part.startBeat / beatsPerBar)),
+        ),
+        endBar: Math.max(
+          1,
+          Math.min(barCount, Math.round(part.endBeat / beatsPerBar)),
+        ),
       })),
     [segmentation.sections, chordSlices, beatsPerBar, barCount],
   );
 
   /** The swept ruler selection — the structural verbs hang off this. */
-  const [barRange, setBarRange] = useState<{ from: number; to: number } | null>(null);
+  const [barRange, setBarRange] = useState<{ from: number; to: number } | null>(
+    null,
+  );
   useEffect(() => setBarRange(null), [section.id]);
 
   /** What the band writes: the detected parts, at the grain you chose. */
@@ -117,13 +145,16 @@ export default function ComposeDesk({
     return {
       useful:
         detectedSplits.length > 1 &&
-        (new Set(labels).size < labels.length || detectedSplits.some((part) => part.repeats > 1)),
+        (new Set(labels).size < labels.length ||
+          detectedSplits.some((part) => part.repeats > 1)),
     };
   }, [detectedSplits]);
 
   const harmonyOutline =
     section.harmonyMeterOutline ??
-    (section.harmonyFollowsDrums === false ? null : (section.drumMeterOutline ?? null));
+    (section.harmonyFollowsDrums === false
+      ? null
+      : (section.drumMeterOutline ?? null));
 
   // One reading, everywhere: the floor, the map and the tools all see the
   // derived numerals, never the stored strings.
@@ -157,11 +188,24 @@ export default function ComposeDesk({
     // A chromatic landing takes the quality of the row it is nearest: ♯III
     // wants III's triad, ♭VII wants ♭VII's.
     const quality: Chord["quality"] =
-      extension === "seventh" ? (diatonic?.seventh ?? "maj7") : (diatonic?.triad ?? "maj");
+      extension === "seventh"
+        ? (diatonic?.seventh ?? "maj7")
+        : (diatonic?.triad ?? "maj");
     const root = rootForDegree(keyName, scale, degree, accidental);
     const beats = Math.max(0.5, span);
-    const draft: Chord = { id: uuid(), root, quality, beats, romanNumeral: "", spelling };
-    const derived = deriveEvent(draft, null, { key: keyName, scale, startBeat: beat });
+    const draft: Chord = {
+      id: uuid(),
+      root,
+      quality,
+      beats,
+      romanNumeral: "",
+      spelling,
+    };
+    const derived = deriveEvent(draft, null, {
+      key: keyName,
+      scale,
+      startBeat: beat,
+    });
     const chord: Chord = { ...draft, romanNumeral: derived.roman };
     // `insertChordAt` already knows the two ways a drop can land: inside a
     // chord (split it) or in open time / a rest (fill it).
@@ -191,21 +235,39 @@ export default function ComposeDesk({
         onChangeRegions={onChangeRegions}
         onPlaceChord={placeChord}
         glue={glue}
-        sections={song.sections.map((entry) => ({ id: entry.id, name: entry.name }))}
+        sections={song.sections.map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+        }))}
         sectionId={section.id}
+        section={section}
+        song={song}
+        onChangeSection={onChangeSection}
         extension={extension}
         onExtensionChange={setExtension}
         tools={
           <span className="flex items-center gap-1.5">
-            <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">tools</span>
+            <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">
+              tools
+            </span>
             <span className="flex overflow-hidden rounded border border-edge">
               {(
                 [
-                  { id: "map", label: "map", hint: "The hex lens — the same progression as a walk" },
-                  { id: "rhythm", label: "rhythm", hint: "Harmonic rhythm — every chord's share of the cycle" },
+                  {
+                    id: "map",
+                    label: "map",
+                    hint: "The hex lens — the same progression as a walk",
+                  },
+                  {
+                    id: "rhythm",
+                    label: "rhythm",
+                    hint: "Harmonic rhythm — every chord's share of the cycle",
+                  },
                   {
                     id: "form",
-                    label: formStructure.useful ? `form · ${segmentation.sections.length}` : "form",
+                    label: formStructure.useful
+                      ? `form · ${segmentation.sections.length}`
+                      : "form",
                     hint: formStructure.useful
                       ? `This section already contains ${segmentation.sections.length} parts`
                       : "Detect the sections this chord stream already contains",
@@ -217,7 +279,9 @@ export default function ComposeDesk({
                   type="button"
                   aria-pressed={drawer === entry.id}
                   title={entry.hint}
-                  onClick={() => setDrawer(drawer === entry.id ? "none" : entry.id)}
+                  onClick={() =>
+                    setDrawer(drawer === entry.id ? "none" : entry.id)
+                  }
                   className={`border-r border-edge px-1 py-0.5 last:border-r-0 ${
                     drawer === entry.id
                       ? "bg-accent text-accentInk"
@@ -235,7 +299,9 @@ export default function ComposeDesk({
                 panel: the ghost boundaries move as you press it. */}
             {section.chords.length > 8 && (
               <span className="flex items-center gap-0.5">
-                <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">grain</span>
+                <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">
+                  grain
+                </span>
                 <span className="flex overflow-hidden rounded border border-edge">
                   {(["coarse", "medium", "fine"] as const).map((option) => (
                     <button
@@ -245,7 +311,9 @@ export default function ComposeDesk({
                       onClick={() => setGrain(option)}
                       title={`Only blocks of ${option === "coarse" ? 8 : option === "medium" ? 4 : 2}+ bars count as parts`}
                       className={`border-r border-edge px-1 py-0.5 text-[9px] last:border-r-0 ${
-                        grain === option ? "bg-accent text-accentInk" : "hover:text-ink"
+                        grain === option
+                          ? "bg-accent text-accentInk"
+                          : "hover:text-ink"
                       }`}
                     >
                       {option}
@@ -267,7 +335,9 @@ export default function ComposeDesk({
                       repeats: part.repeats,
                     })),
                   );
-                  setNotice(`saved · split into ${parts} sections — undo to go back`);
+                  setNotice(
+                    `saved · split into ${parts} sections — undo to go back`,
+                  );
                 }}
                 className="rounded border border-accent bg-accent px-1 py-0.5 text-[9px] font-semibold text-accentInk"
                 title={`Write the ${formSplits.length} parts the chords already contain as sections`}
@@ -275,7 +345,11 @@ export default function ComposeDesk({
                 write {formSplits.length} sections
               </button>
             )}
-            {notice && <span className="rounded bg-accent/15 px-1 py-0.5 text-[9px] text-accent">{notice}</span>}
+            {notice && (
+              <span className="rounded bg-accent/15 px-1 py-0.5 text-[9px] text-accent">
+                {notice}
+              </span>
+            )}
           </span>
         }
         barRange={barRange}
@@ -287,22 +361,34 @@ export default function ComposeDesk({
         onMergeWithNext={onMergeWithNext}
         onRenameSection={onRenameSection}
         status={<FitStatus section={section} onSetBars={onSetBars} />}
-        tension={{ values: analysis.curve, labels: analysis.events.map((event) => event.roman) }}
       />
 
       {/* Tools open OVER the floor, never under it: the page is one screen. */}
       {drawer !== "none" && (
         <div className="absolute left-3 right-3 top-[38px] z-20 max-h-[min(420px,60%)] overflow-auto rounded border border-edge bg-panel shadow-2xl">
           <div className="sticky top-0 flex items-center gap-2 border-b border-edge bg-panel px-2 py-1 font-mono text-[9px] text-inkMuted/70">
-            <TapeLabel size="md" className="text-[10px] font-mono uppercase tracking-wider text-inkMuted">
+            <TapeLabel
+              size="md"
+              className="text-[10px] font-mono uppercase tracking-wider text-inkMuted"
+            >
               {drawer === "map" ? "Map" : "Harmonic rhythm"}
             </TapeLabel>
             <span className="text-inkMuted/60">
-              {drawer === "map" ? "the same progression as a walk" : "each chord's share of the cycle"}
+              {drawer === "map"
+                ? "the same progression as a walk"
+                : "each chord's share of the cycle"}
             </span>
             <span className="ml-auto flex items-center gap-2">
-              {analysis.stats.borrowedCount > 0 && <span className="text-danger">{analysis.stats.borrowedCount} borrowed</span>}
-              {analysis.stats.appliedCount > 0 && <span className="text-accent">{analysis.stats.appliedCount} applied</span>}
+              {analysis.stats.borrowedCount > 0 && (
+                <span className="text-danger">
+                  {analysis.stats.borrowedCount} borrowed
+                </span>
+              )}
+              {analysis.stats.appliedCount > 0 && (
+                <span className="text-accent">
+                  {analysis.stats.appliedCount} applied
+                </span>
+              )}
             </span>
             <button
               type="button"

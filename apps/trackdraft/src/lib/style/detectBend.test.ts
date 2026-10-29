@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { detectBendRatings } from "./detectBend";
 import type { BlueprintSong } from "../../types/blueprint";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 function chord(quality: string, romanNumeral = "I"): any {
   return { id: Math.random().toString(36), romanNumeral, root: "A", quality, beats: 2 };

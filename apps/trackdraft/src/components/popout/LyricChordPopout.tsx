@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { useSongStore } from "../../store/songStore";
-import { sectionSpans, type SectionSpan } from "../../lib/arrangement";
+import { sectionSpans, spanIndexForTick, type SectionSpan } from "../../lib/arrangement";
 import { chordSlotsForSection } from "../../lib/harmony/chordSlots";
 import type { Chord } from "../../types/blueprint";
 import { TRANSPORT_CHANNEL_NAME, type TransportTick } from "../../lib/playback/songTransport";
@@ -99,13 +99,16 @@ export default function LyricChordPopout() {
 
   // SECTION mode — the performing face: only the span actually playing
   // (requires isPlaying, so the "waiting" screen shows until playback).
-  const activeSpan = song && tick && tick.isPlaying && tick.sectionIndex >= 0 ? spans[tick.sectionIndex] : null;
+  const activeSpan = song && tick && tick.isPlaying ? spans[spanIndexForTick(spans, tick)] ?? null : null;
   // Expand chords to full section duration with beat positions (empty while
   // not playing / song not found — deps are stable references + numbers, so
   // it only recomputes when the section's chords or length actually change).
+  // `activeSpan` is a stable object from the memoized span list, so it only
+  // changes when the playhead crosses into another section — which is exactly
+  // when the chords need re-expanding.
   const chordSlots = useMemo<ChordSlot[]>(
     () => (activeSpan ? expandChords(activeSpan.section, activeSpan.durationBeats) : []),
-    [activeSpan?.section.chords, activeSpan?.durationBeats],
+    [activeSpan],
   );
 
   // FLOW mode — the rehearsal face: the whole arrangement as one scroll,
@@ -113,11 +116,11 @@ export default function LyricChordPopout() {
   // (paused included, so a glance keeps your place); stop() emits
   // sectionIndex -1 and dims everything. Renders with no tick at all, so
   // the finished form can be previewed before playing a note.
-  const flowIndex = tick && tick.sectionIndex >= 0 && tick.sectionIndex < spans.length ? tick.sectionIndex : -1;
+  const flowIndex = tick ? spanIndexForTick(spans, tick) : -1;
   const flowSpan = flowIndex >= 0 ? spans[flowIndex] : null;
   const flowChordSlots = useMemo<ChordSlot[]>(
     () => (flowSpan ? expandChords(flowSpan.section, flowSpan.durationBeats) : []),
-    [flowSpan?.section.chords, flowSpan?.durationBeats],
+    [flowSpan],
   );
   const flowTimeline = useMemo(
     () => rebaseLyricsTimeline(flowSpan?.section.lyricsTimeline, flowSpan?.startBeat ?? 0),

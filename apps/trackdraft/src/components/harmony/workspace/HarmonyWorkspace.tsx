@@ -1,7 +1,10 @@
 import { useMemo } from "react";
 import { meanBeatsPerBar } from "../../../types/blueprint";
 import { analyzeSection } from "../../../lib/harmony/analysis";
-import { useHarmonyWorkspaceStore, type HarmonyDesk } from "../../../store/harmonyWorkspaceStore";
+import {
+  useHarmonyWorkspaceStore,
+  type HarmonyDesk,
+} from "../../../store/harmonyWorkspaceStore";
 import TapeLabel from "../../common/TapeLabel";
 import ComposeDesk from "./ComposeDesk";
 import RehearseDesk from "./RehearseDesk";
@@ -9,8 +12,16 @@ import StudyDesk from "./StudyDesk";
 import type { HarmonyDeskProps } from "./types";
 
 const DESKS: { id: HarmonyDesk; label: string; hint: string }[] = [
-  { id: "compose", label: "Compose", hint: "write here · the strip owns time, the lens owns the map" },
-  { id: "rehearse", label: "Rehearse", hint: "read here · nothing edits the song" },
+  {
+    id: "compose",
+    label: "Compose",
+    hint: "write here · the strip owns time, the lens owns the map",
+  },
+  {
+    id: "rehearse",
+    label: "Rehearse",
+    hint: "read here · nothing edits the song",
+  },
   { id: "study", label: "Study", hint: "ask here · the same events, measured" },
 ];
 
@@ -25,7 +36,10 @@ export function HarmonyDeskBar() {
   const active = DESKS.find((entry) => entry.id === desk) ?? DESKS[0];
   return (
     <div className="flex flex-wrap items-center gap-2 rounded border border-edge bg-deep px-2 py-1 font-mono text-[10px]">
-      <TapeLabel size="md" className="text-[10px] font-mono uppercase tracking-[0.14em] text-inkMuted">
+      <TapeLabel
+        size="md"
+        className="text-[10px] font-mono uppercase tracking-[0.14em] text-inkMuted"
+      >
         Harmony
       </TapeLabel>
       <select
@@ -59,7 +73,13 @@ export default function HarmonyWorkspace(props: HarmonyWorkspaceProps) {
         regions: props.regions,
         beatsPerBar,
       }),
-    [props.section.chords, props.keyName, props.scale, props.regions, beatsPerBar],
+    [
+      props.section.chords,
+      props.keyName,
+      props.scale,
+      props.regions,
+      beatsPerBar,
+    ],
   );
 
   const shared = { ...props, analysis };

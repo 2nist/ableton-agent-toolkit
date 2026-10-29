@@ -1,5 +1,6 @@
 import type { DrumLaneId } from "@drum/library";
 import { resolveSectionLaneHits, type LaneHits } from "../../../lib/timeline/drumLaneHits";
+import { stepIndexOf, STEP_SNAP } from "./meterGrid";
 import type { BlueprintSection, BlueprintSong } from "../../../types/blueprint";
 
 /**
@@ -45,10 +46,14 @@ export function peakVelocityByStep(
 ): { peak: Map<number, number>; offGrid: { beat: number; velocity: number }[] } {
   const peak = new Map<number, number>();
   const offGrid: { beat: number; velocity: number }[] = [];
-  const tol = Math.max(0.02, stepBeats * 0.35);
   for (const h of hits) {
-    const idx = Math.round(h.beat / stepBeats);
-    if (Math.abs(h.beat - idx * stepBeats) <= tol && idx >= 0 && idx < stepCount) {
+    const idx = stepIndexOf(h.beat, stepBeats);
+    // A hit belongs to a cell only when it is ON that step. Anything else —
+    // a 16th ghost under a quarter-note grid, a swung hat — is drawn as a
+    // diamond at its true position rather than folded into a neighbour,
+    // because folding it in is what made cells un-toggleable.
+    const onStep = Math.abs(h.beat - idx * stepBeats) <= STEP_SNAP;
+    if (onStep && idx >= 0 && idx < stepCount) {
       peak.set(idx, Math.max(peak.get(idx) ?? 0, h.velocity));
     } else {
       offGrid.push({ beat: h.beat, velocity: h.velocity });

@@ -5,6 +5,7 @@ import { getMidiOutput } from "../../../lib/playback/liveMidiOut";
 import { planClicks } from "../../../lib/playback/metronome";
 import { getSongTransport, type TransportTick } from "../../../lib/playback/songTransport";
 import { useMidiSettingsStore } from "../../../store/midiSettingsStore";
+import { targetUsesAppClock, useDawTargetStore } from "../../../store/dawTargetStore";
 
 /** The drum channel the click rides on — a rehearsal click is a drum sound. */
 const CLICK_CHANNEL = 9;
@@ -21,6 +22,10 @@ export interface RehearsalTransportArgs {
 
 export interface RehearsalTransport {
   isPlaying: boolean;
+  /** Live is driving the clock, so this desk cannot start or stop the
+   *  playhead — `play()` is a no-op and the UI must say why instead of
+   *  claiming to play. */
+  clockBlocked: boolean;
   /** 4, 3, 2, 1 while the count-in bar runs, then null. */
   countInBeat: number | null;
   /** A MIDI output is configured, so a click has somewhere to go. */
@@ -48,6 +53,9 @@ export function useRehearsalTransport({
   beatsPerBar,
 }: RehearsalTransportArgs): RehearsalTransport {
   const outputId = useMidiSettingsStore((state) => state.midiOutputId);
+  // Live is the master when it is the target — the app's playhead follows
+  // Live's transport and cannot be started or stopped from here.
+  const clockBlocked = !targetUsesAppClock(useDawTargetStore((state) => state.target));
   const [isPlaying, setIsPlaying] = useState(false);
   const [countInBeat, setCountInBeat] = useState<number | null>(null);
   const outputRef = useRef<MIDIOutput | null>(null);
@@ -108,6 +116,11 @@ export function useRehearsalTransport({
 
   const play = useCallback(() => {
     const transport = getSongTransport();
+    // Under the Ableton clock the app's transport refuses to start (Live owns
+    // the playhead), so bail before scheduling a count-in or a click — the
+    // old code set `isPlaying` regardless and the desk sat "playing" forever
+    // with a frozen cursor.
+    if (transport.clockSource === "ableton") return;
     const spans = sectionSpans(song);
     const span = spans.find((entry) => entry.sectionId === sectionId) ?? spans[0];
     if (!span) return;
@@ -115,12 +128,13 @@ export function useRehearsalTransport({
 
     const beatMs = 60000 / Math.max(1, song.bpm);
     const startAt = () => {
-      transport.play(song, {
+      const started = transport.play(song, {
         startBeat: span.startBeat,
         ...(loop
           ? { loopStart: span.startBeat, loopEnd: span.startBeat + span.durationBeats, forceLoop: true }
           : {}),
       });
+      if (!started) return;
       scheduledBar.current = Math.floor(span.startBeat / beatsPerBar);
       setIsPlaying(true);
     };
@@ -180,5 +194,12 @@ export function useRehearsalTransport({
 
   useEffect(() => () => clearTimers(), [clearTimers]);
 
-  return { isPlaying, countInBeat, clickReady: Boolean(outputId), play, stop };
+  return {
+    isPlaying,
+    countInBeat,
+    clockBlocked,
+    clickReady: Boolean(outputId),
+    play,
+    stop,
+  };
 }

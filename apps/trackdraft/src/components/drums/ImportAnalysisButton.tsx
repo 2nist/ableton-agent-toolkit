@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useSongStore } from "../../store/songStore";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { parseAnalysisFile } from "../../lib/drumImport/analysisFile";
 import { applySectionPatch, planSectionImport } from "../../lib/drumImport/runner";
@@ -19,8 +19,8 @@ import IconBtn from "../common/IconBtn";
 export default function ImportAnalysisButton() {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
-  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
 
   const onAnalysisFile = async (file: File) => {
     try {

@@ -1,6 +1,7 @@
+import { grooveOf } from "../../lib/drums/grooveModel";
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { sectionSpans, totalBars, type SectionSpan } from "../../lib/arrangement";
+import { sectionSpans, spanIndexForTick, totalBars, type SectionSpan } from "../../lib/arrangement";
 import { useRoleStyle } from "../../lib/roleColors";
 import { addSection, removeSection, reorderSections, repeatsFor, updateSection } from "../../lib/sections";
 import { NOTE_TO_PC, pitchClass } from "@music-theory/core";
@@ -14,7 +15,7 @@ import { getSongTransport, type TransportTick } from "../../lib/playback/songTra
 import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
 import { useSongStore } from "../../store/songStore";
 import { useDawTargetStore } from "../../store/dawTargetStore";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import { rangeIds } from "../../lib/sectionSelection";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 import { useInspectorStore } from "../../store/inspectorStore";
@@ -65,7 +66,7 @@ const ROLES: SectionRole[] = ["intro", "verse", "pre_chorus", "chorus", "bridge"
  * ends. Blocks are TRUE scale — a short song leaves an honest empty tail,
  * it is never stretched to fit.
  *
- * Selection is the same `studioSelectionStore.selectedSectionId` the
+ * Selection is the same `focusedSectionStore.selectedSectionId` the
  * arrangement timeline and the Mix/Bend panel already share, so the spine
  * re-targets them for free.
  */
@@ -73,11 +74,11 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   const P = usePalette();
   const handDrawn = P.handDrawn;
   const roleStyle = useRoleStyle();
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
-  const selectedSectionIds = useStudioSelectionStore((s) => s.selected);
-  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
-  const selectSection = useStudioSelectionStore((s) => s.selectSection);
-  const setSelection = useStudioSelectionStore((s) => s.setSelection);
+  const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
+  const selectedSectionIds = useFocusedSectionStore((s) => s.selected);
+  const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
+  const selectSection = useFocusedSectionStore((s) => s.selectSection);
+  const setSelection = useFocusedSectionStore((s) => s.setSelection);
   /** Song order, for ⇧-ranges: spans repeat a section per pass, so the range
    *  has to be measured against the section list, not the drawn blocks. */
   const sectionOrder = useMemo(() => (song?.sections ?? []).map((entry) => entry.id), [song?.sections]);
@@ -164,12 +165,13 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   const total = useMemo(() => totalBars(spans), [spans]);
   const totalRef = useRef(total);
   totalRef.current = total;
-  const liveIndex =
-    tick?.isPlaying && tick.sectionIndex >= 0 && tick.sectionIndex < spans.length ? tick.sectionIndex : null;
-  const playingSectionId =
-    tick?.isPlaying && tick.sectionIndex >= 0 && tick.sectionIndex < spans.length
-      ? spans[tick.sectionIndex].sectionId
-      : null;
+  // Resolved by IDENTITY (section + repeat pass), not by the tick's
+  // positional index: the transport's index refers to the arrangement as it
+  // was when playback started, and a resize/reorder/split/delete since then
+  // makes it address a different block.
+  const resolvedLiveIndex = tick?.isPlaying ? spanIndexForTick(spans, tick) : -1;
+  const liveIndex = resolvedLiveIndex >= 0 ? resolvedLiveIndex : null;
+  const playingSectionId = liveIndex != null ? spans[liveIndex].sectionId : null;
 
   // Playhead position — pixel-exact in bar space. Within a span, progress
   // maps to its BARS (bar-linear), so a 7/8 bar still spans `barPx`.
@@ -631,7 +633,12 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           Since P2 this row IS the shell's collapsed header — the spine
           mounts above every song route and the legacy header transport is
           gone; no controls sit at the timeline's left or right ends. */}
-      <div className="flex items-center gap-1 px-2 h-7 border-b border-edge/60">
+      <div
+        className="flex items-center gap-1 pr-2 h-7 border-b border-edge/60"
+        // Left inset clears the macOS window buttons (desktop only, 0 in a
+        // browser) — otherwise they sit on the ← and the song title.
+        style={{ paddingLeft: "calc(0.5rem + var(--chrome-inset, 0px))" }}
+      >
         {/* Song chip — the identity (title · key · meter) moved here when
             the standalone header dissolved (user decision 2026-09-21:
             dissolve the top tabs, gain two rows). Click = dashboard. */}
@@ -1216,10 +1223,10 @@ function SpineBlock({
  *  literal: an inferred/auto groove doesn't count as drums you've placed,
  *  a genre recipe doesn't count as chords. */
 function coverageDots(section: BlueprintSection): { label: string; present: boolean }[] {
-  const drums =
-    section.drumPattern != null && section.drumPattern !== "none"
-      ? true
-      : !!section.drumMeterOutline || (section.drumBlocks?.length ?? 0) > 0;
+  // "Authored" = a source the user chose, or notes they placed. Auto and
+  // muted are engine states, not authorship. One reading of the model.
+  const source = grooveOf(section);
+  const drums = (source.kind === "preset" || source.kind === "outline") || (section.drumBlocks?.length ?? 0) > 0;
   return [
     { label: "chords", present: section.chords.length > 0 },
     { label: "drums", present: drums },

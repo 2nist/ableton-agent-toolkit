@@ -1,6 +1,7 @@
+import { applyGrooveChoice } from "../../lib/drums/grooveModel";
+import DrumPatternPicker from "../drums/DrumPatternPicker";
 import type { ReactNode } from "react";
-import type { BlueprintSection, DrumPattern, SectionRole, VelocityPreset } from "../../types/blueprint";
-import { DRUM_PATTERN_OPTIONS, variantCount } from "../../lib/playback/drumPreview";
+import type { BlueprintSection, SectionRole, VelocityPreset } from "../../types/blueprint";
 import DrumNecklacePreview from "./DrumNecklacePreview";
 import NarrativeArcEditor from "./NarrativeArcEditor";
 
@@ -88,7 +89,6 @@ export default function SectionEditor({
   const input = "bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink";
   const select = "bg-panelAlt border border-edge rounded px-1 py-0.5 text-ink";
 
-  const pattern = section.drumPattern;
 
   const drums = section.drumMeterOutline ? (
     <span
@@ -100,53 +100,11 @@ export default function SectionEditor({
   ) : (
     <label className={`flex items-center gap-1.5 ${labelText} text-inkMuted ${compact ? "w-full" : ""}`}>
       <span className={compact ? "uppercase tracking-wide text-[10.5px]" : ""}>Drums</span>
-      <select
-        className={`${select} ${compact ? "flex-1 min-w-0" : ""}`}
-        value={section.drumPattern ?? ""}
-        onChange={(e) => {
-          const val = e.target.value;
-          onChange((s) => ({
-            ...s,
-            drumPattern: val ? (val as DrumPattern) : undefined,
-            drumVariantIndex: val ? 0 : undefined,
-          }));
-        }}
-        title="Override the heuristic drum pattern — empty = automatic from role, velocity and meter"
-      >
-        <option value="">{compact ? "auto" : "auto (heuristic)"}</option>
-        {DRUM_PATTERN_OPTIONS.map((p) => (
-          <option key={p} value={p}>{p}</option>
-        ))}
-      </select>
-      {pattern && (
-        <span className="shrink-0 flex items-center gap-0.5 text-2xs font-mono" title="Which variant of the selected pattern to use">
-          <button
-            className="px-1 hover:text-ink select-none"
-            onClick={() => {
-              const total = variantCount(pattern);
-              if (total <= 1) return;
-              const cur = section.drumVariantIndex ?? 0;
-              onChange((s) => ({ ...s, drumVariantIndex: Math.max(0, cur - 1) }));
-            }}
-          >
-            ◂
-          </button>
-          <span className="tabular-nums min-w-[3ch] text-center">
-            {((section.drumVariantIndex ?? 0) + 1)}/{variantCount(pattern)}
-          </span>
-          <button
-            className="px-1 hover:text-ink select-none"
-            onClick={() => {
-              const total = variantCount(pattern);
-              if (total <= 1) return;
-              const cur = section.drumVariantIndex ?? 0;
-              onChange((s) => ({ ...s, drumVariantIndex: Math.min(total - 1, cur + 1) }));
-            }}
-          >
-            ▸
-          </button>
-        </span>
-      )}
+      <DrumPatternPicker
+        section={section}
+        compact
+        onChoose={(choice) => onChange((sec) => applyGrooveChoice(sec, choice))}
+      />
     </label>
   );
 

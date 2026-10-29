@@ -1,7 +1,7 @@
 import { useSongStore } from "../../store/songStore";
 import { removeSection, repeatsFor, updateRepeats, updateSection } from "../../lib/sections";
 import type { BlueprintSection } from "../../types/blueprint";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import SectionEditor from "../structure/SectionEditor";
 import FitStatus from "../harmony/FitStatus";
 import { askConfirm } from "../../lib/confirm";
@@ -19,8 +19,8 @@ import { askConfirm } from "../../lib/confirm";
 export default function SectionStructurePanel() {
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
-  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
 
   if (!currentSong) return null;
   const song = currentSong;

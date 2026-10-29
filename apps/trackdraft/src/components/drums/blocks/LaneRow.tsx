@@ -1,3 +1,4 @@
+import { stepIndexOf } from "./meterGrid";
 import { memo, useMemo } from "react";
 import type { Palette } from "../../../theme/palette";
 import type { DrumLane } from "../laneStyle";
@@ -85,7 +86,7 @@ function LaneRowImpl(props: LaneRowProps) {
   /** Steps whose base hit the gesture replaces — drawn struck, not filled. */
   const suppressedSteps = useMemo(() => {
     const set = new Set<number>();
-    for (const beat of gesture?.suppressed ?? []) set.add(Math.round(beat / stepBeats));
+    for (const beat of gesture?.suppressed ?? []) set.add(stepIndexOf(beat, stepBeats));
     return set;
   }, [gesture, stepBeats]);
 

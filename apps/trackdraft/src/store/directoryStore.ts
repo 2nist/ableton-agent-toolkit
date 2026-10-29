@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { getHost } from "../lib/host";
+import { kindForFile } from "../lib/importKinds";
 import { readStorage, writeStorage } from "./storage";
 
 export interface DirectoryConfig {
@@ -81,6 +83,25 @@ export const useDirectoryStore = create<DirectoryStoreState>((set, get) => ({
   loadListing: async (path: string) => {
     set({ loading: path, error: null });
     try {
+      // Desktop has no dev server to ask, so it lists the folder through the
+      // main process. Same shape either way; only the source differs.
+      const host = getHost();
+      if (host) {
+        const files = await host.listDirectory(path);
+        const entries: DirectoryEntry[] = files.map((f) => {
+          if (f.isDirectory) {
+            return { file: f.name, title: f.name, sections: 0, type: "directory", loadable: false };
+          }
+          const info = kindForFile(f.name);
+          return { file: f.name, title: f.name, sections: 0, type: info.category, loadable: info.loadable };
+        });
+        set((s) => ({
+          listings: { ...s.listings, [path]: entries },
+          loading: null,
+          error: null,
+        }));
+        return;
+      }
       const res = await fetch(`/__local-browse?dir=${encodeURIComponent(path)}`);
       if (!res.ok) {
         // Try to read server error message

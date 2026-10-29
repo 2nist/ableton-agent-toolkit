@@ -19,7 +19,12 @@ export default function Sidebar({
   return (
     <aside className="w-[200px] shrink-0 border-r border-edge bg-panel flex flex-col min-h-0">
       {/* Navigation */}
-      <nav className="px-2 py-2 space-y-0.5 shrink-0">
+      <nav
+        className="px-2 py-2 space-y-0.5 shrink-0"
+        // The dashboard has no spine, so its top-left is bare — the macOS
+        // window buttons would land on "Songs".
+        style={{ paddingTop: "calc(0.5rem + var(--chrome-inset-top, 0px))" }}
+      >
         <button
           className={`w-full text-left text-xs px-2 py-1 rounded ${
             activeView === "songs" ? "bg-panelAlt text-ink font-medium" : "text-inkMuted hover:text-ink hover:bg-panelAlt/50"

@@ -1,12 +1,14 @@
+import { withGrooveChoice } from "../../lib/drums/grooveIntent";
+import { applyGrooveChoice } from "../../lib/drums/grooveModel";
+import DrumPatternPicker from "./DrumPatternPicker";
 import { useEffect, useRef, useState } from "react";
 import { useSongStore } from "../../store/songStore";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
 import { updateSection } from "../../lib/sections";
 import { sectionSpans } from "../../lib/arrangement";
 import {
   DRUM_PATTERN_OPTIONS,
-  variantCount,
   resolveSectionVoiceNecklaces,
   resolveOutlineVoiceNecklaces,
   resolveSectionVariant,
@@ -32,7 +34,6 @@ import type { BlueprintSection, DrumPattern, DrumTransitionModel, DrumCellVoice,
 import { beatsPerBar } from "../../types/blueprint";
 import TapeLabel from "../common/TapeLabel";
 
-type DrumMode = "auto" | "preset" | "outline";
 type ToolTab = "pattern" | "variation" | "transition";
 
 const DEFAULT_DENOM = 8;
@@ -58,14 +59,6 @@ const CELL_VOICE_FAMILY: Record<DrumCellVoice, keyof VoiceColors> = {
   snare: "snare",
   hat: "hat",
 };
-
-/** Which of the three mutually-exclusive drum-authoring modes a section is
- *  in — same priority the export uses: a Euclidean outline beats a named
- *  preset beats the heuristic. */
-function modeOf(sec: BlueprintSection): DrumMode {
-  if (sec.drumMeterOutline) return "outline";
-  return sec.drumPattern ? "preset" : "auto";
-}
 
 /** Which rotation (if any) of `buildEuclideanOutline(n, d, k, r)` matches
  *  the outline's cells — so the Offset slider shows a real number rather
@@ -136,7 +129,7 @@ export default function DrumPatternTools() {
   } as Record<DrumCellVoice, string>;
   const currentSong = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
+  const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
   const draftSectionId = useDrumsDraftStore((s) => s.sectionId);
   const draftSection = useDrumsDraftStore((s) => s.section);
   const setDraft = useDrumsDraftStore((s) => s.setDraft);
@@ -208,7 +201,6 @@ export default function DrumPatternTools() {
 
   const isDraft = draftSectionId === section.id && draftSection !== null;
   const eff = isDraft && draftSection ? draftSection : section;
-  const mode = modeOf(eff);
   const outline = eff.drumMeterOutline;
   // Default length 8 (eighths) for non-outline sections — it has more than
   // one valid density (3 or 4), so the always-on Euclid sliders are usable
@@ -234,7 +226,6 @@ export default function DrumPatternTools() {
   const selectedCell = outline ? Math.min(cellIndex, outline.cells.length - 1) : null;
   // The selected detour cell, self-clamped the same way.
   const vSelectedCell = variation ? Math.min(vCellIndex, variation.cells.length - 1) : null;
-  const variantTotal = variantCount(eff.drumPattern);
 
   // Per-voice override editing — pick ANY voice (not just ones already in
   // the base). Giving rim / crash / toms their own pattern adds them to the
@@ -267,56 +258,11 @@ export default function DrumPatternTools() {
   /** Auto toggles: on → let the engine pick the groove; clicking it again
    *  turns it off and restores the last explicit preset (or "standard").
    *  Either way, leaving auto also drops any Euclidean outline. */
-  function toggleAuto() {
-    if (mode === "auto") {
-      const restore = lastPresetRef.current ?? "standard";
-      draftWith((sec) => ({
-        ...sec,
-        drumPattern: restore,
-        drumVariantIndex: sec.drumVariantIndex ?? 0,
-        drumMeterOutline: undefined,
-      }));
-    } else {
-      if (eff.drumPattern) lastPresetRef.current = eff.drumPattern;
-      draftWith((sec) => ({ ...sec, drumPattern: undefined, drumVariantIndex: undefined, drumMeterOutline: undefined }));
-    }
-  }
-
-  /** Switch the section to Euclidean (outline) authoring — a drum meter
-   *  independent of the section's time signature. Starts from the
-   *  section's own meter at an 8th-note grid (8 → 4/4, 7 → 7/8, ...); the
-   *  Euclid sliders + cell editor reshape it into any 2s/3s grouping. The
-   *  current preset is remembered so Auto/Preset can restore it. */
-  function enterOutline() {
-    if (mode === "outline") return;
-    if (eff.drumPattern) lastPresetRef.current = eff.drumPattern;
-    // Default the outline to the section's own meter at an 8th-note grid
-    // (8 for 4/4) rather than a fixed 7/8 — most songs are 4/4.
-    const num = eighthNoteNumerator(eff);
-    draftWith((sec) => ({
-      ...sec,
-      drumPattern: undefined,
-      drumVariantIndex: undefined,
-      drumMeterOutline: sec.drumMeterOutline ?? buildEuclideanOutline(num, 8, twoThreeCellCounts(num)[0] ?? 3, 0),
-    }));
-  }
-
-  function setPreset(val: string) {
-    draftWith((sec) => ({
-      ...sec,
-      drumPattern: val ? (val as DrumPattern) : undefined,
-      drumVariantIndex: val ? 0 : undefined,
-      drumMeterOutline: undefined,
-    }));
-  }
-
-  function stepVariant(delta: number) {
-    const total = variantCount(eff.drumPattern);
-    if (total <= 1) return;
-    draftWith((sec) => {
-      const cur = sec.drumVariantIndex ?? 0;
-      return { ...sec, drumVariantIndex: Math.max(0, Math.min(total - 1, cur + delta)) };
-    });
+  /** Starting outline for the picker's Euclid mode: the section's own bar at
+   *  an eighth-note grid (8 → 4/4, 7 → 7/8), not a fixed 4/4. */
+  function outlineFor(sec: BlueprintSection): MeterOutline {
+    const num = eighthNoteNumerator(sec);
+    return sec.drumMeterOutline ?? buildEuclideanOutline(num, 8, twoThreeCellCounts(num)[0] ?? 3, 0);
   }
 
   /** Score the section's current groove against every library preset and
@@ -345,7 +291,9 @@ export default function DrumPatternTools() {
     // Safe: candidates are restricted to DRUM_PATTERN_OPTIONS above.
     const pattern = m.pattern as DrumPattern;
     lastPresetRef.current = pattern;
-    draftWith((sec) => ({ ...sec, drumPattern: pattern, drumVariantIndex: m.variantIndex, drumMeterOutline: undefined }));
+    draftWith((sec) =>
+      withGrooveChoice(sec, { drumPattern: pattern, drumVariantIndex: m.variantIndex, drumMeterOutline: undefined }),
+    );
     setMatches(null);
   }
 
@@ -560,55 +508,14 @@ export default function DrumPatternTools() {
             user request 2026-09-21): Auto · Euclid · Preset · variant ·
             Match · Apply/Revert each fall to the next line as needed. */}
         <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          className={mode === "auto" ? CHIP_ON : CHIP}
-          onClick={toggleAuto}
-          title={
-            mode === "auto"
-              ? "Auto is on — click to switch back to a preset groove"
-              : "Let the engine pick this section's groove from role / meter / velocity"
-          }
-        >
-          Auto
-        </button>
-        <button
-          className={mode === "outline" ? CHIP_ON : CHIP}
-          onClick={enterOutline}
-          title={
-            mode === "outline"
-              ? "Euclidean mode is on — this section's drums run an outline meter independent of the section's time signature"
-              : "Switch to Euclidean odd-meter authoring — a drum meter independent of the section's time signature"
-          }
-        >
-          Euclid
-        </button>
-        <select
-          className="w-40 shrink-0 bg-panelAlt border border-edge rounded px-2 py-1 text-xs text-ink"
-          value={mode === "preset" ? (eff.drumPattern ?? "") : ""}
-          onChange={(e) => setPreset(e.target.value)}
-          title="Named pattern preset for the whole section — Auto defers to the engine"
-        >
-          <option value="">Preset…</option>
-          <optgroup label="Common">
-            {["none", "kick_only", "standard", "half_time", "driving", "bridge_sparse", "intense", "dnb"].map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </optgroup>
-          <optgroup label="Odd meter">
-            {["78", "68", "54"].map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </optgroup>
-        </select>
-        {variantTotal > 1 && (
-          <div className="flex items-center gap-1 shrink-0" title="Which variant of this preset to use">
-            <button className={CHIP} onClick={() => stepVariant(-1)}>◀</button>
-            <span className="font-mono text-2xs tabular-nums text-ink min-w-[44px] text-center">
-              {(eff.drumVariantIndex ?? 0) + 1}/{variantTotal}
-            </span>
-            <button className={CHIP} onClick={() => stepVariant(1)}>▶</button>
-          </div>
-        )}
+        <DrumPatternPicker
+          section={draftSection ?? activeSection}
+          buildOutline={outlineFor}
+          onChoose={(choice) => {
+            if (choice.kind === "preset") lastPresetRef.current = choice.pattern;
+            draftWith((sec) => applyGrooveChoice(sec, choice));
+          }}
+        />
         <button
           className={matches !== null ? CHIP_ON : CHIP}
           onClick={matches !== null ? () => setMatches(null) : showMatches}
@@ -742,7 +649,7 @@ export default function DrumPatternTools() {
                   </p>
                 </div>
                 <div className="border-t border-edge/40 pt-2 space-y-2.5">
-                  <EuclidSliders n={n} denom={baseDenom} k={k} rotation={rotation} onChange={setOutline} />
+                  <EuclidSliders n={n} k={k} rotation={rotation} onChange={setOutline} />
                   {/* Grid — /8 (eighths) vs /16 (sixteenths), the one
                       meter knob the Euclid sliders don't cover. */}
                   <div>
@@ -871,7 +778,7 @@ export default function DrumPatternTools() {
                     <p className="font-mono text-2xs text-inkMuted">{vK} / {vN} · rot {vRot} · {variation.label}</p>
                   </div>
                   <div className="border-t border-edge/40 pt-2 space-y-2.5">
-                    <EuclidSliders n={vN} denom={vDenom} k={vK} rotation={vRot} onChange={setVariation} />
+                    <EuclidSliders n={vN} k={vK} rotation={vRot} onChange={setVariation} />
                     {/* Grid — /8 (eighths) vs /16 (sixteenths), same knob as the
                         whole-section outline editor. */}
                     <div>

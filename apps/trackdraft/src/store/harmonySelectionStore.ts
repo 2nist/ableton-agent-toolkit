@@ -12,7 +12,7 @@ import { create } from "zustand";
  *  `useSongStore`.
  *
  *  SECTION selection is deliberately NOT here: it belongs to the shared
- *  `useStudioSelectionStore`, which the spine writes on every route — so
+ *  `useFocusedSectionStore`, which the spine writes on every route — so
  *  the spine's selection IS the harmony workspace's active section (the
  *  dock's old section chips died in P2). */
 interface HarmonySelectionState {

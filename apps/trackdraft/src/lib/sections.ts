@@ -1,3 +1,4 @@
+import { applyGrooveChoice } from "./drums/grooveModel";
 import {
   barLengths,
   meanBeatsPerBar,
@@ -607,18 +608,26 @@ export function applySongMap(song: BlueprintSong, map: SongMap, options?: ApplyS
         harmonyMeterOutline = buildEuclideanOutline(numerator, denominator, cellCount, slot.harmonyRotation ?? 0);
       }
     }
+    // A genre slot's groove is a whole-section groove choice: when it names
+    // one, it replaces what's there (and clears the rhythm blocks authored
+    // against the old groove) rather than writing the field directly. No
+    // override in the slot → the section's own groove is left untouched.
+    const grooveOverride = inferGrooveOverride(slot.groove);
+    const withGroove = grooveOverride
+      ? applyGrooveChoice(section, grooveOverride === "none" ? { kind: "muted" } : { kind: "preset", pattern: grooveOverride })
+      : section;
+
     return {
-      ...section,
-      bars: slot.bars ?? section.bars,
-      velocity: slot.velocity ?? section.velocity,
+      ...withGroove,
+      bars: slot.bars ?? withGroove.bars,
+      velocity: slot.velocity ?? withGroove.velocity,
       beatsPerChord,
       timeSignatureNumerator: numerator,
-      timeSignatureDenPower: slot.timeSignatureDenPower ?? section.timeSignatureDenPower,
+      timeSignatureDenPower: slot.timeSignatureDenPower ?? withGroove.timeSignatureDenPower,
       transitionNote: slot.purpose,
       chords: slot.progression?.length
         ? honeycombTextToChords(slot.progression.join(" "), resolvedKey, beatsPerChord, resolvedScale)
-        : section.chords,
-      drumPattern: inferGrooveOverride(slot.groove) ?? section.drumPattern,
+        : withGroove.chords,
       harmonyMeterOutline,
       harmonyFollowsDrums: harmonyRhythm === "follow drums" ? true : harmonyRhythm === "beats" ? false : undefined,
       syncopationOffset: slot.syncopationOffset,

@@ -25,8 +25,18 @@ export const STEP_W = 40;
 export const LADDER_STEPS = 12;
 export const BEAT_Z = 26;
 export const BOX_X = 30;
-/** Height of the tension strip pinned inside the plate's foot. */
-export const TENSION_H = 46;
+/** Height of the editable band pinned inside the plate's foot — the
+ *  effects lane, or the voices lane. The scene gives this much up. */
+export const FOOT_H = 46;
+/** The voices lane needs room for two chip rows; the effects lane is one. */
+export const FOOT_H_VOICES = 118;
+/** How far above the floor plane the generated-voice marks sit. Low enough to
+ *  read as "under this chord", high enough that the bottom row's bars and
+ *  their note labels clear the plate's edge. */
+export const VOICE_Y = 6;
+/** Bass bars are nudged this far below the chord box that shares their pitch
+ *  row, so they clear its caption instead of striking through it. */
+export const BASS_DY = 17;
 /** Breathing room at the plate's left and right edges, in pixels. */
 export const PAD = 26;
 /** The bar ruler across the top of the plate. */
@@ -58,6 +68,8 @@ export interface FloorFitInput {
   locked: boolean;
   barsShown: number;
   beatsPerBar: number;
+  /** How much of the plate's height the foot band takes. Default `FOOT_H`. */
+  footHeight?: number;
 }
 
 export interface FloorFit {
@@ -80,6 +92,7 @@ export function computeFloorFit(input: FloorFitInput): FloorFit {
     locked,
     barsShown,
     beatsPerBar,
+    footHeight = FOOT_H,
   } = input;
   const base: SceneCamera = { ...camera, zoom: 1, panX: 0, panY: 0 };
   const proj = (point: Vec3) => projectPoint(point, base, { x: 0, y: 0 });
@@ -114,7 +127,11 @@ export function computeFloorFit(input: FloorFitInput): FloorFit {
   const windowZ0 = windowStart * BEAT_Z;
   const windowZ1 = (windowStart + windowBeats) * BEAT_Z;
   for (const node of nodes) {
-    if (!(node.start + node.beats > windowStart - 0.001 && node.start < windowStart + windowBeats)) continue;
+    if (!(
+      node.start + node.beats > windowStart - 0.001 &&
+      node.start < windowStart + windowBeats
+    ))
+      continue;
     const hx = node.size.x / 2;
     const hy = node.size.y / 2;
     const hz = node.size.z / 2;
@@ -123,7 +140,11 @@ export function computeFloorFit(input: FloorFitInput): FloorFit {
     for (const sx of [-hx, hx]) {
       for (const sy of [-hy, hy]) {
         for (const sz of [z0, z1]) {
-          const point = proj({ x: node.center.x + sx, y: node.center.y + sy, z: sz });
+          const point = proj({
+            x: node.center.x + sx,
+            y: node.center.y + sy,
+            z: sz,
+          });
           contentXs.push(point.x);
           contentYs.push(point.y);
         }
@@ -150,22 +171,28 @@ export function computeFloorFit(input: FloorFitInput): FloorFit {
 
   addGrid(windowBeats);
   const first = spans();
-  const sceneH = Math.max(120, stageH - RULER_H - TENSION_H - 20);
+  const sceneH = Math.max(120, stageH - RULER_H - footHeight - 20);
   const zoomFromWidth = (width - PAD * 2) / first.spanX;
   // Never fewer than MIN_BARS_ACROSS bars: past that the grid grows drop
   // room instead of widening the same four.
-  const zoomCap = (width - PAD * 2) / (MIN_BARS_ACROSS * Math.max(1, beatsPerBar) * BEAT_Z);
+  const zoomCap =
+    (width - PAD * 2) / (MIN_BARS_ACROSS * Math.max(1, beatsPerBar) * BEAT_Z);
   // In the locked front view the TIME axis alone decides the zoom; the
   // vertical budget belongs to `scaleY` below. That split is the whole
   // point: a 77-bar window compresses time without shrinking the twelve
   // ladder rows into a smear, and a 2-bar window stops drawing 600px bars.
   const zoom = locked
     ? Math.max(0.16, Math.min(3.2, Math.min(zoomFromWidth, zoomCap)))
-    : Math.max(0.16, Math.min(3.2, Math.min(zoomFromWidth, sceneH / first.spanY)));
+    : Math.max(
+        0.16,
+        Math.min(3.2, Math.min(zoomFromWidth, sceneH / first.spanY)),
+      );
 
   // Width left over at this zoom becomes drop-room bars (rounded DOWN so the
   // extension can never push the grid past the plate).
-  const slack = locked ? Math.max(0, (width - PAD * 2) / zoom - first.spanX) : 0;
+  const slack = locked
+    ? Math.max(0, (width - PAD * 2) / zoom - first.spanX)
+    : 0;
   const barWidth = Math.max(1, beatsPerBar * BEAT_Z);
   const extraBars = Math.min(MAX_DROP_BARS, Math.ceil(slack / barWidth));
   const gridBars = barsShown + extraBars;
@@ -174,7 +201,9 @@ export function computeFloorFit(input: FloorFitInput): FloorFit {
   // final bar ends on the right pad: the grid is flush to both edges instead
   // of leaving a bar's worth of plate hanging off the end.
   const finalZoom =
-    extraBars > 0 ? Math.max(0.16, Math.min(zoom, (width - PAD * 2) / bounds.spanX)) : zoom;
+    extraBars > 0
+      ? Math.max(0.16, Math.min(zoom, (width - PAD * 2) / bounds.spanX))
+      : zoom;
   const { xs, ys } = bounds;
 
   const left = Math.min(...xs);
@@ -190,13 +219,18 @@ export function computeFloorFit(input: FloorFitInput): FloorFit {
   const scaleY = (() => {
     if (!locked) return 1;
     const rowPitch =
-      Math.abs(proj({ x: STEP_W, y: 0, z: 0 }).y - proj({ x: 0, y: 0, z: 0 }).y) * finalZoom;
+      Math.abs(
+        proj({ x: STEP_W, y: 0, z: 0 }).y - proj({ x: 0, y: 0, z: 0 }).y,
+      ) * finalZoom;
     if (!(rowPitch > 0.0001)) return 1;
     const target = (sceneH * ROW_SHARE) / LADDER_STEPS;
     // Never past the plate: whatever scale we pick, the content must fit.
     // This wins even when it means squashing below the comfortable floor —
     // a stacked band is short, and clipping the tonic row is worse.
-    const fitLimit = Math.max(0.2, sceneH / Math.max(1, (bottom - top) * finalZoom));
+    const fitLimit = Math.max(
+      0.2,
+      sceneH / Math.max(1, (bottom - top) * finalZoom),
+    );
     return Math.min(Math.max(target / rowPitch, 0.55), fitLimit);
   })();
   return {
@@ -206,7 +240,10 @@ export function computeFloorFit(input: FloorFitInput): FloorFit {
     gridBars,
     origin: {
       x: PAD - left * finalZoom,
-      y: RULER_H + (height - RULER_H - TENSION_H) / 2 - (((top + bottom) / 2) * finalZoom * scaleY),
+      y:
+        RULER_H +
+        (height - RULER_H - footHeight) / 2 -
+        ((top + bottom) / 2) * finalZoom * scaleY,
     },
   };
 }

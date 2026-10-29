@@ -102,12 +102,20 @@ describe("narrative reach across the exported stems", () => {
   it("re-seeds the drum groove only for a non-neutral arc", () => {
     // The pick is seeded from the style, so a real arc changes which groove is
     // drawn; an all-neutral arc must leave the historical pick untouched.
-    const bare = song();
-    const neutralArc = song({ tension_profile: 0.5, rhythmic_energy: 0.5, transition_delta: 0, structural_warp: 0 });
-    const realArc = song({ ...WARPED, structural_warp: 0, rhythmic_energy: 1 });
+    //
+    // Asserted across several sections, not one: the seeded pick lands on the
+    // clean default ~35% of the time, so a SINGLE section can legitimately
+    // resolve to the same groove under two different seeds. Over a handful of
+    // sections a re-seed that does nothing is the only way the two agree.
+    const many = (narrative?: NarrativeProfile): BlueprintSong => {
+      const built = song(narrative);
+      built.sections = Array.from({ length: 6 }, (_, i) => section({ id: `v${i}` }));
+      built.arrangement = built.sections.map((s0) => ({ sectionId: s0.id, repeats: 1 }));
+      return built;
+    };
     const drums = (s0: BlueprintSong) => planDrumStem(sectionSpans(s0), s0).map((n) => `${n.pitch}@${n.startTime}`);
-    expect(drums(neutralArc)).toEqual(drums(bare));
-    expect(drums(realArc)).not.toEqual(drums(bare));
+    expect(drums(many({ tension_profile: 0.5, rhythmic_energy: 0.5, transition_delta: 0, structural_warp: 0 }))).toEqual(drums(many()));
+    expect(drums(many({ ...WARPED, structural_warp: 0, rhythmic_energy: 1 }))).not.toEqual(drums(many()));
   });
 
   it("scales chord velocity with energy — bend or narrative", () => {

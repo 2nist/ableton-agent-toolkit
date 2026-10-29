@@ -28,6 +28,9 @@ export interface HarmonyDeskProps {
   /** Write (or clear) the section's authored tonic regions — the "rehome the
    *  analysis" verb: same pitches, different numerals. */
   onChangeRegions: (regions: TonicRegion[] | undefined) => void;
+  /** Write the SECTION (its bass/colour profiles) — the foot band's Voices
+   *  tab. Chords have their own writer above; these are section-scoped. */
+  onChangeSection: (updater: (section: BlueprintSection) => BlueprintSection) => void;
   /** Replace this section with the sections its own chord stream contains —
    *  one undo step, written like any other structural edit. */
   onSplitSection: (splits: SectionSplit[]) => void;

@@ -10,14 +10,14 @@ import {
 /**
  * The song editor's SHARED section selection — which section has focus.
  * Written by the spine (shell chrome on every song route since P2 — its
- * blocks are the app-wide section navigator) and read by the Studio
- * arrangement timeline + Mix/Bend panel, the Workbench's section workspace
- * + Structure rail, and the Harmony workspace (since the Harmony dock's
- * section chips died in P2). The "studio" in the name is historical —
- * treat this as THE section selection for a song, the way
+ * blocks are the app-wide section navigator) and read by the arrangement
+ * timeline + Mix/Bend panel, the Workbench's section workspace + Structure
+ * rail, and the Harmony workspace (since the Harmony dock's section chips
+ * died in P2). Named `studioSelectionStore` until the Studio view was
+ * retired — treat this as THE section selection for a song, the way
  * `songStore.currentSong()` is THE song.
  */
-interface StudioSelection extends SelectionState {
+interface FocusedSection extends SelectionState {
   /** The ONE section single-section views follow — always the last pick, and
    *  always a member of `selected` (or null). */
   selectedSectionId: string | null;
@@ -33,7 +33,7 @@ interface StudioSelection extends SelectionState {
   reconcile: (order: readonly string[]) => void;
 }
 
-export const useStudioSelectionStore = create<StudioSelection>((set, get) => ({
+export const useFocusedSectionStore = create<FocusedSection>((set, get) => ({
   ...EMPTY_SELECTION,
   selectedSectionId: null,
   setSelectedSectionId: (id) =>

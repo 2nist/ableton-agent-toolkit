@@ -2,32 +2,21 @@ import type { NoteDescription } from "@ableton-extensions/sdk";
 import {
   PRESET_DATA,
   FILL_DATA,
-  inferPatternForGenre,
-  songSignalsFor,
-  humanizeOutlineNotes,
   planSectionDrumNotes,
-  outlineBeatsPerBar,
-  outlineToClickPattern,
-  outlineToGroovePattern,
-  occurrenceSeed,
-  hashSeed,
-  pickVariantIndexFor,
-  applyStyleToVariant,
-  hasBend,
-  hasNarrative,
+  humanizeOutlineVariant,
   narrativeTransitionModel,
   resolveEffectiveStyle,
   resolveNarrativeProfile,
-  styleSeed,
+  exportSectionVariant,
+  sectionDrumInput,
   styleVelocityTarget,
   type DrumPattern,
   type FillLibrary,
   type PackedPreset,
-  type PackedVariant,
   type SectionDrumInput,
 } from "@drum/library";
 import { getVelocity } from "@music-theory/song-structure";
-import { barLengths, beatsPerBar, meterForLength, type BlueprintSection, type MeterOutline } from "@music-theory/song-blueprint";
+import { barLengths, beatsPerBar } from "@music-theory/song-blueprint";
 import { sectionSpans, type BlueprintSong } from "./blueprint.js";
 
 export interface DrumClipPlan {
@@ -43,37 +32,16 @@ export type { FillLibrary };
 const HIT_DURATION = 0.25;
 
 /**
- * Turns a section's `drumMeterOutline` into a `PackedVariant` shaped like
- * any corpus/synth preset variant, so it can flow through the exact same
- * scale/tile/handoff pipeline as every other pattern, with no
- * special-casing downstream. When the outline carries `cellVoices` (a
- * per-cell kick/snare assignment, authored in TrackDraft's Drums tab or
- * Drum Studio's Outline mode), each cell's downbeat plays that voice
- * instead of a flat click — a real groove, not just a hi-hat count-along.
- * Absent `cellVoices` (or an outline authored before that field existed)
- * falls back to `outlineToClickPattern`, identical to before. Either way,
- * the result is then humanized (`humanizeOutlineNotes`) rather than left
- * on a mathematically perfect grid.
- */
-function outlineVariant(outline: MeterOutline, presetData: Partial<Record<DrumPattern, PackedPreset>>): PackedVariant {
-  const bpb = outlineBeatsPerBar(outline);
-  const rawNotes = outline.cellVoices ? outlineToGroovePattern(outline, outline.cellVoices) : outlineToClickPattern(outline);
-  return {
-    lengthBeats: bpb,
-    beatsPerBar: bpb,
-    notes: humanizeOutlineNotes(rawNotes, outline.cellBeats, presetData),
-    source: { origin: "synth", generator: outline.cellVoices ? "outline-groove" : "outline-click" },
-  };
-}
-
-/**
- * One clip per section. Pattern and variant selection, in priority order:
+ * One clip per section. Pattern and variant selection is NOT resolved here —
+ * `@drum/library`'s `selectSectionGroove` owns it, so TrackDraft's preview, its
+ * `.mid` export and this Ableton plan all read the same groove. The priority it
+ * implements, for reference:
  *
  * - When `section.drumMeterOutline` is set (built in Drum Studio's Outline
  *   tab or TrackDraft's Drums tab, for a meter the corpus has no analogue
  *   for at all — 9/8, 11/16, 25/16...), a pattern is generated from it
  *   directly — a real kick/snare groove when the outline carries
- *   `cellVoices`, a plain accented click otherwise (see `outlineVariant`).
+ *   `cellVoices`, a plain accented click otherwise.
  *   This is the "sync together" answer with the rest of the arrangement
  *   pipeline: the same blueprint field a section already carries, driving
  *   the same per-section clip this function has always produced, on the
@@ -95,133 +63,58 @@ function outlineVariant(outline: MeterOutline, presetData: Partial<Record<DrumPa
  * the named transition (`drumTransitionModel`) and the resolve-on-crash —
  * runs in `@drum/library`'s `planSectionDrumNotes`, the SAME function the
  * web app's MIDI export uses, so "Export MIDI", live MIDI out, and
- * "Send to Ableton" all produce the same drums. This file only resolves
- * each section's *base* groove (the part that needs song-blueprint /
- * song-structure types) and maps the results into the library's
- * DAW-agnostic `SectionDrumInput`, exactly like `planSectionHandoffFills`.
+ * "Send to Ableton" all produce the same drums. This file only supplies what
+ * is genuinely bridge-specific: the section spans, the velocity preset and the
+ * fitted clip note shape. `exportSectionVariant` resolves (and humanises) the
+ * base groove and `sectionDrumInput` assembles it, both shared with the app.
  *
  * `presetData`/`fillData` default to the real library and only need
  * overriding in tests, which use small fixture presets instead of asserting
  * against actual baked content — that content legitimately changes shape
  * when the pipeline is re-run.
  */
-/** A section's own base groove — pattern (or meter outline) → variant, with
- *  the same meter-aware pick the app uses. Factored out so a section with a
- *  meter map can also ask for the groove at each of its other bar lengths. */
-function resolveBaseVariant(
-  section: BlueprintSection,
-  durationBeats: number,
-  occurrenceIndex: number,
-  song: BlueprintSong,
-  songSignals: ReturnType<typeof songSignalsFor>,
-  presetData: Partial<Record<DrumPattern, PackedPreset>>,
-): PackedVariant | null {
-  if (section.drumMeterOutline) return outlineVariant(section.drumMeterOutline, presetData);
-
-  const pattern = section.drumPattern ?? inferPatternForGenre(
-    {
-      role: section.role,
-      velocity: section.velocity,
-      name: section.name,
-      timeSignatureNumerator: section.timeSignatureNumerator,
-      timeSignatureDenominator: 2 ** section.timeSignatureDenPower,
-    },
-    songSignals,
-    song.genre,
-  );
-  const preset = presetData[pattern];
-  if (!preset || preset.variants.length === 0) return null;
-
-  // Explicit variant index when the user chose one (clamped to valid range);
-  // otherwise the deterministic meter-aware pick that defaults to the clean
-  // downbeat groove (variant 0) most of the time, with the corpus/mined
-  // variants as seeded variation — matches the app's preview/export.
-  const variantIndex = section.drumVariantIndex !== undefined
-    ? Math.max(0, Math.min(section.drumVariantIndex, preset.variants.length - 1))
-    : pickVariantIndexFor(
-        hashSeed(
-          hasBend(section, song) || hasNarrative(section, song)
-            ? styleSeed(resolveEffectiveStyle(section, song), section.id, occurrenceIndex)
-            : occurrenceSeed(section.id, occurrenceIndex),
-        ),
-        preset.variants,
-        durationBeats,
-        beatsPerBar(section),
-      );
-  return preset.variants[variantIndex];
-}
-
 export function planDrumClips(
   song: BlueprintSong,
   presetData: Partial<Record<DrumPattern, PackedPreset>> = PRESET_DATA,
   fillData: FillLibrary = FILL_DATA,
 ): DrumClipPlan[] {
   const spans = sectionSpans(song);
-  // The exact same signals the app's preview/export/live feed the heuristic
-  // (shared `songSignalsFor`), so a fast/trap-leaning song resolves the
-  // same in-browser and here — no drift.
-  const songSignals = songSignalsFor(song);
 
-  // First pass: choose the base pattern + variant per section, so the
-  // handoff planner can look at the *next* section's resolved target too.
-  const resolved: (PackedVariant | null)[] = spans.map(({ section, occurrenceIndex, durationBeats }) =>
-    resolveBaseVariant(section, durationBeats, occurrenceIndex, song, songSignals, presetData),
-  );
-
-  // Map each span into the library's shared per-section pipeline — voice
-  // overrides, detour, transition, and the outline fill are all carried
-  // here, so the app's MIDI export and this Ableton plan can't drift.
-  const inputs: SectionDrumInput[] = spans.map(({ section, durationBeats, occurrenceIndex }, i) => {
+  // Every span becomes the library's `SectionDrumInput` the same way the app's
+  // `midiExport.ts` builds it — same selection, same humanization, same field
+  // mapping — so the two consumers can't drift.
+  const inputs: SectionDrumInput[] = spans.map(({ section, durationBeats, occurrenceIndex }) => {
+    const profile = resolveEffectiveStyle(section, song);
+    const narrative = resolveNarrativeProfile(section, song);
+    const request = { section, song, occurrenceIndex, durationBeats, beatsPerBar: beatsPerBar(section), presetData };
+    const variant = exportSectionVariant(request, profile);
     // A section that changes meter gets one groove per bar length, so a 4/4
-    // pattern is not chopped at 3.5 beats when the chart drops to 7/8. Mirrors
-    // the app's `planDrumStem`, so app == bridge.
+    // pattern is not chopped at 3.5 beats when the chart drops to 7/8.
     const barBeats = barLengths(section);
     const distinctBars = [...new Set(barBeats)];
     const meterVariants =
       distinctBars.length > 1
         ? Object.fromEntries(
             distinctBars.flatMap((length) => {
-              const meter = meterForLength(length);
-              const probe: BlueprintSection = {
-                ...section,
-                timeSignatureNumerator: meter.numerator,
-                timeSignatureDenPower: Math.log2(meter.denominator),
-              };
-              const runVariant = resolveBaseVariant(probe, durationBeats, occurrenceIndex, song, songSignals, presetData);
-              const styled = runVariant ? applyStyleToVariant(runVariant, resolveEffectiveStyle(section, song)) : null;
+              const styled = exportSectionVariant({ ...request, beatsPerBar: length }, profile);
               return styled ? [[String(length), styled] as const] : [];
             }),
           )
         : undefined;
-    // The Bend note transforms (Feel + Backbeat) apply after the outline
-    // humanization baked into `resolved[i]` — the same relative point the
-    // app applies them, so app == bridge. Neutral profile = no-op.
-    const profile = resolveEffectiveStyle(section, song);
-    const narrative = resolveNarrativeProfile(section, song);
-    const variant = resolved[i] ? applyStyleToVariant(resolved[i], profile) : null;
-    return {
-      sectionId: section.id,
+
+    return sectionDrumInput({
+      section,
       occurrenceIndex,
-      role: section.role ?? null,
+      durationBeats,
       beatsPerBar: beatsPerBar(section),
-      ...(meterVariants ? { barBeats, meterVariants } : {}),
       variant,
-      outline: section.drumMeterOutline ?? null,
-      voiceOverrides: section.drumVoicePatterns,
-      mute: section.drumLaneMute,
-      solo: section.drumLaneSolo,
-      blocks: section.drumBlocks,
-      variation: section.drumVariationOutline ?? null,
-      variationBars: section.drumVariationBars,
-      variationStartBeat: section.drumVariationStartBeat,
+      velocityTarget: styleVelocityTarget(getVelocity(section.velocity), profile),
       // transition_delta → a named transition model when the author hasn't
       // picked one explicitly (an authored drumTransitionModel always wins).
       transitionModel: section.drumTransitionModel ?? narrativeTransitionModel(narrative.transition_delta),
-      transitionBars: section.drumTransitionBars,
-      gridBeats: section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25,
-      durationBeats,
-      velocityTarget: styleVelocityTarget(getVelocity(section.velocity), profile),
-    };
+      barBeats,
+      meterVariants,
+    });
   });
 
   const plans = planSectionDrumNotes(inputs, fillData);

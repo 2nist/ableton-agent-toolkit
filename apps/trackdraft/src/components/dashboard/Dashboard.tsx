@@ -4,6 +4,7 @@ import { useSongStore } from "../../store/songStore";
 import { useDirectoryStore, type DirectoryEntry } from "../../store/directoryStore";
 import { computeConfidence } from "../../lib/confidence";
 import { parseFile } from "../../lib/parsers";
+import { isElectronHost } from "../../lib/host";
 
 import Sidebar from "./Sidebar";
 import ActionBar from "./ActionBar";
@@ -66,6 +67,11 @@ export default function Dashboard() {
   // source; the store's addDirectory auto-marks the first entry as default
   // when the list has none.
   useEffect(() => {
+    // Desktop: the on-disk library IS the corpus. These paths are either
+    // repo-relative (no `scripts/` exists inside the bundle) or outside the
+    // app's read grant, so registering them only produced chips that could
+    // never load. The user adds real folders through the gear.
+    if (isElectronHost()) return;
     const store = useDirectoryStore.getState();
     const builtIns = [
       { path: "scripts/output/catalog", label: "Beatles Catalog", isDefault: false },
@@ -125,8 +131,12 @@ export default function Dashboard() {
 
   // Determine which view to show in the main area
   const showDirListing = selectedDir !== null;
-  const dirEntries: DirectoryEntry[] =
-    selectedDir ? (listings[selectedDir] ?? []) : [];
+  // Memoized on the listing, not rebuilt each render — this feeds a
+  // useMemo below, and a fresh array per render defeated it.
+  const dirEntries = useMemo<DirectoryEntry[]>(
+    () => (selectedDir ? (listings[selectedDir] ?? []) : []),
+    [selectedDir, listings],
+  );
   const isLoadingDir = selectedDir ? dirLoading === selectedDir : false;
   const dirLabel = selectedDir ? (dirs.find((d) => d.path === selectedDir)?.label ?? selectedDir) : "";
 

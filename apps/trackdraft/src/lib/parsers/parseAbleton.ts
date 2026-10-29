@@ -37,27 +37,15 @@ interface LiveSetMidiNote {
   velocity: number;
 }
 
-interface LiveSetData {
-  tempo: number;       // BPM
-  key: NoteName;
-  scale: string;
-  timeSigNum: number;
-  timeSigDen: number;
-  locators: LiveSetLocator[];
-  /** Raw note data from all MIDI clips — grouped by locator-boundary later */
-  notes: LiveSetMidiNote[];
-}
 
 // ---------------------------------------------------------------------------
 // XML parsing helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Decompress a gzipped .als file and parse the XML into a JSON object.
- */
-async function parseAlsXml(gzipData: ArrayBuffer): Promise<Record<string, unknown>> {
-  const buffer = Buffer.from(gzipData);
-  const xml = zlib.gunzipSync(buffer).toString("utf-8");
+/** Parse an already-decompressed Live Set XML string. Kept separate from the
+ *  gunzip so the Electron main process can decompress (it owns Node) while the
+ *  renderer keeps the DOM walk. */
+function parseAlsXmlText(xml: string): Record<string, unknown> {
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: "@_",
@@ -200,7 +188,7 @@ function extractKey(parsed: Record<string, unknown>): { key: NoteName; scale: st
   return { key: "C", scale: "ionian" };
 }
 
-function extractMidiNotes(parsed: Record<string, unknown>, tempo: number): LiveSetMidiNote[] {
+function extractMidiNotes(parsed: Record<string, unknown>): LiveSetMidiNote[] {
   const notes: LiveSetMidiNote[] = [];
   const root = parsed.Ableton;
   if (!root || typeof root !== "object") return notes;
@@ -281,11 +269,29 @@ export async function alsToBlueprintSong(
   arrayBuffer: ArrayBuffer,
   title: string,
 ): Promise<BlueprintSong> {
+  let xml: string;
+  try {
+    xml = zlib.gunzipSync(Buffer.from(arrayBuffer)).toString("utf-8");
+  } catch {
+    // Some sets are saved uncompressed.
+    xml = Buffer.from(arrayBuffer).toString("utf-8");
+  }
+  return alsXmlToBlueprintSong(xml, title);
+}
+
+/**
+ * Build a song from an ALREADY-DECOMPRESSED Live Set XML string.
+ *
+ * This is the entry point the Electron host uses: `zlib` is a Node builtin, so
+ * the main process does the gunzip over IPC and the renderer — which has no
+ * Node — only does what it can do in any browser.
+ */
+export async function alsXmlToBlueprintSong(xml: string, title: string): Promise<BlueprintSong> {
   const now = new Date().toISOString();
   let parsed: Record<string, unknown>;
 
   try {
-    parsed = await parseAlsXml(arrayBuffer);
+    parsed = parseAlsXmlText(xml);
   } catch (err) {
     throw new Error(
       `Failed to parse .als file: ${err instanceof Error ? err.message : "Unknown error"}. Make sure this is a valid Ableton Live Set.`,
@@ -296,7 +302,7 @@ export async function alsToBlueprintSong(
   const { tempo, timeSigNum, timeSigDen } = extractMasterData(parsed);
   const { key, scale } = extractKey(parsed);
   const locators = extractLocators(parsed);
-  const notes = extractMidiNotes(parsed, tempo);
+  const notes = extractMidiNotes(parsed);
 
   // Build sections from locator markers
   const sections: BlueprintSection[] = [];
@@ -349,7 +355,9 @@ export async function alsToBlueprintSong(
     id: crypto.randomUUID(),
     title,
     key,
-    scale: "ionian",
+    // `extractKey` is still a stub (C ionian); read it through rather than
+    // hard-coding a second copy that would silently disagree once it is real.
+    scale: scale as BlueprintSong["scale"],
     bpm: tempo,
     timeSignatureNumerator: timeSigNum,
     timeSignatureDenominator: timeSigDen,

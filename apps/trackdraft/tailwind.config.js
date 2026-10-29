@@ -12,7 +12,7 @@ export default {
         // palette without touching a component.
         //
         // This used to import @platform/ui-kit's ABLETON_DARK directly. Those
-        // values now live in `src/index.css` as the `:root` defaults — the
+        // values now live in `src/theme/themes.css` as the `:root` defaults — the
         // dark theme is still exactly Ableton's chrome, it just arrives via a
         // variable. NEVER write a hex here: a literal breaks the theme, and
         // the opacity modifiers silently stop working.
@@ -43,6 +43,7 @@ export default {
         label: "rgb(var(--c-label) / <alpha-value>)",
         grid: "rgb(var(--c-grid) / <alpha-value>)",
         cream: "rgb(var(--c-cream) / <alpha-value>)",
+        select: "rgb(var(--c-select) / <alpha-value>)",
       },
       fontFamily: {
         // The log sheet has exactly four voices and `font-mono` is one of them:
@@ -56,7 +57,9 @@ export default {
         // theme/themes.css, which is why the values sit at 17px rather than
         // the 16px a heavier hand could hold.
         hand: ["'Reenie Beanie'", "'Segoe Script'", "'Bradley Hand'", "cursive"],
-        marker: ["'Permanent Marker'", "Caveat", "cursive"],
+        // Only Permanent Marker is loaded (index.html) — keep this identical
+        // to the --marker-pen stack in theme/themes.css.
+        marker: ["'Permanent Marker'", "cursive"],
       },
       // Tightened from Tailwind's defaults (sm 2px/DEFAULT 4px/md 6px/lg 8px)
       // toward Live's own near-square clip cells, buttons, and knob chips —

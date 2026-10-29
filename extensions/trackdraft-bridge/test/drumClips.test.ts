@@ -434,7 +434,7 @@ describe("planDrumClips — drumTransitionModel (named transitions)", () => {
 });
 
 describe("planDrumClips — drumMeterOutline (odd-meter outline authoring)", () => {
-  it("generates a click pattern spanning the outline's own beats-per-bar, not the preset engine", () => {
+  it("spans the outline's own beats-per-bar, not the preset engine", () => {
     // 7/16 as 2+2+3, cellBeats 0.25 -> beatsPerBar 1.75. bars is derived
     // from the section's own timeSignatureNumerator/bars via sectionSpans,
     // independent of the outline — durationBeats below just confirms the
@@ -457,7 +457,12 @@ describe("planDrumClips — drumMeterOutline (odd-meter outline authoring)", () 
     const [clip] = planDrumClips(song, fixturePresets(), emptyFills);
     expect(clip.durationBeats).toBeCloseTo(7); // 4 bars * 1.75 beats/bar
     expect(clip.notes.length).toBeGreaterThan(0);
-    expect(clip.notes.every((n) => n.pitch === CLOSED_HAT)).toBe(true);
+    // The outline's own grid decides the pitches — a voiceless outline renders
+    // the default backbeat (kick/snare/hats), never the 4/4 preset engine's
+    // material, and never past its own 1.75-beat bar.
+    const backbone = new Set([KICK, SNARE, CLOSED_HAT]);
+    expect(clip.notes.every((n) => backbone.has(n.pitch))).toBe(true);
+    expect(clip.notes.every((n) => n.startTime >= 0 && n.startTime < 7)).toBe(true);
   });
 
   it("accents the first subdivision of each 2s/3s cell", () => {
@@ -499,8 +504,11 @@ describe("planDrumClips — drumMeterOutline (odd-meter outline authoring)", () 
       ],
     });
     const [clip] = planDrumClips(song, fixturePresets({ dnb }), emptyFills);
+    // The dnb preset's tom never appears: the outline wins, and its own grid
+    // (default backbeat for a voiceless outline) is what gets played.
     expect(clip.notes.some((n) => n.pitch === TOM_HIGH)).toBe(false);
-    expect(clip.notes.every((n) => n.pitch === CLOSED_HAT)).toBe(true);
+    const backbone = new Set([KICK, SNARE, CLOSED_HAT]);
+    expect(clip.notes.every((n) => backbone.has(n.pitch))).toBe(true);
   });
 
   it("gets a synthesized fill at a handoff, even though FILL_DATA has nothing for its fractional beats-per-bar", () => {
@@ -581,7 +589,7 @@ describe("planDrumClips — drumMeterOutline (odd-meter outline authoring)", () 
       expect(clip.notes.some((n) => n.pitch === CLOSED_HAT && n.startTime === 0.25)).toBe(true);
     });
 
-    it("an outline authored before cellVoices existed still renders as a plain click, unchanged", () => {
+    it("an outline authored before cellVoices existed gets the default backbeat, not a bare click", () => {
       const song = makeSong({
         id: "x",
         title: "x",
@@ -591,8 +599,11 @@ describe("planDrumClips — drumMeterOutline (odd-meter outline authoring)", () 
         ],
       });
       const [clip] = planDrumClips(song, fixturePresets(), emptyFills);
-      expect(clip.notes.every((n) => n.pitch === CLOSED_HAT)).toBe(true);
-      expect(clip.notes.some((n) => n.pitch === KICK || n.pitch === SNARE)).toBe(false);
+      // An applied Euclidean outline has to arrive with a kick and a snare, or
+      // the writer sees hats where they asked for a beat.
+      expect(clip.notes.some((n) => n.pitch === KICK)).toBe(true);
+      expect(clip.notes.some((n) => n.pitch === SNARE)).toBe(true);
+      expect(clip.notes.some((n) => n.pitch === CLOSED_HAT)).toBe(true);
     });
   });
 });

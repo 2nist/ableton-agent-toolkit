@@ -1,18 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { SYNTH_VARIANTS, SYNTH_FILLS } from "../src/synthesize.js";
+import { SYNTH_VARIANTS, SYNTH_FILLS, CURATED_PATTERNS } from "../src/synthesize.js";
 import { ABLETON_SAFE_NOTES } from "../src/ableton.js";
 
 const SAFE_PITCHES = new Set<number>(Object.values(ABLETON_SAFE_NOTES));
 
 describe("synthesized variants", () => {
-  it("covers the machine idioms and the odd meters", () => {
-    for (const pattern of ["four_on_floor", "trap", "breakbeat", "dnb", "78", "54", "68"] as const) {
+  it("covers the machine idioms", () => {
+    for (const pattern of ["four_on_floor", "trap", "breakbeat", "dnb"] as const) {
       expect(SYNTH_VARIANTS[pattern]!.length, pattern).toBeGreaterThanOrEqual(4);
     }
   });
 
+  it("covers the curated family, odd meters included", () => {
+    for (const pattern of ["kick_only", "standard", "half_time", "driving", "bridge_sparse", "intense", "78", "54", "68"] as const) {
+      expect(CURATED_PATTERNS[pattern]!.length, pattern).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it("emits only Ableton-safe pitches and legal velocities", () => {
-    for (const [pattern, variants] of Object.entries(SYNTH_VARIANTS)) {
+    for (const [pattern, variants] of [...Object.entries(SYNTH_VARIANTS), ...Object.entries(CURATED_PATTERNS)]) {
       for (const variant of variants!) {
         for (const [, pitch, velocity] of variant.notes) {
           expect(SAFE_PITCHES.has(pitch), `${pattern} pitch ${pitch}`).toBe(true);
@@ -24,7 +30,7 @@ describe("synthesized variants", () => {
   });
 
   it("keeps every note inside the declared loop length", () => {
-    for (const [pattern, variants] of Object.entries(SYNTH_VARIANTS)) {
+    for (const [pattern, variants] of [...Object.entries(SYNTH_VARIANTS), ...Object.entries(CURATED_PATTERNS)]) {
       for (const variant of variants!) {
         for (const [beat] of variant.notes) {
           expect(beat, `${pattern} note at ${beat}`).toBeGreaterThanOrEqual(0);
@@ -35,9 +41,9 @@ describe("synthesized variants", () => {
   });
 
   it("declares the right meter spans", () => {
-    expect(SYNTH_VARIANTS["78"]![0].lengthBeats).toBe(3.5);
-    expect(SYNTH_VARIANTS["54"]![0].lengthBeats).toBe(5);
-    expect(SYNTH_VARIANTS["68"]![0].lengthBeats).toBe(3);
+    expect(CURATED_PATTERNS["78"]![0].lengthBeats).toBe(3.5);
+    expect(CURATED_PATTERNS["54"]![0].lengthBeats).toBe(5);
+    expect(CURATED_PATTERNS["68"]![0].lengthBeats).toBe(3);
     expect(SYNTH_VARIANTS.four_on_floor![0].lengthBeats).toBe(4);
     // Two-bar loops still declare a 4-beat bar — that's what a fill replaces.
     expect(SYNTH_VARIANTS.trap![0].lengthBeats).toBe(8);

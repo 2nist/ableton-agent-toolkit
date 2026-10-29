@@ -1,13 +1,7 @@
 import { useEffect, useState } from "react";
-import {
-  listMidiInputs,
-  listMidiOutputs,
-  getMidiOutput,
-  midiOutSupported,
-  sendTestNote,
-  type MidiOutputInfo,
-} from "../../lib/playback/liveMidiOut";
+import { getMidiOutput, sendTestNote } from "../../lib/playback/liveMidiOut";
 import { runLoopbackTest, type LoopbackResult } from "../../lib/playback/midiSelfTest";
+import { useMidiOutputs } from "../../hooks/useMidiOutputs";
 import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 import { useDawTargetStore } from "../../store/dawTargetStore";
 import { useSongStore } from "../../store/songStore";
@@ -59,14 +53,12 @@ export default function MidiSetupPanel({ onClose, inline = false }: { onClose: (
   const song = useSongStore((s) => s.currentSong());
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
 
-  const [outputs, setOutputs] = useState<MidiOutputInfo[]>([]);
-  const [inputCount, setInputCount] = useState(0);
+  const { supported, outputs, inputCount } = useMidiOutputs();
   const [selfTest, setSelfTest] = useState<{ running: boolean; result?: LoopbackResult }>({ running: false });
   /** In-progress instrument name, committed on blur — `updateCurrentSong`
    *  pushes an undo entry per call, so a keystroke-by-keystroke write would
    *  bury the song's history under a single rename. */
   const [nameDraft, setNameDraft] = useState<{ stem: StemId; value: string } | null>(null);
-  const supported = midiOutSupported();
   const instruments = song?.instruments ?? {};
 
   useEffect(() => {
@@ -87,38 +79,6 @@ export default function MidiSetupPanel({ onClose, inline = false }: { onClose: (
       return { ...s, instruments: { ...s.instruments, [stem]: cleaned } };
     });
   }
-
-  // Refresh the port list each time the panel opens — the IAC bus may
-  // have appeared/disappeared since the page loaded. Also reconcile the
-  // persisted port id: Web MIDI ids aren't stable across browser restarts,
-  // so a saved id from a previous session can point at nothing — clear it
-  // so the "MIDI ●" dot and Play don't silently target a phantom port.
-  useEffect(() => {
-    if (!supported) return;
-    let alive = true;
-    listMidiOutputs()
-      .then((outs) => {
-        if (!alive) return;
-        setOutputs(outs);
-        const ids = new Set(outs.map((o) => o.id));
-        const current = useMidiSettingsStore.getState().midiOutputId;
-        if (current && !ids.has(current)) {
-          useMidiSettingsStore.getState().setMidiOutputId("");
-        }
-      })
-      .catch(() => setOutputs([]));
-    // Inputs aren't streamed to, but the count is diagnostic: a virtual bus
-    // with no matching input can't be loopback-tested, and "0 inputs" is
-    // itself the answer to "why doesn't the self-test pass?".
-    listMidiInputs()
-      .then((ins) => {
-        if (alive) setInputCount(ins.length);
-      })
-      .catch(() => setInputCount(0));
-    return () => {
-      alive = false;
-    };
-  }, [supported]);
 
   async function runSelfTest() {
     if (!midiOutputId) return;

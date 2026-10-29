@@ -1,15 +1,35 @@
 import { useState, type ReactNode } from "react";
-import { noteName, pitchClass, type NoteName, type ScaleType } from "@music-theory/core";
-import { BARS_PER_VIEW_OPTIONS, type BarsPerView } from "../../drums/blocks/meterGrid";
+import {
+  noteName,
+  pitchClass,
+  type NoteName,
+  type ScaleType,
+} from "@music-theory/core";
+import {
+  BARS_PER_VIEW_OPTIONS,
+  type BarsPerView,
+} from "../../drums/blocks/meterGrid";
 import { SectionNameInput } from "./SectionNameInput";
 
 export type FloorPreset = "front" | "threeQuarter" | "top";
 export type FloorExtension = "triad" | "seventh";
 
 const VIEW_PRESETS = [
-  { id: "front", label: "front", hint: "Locked front view — drag chords, the camera stays put" },
-  { id: "threeQuarter", label: "3D", hint: "Free camera — drag empty floor to orbit" },
-  { id: "top", label: "top", hint: "From above — depth is time, left to right" },
+  {
+    id: "front",
+    label: "front",
+    hint: "Locked front view — drag chords, the camera stays put",
+  },
+  {
+    id: "threeQuarter",
+    label: "3D",
+    hint: "Free camera — drag empty floor to orbit",
+  },
+  {
+    id: "top",
+    label: "top",
+    hint: "From above — depth is time, left to right",
+  },
 ] as const;
 
 export interface FloorBandProps {
@@ -100,12 +120,21 @@ export default function FloorBand({
         onPointerDown={onTonicPointerDown}
         className="flex items-baseline gap-1 rounded border border-edge px-1.5 py-0.5 text-ink hover:border-accent"
       >
-        <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">tonic</span>
+        <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">
+          tonic
+        </span>
         <span className="hand-value text-sm leading-none text-accent">
-          {tonicSteps === 0 ? keyName : `${keyName} → ${noteName((pitchClass(keyName) + tonicSemitones) % 12, keyName)}`}
+          {tonicSteps === 0
+            ? keyName
+            : `${keyName} → ${noteName((pitchClass(keyName) + tonicSemitones) % 12, keyName)}`}
         </span>
         <span className="text-[8px] text-inkMuted/60">{scale}</span>
-        {tonicSteps !== 0 && <span className="text-[8px] text-track">{tonicSemitones > 0 ? "+" : ""}{tonicSemitones}</span>}
+        {tonicSteps !== 0 && (
+          <span className="text-[8px] text-track">
+            {tonicSemitones > 0 ? "+" : ""}
+            {tonicSemitones}
+          </span>
+        )}
       </button>
 
       <span className="flex items-center gap-0.5">
@@ -136,7 +165,9 @@ export default function FloorBand({
 
       {sections.length > 1 && renaming === null && (
         <label className="flex items-center gap-1">
-          <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">section</span>
+          <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">
+            section
+          </span>
           <select
             value={sectionId}
             onChange={(event) => onSectionChange(event.target.value)}
@@ -154,7 +185,11 @@ export default function FloorBand({
       {onRenameSection && renaming === null && sections.length > 1 && (
         <button
           type="button"
-          onClick={() => setRenaming(sections.find((entry) => entry.id === sectionId)?.name ?? "")}
+          onClick={() =>
+            setRenaming(
+              sections.find((entry) => entry.id === sectionId)?.name ?? "",
+            )
+          }
           title="Rename this section"
           className="rounded border border-edge px-1 py-0.5 text-[9px] text-inkMuted hover:border-accent hover:text-ink"
         >
@@ -185,7 +220,9 @@ export default function FloorBand({
       )}
 
       <span className="flex items-center gap-1">
-        <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">bars</span>
+        <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">
+          bars
+        </span>
         <span className="flex overflow-hidden rounded border border-edge">
           {BARS_PER_VIEW_OPTIONS.map((option) => (
             <button
@@ -199,7 +236,9 @@ export default function FloorBand({
                   : `${option} bar${option === 1 ? "" : "s"} per view — the bar arrows walk the section`
               }
               className={`border-r border-edge px-1 py-0.5 last:border-r-0 ${
-                barsPerView === option ? "bg-accent text-accentInk" : "hover:text-ink"
+                barsPerView === option
+                  ? "bg-accent text-accentInk"
+                  : "hover:text-ink"
               }`}
             >
               {option === "all" ? "ALL" : option}
@@ -209,7 +248,9 @@ export default function FloorBand({
       </span>
 
       <span className="flex items-center gap-1">
-        <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">place</span>
+        <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">
+          place
+        </span>
         <span className="flex overflow-hidden rounded border border-edge">
           {(["triad", "seventh"] as const).map((option) => (
             <button
@@ -219,7 +260,9 @@ export default function FloorBand({
               onClick={() => onExtensionChange(option)}
               title={`A click on the ladder places the row's ${option === "triad" ? "diatonic triad" : "diatonic seventh"} — a row between two scale steps takes the nearer one's chord`}
               className={`border-r border-edge px-1 py-0.5 last:border-r-0 ${
-                extension === option ? "bg-accent text-accentInk" : "hover:text-ink"
+                extension === option
+                  ? "bg-accent text-accentInk"
+                  : "hover:text-ink"
               }`}
             >
               {option === "triad" ? "triad" : "7th"}
@@ -229,7 +272,9 @@ export default function FloorBand({
       </span>
 
       <span className="flex items-center gap-1">
-        <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">view</span>
+        <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">
+          view
+        </span>
         <span className="flex overflow-hidden rounded border border-edge">
           {VIEW_PRESETS.map((option) => (
             <button
@@ -239,7 +284,9 @@ export default function FloorBand({
               onClick={() => onPresetChange(option.id)}
               title={option.hint}
               className={`border-r border-edge px-1 py-0.5 last:border-r-0 ${
-                preset === option.id ? "bg-accent text-accentInk" : "hover:text-ink"
+                preset === option.id
+                  ? "bg-accent text-accentInk"
+                  : "hover:text-ink"
               }`}
             >
               {option.label}
@@ -247,7 +294,10 @@ export default function FloorBand({
           ))}
         </span>
         {!locked && (
-          <span className="text-[8px] text-track" title="The camera is free — drag empty floor to orbit">
+          <span
+            className="text-[8px] text-track"
+            title="The camera is free — drag empty floor to orbit"
+          >
             unlocked
           </span>
         )}
@@ -258,7 +308,9 @@ export default function FloorBand({
           type="button"
           aria-label="Previous bar"
           disabled={lastFirstBar === 0}
-          onClick={() => onFirstBar(Math.max(0, Math.min(windowFirstBar, lastFirstBar) - 1))}
+          onClick={() =>
+            onFirstBar(Math.max(0, Math.min(windowFirstBar, lastFirstBar) - 1))
+          }
           className="px-0.5 text-inkMuted hover:text-ink disabled:opacity-30"
         >
           ◂
@@ -282,7 +334,11 @@ export default function FloorBand({
       {tools}
 
       <span className="ml-auto flex items-center gap-2">
-        {activeRegions > 0 && <span className="text-accent/80">{activeRegions} tonic region{activeRegions === 1 ? "" : "s"}</span>}
+        {activeRegions > 0 && (
+          <span className="text-accent/80">
+            {activeRegions} tonic region{activeRegions === 1 ? "" : "s"}
+          </span>
+        )}
         <span>
           {chordCount} chords · {cycleBeats} beats · {bars} bars
         </span>

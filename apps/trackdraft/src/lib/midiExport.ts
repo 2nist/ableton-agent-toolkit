@@ -15,15 +15,15 @@
  * the web app has no dependency on).
  */
 
-import { chordToMidiNotes, getChordIntervals, pitchClass, planChordNotes, voiceChord, type ChordQuality } from "@music-theory/core";
+import { getChordIntervals, pitchClass, planChordNotes, voiceChord, type ChordQuality } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
-import { resolveSectionVariant, velocityNumber } from "./playback/drumPreview";
-import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, humanizeOutlineNotes, resolveChordOccurrences, pocketSummary, applyStyleToVariant, resolveEffectiveStyle, resolveNarrativeProfile, narrativeHarmonySection, narrativeTransitionModel, styleArticulation, styleQualityFor, styleSpacing, styleVelocityTarget, drumPocket, glueToPocket, planLaneCc, type GrooveMap, type SectionDrumInput } from "@drum/library";
+import { velocityNumber } from "./playback/drumPreview";
+import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, exportSectionVariant, sectionDrumInput, resolveChordOccurrences, pocketSummary, resolveEffectiveStyle, resolveNarrativeProfile, narrativeHarmonySection, narrativeTransitionModel, styleArticulation, styleQualityFor, styleSpacing, styleVelocityTarget, drumPocket, glueToPocket, planLaneCc, type GrooveMap, type SectionDrumInput } from "@drum/library";
 import { planColorStem } from "./colorStem";
 import { planMelodyStem } from "./melody/melodyStem";
 import { GM_ROUTING, STEM_LABELS, clampChannel, clampProgram, type StemId, type StemRoutingMap } from "./stems";
-import { barLengths, beatsPerBar, meterForLength, type BlueprintSong, type BlueprintSection } from "../types/blueprint";
+import { barLengths, beatsPerBar, type BlueprintSong } from "../types/blueprint";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -212,16 +212,16 @@ export function planBassStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
 }
 
 /** Drum notes — the SAME per-section pipeline the bridge's `planDrumClips`
- *  uses for the Ableton export, via `@drum/library`'s `planSectionDrumNotes`,
- *  so the exported .mid (and live MIDI out, which reuses this) matches
- *  "Send to Ableton" note for note: outline-vs-pattern base resolution
- *  (`resolveSectionVariant`), per-voice Euclidean overrides
+ *  uses for the Ableton export, so the exported .mid (and live MIDI out, which
+ *  reuses this) matches "Send to Ableton" note for note. Nothing in this
+ *  function is app-specific any more: `exportSectionVariant` resolves the base
+ *  groove (outline / authored pattern / heuristic, humanized and Bend-tinted)
+ *  and `sectionDrumInput` assembles the section, both from `@drum/library`,
+ *  and `planSectionDrumNotes` runs per-voice Euclidean overrides
  *  (`drumVoicePatterns`), velocity scaling, seeded per-occurrence tiling,
- *  automatic handoff fills, the ending detour (`drumVariationOutline`) and
- *  the named transition (`drumTransitionModel`). Outline-driven sections
- *  are humanized exactly like the bridge so even microtiming agrees.
- *  `song` feeds the heuristic pattern fallback with full signals (bpm /
- *  title / concept / notes), same as the bridge — see `inferPatternForSection`. */
+ *  automatic handoff fills, the ending detour (`drumVariationOutline`) and the
+ *  named transition (`drumTransitionModel`). `song` feeds the heuristic with
+ *  full signals (bpm / title / concept / notes), same as the bridge. */
 /** A controller message at an absolute beat — the drum lane CC stream. */
 export interface MidiCc {
   beat: number;
@@ -256,16 +256,16 @@ export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
     const section = span.section;
     const profile = resolveEffectiveStyle(section, song);
     const narrative = resolveNarrativeProfile(section, song);
-    let variant = resolveSectionVariant(section, song, span.occurrenceIndex);
-    if (variant && section.drumMeterOutline) {
-      variant = { ...variant, notes: humanizeOutlineNotes(variant.notes, section.drumMeterOutline.cellBeats) };
-    }
-    // The Bend note transforms (Feel + Backbeat) apply after any outline
-    // humanization — the same relative point the bridge applies them, so
-    // app == bridge. Neutral profile = no-op.
-    if (variant) {
-      variant = applyStyleToVariant(variant, profile);
-    }
+    const request = {
+      section,
+      song,
+      occurrenceIndex: span.occurrenceIndex,
+      durationBeats: span.durationBeats,
+      beatsPerBar: beatsPerBar(section),
+    };
+    // Selection + outline humanization + the Bend transforms, all shared with
+    // the Ableton bridge — see `exportSectionVariant`.
+    const variant = exportSectionVariant(request, profile);
     // A section that changes meter gets one groove per bar length, so a 4/4
     // pattern is not chopped at 3.5 beats when the chart drops to 7/8.
     const barBeats = barLengths(section);
@@ -274,40 +274,23 @@ export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
       distinctBars.length > 1
         ? Object.fromEntries(
             distinctBars.flatMap((length) => {
-              const meter = meterForLength(length);
-              const probe: BlueprintSection = {
-                ...section,
-                timeSignatureNumerator: meter.numerator,
-                timeSignatureDenPower: Math.log2(meter.denominator),
-              };
-              const resolved = resolveSectionVariant(probe, song, span.occurrenceIndex);
-              const styled = resolved ? applyStyleToVariant(resolved, profile) : null;
+              const styled = exportSectionVariant({ ...request, beatsPerBar: length }, profile);
               return styled ? [[String(length), styled] as const] : [];
             }),
           )
         : undefined;
 
-    return {
-      sectionId: section.id,
+    return sectionDrumInput({
+      section,
       occurrenceIndex: span.occurrenceIndex,
-      role: section.role ?? null,
-      beatsPerBar: beatsPerBar(section),
-      ...(meterVariants ? { barBeats, meterVariants } : {}),
-      variant,
-      outline: section.drumMeterOutline ?? null,
-      voiceOverrides: section.drumVoicePatterns,
-      mute: section.drumLaneMute,
-      solo: section.drumLaneSolo,
-      blocks: section.drumBlocks,
-      variation: section.drumVariationOutline ?? null,
-      variationBars: section.drumVariationBars,
-      variationStartBeat: section.drumVariationStartBeat,
-      transitionModel: section.drumTransitionModel ?? narrativeTransitionModel(narrative.transition_delta),
-      transitionBars: section.drumTransitionBars,
-      gridBeats: section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25,
       durationBeats: span.durationBeats,
+      beatsPerBar: beatsPerBar(section),
+      variant,
       velocityTarget: styleVelocityTarget(velocityNumber(section.velocity), profile),
-    };
+      transitionModel: section.drumTransitionModel ?? narrativeTransitionModel(narrative.transition_delta),
+      barBeats,
+      meterVariants,
+    });
   });
 
   const plans = planSectionDrumNotes(inputs, FILL_DATA);

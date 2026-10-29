@@ -16,7 +16,7 @@ import * as path from "node:path";
 import { parseAnalysisFile } from "../src/lib/drumImport/analysisFile";
 import { arrangementSpans, type SongLike } from "./drumAnalysis/song";
 
-const LANES = ["kick", "snare", "hat"] as const;
+type Lane = "kick" | "snare" | "hat";
 
 function usage(): never {
   console.error("Usage: npx tsx scripts/fit-report.ts <song.trackdraft.json> <analysis.json> [--verbose]");
@@ -52,7 +52,7 @@ function main(): void {
     return chords[chords.length - 1];
   };
 
-  const steps = (lane: (typeof LANES)[number], bar: number): number[] =>
+  const steps = (lane: Lane, bar: number): number[] =>
     (analysis.bars[bar]?.lanes?.[lane] ?? []).map((v, i) => (v > 0 ? i : -1)).filter((i) => i >= 0);
   const isFill = (bar: number): boolean => {
     const s = steps("snare", bar);
@@ -60,7 +60,7 @@ function main(): void {
     for (let i = 1; i < s.length; i++) if (s[i] - s[i - 1] <= 2) return true;
     return false;
   };
-  const pattern = (lane: (typeof LANES)[number], bars: number[]): number[] => {
+  const pattern = (lane: Lane, bars: number[]): number[] => {
     const count = new Map<string, number>();
     for (const b of bars) count.set(steps(lane, b).join(","), (count.get(steps(lane, b).join(",")) ?? 0) + 1);
     const best = [...count.entries()].sort((a, b) => b[1] - a[1])[0];

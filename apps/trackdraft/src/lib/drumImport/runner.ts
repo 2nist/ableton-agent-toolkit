@@ -8,6 +8,7 @@ import {
 } from "@drum/library";
 import type { BlueprintSection, BlueprintSong } from "../../types/blueprint";
 import type { DrumAnalysisFile } from "./analysisFile";
+import { applyGrooveChoice } from "../drums/grooveModel";
 
 /**
  * The importer runner — the app-side half of the drum importer (the
@@ -137,9 +138,15 @@ export function planSongImport(file: DrumAnalysisFile, song: BlueprintSong): Son
  * becomes "none" (the muted base + blocks is the converter's pure path).
  */
 export function applySectionPatch(section: BlueprintSection, patch: SectionDrumPatch): BlueprintSection {
+  // Go through the groove verb first so the base pattern and the cleared
+  // layers can never disagree, then drop everything the verb keeps (FX
+  // blocks, voice patterns, variation, transition) and install the import.
+  const cleared = applyGrooveChoice(
+    section,
+    patch.drumPattern === "none" ? { kind: "muted" } : { kind: "preset", pattern: patch.drumPattern },
+  );
   return {
-    ...section,
-    drumPattern: patch.drumPattern,
+    ...cleared,
     velocity: patch.velocity,
     drumBlocks: patch.drumBlocks,
     drumVariantIndex: undefined,

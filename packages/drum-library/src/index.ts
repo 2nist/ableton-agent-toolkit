@@ -27,7 +27,9 @@ export * from "./blocks.js";
 export * from "./bass.js";
 export * from "./melody.js";
 export * from "./style.js";
+export * from "./style-family.js";
 export * from "./narrative.js";
+export * from "./grooveSelect.js";
 export * from "./match.js";
 
 // Drum import (grid → Drum Block[]). Explicit names only: the module's

@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import type { BlueprintSong } from "../../types/blueprint";
 import { computeConfidence } from "../../lib/confidence";
-import type { ConfidenceLevel } from "../../lib/confidence";
 import { useSongStore } from "../../store/songStore";
 import { downloadSongJson } from "../../lib/exportImport";
 import { classifySong } from "../../lib/classification";

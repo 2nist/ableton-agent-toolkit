@@ -11,7 +11,6 @@
  */
 
 import {
-  chordToMidiNotes,
   getChordIntervals,
   pitchClass,
   planChordNotes,
@@ -55,10 +54,6 @@ async function previewOutput(channel?: number): Promise<{ output: MIDIOutput; ch
   const output = await getMidiOutput(midiOutputId);
   if (!output) return null;
   return { output, ch: Math.max(0, Math.min(15, (channel ?? routing.chords.channel) - 1)) };
-}
-
-function chordPitches(chord: { root: string; quality: string }): number[] {
-  return chordToMidiNotes(pitchClass(chord.root), chord.quality as ChordQuality, CHORD_OCTAVE);
 }
 
 /** The shape a chord carries through the app — enough to plan its notes and

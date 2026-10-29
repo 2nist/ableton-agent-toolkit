@@ -169,9 +169,6 @@ export function parseRockCorpusTdc(raw: unknown): RawCatalogSong {
   const warnings: string[] = [];
   const stats: TranslateStats = { simplified: 0, applied: 0, unknownFigures: new Set() };
   let keyChanges = 0;
-  let dots = 0;
-  let stars = 0;
-  let rests = 0;
   let unknownTokens = 0;
   const unknownSamples = new Set<string>();
 
@@ -203,12 +200,10 @@ export function parseRockCorpusTdc(raw: unknown): RawCatalogSong {
       continue;
     }
     if (token === ".") {
-      dots++;
       extendPrev(cellEnd);
       continue;
     }
     if (token === "R") {
-      rests++;
       continue;
     }
     const star = token.match(/^\*(\d+)$/);
@@ -221,7 +216,6 @@ export function parseRockCorpusTdc(raw: unknown): RawCatalogSong {
       // the chord continues through the marker cell. The earlier
       // n×cell-duration reading inflated bar counts ~5× on vamp songs
       // (Who Do You Love reached 992 bars for a 147 s track).
-      stars++;
       extendPrev(cellEnd);
       continue;
     }

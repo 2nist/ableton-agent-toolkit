@@ -5,7 +5,6 @@ import { flushAllPendingWrites } from "./store/storage";
 import { startAtomSqUserMidi, stopAtomSqUserMidi } from "./lib/playback/userMidi";
 import Dashboard from "./components/dashboard/Dashboard";
 import SongEditorLayout from "./components/layout/SongEditorLayout";
-import StudioView from "./components/studio/StudioView";
 import StructureView from "./components/structure/StructureView";
 import HarmonyView from "./components/harmony/HarmonyView";
 import DrumsTab from "./components/drums/DrumsTab";
@@ -24,14 +23,17 @@ import ConfirmHost from "./components/common/ConfirmHost";
 const LivePreviewSandbox = lazy(() => import("./pages/LivePreviewSandbox"));
 const GenreWorkbench = lazy(() => import("./pages/GenreWorkbench"));
 const DesignLab = lazy(() => import("./pages/DesignLab"));
+const StudioLogLab = lazy(() => import("./pages/studio-log/StudioLogLab"));
 const RenderCanvasLayout = lazy(() => import("./components/RenderCanvasLayout"));
 
 function App() {
-  const loadFromStorage = useSongStore((s) => s.loadFromStorage);
+  const hydrate = useSongStore((s) => s.hydrate);
 
+  // One load path: the store's repository knows whether this is the desktop
+  // library directory or localStorage, so there is no host check here.
   useEffect(() => {
-    loadFromStorage();
-  }, [loadFromStorage]);
+    void hydrate();
+  }, [hydrate]);
 
   // Start listening for ATOM SQ User-mode MIDI messages once on mount.
   useEffect(() => {
@@ -64,8 +66,7 @@ function App() {
           <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/song/:songId" element={<SongEditorLayout />}>
-            <Route index element={<Navigate to="studio" replace />} />
-            <Route path="studio" element={<StudioView />} />
+            <Route index element={<Navigate to="workbench" replace />} />
             <Route path="structure" element={<StructureView />} />
             <Route path="harmony" element={<HarmonyView />} />
             <Route path="drums" element={<DrumsTab />} />
@@ -83,6 +84,7 @@ function App() {
           <Route path="/canvas" element={<RenderCanvasLayout />} />
           <Route path="/genre-workbench" element={<GenreWorkbench />} />
           <Route path="/design-lab" element={<DesignLab />} />
+          <Route path="/studio-log" element={<StudioLogLab />} />
           <Route path="/ui-kit-sandbox" element={<Navigate to="/design-lab" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

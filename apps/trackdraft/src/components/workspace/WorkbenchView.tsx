@@ -2,20 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
-import {
-  resolveChordOccurrences,
-  resolveEffectiveStyle,
-  resolveNarrativeProfile,
-  narrativeHarmonySection,
-  styleSpacing,
-} from "@drum/library";
+import { resolveChordOccurrences } from "@drum/library";
 import { effectiveTonicRegions } from "../../lib/harmony/tonic";
+import { useActiveChord } from "../../hooks/useActiveChord";
 import { useSongStore } from "../../store/songStore";
 import { useDawTargetStore } from "../../store/dawTargetStore";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
-import { useTimeSelectionStore } from "../../store/timeSelectionStore";
-import { sectionSpans, type SectionSpan } from "../../lib/arrangement";
+import { selectionWithin, useTimeSelectionStore } from "../../store/timeSelectionStore";
+import { sectionSpans, spanIndexForTick, type SectionSpan } from "../../lib/arrangement";
 import { updateSection } from "../../lib/sections";
 import { useRoleStyle } from "../../lib/roleColors";
 import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playback/drumPreview";
@@ -46,9 +41,22 @@ import LyricsFace from "./layers/LyricsFace";
 import { beatsPerBar } from "../../types/blueprint";
 import type { BlueprintSection, BlueprintSong, Chord, SectionRole } from "../../types/blueprint";
 import TapeLabel from "../common/TapeLabel";
+import SongSettingsStrip from "./SongSettingsStrip";
+import ArrangementTimeline from "../arrangement/ArrangementTimeline";
+import StudioConsole from "../arrangement/StudioConsole";
 
 /** Canonical role order for the header's role menu (same list everywhere). */
 const ROLE_OPTIONS: SectionRole[] = ["intro", "verse", "pre_chorus", "chorus", "bridge", "solo", "breakdown", "outro", "custom"];
+
+/** The workbench's two scales of view: one section in detail, or the whole
+ *  song as blocks. The arrangement surface is what the retired Studio view
+ *  was actually used for; keeping it here means one workspace, not two. */
+const SURFACES = [
+  { id: "section", label: "Section", hint: "Edit the selected section — harmony, drums, melody, lyrics" },
+  { id: "arrangement", label: "Arrangement", hint: "The whole song as blocks, with the stem console under it" },
+] as const;
+
+type Surface = (typeof SURFACES)[number]["id"];
 
 /**
  * The Workbench — first slice of the new workspace (docs/design/workspace.md).
@@ -69,9 +77,10 @@ const ROLE_OPTIONS: SectionRole[] = ["intro", "verse", "pre_chorus", "chorus", "
 export default function WorkbenchView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const navigate = useNavigate();
-  const selectedSectionId = useStudioSelectionStore((s) => s.selectedSectionId);
-  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
+  const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
   const [tick, setTick] = useState<TransportTick | null>(null);
+  const [surface, setSurface] = useState<Surface>("section");
 
   useEffect(() => getSongTransport().onTick(setTick), []);
 
@@ -120,15 +129,40 @@ export default function WorkbenchView() {
 
   const activeIndex = spans.length === 0 ? -1 : Math.max(0, spans.findIndex((sp) => sp.sectionId === selectedSectionId));
   const activeSpan = activeIndex >= 0 ? spans[activeIndex] : null;
-  const isLive = activeSpan != null && tick?.isPlaying === true && tick.sectionIndex === activeIndex;
+  // Resolved by identity, not by the tick's positional index: editing the
+  // arrangement mid-playback makes that index point at a different section.
+  const liveIndex = tick?.isPlaying ? spanIndexForTick(spans, tick) : -1;
+  const isLive = activeSpan != null && liveIndex === activeIndex;
   const beatInSection = isLive && tick && activeSpan ? tick.beat - activeSpan.startBeat : null;
 
   return (
     <div className="h-full flex flex-col min-h-0">
+      <SongSettingsStrip song={song} />
+      <div className="flex items-center gap-1 px-3 py-1 border-b border-edge/70 shrink-0">
+        {SURFACES.map((s2) => (
+          <button
+            key={s2.id}
+            type="button"
+            className={`px-2 py-0.5 rounded border text-[10px] font-mono ${
+              surface === s2.id ? "border-accent/50 bg-panelAlt text-ink" : "border-edge/70 text-inkMuted hover:text-ink"
+            }`}
+            onClick={() => setSurface(s2.id)}
+            title={s2.hint}
+          >
+            {s2.label}
+          </button>
+        ))}
+      </div>
       {/* The section workspace is the CANVAS — the library (left) and the
           inspector (right) are shell chrome around it since slice C, and
           the spine band above mounts in SongEditorLayout too. */}
       <div className="flex-1 flex min-h-0">
+        {surface === "arrangement" ? (
+          <div className="flex-1 min-w-0 overflow-y-auto p-3 space-y-3">
+            <ArrangementTimeline song={song} />
+            <StudioConsole song={song} />
+          </div>
+        ) : (
         <div className="flex-1 min-w-0 overflow-y-auto p-3">
           {activeSpan ? (
             <SectionWorkspace
@@ -146,7 +180,7 @@ export default function WorkbenchView() {
             </div>
           )}
         </div>
-
+        )}
       </div>
     </div>
   );
@@ -343,23 +377,9 @@ function SectionWorkspace({
     });
   }
 
-  const activeChordId = useMemo(() => {
-    if (beatInSection == null) return null;
-    const profile = resolveEffectiveStyle(section, song);
-    const occurrences = resolveChordOccurrences(
-      narrativeHarmonySection(section, resolveNarrativeProfile(section, song)),
-      span.durationBeats,
-      styleSpacing(profile.density),
-    );
-    let active: string | null = null;
-    for (let i = occurrences.length - 1; i >= 0; i--) {
-      if (occurrences[i].startTime <= beatInSection) {
-        active = occurrences[i].chord.id;
-        break;
-      }
-    }
-    return active;
-  }, [section, song, span.durationBeats, beatInSection]);
+  // Same derivation the harmony canvas uses (one hook, not a copy), so the
+  // row's highlight and the canvas can never resolve different timings.
+  const activeChordId = useActiveChord(section, song, span.durationBeats, beatInSection);
 
   const necklaces = useMemo(
     () => resolveSectionVoiceNecklaces(section, song, span.occurrenceIndex),
@@ -386,9 +406,13 @@ function SectionWorkspace({
     section.harmonyMeterOutline ??
     (section.harmonyFollowsDrums === false ? null : section.drumMeterOutline ?? null)
   );
-  const sectionSelection = useTimeSelectionStore((s) =>
+  // Clamped to the section's current length — the stored range can outlive a
+  // bar resize or a split, and an unclamped one reports bars that no longer
+  // exist.
+  const rawSectionSelection = useTimeSelectionStore((s) =>
     s.selection && s.selection.sectionId === section.id ? s.selection : null,
   );
+  const sectionSelection = selectionWithin(rawSectionSelection, section.id, span.durationBeats);
   const clearSelection = useTimeSelectionStore((s) => s.clearSelection);
   const selectionStartBar = sectionSelection ? Math.floor(sectionSelection.startBeat / bpb) + 1 : 0;
   const selectionEndBar = sectionSelection
@@ -607,6 +631,7 @@ function SectionWorkspace({
         face={
           <HarmonyFace
             section={section}
+            song={song}
             keyName={effKey}
             selectedChordId={selectedChordId}
             activeChordId={activeChordId}

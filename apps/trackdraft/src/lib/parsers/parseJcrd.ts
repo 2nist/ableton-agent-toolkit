@@ -109,15 +109,6 @@ interface McGillSection {
   tags?: string[];
 }
 
-interface McGillSong {
-  title: string;
-  artist?: string;
-  bpm?: number;
-  source?: string;
-  key?: string;
-  scale?: string;
-  sections: McGillSection[];
-}
 
 export function parseMcgillJcrd(raw: unknown): BlueprintSong {
   if (typeof raw !== "object" || raw === null) throw new Error("Not a valid McGill JCRD file");
@@ -202,7 +193,6 @@ export function parseRockCorpusJcrd(raw: unknown): BlueprintSong {
   if (!meta?.title) throw new Error("Missing metadata.title");
 
   const chords = (data.chords as RockCorpusChord[]) ?? [];
-  const beats = (data.beats as RockCorpusBeat[]) ?? [];
   const sections = (data.sections as RockCorpusSection[]) ?? [];
   const songKey = (meta.key as NoteName) ?? ("C" as NoteName);
   const bpm = meta.tempo ? Math.round(meta.tempo * 4) : 120; // Rock Corpus stores quarter-note tempo

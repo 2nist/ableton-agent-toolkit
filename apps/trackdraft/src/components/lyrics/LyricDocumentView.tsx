@@ -24,7 +24,7 @@ import { getSongTransport } from "../../lib/playback/songTransport";
 import { planSectionTransitions } from "@drum/library";
 import { velocityNumber } from "../../lib/playback/drumPreview";
 import { useTransitionColors, TRANSITION_LABEL, TRANSITION_MODELS } from "../drums/transitionStyle";
-import { useStudioSelectionStore } from "../../store/studioSelectionStore";
+import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import { useInspectorStore, type InspectorTab } from "../../store/inspectorStore";
 import { useHarmonySelectionStore } from "../../store/harmonySelectionStore";
 
@@ -90,9 +90,8 @@ interface LyricDocumentViewProps {
  */
 export default function LyricDocumentView({ song, onChange }: LyricDocumentViewProps) {
   const roleStyle = useRoleStyle();
-  const TRANSITION_COLOR = useTransitionColors();
   const navigate = useNavigate();
-  const setSelectedSectionId = useStudioSelectionStore((s) => s.setSelectedSectionId);
+  const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
 
   const docLines = useMemo(() => buildLyricDocument(song), [song]);
@@ -141,7 +140,7 @@ export default function LyricDocumentView({ song, onChange }: LyricDocumentViewP
   useEffect(() => {
     if (!playPos?.playing || selMode === "active") return;
     playLineRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- scroll on position changes only
+     
   }, [playPos?.sectionId, playPos?.lineIdx, playPos?.playing, selMode]);
 
   function clearSelection() {

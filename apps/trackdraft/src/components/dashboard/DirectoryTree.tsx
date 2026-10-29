@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 import { useDirectoryStore, type DirectoryConfig } from "../../store/directoryStore";
+import { useSongStore } from "../../store/songStore";
+import { isElectronHost } from "../../lib/host";
 import TapeLabel from "../common/TapeLabel";
 
 interface DirectoryTreeProps {
@@ -14,16 +16,26 @@ export default function DirectoryTree({ selectedDir, onSelectDir, onManageDirs }
   const loading = useDirectoryStore((s) => s.loading);
   const loadListing = useDirectoryStore((s) => s.loadListing);
 
+  /** In the desktop build the library IS the song store (files on disk);
+   *  directory listings need the Vite dev endpoint and would 404. */
+  const hosted = isElectronHost();
+  const libraryCount = useSongStore((s) => s.songs.length);
+
   // Auto-load listings for any dirs that don't have them yet
   useEffect(() => {
+    if (hosted) return;
     for (const dir of dirs) {
       if (!listings[dir.path]) {
         loadListing(dir.path);
       }
     }
-  }, [dirs, listings, loadListing]);
+  }, [dirs, listings, loadListing, hosted]);
 
-  const totalSongs = Object.values(listings).reduce((sum, entries) => sum + entries.length, 0);
+  // "All Songs" used to count directory listings, which reads 0 in a packaged
+  // build no matter how many songs the library holds.
+  const totalSongs = hosted
+    ? libraryCount
+    : Object.values(listings).reduce((sum, entries) => sum + entries.length, 0);
 
   return (
     <div className="space-y-1">

@@ -28,6 +28,22 @@ export type DrumPattern =
   // has to match the schema's legacy dropdown values.
   | "four_on_floor"
   | "trap"
+  // The idiom shelf. Same contract as everything else in `CURATED_PATTERNS`:
+  // written, one bar, fixed density, no toms — but a named groove a writer
+  // can reach for instead of an energy level. These have no corpus bake entry
+  // of their own, so `presetData.ts` borrows a felt donor from a sibling
+  // pattern (see `DONOR_PATTERN`): the structure is written, the timing is
+  // still a human take's.
+  | "motown"
+  | "boom_bap"
+  | "train_beat"
+  | "bossa"
+  | "reggae"
+  | "disco"
+  | "afrobeat"
+  | "punk"
+  | "ballad"
+  | "second_line"
   | "breakbeat";
 
 export interface PresetTarget {
@@ -131,4 +147,15 @@ export const PRESETS: Record<DrumPattern, PresetTarget | null> = {
     limbs: ["feet", "snare"],
     timeSignature: { numerator: 5, denominator: 4 },
   },
+  // Idiom shelf: written material with no corpus bake entry of its own.
+  motown: null,
+  boom_bap: null,
+  train_beat: null,
+  bossa: null,
+  reggae: null,
+  disco: null,
+  afrobeat: null,
+  punk: null,
+  ballad: null,
+  second_line: null,
 };

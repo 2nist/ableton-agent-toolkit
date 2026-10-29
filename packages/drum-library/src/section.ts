@@ -18,7 +18,7 @@ import {
   type FillLibrary,
   type HandoffSectionInput,
 } from "./handoffs.js";
-import { tileGrooveVaried } from "./vary.js";
+import { applyCyclicDevelopment, tileGrooveVaried } from "./vary.js";
 import { applyDrumBlocks, DRUM_LANE_VOICES, type DrumBlock, type DrumLaneId } from "./blocks.js";
 import { audibleLanes } from "./lanes.js";
 
@@ -605,6 +605,24 @@ export function planSectionDrumNotes(
         );
         for (const note of body) tiled.push({ ...note, beat: note.beat + cursor });
         cursor += run.lengthBeats;
+      });
+    }
+
+    // The 4-bar cycle: open the hat in bar 2, turn the last eighth over into
+    // the next cycle in bar 4. Structural development, applied BEFORE the
+    // gestures so a fill or transition still owns the tail it replaces.
+    //
+    // NOT for an authored meter outline: that groove is the user's own bar,
+    // built cell by cell for a meter the corpus has nothing for. Imposing a
+    // 4-bar turnaround on it would be the system editing their work.
+    if (!input.outline) {
+      tiled = applyCyclicDevelopment(tiled, {
+        beatsPerBar: variant.beatsPerBar,
+        durationBeats: input.durationBeats,
+        velocityTarget,
+        openHatPitch: ABLETON_SAFE_NOTES.openHat,
+        closedHatPitch: ABLETON_SAFE_NOTES.closedHat,
+        kickPitch: ABLETON_SAFE_NOTES.kick,
       });
     }
 

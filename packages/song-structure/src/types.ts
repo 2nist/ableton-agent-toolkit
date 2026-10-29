@@ -1,6 +1,14 @@
 import type { ScaleType, NoteName } from "./music-theory-types";
 
-/** Drum pattern presets — from lalo-chezia S() format */
+/**
+ * Drum pattern presets.
+ *
+ * The first group is the original lalo-chezia S() vocabulary. Everything after
+ * it is storable too: `@drum/library` had grown patterns the schema could not
+ * hold, so a picker could offer `four_on_floor` and the write would be cast
+ * past the type — an id the engine plays but the song file cannot record. A
+ * pattern a writer can choose has to survive a save.
+ */
 export type DrumPattern =
   | "none"
   | "kick_only"
@@ -12,7 +20,22 @@ export type DrumPattern =
   | "dnb"
   | "78"
   | "68"
-  | "54";
+  | "54"
+  // Machine idioms (synth-only — no acoustic-corpus analogue).
+  | "four_on_floor"
+  | "trap"
+  | "breakbeat"
+  // The idiom shelf: named written grooves.
+  | "motown"
+  | "boom_bap"
+  | "train_beat"
+  | "bossa"
+  | "reggae"
+  | "disco"
+  | "afrobeat"
+  | "punk"
+  | "ballad"
+  | "second_line";
 
 /** Section type labels — common song section roles */
 export type SectionRole =
@@ -334,4 +357,19 @@ export const DRUM_TRACK_CONFIGS: Record<DrumPattern, DrumTrackConfig> = {
     complexity: 0.4,
     density: 0.45,
   },
+  // Machine idioms and the idiom shelf — same sketch tracks as the acoustic
+  // patterns they stand in for, so automatic track creation still has an answer.
+  four_on_floor: { activeTracks: ["kick", "snare", "hat"], complexity: 0.35, density: 0.5 },
+  trap: { activeTracks: ["kick", "snare", "hat"], complexity: 0.6, density: 0.75 },
+  breakbeat: { activeTracks: ["kick", "snare", "hat"], complexity: 0.7, density: 0.65 },
+  motown: { activeTracks: ["kick", "snare", "hat"], complexity: 0.45, density: 0.5 },
+  boom_bap: { activeTracks: ["kick", "snare", "hat"], complexity: 0.4, density: 0.4 },
+  train_beat: { activeTracks: ["kick", "snare", "hat"], complexity: 0.6, density: 0.65 },
+  bossa: { activeTracks: ["kick", "rim", "hat"], complexity: 0.45, density: 0.45 },
+  reggae: { activeTracks: ["kick", "snare", "hat"], complexity: 0.3, density: 0.4 },
+  disco: { activeTracks: ["kick", "snare", "hat"], complexity: 0.5, density: 0.6 },
+  afrobeat: { activeTracks: ["kick", "snare", "hat"], complexity: 0.65, density: 0.7 },
+  punk: { activeTracks: ["kick", "snare", "hat"], complexity: 0.55, density: 0.8 },
+  ballad: { activeTracks: ["kick", "snare"], complexity: 0.2, density: 0.25 },
+  second_line: { activeTracks: ["kick", "snare", "hat"], complexity: 0.5, density: 0.55 },
 };

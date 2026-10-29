@@ -143,7 +143,7 @@ describe("songStore — real repaired catalog song survives undo/redo/save/reloa
 
     // A real reload: fresh module, fresh Zustand instance, same backing storage.
     const store2 = await freshStore();
-    store2.getState().loadFromStorage();
+    await store2.getState().hydrate();
     const reloaded = store2.getState().currentSong();
     expect(reloaded).toEqual(afterOp);
 
@@ -171,7 +171,7 @@ describe("songStore — real repaired catalog song survives undo/redo/save/reloa
     expect(JSON.parse(backingStorage.getItem("trackdraft-songs")!)[0].bpm).toBe(120);
 
     const store2 = await freshStore();
-    store2.getState().loadFromStorage();
+    await store2.getState().hydrate();
     expect(store2.getState().currentSong()!.bpm).toBe(120);
 
     store1.getState().redo();

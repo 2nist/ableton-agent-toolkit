@@ -211,7 +211,14 @@ function main(): void {
         : undefined;
 
       const id = `rock-${slugBase(base)}`;
-      const song = catalogSongToBlueprintSong({ id, raw: parsed, lyricLines, hasSyncedLyrics });
+      const song = catalogSongToBlueprintSong({
+      id,
+      raw: parsed,
+      lyricLines,
+      hasSyncedLyrics,
+      // The corpus is rock by definition.
+      genre: "rock",
+    });
 
       if (!args.dry) {
         fs.writeFileSync(path.join(args.out, `${id}.trackdraft.json`), JSON.stringify(song, null, 2));

@@ -26,8 +26,11 @@ export interface FloorSlot {
   /** Beat the chord starts on, rests included. */
   start: number;
   /** Beat the chord stops sounding — its own length, so a rest after it is
-   *  NOT part of this span. */
+   *  NOT part of this span (and never past the section's last bar). */
   end: number;
+  /** Which loop pass this is: 0 the first time through the progression, 1 the
+   *  second, and so on. See `floorSlotsFilled`. */
+  pass?: number;
 }
 
 /** Half a beat — the floor's snap, and the shortest chord it will make. */
@@ -41,7 +44,8 @@ const length = (chord: Chord): number => Math.max(FLOOR_STEP, chord.beats);
 const round = (value: number): number => Math.round(value * 1000) / 1000;
 
 /** Round to the floor's grid. */
-export const snap = (beat: number): number => Math.round(beat / FLOOR_STEP) * FLOOR_STEP;
+export const snap = (beat: number): number =>
+  Math.round(beat / FLOOR_STEP) * FLOOR_STEP;
 
 /** Every chord with the beat it starts on, gaps included. */
 export function floorSlots(chords: readonly Chord[]): FloorSlot[] {
@@ -57,17 +61,61 @@ export function floorSlots(chords: readonly Chord[]): FloorSlot[] {
   return slots;
 }
 
+/**
+ * The progression laid out across a WHOLE SECTION, not one pass.
+ *
+ * A section's chord list is one pass through its progression: a 16-bar verse
+ * built from a 4-bar progression lists only those four chords. Every generator
+ * loops the list to fill the section (`loopChordsToFill` in @drum/library), so
+ * a section is always as long as its bars say it is — never as long as the
+ * chord list happens to add up to. The floor drew one pass, which is why a
+ * 25-beat progression in a 7-bar section left the last three beats looking
+ * empty while the players were already back on chord one.
+ *
+ * So: repeat the pass until the section is covered, truncating the final
+ * repeat at the last bar exactly as the exports do. `pass` is how the plate
+ * knows a box is the loop coming round rather than a new chord.
+ */
+export function floorSlotsFilled(
+  chords: readonly Chord[],
+  sectionBeats: number,
+): FloorSlot[] {
+  const pass = floorSlots(chords);
+  if (pass.length === 0) return [];
+  const cycle = floorLength(chords);
+  if (cycle <= 0 || !Number.isFinite(sectionBeats)) return pass;
+  const slots: FloorSlot[] = [];
+  for (let index = 0; index * cycle < sectionBeats - 1e-6; index += 1) {
+    const offset = index * cycle;
+    for (const slot of pass) {
+      const start = round(slot.start + offset);
+      if (start >= sectionBeats - 1e-6) break;
+      slots.push({
+        chord: slot.chord,
+        index: slot.index,
+        start,
+        end: Math.min(round(slot.end + offset), sectionBeats),
+        pass: index,
+      });
+    }
+  }
+  return slots;
+}
+
 /** One full pass through the progression, trailing rest included — the beat
  *  the cycle repeats on. */
 export function floorLength(chords: readonly Chord[]): number {
   return chords.reduce(
-    (sum, chord) => sum + gap(chord.restBefore) + length(chord) + gap(chord.restAfter),
+    (sum, chord) =>
+      sum + gap(chord.restBefore) + length(chord) + gap(chord.restAfter),
     0,
   );
 }
 
 /** The silence on the floor: leading, between, and trailing. */
-export function restsBetween(chords: readonly Chord[]): { start: number; beats: number }[] {
+export function restsBetween(
+  chords: readonly Chord[],
+): { start: number; beats: number }[] {
   const slots = floorSlots(chords);
   const bands: { start: number; beats: number }[] = [];
   if (slots.length === 0) return bands;
@@ -78,7 +126,8 @@ export function restsBetween(chords: readonly Chord[]): { start: number; beats: 
     if (beats > 0.001) bands.push({ start: slots[index].end, beats });
   }
   const trailing = gap(chords[chords.length - 1].restAfter);
-  if (trailing > 0) bands.push({ start: slots[slots.length - 1].end, beats: trailing });
+  if (trailing > 0)
+    bands.push({ start: slots[slots.length - 1].end, beats: trailing });
   return bands;
 }
 
@@ -87,9 +136,15 @@ export function restsBetween(chords: readonly Chord[]): { start: number; beats: 
  * so nothing overlaps, every gap written on exactly one chord. Every gesture
  * below funnels through here, so they cannot disagree about what a gap is.
  */
-function applyStarts(chords: readonly Chord[], starts: readonly number[]): Chord[] {
+function applyStarts(
+  chords: readonly Chord[],
+  starts: readonly number[],
+): Chord[] {
   const wanted = chords
-    .map((chord, index) => ({ chord, start: Math.max(0, round(starts[index] ?? 0)) }))
+    .map((chord, index) => ({
+      chord,
+      start: Math.max(0, round(starts[index] ?? 0)),
+    }))
     .sort((left, right) => left.start - right.start);
 
   let cursor = 0;
@@ -109,7 +164,10 @@ function applyStarts(chords: readonly Chord[], starts: readonly number[]): Chord
     return { ...rest } as Chord;
   });
   placed.forEach(({ start }, index) => {
-    const before = index === 0 ? start : start - (placed[index - 1].start + length(placed[index - 1].chord));
+    const before =
+      index === 0
+        ? start
+        : start - (placed[index - 1].start + length(placed[index - 1].chord));
     if (before <= 0) return;
     if (index === 0) resolved[0].restBefore = round(before);
     else resolved[index - 1].restAfter = round(before);
@@ -121,15 +179,26 @@ function applyStarts(chords: readonly Chord[], starts: readonly number[]): Chord
 }
 
 /** The chord whose span contains `beat`, ignoring one id. */
-function chordAt(slots: readonly FloorSlot[], beat: number, exceptId: string): FloorSlot | undefined {
+function chordAt(
+  slots: readonly FloorSlot[],
+  beat: number,
+  exceptId: string,
+): FloorSlot | undefined {
   return slots.find(
-    (slot) => slot.chord.id !== exceptId && beat + 0.001 >= slot.start && beat < slot.end - 0.001,
+    (slot) =>
+      slot.chord.id !== exceptId &&
+      beat + 0.001 >= slot.start &&
+      beat < slot.end - 0.001,
   );
 }
 
 /** Move a chord to a beat. Landing on another chord trades places; landing in
  *  a gap leaves a rest behind. */
-export function moveChordTo(chords: readonly Chord[], id: string, start: number): Chord[] {
+export function moveChordTo(
+  chords: readonly Chord[],
+  id: string,
+  start: number,
+): Chord[] {
   const slots = floorSlots(chords);
   const moving = slots.find((slot) => slot.chord.id === id);
   if (!moving) return [...chords];
@@ -149,17 +218,30 @@ export function moveChordTo(chords: readonly Chord[], id: string, start: number)
  * Stretch or shrink from the end. Growing pushes what follows (the floor is a
  * timeline, not a fixed grid); shrinking leaves a rest behind.
  */
-export function resizeChordTo(chords: readonly Chord[], id: string, end: number): Chord[] {
+export function resizeChordTo(
+  chords: readonly Chord[],
+  id: string,
+  end: number,
+): Chord[] {
   const slots = floorSlots(chords);
   const slot = slots.find((candidate) => candidate.chord.id === id);
   if (!slot) return [...chords];
   const beats = Math.max(FLOOR_STEP, round(snap(end) - slot.start));
-  const nextChords = chords.map((chord) => (chord.id === id ? { ...chord, beats } : chord));
-  return applyStarts(nextChords, slots.map((entry) => entry.start));
+  const nextChords = chords.map((chord) =>
+    chord.id === id ? { ...chord, beats } : chord,
+  );
+  return applyStarts(
+    nextChords,
+    slots.map((entry) => entry.start),
+  );
 }
 
 /** Move the start, keeping the end — the space given up becomes a rest. */
-export function trimChordTo(chords: readonly Chord[], id: string, start: number): Chord[] {
+export function trimChordTo(
+  chords: readonly Chord[],
+  id: string,
+  start: number,
+): Chord[] {
   const slots = floorSlots(chords);
   const slot = slots.find((candidate) => candidate.chord.id === id);
   if (!slot) return [...chords];
@@ -167,20 +249,28 @@ export function trimChordTo(chords: readonly Chord[], id: string, start: number)
   const lowest = previous ? previous.end : 0;
   const next = Math.max(lowest, Math.min(slot.end - FLOOR_STEP, snap(start)));
   const beats = round(slot.end - next);
-  const nextChords = chords.map((chord) => (chord.id === id ? { ...chord, beats } : chord));
+  const nextChords = chords.map((chord) =>
+    chord.id === id ? { ...chord, beats } : chord,
+  );
   const starts = slots.map((entry) => entry.start);
   starts[slot.index] = next;
   return applyStarts(nextChords, starts);
 }
 
 /** Open (or close) silence after a chord, pushing the rest of the cycle. */
-export function setRestAfter(chords: readonly Chord[], id: string, beats: number): Chord[] {
+export function setRestAfter(
+  chords: readonly Chord[],
+  id: string,
+  beats: number,
+): Chord[] {
   const slots = floorSlots(chords);
   const slot = slots.find((candidate) => candidate.chord.id === id);
   if (!slot) return [...chords];
   const silence = Math.max(0, snap(beats));
   const delta = silence - gap(slot.chord.restAfter);
-  const starts = slots.map((entry, index) => (index > slot.index ? entry.start + delta : entry.start));
+  const starts = slots.map((entry, index) =>
+    index > slot.index ? entry.start + delta : entry.start,
+  );
   const nextChords = chords.map((chord) => {
     if (chord.id !== id) return chord;
     const { restAfter: _drop, ...rest } = chord;
@@ -197,7 +287,12 @@ export function setRestAfter(chords: readonly Chord[], id: string, beats: number
  * from its front instead, so the chord you are running up to never moves.
  * Landing in a rest fills part of it and leaves the next chord where it was.
  */
-export function insertChordAt(chords: readonly Chord[], beat: number, chord: Chord, span: number): Chord[] {
+export function insertChordAt(
+  chords: readonly Chord[],
+  beat: number,
+  chord: Chord,
+  span: number,
+): Chord[] {
   const at = Math.max(0, round(snap(beat)));
   const slots = floorSlots(chords);
   const host = slots.find((slot) => at >= slot.start && at < slot.end - 0.001);
@@ -232,24 +327,40 @@ export function insertChordAt(chords: readonly Chord[], beat: number, chord: Cho
 
 /** Close a rest, pulling everything after it earlier. */
 export function closeRestAt(chords: readonly Chord[], beat: number): Chord[] {
-  const band = restsBetween(chords).find((rest) => beat >= rest.start - 0.001 && beat < rest.start + rest.beats);
+  const band = restsBetween(chords).find(
+    (rest) => beat >= rest.start - 0.001 && beat < rest.start + rest.beats,
+  );
   if (!band) return [...chords];
   const slots = floorSlots(chords);
-  const starts = slots.map((slot) => (slot.start > band.start ? slot.start - band.beats : slot.start));
+  const starts = slots.map((slot) =>
+    slot.start > band.start ? slot.start - band.beats : slot.start,
+  );
   return applyStarts(chords, starts);
 }
 
 /** Give a rest's time to the chord before it. */
-export function extendIntoRestAt(chords: readonly Chord[], beat: number): Chord[] {
-  const band = restsBetween(chords).find((rest) => beat >= rest.start - 0.001 && beat < rest.start + rest.beats);
+export function extendIntoRestAt(
+  chords: readonly Chord[],
+  beat: number,
+): Chord[] {
+  const band = restsBetween(chords).find(
+    (rest) => beat >= rest.start - 0.001 && beat < rest.start + rest.beats,
+  );
   if (!band) return [...chords];
   const slots = floorSlots(chords);
-  const before = [...slots].reverse().find((slot) => slot.end <= band.start + 0.001);
+  const before = [...slots]
+    .reverse()
+    .find((slot) => slot.end <= band.start + 0.001);
   if (!before) return [...chords];
   const nextChords = chords.map((chord) =>
-    chord.id === before.chord.id ? { ...chord, beats: round(chord.beats + band.beats) } : chord,
+    chord.id === before.chord.id
+      ? { ...chord, beats: round(chord.beats + band.beats) }
+      : chord,
   );
-  return applyStarts(nextChords, slots.map((slot) => slot.start));
+  return applyStarts(
+    nextChords,
+    slots.map((slot) => slot.start),
+  );
 }
 
 /** Delete a chord; whatever it occupied closes up. */
@@ -260,6 +371,12 @@ export function removeChord(chords: readonly Chord[], id: string): Chord[] {
 /** Append a chord at the end of the cycle. */
 export function appendChord(chords: readonly Chord[], chord: Chord): Chord[] {
   const slots = floorSlots(chords);
-  const end = slots.length === 0 ? 0 : slots[slots.length - 1].end + gap(chords[chords.length - 1].restAfter);
-  return applyStarts([...chords, chord], [...slots.map((slot) => slot.start), end]);
+  const end =
+    slots.length === 0
+      ? 0
+      : slots[slots.length - 1].end + gap(chords[chords.length - 1].restAfter);
+  return applyStarts(
+    [...chords, chord],
+    [...slots.map((slot) => slot.start), end],
+  );
 }
