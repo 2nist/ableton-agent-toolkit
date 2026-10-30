@@ -13,6 +13,7 @@ import MidiTemplateGuide from "./MidiTemplateGuide";
 import ExportMenu from "./ExportMenu";
 import DirSetupModal from "../dashboard/DirSetupModal";
 import TapeLabel from "../common/TapeLabel";
+import { openLyricChordPopout } from "../../lib/popout";
 
 /**
  * Settings — the song-adjacent controls that used to hide behind one-off
@@ -40,11 +41,7 @@ export default function SettingsView() {
 
   function openPopout() {
     if (!currentSong) return;
-    window.open(
-      `/song/${currentSong.id}/popout`,
-      "trackdraft-popout",
-      "width=900,height=560,menubar=no,toolbar=no,location=no,status=no",
-    );
+    openLyricChordPopout(currentSong.id);
   }
 
   const targetBtn = (mode: DawTarget) => (

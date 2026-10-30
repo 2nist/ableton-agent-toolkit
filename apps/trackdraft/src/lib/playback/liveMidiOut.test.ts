@@ -326,3 +326,62 @@ describe("LiveMidiScheduler output options", () => {
     expect(Math.min(...shifted)).toBe(new FakeClock().originMs + 500);
   });
 });
+
+describe("LiveMidiScheduler with per-stem hardware ports", () => {
+  const scheduler = getLiveMidiScheduler();
+  const channels = DEFAULT_LIVE_MIDI_CHANNELS;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    scheduler.stop();
+    vi.useRealTimers();
+  });
+
+  function run(clock: FakeClock, toBeat: number): void {
+    for (let pos = 0; pos <= toBeat + 1e-9; pos += 0.5) {
+      clock.pos = pos;
+      vi.advanceTimersByTime(50);
+    }
+  }
+
+  it("sends an overridden stem to its own port and the rest to the master", () => {
+    const master = new FakeOutput();
+    const chordPort = new FakeOutput();
+    const clock = new FakeClock();
+    scheduler.start(song(), master as unknown as MIDIOutput, channels, {
+      clock,
+      stemOutputs: { chords: chordPort as unknown as MIDIOutput },
+    });
+    run(clock, 4);
+    scheduler.stop();
+
+    const chordChannel = channels.chords.channel;
+    expect(noteOns(chordPort).length).toBeGreaterThan(0);
+    for (const m of noteOns(chordPort)) {
+      expect((m[0]! & 0x0f) + 1).toBe(chordChannel);
+    }
+    // Nothing on the master carries the chords channel any more.
+    expect(noteOns(master).length).toBeGreaterThan(0);
+    for (const m of noteOns(master)) {
+      expect((m[0]! & 0x0f) + 1).not.toBe(chordChannel);
+    }
+    // Stop must silence the hardware too, or a synth holds its last chord.
+    expect(allNotesOff(chordPort).length).toBeGreaterThan(0);
+    expect(allNotesOff(master).length).toBeGreaterThan(0);
+  });
+
+  it("streams to hardware with no master port at all", () => {
+    const chordPort = new FakeOutput();
+    const clock = new FakeClock();
+    scheduler.start(song(), null, channels, {
+      clock,
+      stemOutputs: { chords: chordPort as unknown as MIDIOutput },
+    });
+    run(clock, 4);
+    scheduler.stop();
+    expect(noteOns(chordPort).length).toBeGreaterThan(0);
+  });
+});

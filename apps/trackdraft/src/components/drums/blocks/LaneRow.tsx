@@ -1,9 +1,7 @@
-import { stepIndexOf } from "./meterGrid";
 import { memo, useMemo } from "react";
 import type { Palette } from "../../../theme/palette";
 import type { DrumLane } from "../laneStyle";
 import { PARAM_SPECS, type StepParam } from "./stepParams";
-import type { LaneGesture } from "./gestureLayer";
 
 /**
  * One surface lane, drawn as PATH STRINGS.
@@ -41,8 +39,6 @@ export interface LaneRowProps {
   offGrid: readonly { beat: number; velocity: number }[];
   /** Authored step parameters, per step — the marks under/over the cells. */
   marks?: StepMarks;
-  /** What the export plays here that the grid can't show — the gesture layer. */
-  gesture?: LaneGesture;
   P: Palette;
 }
 
@@ -69,7 +65,7 @@ export interface StepMarks {
 function LaneRowImpl(props: LaneRowProps) {
   const {
     lane, beatToX, stepBeats, stepW, stepCount, stepsPerBar,
-    top, rowH, peak, offGrid, marks, gesture, P,
+    top, rowH, peak, offGrid, marks, P,
   } = props;
   const w = stepW;
   // every step is an OUTLINED CELL (like the one-bar view), and the hit
@@ -82,13 +78,6 @@ function LaneRowImpl(props: LaneRowProps) {
   // ~10px the outlines would turn the lane into a barcode, so the grid falls
   // back to printed ticks and the hits alone carry the rhythm.
   const outlined = w >= 9;
-
-  /** Steps whose base hit the gesture replaces — drawn struck, not filled. */
-  const suppressedSteps = useMemo(() => {
-    const set = new Set<number>();
-    for (const beat of gesture?.suppressed ?? []) set.add(stepIndexOf(beat, stepBeats));
-    return set;
-  }, [gesture, stepBeats]);
 
   const paths = useMemo(() => {
     let cells = "";
@@ -108,7 +97,7 @@ function LaneRowImpl(props: LaneRowProps) {
         if (onBar) barCells += cell;
         else cells += cell;
       }
-      const v = suppressedSteps.has(q) ? 0 : peak.get(q) ?? 0;
+      const v = peak.get(q) ?? 0;
       if (v <= 0) {
         if (!outlined) {
           cells += `M${left.toFixed(2)} ${cellBase - 1}h${w.toFixed(2)}v2h${(-w).toFixed(2)}Z`;
@@ -124,7 +113,7 @@ function LaneRowImpl(props: LaneRowProps) {
       dots += `M${(x - 1).toFixed(2)} ${cellBase - 4}h2v2h-2Z`;
     }
     return { cells, barCells, fills, second, dots };
-  }, [beatToX, stepBeats, stepCount, stepsPerBar, peak, w, cellTop, cellH, cellBase, offGrid, outlined, suppressedSteps]);
+  }, [beatToX, stepBeats, stepCount, stepsPerBar, peak, w, cellTop, cellH, cellBase, offGrid, outlined]);
 
   /** Parameter marks: corner ticks on cells that carry a ratchet/flam, a
    *  gate rule under the cell, and — when the STEP chip is on something other
@@ -183,26 +172,6 @@ function LaneRowImpl(props: LaneRowProps) {
     return { ticks, meter, pips, badges };
   }, [marks, beatToX, stepBeats, stepCount, w, cellTop, cellBase]);
 
-  const gesturePaths = useMemo(() => {
-    if (!gesture) return { strikes: "", ghosts: "", auto: "" };
-    let strikes = "";
-    for (const beat of gesture.suppressed) {
-      const left = beat * beatToX;
-      // a diagonal across the cell: "the groove's hit is replaced here"
-      strikes += `M${(left + 1).toFixed(2)} ${(cellBase - 1).toFixed(2)}L${(left + w - 1).toFixed(2)} ${(cellTop + 1).toFixed(2)}`;
-    }
-    let ghosts = "";
-    let auto = "";
-    for (const g of gesture.ghosts) {
-      const left = g.beat * beatToX;
-      const h = Math.max(2, (Math.min(127, Math.max(1, g.velocity)) / 127) * (cellH - 2));
-      const bar = `M${left.toFixed(2)} ${(cellBase - h).toFixed(2)}h${w.toFixed(2)}v${h.toFixed(2)}h${(-w).toFixed(2)}Z`;
-      if (g.authored) ghosts += bar;
-      else auto += bar;
-    }
-    return { strikes, ghosts, auto };
-  }, [gesture, beatToX, w, cellTop, cellH, cellBase]);
-
   return (
     <>
       {/* the grid itself: every step is a printed cell */}
@@ -210,15 +179,6 @@ function LaneRowImpl(props: LaneRowProps) {
       {paths.barCells && <path d={paths.barCells} fill="none" stroke={P.label} strokeOpacity={1} strokeWidth={2.4} />}
       {paths.second && P.handDrawn && (
         <path d={paths.second} fill="none" stroke={P.label} strokeOpacity={0.22} strokeWidth={1} />
-      )}
-      {gesturePaths.ghosts && (
-        <path d={gesturePaths.ghosts} fill="none" stroke={lane.color} strokeOpacity={0.85} strokeWidth={1.2} pointerEvents="none" />
-      )}
-      {gesturePaths.auto && (
-        <path d={gesturePaths.auto} fill="none" stroke={P.label} strokeOpacity={0.7} strokeWidth={1.2} strokeDasharray="2 2" pointerEvents="none" />
-      )}
-      {gesturePaths.strikes && (
-        <path d={gesturePaths.strikes} fill="none" stroke={lane.color} strokeOpacity={0.5} strokeWidth={1.2} pointerEvents="none" />
       )}
       {paths.fills && <path d={paths.fills} fill={lane.color} fillOpacity={P.handDrawn ? 0.85 : 0.62} />}
       {paths.fills && P.handDrawn && <path d={paths.fills} fill="url(#pencil-hatch)" fillOpacity={0.5} />}

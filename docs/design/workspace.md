@@ -893,6 +893,13 @@ reverse map now follows the kit, not the spec (documented at the entry).
 
 ## 15. Gesture layer — drawing the detour (2026-10-24)
 
+> **Superseded by §20 (2026-10-30).** The lanes now draw the export plan
+> itself, so there is no gap left to narrate: `gestureLayer.ts` and its ghost /
+> strike deltas were removed rather than kept as a second, already-equal
+> opinion. The reasoning below still explains why a gesture is an OVERRIDE and
+> not an addition, which is why the lanes had to change rather than gain an
+> overlay.
+
 The last truth gap in the Drums surface: the marker rail announced a detour or
 transition, but the cells went on drawing the base groove. A handoff fill or a
 detour is *not* an addition — a sparse detour in a 4-bar section plays 4 notes
@@ -937,3 +944,163 @@ and the planner drops its hits, so every cell would read as "taken over".
 Deliberately **not** shown: velocity changes the gesture makes to hits that
 survive it. The owner chose the plain override reading; a finer layer can be
 added later without moving the data.
+
+## 16. MIDI chord entry (2026-10-29)
+
+The floor could only be written by clicking hexes and dragging beats; naming a
+chord you were already holding, or playing the progression in time, meant
+leaving the app. The **midi** tool on the Compose floor closes that loop.
+
+- **Recognition** (`lib/harmony/chordRecognition.ts`) is pure: pitch classes in,
+  root + quality out. The lowest sounding note is root evidence, the song's key
+  is a soft tie-breaker, and a quality preference order settles exact ties
+  (C–E–G–A with C in the bass reads C6, not Am7). One note is not a chord, so
+  nothing is named until two are held.
+- **The pad** (`MidiChordPanel`) listens to every MIDI input through
+  `lib/playback/midiInput.ts`, which uses `addEventListener` (the ATOM SQ
+  handler owns `onmidimessage`) and skips the selected output port's name, so a
+  virtual bus like IAC cannot record the app's own click as input. The ATOM
+  SQ's User-mode channels (10–17) are ignored. A 55 ms settle window means a
+  3rd landing a few milliseconds late doesn't flash two chords, and the first
+  note-on of the shape is the attack the take is timed from.
+- **A chord at a time**: `place at playhead` writes a bar at the cursor through
+  `insertChordAt`; `replace selected` swaps the selected chord's root/quality
+  and keeps its length and rests. Both are one song-store write.
+- **The take** (`lib/harmony/chordCapture.ts`): arm, count-in, click. Chord
+  changes are timestamped against the transport's beat (walked back from the
+  settle window), repeats merge, and change points snap to 1/8 · 1/4 · 1/2
+  notes. The last chord ends where the player released (or the transport
+  stopped), so a four-bar cycle played inside an eight-bar section stays four
+  bars and loops instead of stretching its final chord. Nothing is written
+  until **write progression**; a bad take costs one click and Undo takes it
+  back like any other edit.
+- **Clocks**: with the app's clock the panel runs its own count-in and Web
+  Audio click (no MIDI output needed); with Live as the target it arms and
+  reads Live's beats instead of pretending it can start the transport.
+
+## 17. Drums: multi-section steps (2026-10-29)
+
+Harmony stacks every section the spine has selected; the Drums Blocks view was
+the last surface still reading only `selectedSectionId`, so a sweep across the
+spine looked like it had done nothing here. It now reads the shared `selected`
+set and draws a **combined step canvas**.
+
+- **One canvas, section end to end.** `views` is the model: each selected
+  section (song order, one entry each) carries its own meter, step grid, hits,
+  gesture layer and marker rail. `barPx` is shared so bars line up, but the
+  step subdivision is per section — a 3/4 bar keeps its six eighths beside a
+  4/4 bar's eight. A section-name band sits above the ruler, bar numbers keep
+  counting across seams, and the whole run scrolls.
+- **Editable where it belongs.** A click toggles the step in the section that
+  owns that bar (`withToggledStep` on that section), and a drag edits the
+  velocity/param of the pressed cell in that section too. Editing a section
+  moves the selection's **focus** (tools follow) without collapsing the set.
+- **Range tools stay single-section.** Bar/lane ranges, the Selection
+  Workbench, copy/paste, flatten and the velocity ops all describe one
+  section; entering multi clears the range and the bars-per-view control is
+  disabled ("every selected bar is on screen"). `focus one` returns to the
+  familiar editor.
+- **Bulk groove.** Picking a card in the groove shelf applies it to **every
+  selected section in one song update** — one undo step — which is the verb a
+  multi-selection exists for. M/S/CC remain per focused section.
+
+## 18. Sequencer accuracy (2026-10-29)
+
+A report that "the sequencer doesn't show the beat that plays" turned out to be
+two different things — one real, one a confusing label.
+
+- **The label.** A section whose `drumPattern` is set but not pinned resolves a
+  **seeded variant** (`standard` has 69 baked takes; "Unlabeled" was playing
+  v10). The groove shelf highlighted variant 1 of every pattern, so the card
+  said one beat and the grid/audio played another. The shelf now receives the
+  resolved `currentVariant`, draws that pattern's card from it in whole-kit
+  mode, highlights it, and badges it (`v10`) — clicking the active card pins
+  the variant instead of silently changing the performance to v1.
+- **The transforms.** `resolveSectionLaneHits` (the AUTHORED pocket behind a
+  step toggle) used to tile the raw groove and skip two structural export
+  steps. It now mirrors the exporter: the Bend (`applyStyleToVariant` —
+  backbeat inserts 2 & 4 snares, feel moves notes), the velocity preset
+  (`styleVelocityTarget` + `scaleToVelocityPreset`), the seeded
+  `tileGrooveVaried` (the deliberate hat gaps), the 4-bar cyclic development,
+  and authored blocks. The lanes still drew a *pocket* the performance no
+  longer played while a fill owned the final bar; §20 replaces what the lanes
+  draw with the export plan itself.
+- **Known limit, not fixed:** a section with a meter MAP still gets one average
+  step grid (`stepGridFor` divides duration by bars), so mixed-meter sections
+  cannot draw a beat-accurate bar grid yet.
+
+## 19. Multiple MIDI outs for external hardware (2026-10-29)
+
+"The MIDI out" was a single port id, so a rig with a drum module on one
+interface and a synth on another could only reach one of them.
+
+- **Per-stem ports.** `midiSettingsStore.stemOutputs: Partial<Record<StemId,
+  string>>` overrides the master port per stem; absent/`""` means "same as the
+  master", so every existing setup keeps working untouched. Settings → MIDI Out
+  setup shows a port `<select>` per stem (default label *master port*), and the
+  Sync facet summarises how many stems sit on their own port.
+- **Master may be off.** The scheduler accepts a null master as long as at least
+  one stem resolves (hardware-only rigs). `resolveStemOutputs` in `liveMidiOut`
+  maps stem → `MIDIOutput`, every `ScheduledNote`/`ScheduledCc` carries the
+  output it belongs to, and `allNotesOff` silences **every** port in use — not
+  just the master — so stopping the transport cannot strand a held note on a
+  second interface.
+- **Every start site resolves outputs.** `transportControl` gained
+  `resolveOutputs()`/`hasAnyOutput()` and all play paths (`playSong`, `seekTo`,
+  `playSectionLoop`, `resumeUnlooped`, `playLoopRegion`, `liveRefresh` and its
+  staged re-plan) pass the per-stem map; `MelodyView` does the same, and the
+  MIDI setup panel's **Test** button plays on the stem's own port.
+- **Auditions follow their stem.** `previewChord`/`previewProgression` send the
+  chord, bass and color layers to those stems' ports, `auditionDrumHit` to the
+  drums port, and the rehearsal **click** to the drums port too. Without this a
+  hardware-only rig went silent while editing — the one moment you most need to
+  hear the port you just picked.
+- **Stale ports.** `useMidiOutputs` clears a vanished master id *and* every
+  vanished per-stem id, so unplugging an interface falls back rather than
+  failing silently.
+
+## 20. The lanes draw the performance, and a playhead (2026-10-30)
+
+§18 closed the *label* gap and most of the transform gap, and left the last one
+visible: the lanes drew the section's pocket for the whole section, so the bar
+the automatic fill / transition had taken over showed hits that never sounded.
+The view annotated the difference (a "gesture layer" of ghost bars and strike
+marks) instead of drawing the truth.
+
+- **One source of truth.** `planDrumStem` was split into `planDrumSections`
+  (per span, section-relative) + a thin `planDrumStem` flatten, and the lanes
+  now bin those notes (`laneHitsFromNotes` → `resolvePlayedLaneHits`). A dot is
+  now a note the exporter writes: fills, transitions, handoff fills, the
+  post-fill crash and the outline humaniser's micro-timing all included. The
+  whole song is planned once per edit (≈4 ms for a 13-section song) because a
+  handoff fill is decided across the seam — a section planned alone would draw
+  a different last bar than the one that sounds.
+- **Editing is unchanged.** `resolveSectionLaneHits` stays the AUTHORED pocket
+  (groove + blocks) and `stepToggle` still reads it, so clicking a cell writes a
+  step into the section's own material rather than trying to rewrite a
+  generated fill. The ghost/strike gesture layer is gone — it existed only to
+  narrate a gap that is no longer there; the marker rail still names the
+  detour/transition windows.
+- **The playhead.** The canvas subscribes to `getSongTransport().onTick` and
+  draws a full-height rule (ruler → lanes) with a triangular head, resolved by
+  section IDENTITY (`tick.sectionId` + `occurrenceIndex`) so editing the
+  arrangement mid-playback cannot move it to the wrong section. It dims when
+  stopped, follows the viewport while playing, and hides when the tick belongs
+  to a section the canvas is not showing (the spine still marks it "Now
+  playing").
+
+## 21. A door to the popout from the workbench (2026-10-30)
+
+The lyrics/chords popout never went away — the route
+(`/song/:id/popout`, `LyricChordPopout`) and the window were intact, but its
+only launcher was a row buried in Settings, so it read as "lost" (user report).
+
+- `lib/popout.ts` owns the URL, the fixed window name and the window features,
+  so Settings and the workbench cannot drift — and a second open focuses the
+  first (`window.open` with a name).
+- The **workbench toolbar** (the Section/Arrangement row) now carries a
+  `lyrics & chords` button on its right. That is the surface where you play
+  along while editing, which is exactly who the second screen is for.
+- Pop-up blockers: the call is made straight from the click handler (not after
+  an await), which is what browsers require; the tooltip says to allow pop-ups
+  if the window does not appear.

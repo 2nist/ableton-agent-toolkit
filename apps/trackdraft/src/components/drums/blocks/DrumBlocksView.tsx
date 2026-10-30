@@ -14,7 +14,10 @@ import { useFocusedSectionStore } from "../../../store/focusedSectionStore";
 import { useDrumsDraftStore } from "../../../store/drumsDraftStore";
 import { updateSection } from "../../../lib/sections";
 import { sectionSpans, type SectionSpan } from "../../../lib/arrangement";
-import type { LaneHit } from "../../../lib/timeline/drumLaneHits";
+import { selectedSpans } from "../../../lib/sectionSelection";
+import { resolvePlayedLaneHits, type LaneHit } from "../../../lib/timeline/drumLaneHits";
+import { planDrumSections } from "../../../lib/midiExport";
+import { getSongTransport, type TransportTick } from "../../../lib/playback/songTransport";
 import {
   inferPatternForSection,
   resolveSectionVariant,
@@ -49,15 +52,15 @@ import GrooveShelf from "./GrooveShelf";
 import GrooveGlue from "./GrooveGlue";
 import LaneRow from "./LaneRow";
 import LaneGutter from "./LaneGutter";
+import type { StepMarks } from "./LaneRow";
 import MarkerRail, { MARKER_BAND_H } from "./MarkerRail";
-import { sectionMarkers } from "./transitionMarkers";
+import { sectionMarkers, type SectionMarkers } from "./transitionMarkers";
 import SelectionEditorModal from "./SelectionEditorModal";
-import { BARS_PER_VIEW_OPTIONS, stepGridFor, stepIndexOf, type BarsPerView } from "./meterGrid";
-import { laneHitsFor, peakVelocityByStep } from "./hitsCache";
+import { BARS_PER_VIEW_OPTIONS, stepGridFor, stepIndexOf, type BarsPerView, type StepGrid } from "./meterGrid";
+import { laneHitsFor, peakVelocityByStep, type LaneHits } from "./hitsCache";
 import { notesFromHits, withToggledStep } from "./stepToggle";
 import { applyGrooveChoice, grooveOf } from "../../../lib/drums/grooveModel";
 import { asStepParam } from "./stepParams";
-import { gestureLayerFor } from "./gestureLayer";
 import { auditionDrumHit } from "../../../lib/playback/previewMidi";
 import {
   copyBlocksToRange,
@@ -105,7 +108,6 @@ const MARKER_TOP = RULER_H + 1;
 const TOP = MARKER_TOP + MARKER_BAND_H;
 const ROW_H = 52;
 const GUTTER = 104;
-const HEIGHT = TOP + LANE_COUNT * ROW_H + 12;
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 const round4 = (n: number): number => Math.round(n * 10000) / 10000;
@@ -120,8 +122,40 @@ interface BarSel {
 
 type ScrubTargets = { draft: ParamDraftNote; value0: number; stepIdx: number }[];
 
+/**
+ * One section's slice of the canvas.
+ *
+ * A single-section view is the whole canvas; a MULTI-section selection is a
+ * run of these laid end to end, each with its own meter, step grid, hits and
+ * gesture layer — so 3/4 and 4/4 can sit next to each other without one
+ * section's grid being imposed on the other. Every row's geometry lives here
+ * so the render and the pointer maths read the same numbers.
+ */
+interface SectionView {
+  span: SectionSpan;
+  /** The section actually rendered — the draft when one is open. */
+  section: BlueprintSection;
+  hits: LaneHits;
+  grid: StepGrid;
+  bars: number;
+  /** Bars before this section in the combined timeline. */
+  barOffset: number;
+  /** Canvas x of the section's first bar, and its width in px. */
+  x: number;
+  width: number;
+  stepCount: number;
+  beatToX: number;
+  stepW: number;
+  markers: SectionMarkers | null;
+  laneData: { peak: Map<number, number>; offGrid: { beat: number; velocity: number }[] }[];
+  laneMarks: StepMarks[];
+  silentLanes: Set<string>;
+}
+
 /** The in-flight velocity gesture. */
 interface VelDrag {
+  /** The section (and its geometry) the pressed cell belongs to. */
+  view: SectionView;
   laneKey: DrumLaneId;
   stepIdx: number;
   stepBeat: number;
@@ -154,6 +188,65 @@ function velocityAt(y: number, cellTop: number, cellH: number): number {
   const frac = Math.max(0, Math.min(1, (cellTop + cellH - y) / Math.max(1, cellH - 2)));
   return Math.round(frac * 127);
 }
+
+/**
+ * The authored (mode `steps`) notes of one lane, indexed by step.
+ *
+ * Cell membership is by the shared step index — no snap gate. A note a few
+ * thousandths off (a legacy authored copy) still belongs to the cell it is
+ * drawn in, and must stay editable there.
+ */
+function authoredNotesIn(
+  sec: BlueprintSection | null,
+  laneKey: DrumLaneId,
+  stepBeats: number,
+): Map<number, DrumBlockNote> {
+  const map = new Map<number, DrumBlockNote>();
+  if (!sec) return map;
+  for (const b of sec.drumBlocks ?? []) {
+    if (b.mode !== "steps" || b.lane !== laneKey) continue;
+    for (const n of b.notes ?? []) {
+      const idx = stepIndexOf(b.startBeat + n.beat, stepBeats);
+      const prev = map.get(idx);
+      if (!prev || n.velocity > prev.velocity) map.set(idx, n);
+    }
+  }
+  return map;
+}
+
+/** What each lane's cells carry beyond velocity — the marks `LaneRow` draws
+ *  (ratchet ticks, a flam slash, a gate rule) plus the value of the lane's
+ *  ACTIVE step param, so a gate/ratchet/flam is visible after the drag ends. */
+function stepMarksFor(
+  sec: BlueprintSection | null,
+  laneKey: DrumLaneId,
+  stepBeats: number,
+  stepSel: Record<string, StepParam>,
+): StepMarks {
+  const active = asStepParam(stepSel[laneKey]);
+  const spec = PARAM_SPECS[active];
+  const ratchet = new Map<number, number>();
+  const flam = new Set<number>();
+  const gate = new Map<number, number>();
+  const values = new Map<number, number>();
+  const voices = new Map<number, { label: string; index: number }>();
+  const family = DRUM_LANE_VOICES[laneKey] ?? [];
+  for (const [stepIdx, note] of authoredNotesIn(sec, laneKey, stepBeats)) {
+    const vi = family.indexOf(note.voice as KitVoice);
+    if (vi > 0) voices.set(stepIdx, { label: VOICE_LABEL[note.voice as KitVoice] ?? String(note.voice), index: vi });
+    if (note.ratchet && note.ratchet > 1) ratchet.set(stepIdx, note.ratchet);
+    if (note.flam) flam.add(stepIdx);
+    if (note.durBeats !== undefined) {
+      const frac = note.durBeats / stepBeats;
+      if (Math.abs(frac - 1) > 0.02) gate.set(stepIdx, frac);
+    }
+    const v = spec.read(note, stepBeats, laneKey);
+    if (v !== undefined) values.set(stepIdx, v);
+  }
+  return { ratchet, flam, gate, active, values, voices };
+}
+
+const DEFAULT_GRID: StepGrid = { stepsPerBar: 16, stepBeats: 0.25, beatsPerBar: 4 };
 
 function loadJson<T>(key: string, fallback: T): T {
   try {
@@ -192,7 +285,9 @@ export default function DrumBlocksView() {
     };
   }, []);
   const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
+  const selectedSectionIds = useFocusedSectionStore((s) => s.selected);
   const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
+  const setSelection = useFocusedSectionStore((s) => s.setSelection);
   const draftSectionId = useDrumsDraftStore((s) => s.sectionId);
   const draftSection = useDrumsDraftStore((s) => s.section);
 
@@ -228,39 +323,159 @@ export default function DrumBlocksView() {
   );
 
   const section = anchorSpan ? effectiveSection(anchorSpan) : null;
-  const hits = useMemo(
-    () => (anchorSpan && section ? laneHitsFor(section, song ?? undefined, anchorSpan.occurrenceIndex) : null),
-    [anchorSpan, section, song],
-  );
 
-  const grid = useMemo(
-    () => (anchorSpan ? stepGridFor(anchorSpan, barsPerView) : { stepsPerBar: 16, stepBeats: 0.25, beatsPerBar: 4 }),
-    [anchorSpan, barsPerView],
+  /** The sections the spine has selected, in song order, one entry each.
+   *  A sweep (or ⌘-click) means "show all of these"; a plain click means the
+   *  familiar one-section editor. */
+  const multiSpans = useMemo(
+    () => selectedSpans(spans, selectedSectionIds),
+    [spans, selectedSectionIds],
   );
+  const multi = multiSpans.length > 1;
+
   const sectionBars = anchorSpan ? Math.max(1, Math.round(anchorSpan.bars)) : 1;
   const visibleBars = barsPerView === "all" ? sectionBars : Math.min(sectionBars, barsPerView);
-  // the gutter is a sticky OVERLAY, so the canvas gets the remaining pixels
-  const barPx = Math.max(40, (width - GUTTER) / Math.max(1, visibleBars));
-  const contentW = barPx * sectionBars;
-  const beatToX = barPx / Math.max(1e-6, grid.beatsPerBar);
-  const stepCount = sectionBars * grid.stepsPerBar;
-  // cells take the whole step: fewer bars ⇒ wider cells (no 16px cap),
-  // so a one-bar view fills the panel instead of floating in white space
-  const stepW = Math.max(3, beatToX * grid.stepBeats - 3);
+  const totalBars = multi
+    ? multiSpans.reduce((sum, span) => sum + Math.max(1, Math.round(span.bars)), 0)
+    : sectionBars;
+  // The gutter is a sticky OVERLAY, so the canvas gets the remaining pixels.
+  // A combined view shows every selected bar at once and scrolls, so its
+  // floor is lower than the single-section editor's 40px.
+  const barPx = multi
+    ? Math.max(40, (width - GUTTER) / Math.max(1, totalBars))
+    : Math.max(40, (width - GUTTER) / Math.max(1, visibleBars));
+  const contentW = barPx * totalBars;
 
-  /** What the export plays here that the grid can't show (detour ·
-   *  transition · handoff fill). Cached on the section object, so a drag
-   *  never pays for it. */
-  const gesture = useMemo(() => {
-    if (!song || !anchorSpan) return null;
-    // With the preview draft overlaid, exactly like the marker rail above —
-    // otherwise the rail shows a detour the lanes refuse to explain.
-    const live = spans.map((span) => ({ ...span, section: effectiveSection(span) }));
-    const at = live.findIndex(
-      (sp) => sp.sectionId === anchorSpan.sectionId && sp.occurrenceIndex === anchorSpan.occurrenceIndex,
+  /** The combined canvas adds a section-name band above the ruler — the one
+   *  place a run of sections can be told apart at a glance. */
+  const bandH = multi ? 15 : 0;
+  const rulerTop = bandH;
+  const markerTop = rulerTop + RULER_H + 1;
+  const laneTop = markerTop + MARKER_BAND_H;
+  const canvasH = laneTop + LANE_COUNT * ROW_H + 12;
+
+  /**
+   * Every section on the canvas, each with its own meter, grid, hits and
+   * gesture layer. One entry in single-section mode; one per selected
+   * section (end to end) in multi-section mode.
+   */
+  /** The song as the canvas sees it — the working draft standing in for the
+   *  section it belongs to. */
+  const live = useMemo(
+    () => spans.map((span) => ({ ...span, section: effectiveSection(span) })),
+    [spans, effectiveSection],
+  );
+
+  /** What every section PLAYS, planned once for the whole song: a handoff
+   *  fill is decided across the seam, so a section planned alone would draw a
+   *  different last bar than the one that sounds. */
+  const playedPlans = useMemo(() => (song ? planDrumSections(live, song) : []), [live, song]);
+
+  const views = useMemo<SectionView[]>(() => {
+    if (!song) return [];
+    const source = multi ? multiSpans : anchorSpan ? [anchorSpan] : [];
+    if (source.length === 0) return [];
+    const markerPlan = sectionMarkers(
+      live.map((span) => ({
+        sectionId: span.sectionId,
+        occurrenceIndex: span.occurrenceIndex,
+        durationBeats: span.durationBeats,
+        section: span.section,
+        hasVariant: !!resolveSectionVariant(span.section, song, span.occurrenceIndex),
+      })),
     );
-    return at < 0 ? null : gestureLayerFor(song, live, live[at]);
-  }, [song, spans, anchorSpan, effectiveSection]);
+    let barOffset = 0;
+    return source.map((span) => {
+      const sec = effectiveSection(span);
+      const stepGrid = stepGridFor(span, multi ? 8 : barsPerView);
+      const bars = Math.max(1, Math.round(span.bars));
+      const at = live.findIndex(
+        (entry) => entry.sectionId === span.sectionId && entry.occurrenceIndex === span.occurrenceIndex,
+      );
+      // The lanes draw the PERFORMANCE, not the pocket underneath it: the
+      // same plan the exporter writes, so a fill that takes over the last bar
+      // is drawn as the fill. `resolveSectionLaneHits` (the pocket) is still
+      // what a step toggle edits — see `stepToggle`.
+      const laneHits = at < 0
+        ? laneHitsFor(sec, song, span.occurrenceIndex)
+        : resolvePlayedLaneHits(live, song, at, playedPlans);
+      const stepCountFor = bars * stepGrid.stepsPerBar;
+      const beatToXFor = barPx / Math.max(1e-6, stepGrid.beatsPerBar);
+      const playable = audibleLanes(sec.drumLaneMute, sec.drumLaneSolo);
+      const view: SectionView = {
+        span,
+        section: sec,
+        hits: laneHits,
+        grid: stepGrid,
+        bars,
+        barOffset,
+        x: barOffset * barPx,
+        width: bars * barPx,
+        stepCount: stepCountFor,
+        beatToX: beatToXFor,
+        stepW: Math.max(3, beatToXFor * stepGrid.stepBeats - 3),
+        markers: at < 0 ? null : markerPlan[at] ?? null,
+        laneData: DRUM_LANES.map((lane) =>
+          peakVelocityByStep(
+            (laneHits.get(lane.key as DrumLaneId) ?? []) as LaneHit[],
+            stepGrid.stepBeats,
+            stepCountFor,
+          ),
+        ),
+        laneMarks: DRUM_LANES.map((lane) =>
+          stepMarksFor(sec, lane.key as DrumLaneId, stepGrid.stepBeats, stepSel),
+        ),
+        silentLanes: new Set(DRUM_LANES.map((lane) => lane.key).filter((key) => !playable.has(key as DrumLaneId))),
+      };
+      barOffset += bars;
+      return view;
+    });
+  }, [song, multi, multiSpans, anchorSpan, live, playedPlans, barsPerView, barPx, stepSel, effectiveSection]);
+
+  const anchorView = useMemo(
+    () => views.find((view) => view.span.section.id === anchorSpan?.section.id) ?? views[0] ?? null,
+    [views, anchorSpan],
+  );
+
+  const hits = anchorView?.hits ?? null;
+  const grid = anchorView?.grid ?? DEFAULT_GRID;
+  const stepCount = anchorView?.stepCount ?? 0;
+
+  // ---- playhead ---------------------------------------------------------------
+
+  /** The app transport's position, tick by tick. The drums view is where you
+   *  listen to a beat, so it is the one screen that has to say WHERE in the
+   *  section that sound is coming from. */
+  const [tick, setTick] = useState<TransportTick | null>(null);
+  useEffect(() => getSongTransport().onTick(setTick), []);
+
+  const playhead = useMemo(() => {
+    if (!tick || views.length === 0) return null;
+    // Resolve by section identity, not by index: editing the arrangement
+    // mid-playback re-numbers the spans.
+    const view =
+      views.find(
+        (v) => v.span.sectionId === tick.sectionId && v.span.occurrenceIndex === tick.occurrenceIndex,
+      ) ??
+      views.find(
+        (v) => tick.beat >= v.span.startBeat - 1e-9 && tick.beat < v.span.startBeat + v.span.durationBeats - 1e-9,
+      );
+    if (!view) return null;
+    const rel = tick.beat - view.span.startBeat;
+    if (rel < -1e-6 || rel > view.span.durationBeats + 1e-6) return null;
+    return { x: view.x + rel * view.beatToX, playing: tick.isPlaying, beat: tick.beat };
+  }, [tick, views]);
+
+  // Follow it while playing — the canvas is wider than the panel as soon as
+  // there is more than one bar, so a playhead you cannot see is no playhead.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !playhead?.playing) return;
+    const margin = 48;
+    if (playhead.x < el.scrollLeft + margin || playhead.x > el.scrollLeft + el.clientWidth - margin) {
+      el.scrollLeft = Math.max(0, playhead.x - el.clientWidth / 2);
+    }
+  }, [playhead]);
 
   /** Which lanes will actually sound — the SAME rule the planner applies
    *  (`audibleLanes`), so a dimmed lane is a lane the export drops. */
@@ -280,22 +495,16 @@ export default function DrumBlocksView() {
     return out.sort((a, b) => a.beat - b.beat);
   }, [hits]);
 
-  const laneData = useMemo(
-    () =>
-      DRUM_LANES.map((lane) =>
-        peakVelocityByStep((hits?.get(lane.key as DrumLaneId) ?? []) as LaneHit[], grid.stepBeats, stepCount),
-      ),
-    [hits, grid.stepBeats, stepCount],
-  );
-
   /** Peak maps with the in-flight drag applied — memo-stable per lane, so a
    *  KICK drag re-renders KICK's row and nothing else. */
   const peakFor = useCallback(
-    (li: number): ReadonlyMap<number, number> => {
+    (view: SectionView, li: number): ReadonlyMap<number, number> => {
       const d = velDrag;
       const laneKey = DRUM_LANES[li].key as DrumLaneId;
-      if (!d || d.laneKey !== laneKey || !d.moved) return laneData[li].peak;
-      const out = new Map(laneData[li].peak);
+      if (!d || d.laneKey !== laneKey || !d.moved || d.view.span.sectionId !== view.span.sectionId) {
+        return view.laneData[li].peak;
+      }
+      const out = new Map(view.laneData[li].peak);
       if (d.scrub) {
         if (d.param === "vel") {
           const delta = d.value - d.scrub.pressed0;
@@ -306,7 +515,7 @@ export default function DrumBlocksView() {
       }
       return out;
     },
-    [velDrag, laneData],
+    [velDrag],
   );
 
   // ---- width ------------------------------------------------------------------
@@ -322,6 +531,21 @@ export default function DrumBlocksView() {
     setWidth(el.clientWidth);
     return () => ro.disconnect();
   }, []);
+
+  // A combined view is about the steps, not a bar range: the per-section
+  // selection tools belong to the one-section editor.
+  useEffect(() => {
+    if (!multi) return;
+    setSel(null);
+    setCopyArm(null);
+  }, [multi]);
+
+  // Opening a range brings its first section into view.
+  const multiKey = multiSpans.map((span) => span.sectionId).join("|");
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (el && multiKey) el.scrollLeft = 0;
+  }, [multiKey]);
 
   // A drag must never outlive its gesture: if the pointerup is swallowed by
   // another layer (a menu backdrop, an overlay), drop the in-flight drag
@@ -391,6 +615,9 @@ export default function DrumBlocksView() {
 
   const selectLane = useCallback((laneKey: DrumLaneId) => {
     if (!anchorSpan) return;
+    // A bar/lane range is a one-section edit; a combined view deliberately
+    // works on steps, not ranges.
+    if (multi) return;
     setCopyArm(null);
     setSel((cur) => {
       const sameSection = cur && cur.sectionId === anchorSpan.section.id;
@@ -403,7 +630,7 @@ export default function DrumBlocksView() {
       }
       return { sectionId: anchorSpan.section.id, lanes: [laneKey], fromBar: 0, toBar: sectionBars - 1 };
     });
-  }, [anchorSpan, sectionBars, shiftHeld]);
+  }, [anchorSpan, sectionBars, shiftHeld, multi]);
 
   const selectBar = useCallback((bar: number, extend = false) => {
     if (!anchorSpan) return;
@@ -515,6 +742,28 @@ export default function DrumBlocksView() {
     [anchorSpan, writeSection],
   );
 
+  /** Apply a groove change to every selected section in ONE song update —
+   *  the bulk verb that makes a multi-selection worth having. */
+  const writeGrooveToSelection = useCallback(
+    (mutate: (sec: BlueprintSection) => BlueprintSection) => {
+      const targets = multi ? views.map((view) => view.section.id) : anchorSpan ? [anchorSpan.section.id] : [];
+      if (targets.length === 0) return;
+      useDrumsDraftStore.getState().clearDraft();
+      if (targets.length === 1) {
+        const id = targets[0]!;
+        const base = multi ? views[0]!.section : section;
+        updateCurrentSong((songNow) => updateSection(songNow, id, (sec) => mutate(sec ?? base!)));
+        return;
+      }
+      const ids = new Set(targets);
+      updateCurrentSong((songNow) => ({
+        ...songNow,
+        sections: songNow.sections.map((sec) => (ids.has(sec.id) ? mutate(sec) : sec)),
+      }));
+    },
+    [multi, views, anchorSpan, section, updateCurrentSong],
+  );
+
   const applyDraft = useCallback(() => {
     const st = useDrumsDraftStore.getState();
     if (st.sectionId && st.section) {
@@ -532,61 +781,6 @@ export default function DrumBlocksView() {
   }, []);
 
   // ---- gestures: velocity (commit on release) -------------------------------------
-
-  const authoredNotesFor = useCallback(
-    (laneKey: DrumLaneId): Map<number, DrumBlockNote> => {
-      const map = new Map<number, DrumBlockNote>();
-      if (!section) return map;
-      for (const b of section.drumBlocks ?? []) {
-        if (b.mode !== "steps" || b.lane !== laneKey) continue;
-        for (const n of b.notes ?? []) {
-          const abs = b.startBeat + n.beat;
-          // Cell membership by the shared index — no snap gate. A note a few
-          // thousandths off (a legacy authored copy) still belongs to the
-          // cell it is drawn in, and must stay editable there.
-          const idx = stepIndexOf(abs, grid.stepBeats);
-          const prev = map.get(idx);
-          if (!prev || n.velocity > prev.velocity) map.set(idx, n);
-        }
-      }
-      return map;
-    },
-    [section, grid.stepBeats],
-  );
-
-  /** What each lane's cells carry beyond velocity — the marks `LaneRow`
-   *  draws (ratchet ticks, a flam slash, a gate rule) plus the value of the
-   *  lane's ACTIVE step param, so a gate/ratchet/flam is visible after the
-   *  drag ends. Memoised per (section, grid, chip selection) so only the
-   *  lane you edited re-renders. */
-  const laneMarks = useMemo(
-    () =>
-      DRUM_LANES.map((lane) => {
-        const laneKey = lane.key as DrumLaneId;
-        const active = asStepParam(stepSel[laneKey]);
-        const spec = PARAM_SPECS[active];
-        const ratchet = new Map<number, number>();
-        const flam = new Set<number>();
-        const gate = new Map<number, number>();
-        const values = new Map<number, number>();
-        const voices = new Map<number, { label: string; index: number }>();
-        const family = DRUM_LANE_VOICES[laneKey] ?? [];
-        for (const [stepIdx, note] of authoredNotesFor(laneKey)) {
-          const vi = family.indexOf(note.voice as KitVoice);
-          if (vi > 0) voices.set(stepIdx, { label: VOICE_LABEL[note.voice as KitVoice] ?? String(note.voice), index: vi });
-          if (note.ratchet && note.ratchet > 1) ratchet.set(stepIdx, note.ratchet);
-          if (note.flam) flam.add(stepIdx);
-          if (note.durBeats !== undefined) {
-            const frac = note.durBeats / grid.stepBeats;
-            if (Math.abs(frac - 1) > 0.02) gate.set(stepIdx, frac);
-          }
-          const v = spec.read(note, grid.stepBeats, laneKey);
-          if (v !== undefined) values.set(stepIdx, v);
-        }
-        return { ratchet, flam, gate, active, values, voices };
-      }),
-    [authoredNotesFor, stepSel, grid.stepBeats],
-  );
 
   /** The press-time snapshot for a selection-wide scrub: every authored note
    *  and every resolved hit inside the selected bars on the pressed lane. */  const buildScrub = useCallback((laneKey: DrumLaneId, param: StepParam, pressed0: number): VelDrag["scrub"] => {
@@ -635,17 +829,18 @@ export default function DrumBlocksView() {
   const newHitVelocity = (d: VelDrag): number =>
     d.param === "vel" ? Math.round(d.value) : 100;
 
-  /** One write for a whole gesture. */
-  const commitVelocity = useCallback((d: VelDrag) => {
-    if (!anchorSpan || !section) return;
-    const span = anchorSpan;
+  /** One write for a whole gesture — into the section the pressed cell
+   *  belongs to, so a combined view edits each section in place. */
+  const commitVelocity = useCallback((view: SectionView, d: VelDrag) => {
+    const sec = view.section;
+    const stepBeats = view.grid.stepBeats;
     const spec = PARAM_SPECS[d.param];
     if (d.scrub) {
       const delta = d.value - d.scrub.pressed0;
       const notes: DrumBlockNote[] = d.scrub.targets.map((t) => {
         const next = spec.kind === "continuous" ? clampParam(spec, t.value0 + delta) : d.value;
         const draft = { ...t.draft };
-        spec.write(draft, next, grid.stepBeats, d.laneKey);
+        spec.write(draft, next, stepBeats, d.laneKey);
         return { ...draft, voice: draft.voice as DrumVoiceName };
       });
       const block: DrumBlock = {
@@ -656,27 +851,27 @@ export default function DrumBlocksView() {
         mode: "steps",
         notes,
       };
-      writeSection(span.section.id, span.section, (sec) => ({
-        ...sec,
-        drumBlocks: upsertModeBlocks(sec.drumBlocks, d.scrub!.start, d.scrub!.end, [block]),
+      writeSection(view.span.section.id, view.span.section, (s) => ({
+        ...s,
+        drumBlocks: upsertModeBlocks(s.drumBlocks, d.scrub!.start, d.scrub!.end, [block]),
       }));
       return;
     }
-    const existing = (section.drumBlocks ?? []).find(
+    const existing = (sec.drumBlocks ?? []).find(
       (b) => b.mode === "steps" && b.lane === d.laneKey && d.stepBeat >= b.startBeat - 1e-9 && d.stepBeat < b.endBeat - 1e-9,
     );
     const start = existing ? existing.startBeat : d.stepBeat;
-    const end = existing ? existing.endBeat : round4(d.stepBeat + grid.stepBeats);
-    const laneHits = hits?.get(d.laneKey) ?? [];
-    const stepIdx = stepIndexOf(d.stepBeat, grid.stepBeats);
+    const end = existing ? existing.endBeat : round4(d.stepBeat + stepBeats);
+    const laneHits = view.hits.get(d.laneKey) ?? [];
+    const stepIdx = stepIndexOf(d.stepBeat, stepBeats);
     // Cell ownership, not a point tolerance: the same function the drawing
     // uses, so a click can only ever edit the cell under the pointer.
-    const onStep = laneHits.filter((h) => stepIndexOf(h.beat, grid.stepBeats) === stepIdx);
+    const onStep = laneHits.filter((h) => stepIndexOf(h.beat, stepBeats) === stepIdx);
     let notes: DrumBlockNote[];
     const voice = () => DRUM_LANE_PRIMARY[d.laneKey] as DrumVoiceName;
     if (existing && (existing.notes?.length ?? 0) > 0) {
       notes = (existing.notes ?? []).map((n) => ({ ...n }));
-      let target = notes.find((n) => stepIndexOf(start + n.beat, grid.stepBeats) === stepIdx);
+      let target = notes.find((n) => stepIndexOf(start + n.beat, stepBeats) === stepIdx);
       if (!target) {
         if (onStep.length === 0) {
           // an empty step: a click/drag at a height CREATES the hit there
@@ -691,15 +886,15 @@ export default function DrumBlocksView() {
         }
         notes.push(target);
       }
-      spec.write(target, d.value, grid.stepBeats, d.laneKey);
+      spec.write(target, d.value, stepBeats, d.laneKey);
     } else if (onStep.length === 0) {
       if (!d.addIfEmpty) return;
       notes = [{ beat: 0, voice: voice(), velocity: newHitVelocity(d) }];
-      spec.write(notes[0], d.value, grid.stepBeats, d.laneKey);
+      spec.write(notes[0], d.value, stepBeats, d.laneKey);
     } else {
-      notes = notesFromHits(onStep, start, grid.stepBeats);
+      notes = notesFromHits(onStep, start, stepBeats);
       const loudest = notes.reduce((a, b) => (b.velocity > a.velocity ? b : a));
-      spec.write(loudest, d.value, grid.stepBeats, d.laneKey);
+      spec.write(loudest, d.value, stepBeats, d.laneKey);
     }
     const block: DrumBlock = {
       id: existing?.id ?? `blk-${d.laneKey}-${round4(start)}-${round4(end)}-steps`,
@@ -709,29 +904,36 @@ export default function DrumBlocksView() {
       mode: "steps",
       notes,
     };
-    writeSection(span.section.id, span.section, (sec) => ({ ...sec, drumBlocks: upsertModeBlocks(sec.drumBlocks, start, end, [block]) }));
-  }, [anchorSpan, section, hits, grid.stepBeats, writeSection]);
+    writeSection(view.span.section.id, view.span.section, (s) => ({
+      ...s,
+      drumBlocks: upsertModeBlocks(s.drumBlocks, start, end, [block]),
+    }));
+  }, [writeSection]);
 
   /** Click feedback: play the hit you just made or pressed, on the lane's
    *  own voice. `voice` defaults to whatever the step already resolves to. */
-  const auditionStep = useCallback((laneKey: DrumLaneId, beat: number, voice?: KitVoice, velocity?: number) => {
-    const laneHits = hits?.get(laneKey) ?? [];
-    const tol = Math.max(0.02, grid.stepBeats * 0.35);
+  const auditionStep = useCallback((view: SectionView, laneKey: DrumLaneId, beat: number, voice?: KitVoice, velocity?: number) => {
+    const laneHits = view.hits.get(laneKey) ?? [];
+    const tol = Math.max(0.02, view.grid.stepBeats * 0.35);
     const hit = laneHits.find((h) => Math.abs(h.beat - beat) < tol);
     const v = voice ?? ((hit?.voice as KitVoice | undefined) ?? (DRUM_LANE_PRIMARY[laneKey] as KitVoice));
     void auditionDrumHit(v, velocity ?? hit?.velocity ?? 100);
-  }, [hits, grid.stepBeats]);
+  }, []);
 
-  const toggleStep = useCallback((laneKey: DrumLaneId, beat: number) => {
-    if (!anchorSpan || !section) return;
-    writeSection(anchorSpan.section.id, anchorSpan.section, (s) =>
+  const toggleStep = useCallback((view: SectionView, laneKey: DrumLaneId, beat: number) => {
+    writeSection(view.span.section.id, view.span.section, (s) =>
       withToggledStep(s, {
-        section, song: song ?? undefined, occurrenceIndex: anchorSpan.occurrenceIndex,
-        laneKey, beat, stepSize: grid.stepBeats,
+        section: view.section, song: song ?? undefined, occurrenceIndex: view.span.occurrenceIndex,
+        laneKey, beat, stepSize: view.grid.stepBeats,
       }),
     );
-    setSelectedSectionId(anchorSpan.section.id);
-  }, [anchorSpan, section, song, grid.stepBeats, writeSection, setSelectedSectionId]);
+    // Editing a section inside a combined view moves the FOCUS there without
+    // collapsing the selection — so the tools follow your hand while all
+    // selected steps stay on screen.
+    if (multi && view.span.section.id !== anchorSpan?.section.id) {
+      setSelection(selectedSectionIds, view.span.section.id);
+    }
+  }, [multi, song, writeSection, setSelection, selectedSectionIds, anchorSpan]);
 
 
   const localPoint = (e: ReactPointerEvent): { x: number; y: number } => {
@@ -740,37 +942,53 @@ export default function DrumBlocksView() {
   };
 
   const onCanvasDown = (e: ReactPointerEvent) => {
-    if (e.button !== 0 || !anchorSpan) return;
+    if (e.button !== 0 || views.length === 0) return;
     const { x, y } = localPoint(e);
-    const bar = clamp(Math.floor(x / barPx), 0, sectionBars - 1);
+    // Which section's slice of the combined canvas is under the pointer.
+    const view =
+      views.find((entry) => x >= entry.x - 1e-6 && x < entry.x + entry.width + 1e-6) ??
+      (x < 0 ? views[0]! : views[views.length - 1]!);
+    const localX = clamp(x - view.x, 0, Math.max(0, view.width - 1e-6));
+    const bar = clamp(Math.floor(localX / barPx), 0, view.bars - 1);
 
-    // the ruler band: bar selection (or the paste target while copying)
-    if (y < TOP) {
-      if (copyArm) { pasteAtBar(bar); return; }
-      selectBar(bar, e.shiftKey);
+    // Above the lanes: the ruler (single-section bar selection) or any part
+    // of a combined view's header band — where a click names the section, so
+    // the user can dive from the overview into its editor.
+    if (y < laneTop) {
+      if (multi) {
+        setSelectedSectionId(view.span.section.id);
+        return;
+      }
+      if (y < TOP) {
+        if (copyArm) { pasteAtBar(bar); return; }
+        selectBar(bar, e.shiftKey);
+      }
       return;
     }
 
-    const laneIdx = clamp(Math.floor((y - TOP) / ROW_H), 0, LANE_COUNT - 1);
+    const laneIdx = clamp(Math.floor((y - laneTop) / ROW_H), 0, LANE_COUNT - 1);
     const laneKey = DRUM_LANES[laneIdx].key as DrumLaneId;
-    const stepIdx = clamp(Math.floor(x / (beatToX * grid.stepBeats)), 0, stepCount - 1);
-    const stepBeat = round4(stepIdx * grid.stepBeats);
+    const stepIdx = clamp(Math.floor(localX / (view.beatToX * view.grid.stepBeats)), 0, view.stepCount - 1);
+    const stepBeat = round4(stepIdx * view.grid.stepBeats);
 
-    if (copyArm) { pasteAtBar(bar); return; }
+    if (copyArm && !multi) { pasteAtBar(bar); return; }
 
-    const authored = authoredNotesFor(laneKey).get(stepIdx);
+    const authored = authoredNotesIn(view.section, laneKey, view.grid.stepBeats).get(stepIdx);
     const param = asStepParam(stepSel[laneKey]);
-    const cellTop = TOP + laneIdx * ROW_H + 5;
+    const cellTop = laneTop + laneIdx * ROW_H + 5;
     const cellH = ROW_H - 12;
     // VEL is absolute: the press height IS the value — a click and a drag
     // therefore use the same mapping
     const startValue = param === "vel"
       ? velocityAt(y, cellTop, cellH)
-      : (authored ? (PARAM_SPECS[param].read(authored, grid.stepBeats, laneKey) ?? PARAM_SPECS[param].rest) : PARAM_SPECS[param].rest);
+      : (authored ? (PARAM_SPECS[param].read(authored, view.grid.stepBeats, laneKey) ?? PARAM_SPECS[param].rest) : PARAM_SPECS[param].rest);
     const d: VelDrag = {
+      view,
       laneKey, stepIdx, stepBeat, param,
       startValue, value: startValue,
-      scrub: buildScrub(laneKey, param, startValue),
+      // A selection-wide scrub is a single-section gesture; a combined view
+      // edits the cell you pressed, in the section that owns it.
+      scrub: multi ? null : buildScrub(laneKey, param, startValue),
       x0: x, y0: y, x, y,
       cellTop,
       cellH,
@@ -810,50 +1028,57 @@ export default function DrumBlocksView() {
     dragRef.current = null;
     setVelDrag(null);
     if (!d) return;
+    const v = d.view;
+    const stepBeats = v.grid.stepBeats;
+    const laneHits = v.hits.get(d.laneKey) ?? [];
+    const tol = Math.max(0.02, stepBeats * 0.35);
+    const has = laneHits.some((h) => Math.abs(h.beat - d.stepBeat) < tol)
+      || !!authoredNotesIn(v.section, d.laneKey, stepBeats).get(d.stepIdx);
     if (!d.moved) {
-      const laneHits = hits?.get(d.laneKey) ?? [];
-      const tol = Math.max(0.02, grid.stepBeats * 0.35);
-      const has = laneHits.some((h) => Math.abs(h.beat - d.stepBeat) < tol)
-        || !!authoredNotesFor(d.laneKey).get(d.stepIdx);
+      // A combined view is for shaping several sections at once: a click is
+      // a toggle there, whichever STEP chip is lit.
+      if (multi) {
+        toggleStep(v, d.laneKey, d.stepBeat);
+        if (!has) auditionStep(v, d.laneKey, d.stepBeat);
+        return;
+      }
       // With the STEP chip on VEL, a click IS a velocity edit: the height you
       // press is the value. Clicking the cell's floor (≤2) removes the hit.
       if (d.param === "vel") {
-        const v = velocityAt(d.y, d.cellTop, d.cellH);
-        if (v <= 2) {
+        const vel = velocityAt(d.y, d.cellTop, d.cellH);
+        if (vel <= 2) {
           // Pressing a cell's floor on a hit removes it. On an EMPTY cell the
           // same press used to return silently — a click that does nothing at
           // all, which reads as a broken cell. It adds at the neutral
           // velocity instead.
           if (has) {
-            toggleStep(d.laneKey, d.stepBeat);
+            toggleStep(v, d.laneKey, d.stepBeat);
             return;
           }
-          toggleStep(d.laneKey, d.stepBeat);
-          auditionStep(d.laneKey, d.stepBeat);
+          toggleStep(v, d.laneKey, d.stepBeat);
+          auditionStep(v, d.laneKey, d.stepBeat);
           return;
         }
-        commitVelocity({ ...d, moved: true, value: v, addIfEmpty: true });
-        auditionStep(d.laneKey, d.stepBeat, undefined, v);
+        commitVelocity(v, { ...d, moved: true, value: vel, addIfEmpty: true });
+        auditionStep(v, d.laneKey, d.stepBeat, undefined, vel);
         return;
       }
       // any other step parameter keeps click = toggle; the click still
       // sounds, so you hear the cell you just turned on
-      toggleStep(d.laneKey, d.stepBeat);
-      if (!has) auditionStep(d.laneKey, d.stepBeat);
+      toggleStep(v, d.laneKey, d.stepBeat);
+      if (!has) auditionStep(v, d.laneKey, d.stepBeat);
       return;
     }
-    if (d.param !== "vel" && !authoredNotesFor(d.laneKey).get(d.stepIdx)) {
-      auditionStep(d.laneKey, d.stepBeat);
+    if (d.param !== "vel" && !authoredNotesIn(v.section, d.laneKey, stepBeats).get(d.stepIdx)) {
+      auditionStep(v, d.laneKey, d.stepBeat);
     }
     if (d.param === "vel" && d.value <= 2) {
       // dragged down to the floor — the same gesture as clicking it
-      const laneHits = hits?.get(d.laneKey) ?? [];
-      const tol = Math.max(0.02, grid.stepBeats * 0.35);
       const had = laneHits.some((h) => Math.abs(h.beat - d.stepBeat) < tol);
-      if (had) { toggleStep(d.laneKey, d.stepBeat); return; }
+      if (had) { toggleStep(v, d.laneKey, d.stepBeat); return; }
       return;
     }
-    commitVelocity(d);
+    commitVelocity(v, d);
   };
 
   // ---- commands: flatten / velocity ops / copy / regenerate ------------------------
@@ -1000,25 +1225,6 @@ export default function DrumBlocksView() {
   // Read from the plan the exporter applies, for the section on screen only —
   // the rail sits inside THIS section's beat axis, so markers land on real bars.
 
-  const markers = useMemo(() => {
-    if (!anchorSpan || !section || !song) return null;
-    const resolved = spans.map((span) => {
-      const sec = effectiveSection(span);
-      return {
-        sectionId: span.sectionId,
-        occurrenceIndex: span.occurrenceIndex,
-        durationBeats: span.durationBeats,
-        section: sec,
-        hasVariant: !!resolveSectionVariant(sec, song, span.occurrenceIndex),
-      };
-    });
-    const at = resolved.findIndex(
-      (r) => r.sectionId === anchorSpan.sectionId && r.occurrenceIndex === anchorSpan.occurrenceIndex,
-    );
-    if (at < 0) return null;
-    return sectionMarkers(resolved)[at];
-  }, [anchorSpan, section, song, spans, effectiveSection]);
-
   /** A marker click focuses the gesture's bars (shift clears an authored one). */
   const focusGesture = useCallback(
     (range: { startBeat: number; endBeat: number }, clear: (() => void) | null, shift: boolean) => {
@@ -1059,9 +1265,14 @@ export default function DrumBlocksView() {
     : shelfSource.kind === "muted"
       ? undefined
       : inferPatternForSection(section, song);
+  /** WHICH take of that pattern plays. A pattern name alone doesn't say —
+   *  an unpinned section resolves a seeded variant, so the shelf has to show
+   *  that performance or it disagrees with the step grid. */
+  const currentVariant = anchorSpan && section && currentPattern
+    ? (section.drumVariantIndex ?? seededVariantIndex(currentPattern, section, song, anchorSpan.occurrenceIndex))
+    : undefined;
   const hasDraft = !!draftSection && draftSectionId === anchorSpan.section.id;
   const barLabel = sel ? `${Math.min(sel.fromBar, sel.toBar) + 1}–${Math.max(sel.fromBar, sel.toBar) + 1}` : "";
-  const gridLines = Array.from({ length: sectionBars + 1 }).map((_, b) => b * barPx);
   const rangeForModal = selRange
     ? { startBeat: selRange.startBeat, endBeat: selRange.endBeat, laneKeys: selRange.laneKeys }
     : null;
@@ -1072,11 +1283,12 @@ export default function DrumBlocksView() {
         span={anchorSpan}
         section={section}
         current={currentPattern ?? null}
+        currentVariant={currentVariant}
         songBeats={song?.savedBeats ?? []}
         userBeats={userBeats}
         onPickSaved={(beat) => {
-          writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => withSavedBeat(sec, beat));
-          setSelectedSectionId(anchorSpan.section.id);
+          writeGrooveToSelection((sec) => withSavedBeat(sec, beat));
+          if (!multi) setSelectedSectionId(anchorSpan.section.id);
         }}
         onSaveBeat={(name, target) => {
           if (!anchorSpan) return;
@@ -1138,7 +1350,7 @@ export default function DrumBlocksView() {
           }
         }}
         onPick={(pattern, variant, lane) => {
-          writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => {
+          writeGrooveToSelection((sec) => {
             // LANE PICK: replace that one drum and keep the rest of the beat.
             // Assembling a groove kick-by-kick is the whole reason the lens has
             // a per-lane scope — swapping the entire pattern here would throw
@@ -1150,70 +1362,94 @@ export default function DrumBlocksView() {
             // WHOLE-BEAT PICK: replaces the groove, so the rhythm blocks
             // authored against the old one go with it, and it carries the
             // VARIANT the card was drawn from so the shape you clicked is the
-            // shape you get.
+            // shape you get. With several sections selected, this is the
+            // bulk verb: the shape goes onto every one of them.
             return applyGrooveChoice(sec, { kind: "preset", pattern, variant });
           });
-          setSelectedSectionId(anchorSpan.section.id);
+          if (!multi) setSelectedSectionId(anchorSpan.section.id);
         }}
       />
 
       {/* header: zoom (bars per view) · selection pill · draft controls */}
       <div className="flex items-center gap-2 mb-1.5 min-h-6">
         <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-inkMuted">bars</span>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5" style={{ opacity: multi ? 0.4 : 1 }}>
           {BARS_PER_VIEW_OPTIONS.map((n) => (
             <button
               key={String(n)}
+              disabled={multi}
               onClick={() => { setBarsPerView(n); saveJson("trackdraft-drums-bars-view", n); }}
-              className="font-mono text-2xs rounded-sm px-1.5 py-0.5 border"
+              className="font-mono text-2xs rounded-sm px-1.5 py-0.5 border disabled:cursor-not-allowed"
               style={{
                 borderColor: barsPerView === n ? P.track : P.grid,
                 color: barsPerView === n ? P.track : P.label,
                 background: barsPerView === n ? "rgba(232,181,74,0.12)" : "transparent",
               }}
-              title={`${n === "all" ? "Whole section" : `${n} bar${n === 1 ? "" : "s"}`} per view — the step grid follows the meter`}
+              title={
+                multi
+                  ? "Every selected bar is on screen — focus one section to zoom"
+                  : `${n === "all" ? "Whole section" : `${n} bar${n === 1 ? "" : "s"}`} per view — the step grid follows the meter`
+              }
             >
               {n === "all" ? "ALL" : n}
             </button>
           ))}
         </div>
 
-        {/* the bar navigator — the one-bar view's spine, tied to the
-            selection: it names the bars you have chosen and walks them */}
-        <span className="flex items-center gap-1 font-mono text-2xs text-ink tabular-nums">
-          <button
-            onClick={() => stepSelBar(-1)}
-            className="w-4 h-4 flex items-center justify-center text-inkMuted hover:text-ink"
-            title="Previous bar"
-            aria-label="Previous bar"
-          >
-            ◂
-          </button>
-          <span title="Selection, in bars of this section">
-            {anchorSpan.section.name} ·{" "}
-            {sel
-              ? (() => {
-                  const a = Math.min(sel.fromBar, sel.toBar) + 1;
-                  const b = Math.max(sel.fromBar, sel.toBar) + 1;
-                  return a === b ? `bar ${a}/${sectionBars}` : `bars ${a}–${b}/${sectionBars}`;
-                })()
-              : `${sectionBars} bars`}
+        {multi ? (
+          <span className="flex items-center gap-1 font-mono text-2xs tabular-nums">
+            <span className="rounded border border-track/60 bg-track/10 px-1.5 py-0.5 text-track" title="Shift-drag or ⌘-click the sections above; every selected bar is drawn on one grid, a step toggle edits the section that owns it, and a groove pick applies to all of them">
+              {multiSpans.length} sections · {totalBars} bars
+            </span>
+            <span className="text-inkMuted">all steps</span>
+            <button
+              onClick={() => anchorSpan && setSelectedSectionId(anchorSpan.section.id)}
+              className="rounded border border-edge px-1.5 py-0.5 text-inkMuted hover:text-ink"
+              title="Collapse the selection to the focused section"
+            >
+              focus one
+            </button>
           </span>
-          <button
-            onClick={() => stepSelBar(1)}
-            className="w-4 h-4 flex items-center justify-center text-inkMuted hover:text-ink"
-            title="Next bar"
-            aria-label="Next bar"
-          >
-            ▸
-          </button>
-        </span>
+        ) : (
+          /* the bar navigator — the one-bar view's spine, tied to the
+             selection: it names the bars you have chosen and walks them */
+          <span className="flex items-center gap-1 font-mono text-2xs text-ink tabular-nums">
+            <button
+              onClick={() => stepSelBar(-1)}
+              className="w-4 h-4 flex items-center justify-center text-inkMuted hover:text-ink"
+              title="Previous bar"
+              aria-label="Previous bar"
+            >
+              ◂
+            </button>
+            <span title="Selection, in bars of this section">
+              {anchorSpan.section.name} ·{" "}
+              {sel
+                ? (() => {
+                    const a = Math.min(sel.fromBar, sel.toBar) + 1;
+                    const b = Math.max(sel.fromBar, sel.toBar) + 1;
+                    return a === b ? `bar ${a}/${sectionBars}` : `bars ${a}–${b}/${sectionBars}`;
+                  })()
+                : `${sectionBars} bars`}
+            </span>
+            <button
+              onClick={() => stepSelBar(1)}
+              className="w-4 h-4 flex items-center justify-center text-inkMuted hover:text-ink"
+              title="Next bar"
+              aria-label="Next bar"
+            >
+              ▸
+            </button>
+          </span>
+        )}
 
-        <GrooveGlue
-          section={section}
-          drumBeats={allDrumBeats}
-          onWrite={(mutate) => writeSection(anchorSpan.section.id, anchorSpan.section, mutate)}
-        />
+        {!multi && (
+          <GrooveGlue
+            section={section}
+            drumBeats={allDrumBeats}
+            onWrite={(mutate) => writeSection(anchorSpan.section.id, anchorSpan.section, mutate)}
+          />
+        )}
 
         <span className="flex-1" />
 
@@ -1279,11 +1515,11 @@ export default function DrumBlocksView() {
       {/* TIER 2 — the surface lanes */}
       <div ref={frameRef} className="w-full border border-edge rounded bg-deep overflow-hidden">
         <div ref={scrollerRef} className="relative overflow-x-auto" style={{ cursor: copyArm ? "copy" : undefined }}>
-          <div className="relative" style={{ width: GUTTER + contentW, height: HEIGHT }}>
+          <div className="relative" style={{ width: GUTTER + contentW, height: canvasH }}>
             <svg
               ref={svgRef}
               width={contentW}
-              height={HEIGHT}
+              height={canvasH}
               style={{ marginLeft: GUTTER }}
               className="block touch-none select-none"
               onPointerDown={onCanvasDown}
@@ -1297,142 +1533,230 @@ export default function DrumBlocksView() {
                 </pattern>
               </defs>
 
-              {/* bar ruler — the numbers ARE the bar-selection targets */}
-              {Array.from({ length: sectionBars }).map((_, b) => {
-                const inSel = !!sel && b >= Math.min(sel.fromBar, sel.toBar) && b <= Math.max(sel.fromBar, sel.toBar);
+              {/* section band — the one place a combined selection's sections
+                  are named; it is also a click target that focuses one */}
+              {multi &&
+                views.map((view) => {
+                  const label = view.span.section.name.length > Math.max(4, Math.floor(view.width / 6))
+                    ? `${view.span.section.name.slice(0, Math.max(4, Math.floor(view.width / 6)) - 1)}…`
+                    : view.span.section.name;
+                  const isAnchor = view.span.section.id === anchorSpan?.section.id;
+                  return (
+                    <g key={`band-${view.span.sectionId}`} pointerEvents="none">
+                      <rect x={view.x} y={0} width={view.width} height={bandH - 2} fill="rgba(232,181,74,0.08)" />
+                      <text
+                        x={view.x + 4} y={bandH - 5}
+                        fontSize={9} fontFamily="'IBM Plex Mono', monospace"
+                        fill={isAnchor ? P.track : P.label}
+                      >
+                        {label}
+                      </text>
+                      <line x1={view.x} y1={0} x2={view.x} y2={canvasH} stroke={P.track} strokeOpacity={0.35} strokeWidth={1} />
+                    </g>
+                  );
+                })}
+
+              {/* bar ruler — the numbers ARE the bar-selection targets; in a
+                  combined view they keep counting across section seams */}
+              {views.map((view) => {
+                const viewSel = sel && sel.sectionId === view.span.section.id ? sel : null;
                 return (
-                  <g key={`bn-${b}`}>
-                    <rect
-                      x={b * barPx} y={0} width={barPx} height={RULER_H}
-                      fill={inSel ? "rgba(232,181,74,0.10)" : "transparent"}
-                    />
-                    <text
-                      x={b * barPx + 4} y={15}
-                      fontSize={9} fontFamily="'IBM Plex Mono', monospace"
-                      fill={inSel ? P.track : P.grid}
-                      pointerEvents="none"
-                    >
-                      {b + 1}
-                    </text>
+                  <g key={`ruler-${view.span.sectionId}`}>
+                    {Array.from({ length: view.bars }).map((_, b) => {
+                      const inSel = !!viewSel && b >= Math.min(viewSel.fromBar, viewSel.toBar) && b <= Math.max(viewSel.fromBar, viewSel.toBar);
+                      const x = view.x + b * barPx;
+                      return (
+                        <g key={`bn-${view.span.sectionId}-${b}`}>
+                          <rect
+                            x={x} y={rulerTop} width={barPx} height={RULER_H}
+                            fill={inSel ? "rgba(232,181,74,0.10)" : "transparent"}
+                          />
+                          <text
+                            x={x + 4} y={rulerTop + 15}
+                            fontSize={9} fontFamily="'IBM Plex Mono', monospace"
+                            fill={inSel ? P.track : P.grid}
+                            pointerEvents="none"
+                          >
+                            {view.barOffset + b + 1}
+                          </text>
+                        </g>
+                      );
+                    })}
                   </g>
                 );
               })}
 
               {/* the ruler/marker seam — the rail is a band, not floating text */}
               <line
-                x1={0} y1={RULER_H} x2={contentW} y2={RULER_H}
+                x1={0} y1={rulerTop + RULER_H} x2={contentW} y2={rulerTop + RULER_H}
                 stroke={P.handDrawn ? P.grid : "#fff"}
                 strokeOpacity={P.handDrawn ? 0.3 : 0.07}
                 strokeWidth={1}
                 pointerEvents="none"
               />
 
-              {markers && (
-                <MarkerRail
-                  markers={markers}
-                  beatToX={beatToX}
-                  top={MARKER_TOP}
-                  P={P}
-                  onTransition={(e) => {
-                    e.stopPropagation();
-                    if (!markers.transition) return;
-                    const manual = markers.transition.manual;
-                    focusGesture(
-                      markers.transition,
-                      manual
-                        ? () =>
-                            writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({
-                              ...sec,
-                              drumTransitionModel: undefined,
-                              drumTransitionBars: undefined,
-                            }))
-                        : null,
-                      e.shiftKey,
-                    );
-                  }}
-                  onDetour={(e) => {
-                    e.stopPropagation();
-                    if (!markers.detour) return;
-                    focusGesture(
-                      markers.detour,
-                      () =>
-                        writeSection(anchorSpan.section.id, anchorSpan.section, (sec) => ({
-                          ...sec,
-                          drumVariationOutline: undefined,
-                          drumVariationBars: undefined,
-                          drumVariationStartBeat: undefined,
-                        })),
-                      e.shiftKey,
-                    );
-                  }}
-                />
-              )}
-
-              {gridLines.map((x, i) => (
-                <line
-                  key={`bl-${i}`}
-                  x1={x} y1={TOP} x2={x} y2={HEIGHT - 8}
-                  stroke={P.handDrawn ? P.grid : "#fff"}
-                  strokeOpacity={P.handDrawn ? 0.4 : 0.08}
-                  strokeWidth={1}
-                  pointerEvents="none"
-                />
-              ))}
-
-              {sel && (
-                <rect
-                  x={Math.min(sel.fromBar, sel.toBar) * barPx}
-                  y={TOP}
-                  width={(Math.abs(sel.toBar - sel.fromBar) + 1) * barPx}
-                  height={LANE_COUNT * ROW_H}
-                  fill="rgba(232,181,74,0.06)"
-                  pointerEvents="none"
-                />
-              )}
-
-              {DRUM_LANES.map((lane, li) => {
-                const inSel = !!sel && sel.lanes.includes(lane.key as DrumLaneId);
-                return (
-                  <g
-                    key={`lane-${lane.key}`}
-                    opacity={silentLanes.has(lane.key) ? 0.28 : sel && !inSel ? 0.62 : 1}
-                  >
-                    {inSel && (
-                      <rect
-                        x={Math.min(sel!.fromBar, sel!.toBar) * barPx}
-                        y={TOP + li * ROW_H + 2}
-                        width={(Math.abs(sel!.toBar - sel!.fromBar) + 1) * barPx}
-                        height={ROW_H - 4}
-                        fill="rgba(232,181,74,0.10)"
-                        stroke="rgba(232,181,74,0.35)"
-                        strokeWidth={1}
-                        pointerEvents="none"
-                      />
-                    )}
-                    <LaneRow
-                      lane={{ ...lane, color: laneColor(lane, P) }}
-                      beatToX={beatToX}
-                      stepBeats={grid.stepBeats}
-                      stepW={stepW}
-                      stepCount={stepCount}
-                      stepsPerBar={grid.stepsPerBar}
-                      top={TOP + li * ROW_H}
-                      rowH={ROW_H}
-                      peak={peakFor(li)}
-                      offGrid={laneData[li].offGrid}
-                      marks={laneMarks[li]}
-                      gesture={gesture?.get(lane.key as DrumLaneId)}
+              {views.map((view) =>
+                view.markers ? (
+                  <g key={`mk-${view.span.sectionId}`} transform={`translate(${view.x},0)`}>
+                    <MarkerRail
+                      markers={view.markers}
+                      beatToX={view.beatToX}
+                      top={markerTop}
                       P={P}
+                      onTransition={(e) => {
+                        e.stopPropagation();
+                        if (!view.markers?.transition) return;
+                        // A combined view uses the rail as a door into the
+                        // section; the single-section editor keeps its
+                        // focus-the-gesture verb.
+                        if (multi) {
+                          setSelectedSectionId(view.span.section.id);
+                          return;
+                        }
+                        const transition = view.markers.transition;
+                        const manual = transition.manual;
+                        focusGesture(
+                          transition,
+                          manual
+                            ? () =>
+                                writeSection(view.span.section.id, view.span.section, (sec) => ({
+                                  ...sec,
+                                  drumTransitionModel: undefined,
+                                  drumTransitionBars: undefined,
+                                }))
+                            : null,
+                          e.shiftKey,
+                        );
+                      }}
+                      onDetour={(e) => {
+                        e.stopPropagation();
+                        if (!view.markers?.detour) return;
+                        if (multi) {
+                          setSelectedSectionId(view.span.section.id);
+                          return;
+                        }
+                        const detour = view.markers.detour;
+                        focusGesture(
+                          detour,
+                          () =>
+                            writeSection(view.span.section.id, view.span.section, (sec) => ({
+                              ...sec,
+                              drumVariationOutline: undefined,
+                              drumVariationBars: undefined,
+                              drumVariationStartBeat: undefined,
+                            })),
+                          e.shiftKey,
+                        );
+                      }}
                     />
+                  </g>
+                ) : null,
+              )}
+
+              {views.map((view) =>
+                Array.from({ length: view.bars + 1 }).map((_, b) => (
+                  <line
+                    key={`bl-${view.span.sectionId}-${b}`}
+                    x1={view.x + b * barPx} y1={laneTop} x2={view.x + b * barPx} y2={canvasH - 8}
+                    stroke={P.handDrawn ? P.grid : "#fff"}
+                    strokeOpacity={P.handDrawn ? 0.4 : 0.08}
+                    strokeWidth={1}
+                    pointerEvents="none"
+                  />
+                )),
+              )}
+
+              {views.map((view) => {
+                const viewSel = sel && sel.sectionId === view.span.section.id ? sel : null;
+                if (!viewSel) return null;
+                const from = Math.min(viewSel.fromBar, viewSel.toBar);
+                const to = Math.max(viewSel.fromBar, viewSel.toBar);
+                return (
+                  <rect
+                    key={`sel-${view.span.sectionId}`}
+                    x={view.x + from * barPx}
+                    y={laneTop}
+                    width={(to - from + 1) * barPx}
+                    height={LANE_COUNT * ROW_H}
+                    fill="rgba(232,181,74,0.06)"
+                    pointerEvents="none"
+                  />
+                );
+              })}
+
+              {views.map((view) => {
+                const viewSel = sel && sel.sectionId === view.span.section.id ? sel : null;
+                return (
+                  <g key={`lanes-${view.span.sectionId}`} transform={`translate(${view.x},0)`}>
+                    {DRUM_LANES.map((lane, li) => {
+                      const inSel = !!viewSel && viewSel.lanes.includes(lane.key as DrumLaneId);
+                      return (
+                        <g
+                          key={`lane-${view.span.sectionId}-${lane.key}`}
+                          opacity={view.silentLanes.has(lane.key) ? 0.28 : viewSel && !inSel ? 0.62 : 1}
+                        >
+                          {inSel && (
+                            <rect
+                              x={Math.min(viewSel!.fromBar, viewSel!.toBar) * barPx}
+                              y={laneTop + li * ROW_H + 2}
+                              width={(Math.abs(viewSel!.toBar - viewSel!.fromBar) + 1) * barPx}
+                              height={ROW_H - 4}
+                              fill="rgba(232,181,74,0.10)"
+                              stroke="rgba(232,181,74,0.35)"
+                              strokeWidth={1}
+                              pointerEvents="none"
+                            />
+                          )}
+                          <LaneRow
+                            lane={{ ...lane, color: laneColor(lane, P) }}
+                            beatToX={view.beatToX}
+                            stepBeats={view.grid.stepBeats}
+                            stepW={view.stepW}
+                            stepCount={view.stepCount}
+                            stepsPerBar={view.grid.stepsPerBar}
+                            top={laneTop + li * ROW_H}
+                            rowH={ROW_H}
+                            peak={peakFor(view, li)}
+                            offGrid={view.laneData[li].offGrid}
+                            marks={view.laneMarks[li]}
+                            P={P}
+                          />
+                        </g>
+                      );
+                    })}
                   </g>
                 );
               })}
+
+              {/* playhead — a full-height rule through ruler, markers and
+                  every lane, so a hit you hear can be read off the grid */}
+              {playhead && (
+                <g pointerEvents="none">
+                  <line
+                    x1={playhead.x} y1={rulerTop} x2={playhead.x} y2={canvasH - 8}
+                    stroke={P.track}
+                    strokeOpacity={playhead.playing ? 0.22 : 0.1}
+                    strokeWidth={5}
+                  />
+                  <line
+                    x1={playhead.x} y1={rulerTop} x2={playhead.x} y2={canvasH - 8}
+                    stroke={P.track}
+                    strokeOpacity={playhead.playing ? 0.95 : 0.5}
+                    strokeWidth={1.4}
+                  />
+                  <path
+                    d={`M${(playhead.x - 4).toFixed(2)} ${rulerTop - 1}h8L${playhead.x.toFixed(2)} ${rulerTop + 5}Z`}
+                    fill={P.track}
+                    fillOpacity={playhead.playing ? 0.95 : 0.5}
+                  />
+                </g>
+              )}
 
               {velDrag && velDrag.moved && (
                 <g pointerEvents="none">
                   <rect x={velDrag.x + 14} y={velDrag.y - 46} width={72} height={32} rx={5} fill="rgba(11,13,17,0.95)" stroke={P.track} strokeOpacity={0.6} />
                   <text x={velDrag.x + 50} y={velDrag.y - 31} textAnchor="middle" fontSize={13} fontWeight={600} fontFamily="'IBM Plex Mono', monospace" fill={P.track}>
-                    {PARAM_SPECS[velDrag.param].format(velDrag.value, grid.stepBeats, velDrag.laneKey)}
+                    {PARAM_SPECS[velDrag.param].format(velDrag.value, velDrag.view.grid.stepBeats, velDrag.laneKey)}
                   </text>
                   <text x={velDrag.x + 50} y={velDrag.y - 20} textAnchor="middle" fontSize={7.5} fontFamily="'IBM Plex Mono', monospace" fill={P.label}>
                     {PARAM_SPECS[velDrag.param].short}
@@ -1442,9 +1766,9 @@ export default function DrumBlocksView() {
             </svg>
 
             <LaneGutter
-              height={HEIGHT}
+              height={canvasH}
               width={GUTTER}
-              top={TOP}
+              top={laneTop}
               rowH={ROW_H}
               stepSel={stepSel}
               fxSel={fxSel}

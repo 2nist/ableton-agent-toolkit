@@ -75,6 +75,42 @@ describe("midiSettingsStore — persisted shape", () => {
     expect(routing.chords.channel).toBe(3);
   });
 
+  it("persists per-stem output ports (external hardware) and clears them", async () => {
+    const store = await freshStore();
+    store.getState().setStemOutput("drums", "hw-drums");
+    store.getState().setStemOutput("bass", "hw-bass");
+
+    const reloaded = await freshStore();
+    expect(reloaded.getState().stemOutputs).toEqual({ drums: "hw-drums", bass: "hw-bass" });
+
+    // Emptying an override means "follow the master" — not "remember an
+    // empty port" that the resolver would have to special-case.
+    reloaded.getState().setStemOutput("bass", "");
+    expect(reloaded.getState().stemOutputs).toEqual({ drums: "hw-drums" });
+  });
+
+  it("ignores a saved stem key the app does not know", async () => {
+    backingStorage.setItem(
+      KEY,
+      JSON.stringify({
+        midiOutputId: "m",
+        stemOutputs: { drums: "hw-drums", kazoo: "hw-kazoo" },
+        latencyMs: 0,
+      }),
+    );
+    const store = await freshStore();
+    expect(store.getState().stemOutputs).toEqual({ drums: "hw-drums" });
+  });
+
+  it("keeps hardware routing when a channel preset is applied", async () => {
+    // Presets rewrite channels + instrument hints; which physical port a
+    // stem leaves on is wiring, not a preset.
+    const store = await freshStore();
+    store.getState().setStemOutput("drums", "hw-drums");
+    store.getState().applyProfile("gm");
+    expect(store.getState().stemOutputs).toEqual({ drums: "hw-drums" });
+  });
+
   it("persists channel and latency edits", async () => {
     const store = await freshStore();
     store.getState().setChannel("drums", 10);

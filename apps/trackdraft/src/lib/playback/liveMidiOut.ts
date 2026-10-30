@@ -2,7 +2,7 @@ import { sectionSpans } from "../arrangement";
 import { planChordStem, planBassStem, planDrumStem, planDrumCcStem, type MidiNote } from "../midiExport";
 import { planColorStem } from "../colorStem";
 import { planMelodyStem } from "../melody/melodyStem";
-import { LIVE_ROUTING, clampChannel, type StemId, type StemRoutingMap } from "../stems";
+import { LIVE_ROUTING, STEM_IDS, clampChannel, type StemId, type StemRoutingMap } from "../stems";
 import type { BlueprintSong } from "../../types/blueprint";
 
 /** Per-stem routing for the live MIDI out — the same shape the file export
@@ -64,6 +64,29 @@ export async function getMidiOutput(id: string): Promise<MIDIOutput | null> {
   return access.outputs.get(id) ?? null;
 }
 
+/**
+ * Saved per-stem port ids → live output ports (external hardware).
+ *
+ * A stem with no override, or whose saved port has disappeared, is simply
+ * absent from the map — `LiveMidiScheduler` then sends it to the master port,
+ * so unplugging a synth never silences the rest of the arrangement.
+ */
+export async function resolveStemOutputs(
+  overrides: Partial<Record<StemId, string>>,
+): Promise<Partial<Record<StemId, MIDIOutput>>> {
+  const entries = await Promise.all(
+    STEM_IDS.map(async (stem) => {
+      const id = overrides[stem];
+      if (!id) return null;
+      const output = await getMidiOutput(id);
+      return output ? ([stem, output] as const) : null;
+    }),
+  );
+  return Object.fromEntries(
+    entries.filter((entry): entry is readonly [StemId, MIDIOutput] => entry !== null),
+  );
+}
+
 
 
 /** Sends one short MIDI note on a 1-based `channel` through `output` — a
@@ -102,11 +125,15 @@ interface ScheduledCc {
   value: number;
   /** 1-based stem channel. */
   channel: number;
+  /** The port this message leaves on — the drums stem may have its own. */
+  output: MIDIOutput;
 }
 
 interface ScheduledNote {
   note: MidiNote;
   channel: number; // 1-based
+  /** The port this note leaves on (per-stem override, else the master). */
+  output: MIDIOutput;
 }
 
 /** Streams a song's chords/bass/drums out to a real MIDI output port in
@@ -155,6 +182,11 @@ export interface LiveSchedulerOptions {
    *  (see the field's docs). Callers set this for every target except Live —
    *  Live's clock already carries the calibration in `beatOffset`. */
   applyOutputOffset?: boolean;
+  /** Per-stem OUTPUT PORTS — external hardware. A stem listed here leaves on
+   *  its own interface; every other stem follows the master `output` passed
+   *  to `start()`. Resolved by the caller (Web MIDI ids → live ports), so the
+   *  scheduler stays free of async port lookups. */
+  stemOutputs?: Partial<Record<StemId, MIDIOutput>>;
 }
 
 /** Where the scheduler gets its time — the only thing that decides *when* a
@@ -214,7 +246,7 @@ class LiveMidiScheduler {
 
   start(
     song: BlueprintSong,
-    output: MIDIOutput,
+    output: MIDIOutput | null,
     routing: StemRoutingMap = DEFAULT_LIVE_MIDI_CHANNELS,
     opts: LiveSchedulerOptions = {},
   ): void {
@@ -238,11 +270,18 @@ class LiveMidiScheduler {
     // Clamped at 0 exactly like the export, so a note shifted before the top
     // plays on the downbeat rather than being dropped by `windowedStart`.
     const outputOffset = opts.applyOutputOffset ? (song.outputOffsetBeats ?? 0) : 0;
-    const stem = (notes: MidiNote[], id: StemId): ScheduledNote[] =>
-      notes.map((note) => ({
+    const stem = (notes: MidiNote[], id: StemId): ScheduledNote[] => {
+      // The hardware split: a stem with its own port leaves there, the rest
+      // follow the master. No master and no override means that stem is
+      // simply silent — a hardware-only rig can leave the master Off.
+      const target = opts.stemOutputs?.[id] ?? output;
+      if (!target) return [];
+      return notes.map((note) => ({
         note: outputOffset === 0 ? note : { ...note, startTime: Math.max(0, note.startTime + outputOffset) },
         channel: clampChannel(routing[id].channel),
+        output: target,
       }));
+    };
     const scheduled: ScheduledNote[] = [
       ...stem(planChordStem(spans, song), "chords"),
       ...stem(planBassStem(spans, song), "bass"),
@@ -256,12 +295,16 @@ class LiveMidiScheduler {
     // the drums channel. Built by the shared `planDrumCcStem`, so the .mid and
     // this stream send identical messages.
     const drumsChannel = clampChannel(routing.drums.channel);
-    this.ccs = planDrumCcStem(spans, song).map((c) => ({
-      beat: outputOffset === 0 ? c.beat : Math.max(0, c.beat + outputOffset),
-      cc: c.cc,
-      value: c.value,
-      channel: drumsChannel,
-    }));
+    const drumsOutput = opts.stemOutputs?.drums ?? output;
+    this.ccs = drumsOutput
+      ? planDrumCcStem(spans, song).map((c) => ({
+          beat: outputOffset === 0 ? c.beat : Math.max(0, c.beat + outputOffset),
+          cc: c.cc,
+          value: c.value,
+          channel: drumsChannel,
+          output: drumsOutput,
+        }))
+      : [];
     this.lastNoteStart = scheduled.length ? scheduled[scheduled.length - 1].note.startTime : 0;
 
     this.secPerBeat = 60 / song.bpm;
@@ -302,7 +345,7 @@ class LiveMidiScheduler {
   }
 
   private tick(): void {
-    if (!this.output || !this.clock) return;
+    if (!this.clock) return;
     const pos = this.clock.position();
     if (pos === null) {
       // The master stopped (or hasn't reported a position yet) — hold
@@ -338,9 +381,9 @@ class LiveMidiScheduler {
       from = seeking ? pos : pos - reach;
     }
 
-    for (const { note, channel } of this.notes) {
-      const at = this.windowedStart(note.startTime, from, windowEndBeats);
-      if (at !== null) this.send(note, channel, at);
+    for (const scheduled of this.notes) {
+      const at = this.windowedStart(scheduled.note.startTime, from, windowEndBeats);
+      if (at !== null) this.send(scheduled, at);
     }
     for (const c of this.ccs) {
       const at = this.windowedStart(c.beat, from, windowEndBeats);
@@ -382,8 +425,9 @@ class LiveMidiScheduler {
     return beat > from && beat <= windowEnd ? beat : null;
   }
 
-  private send(note: MidiNote, channel: number, atBeat: number): void {
-    if (!this.output || !this.clock) return; // tick() guards too, but this runs on its own
+  private send(scheduled: ScheduledNote, atBeat: number): void {
+    const { note, channel, output } = scheduled;
+    if (!output || !this.clock) return; // tick() guards too, but this runs on its own
     const scheduledAtMs = this.clock.timeAt(atBeat);
     if (scheduledAtMs === null) return;
     // Calibrated latency shifts both ends together, so note lengths are
@@ -394,16 +438,16 @@ class LiveMidiScheduler {
     const velocity = Math.max(1, Math.min(127, Math.round(note.velocity)));
     const offAtMs = onAtMs + Math.max(0.02, note.duration) * this.secPerBeat * 1000;
 
-    this.output.send([0x90 | ch, pitch, velocity], onAtMs);
-    this.output.send([0x80 | ch, pitch, 0], offAtMs);
+    output.send([0x90 | ch, pitch, velocity], onAtMs);
+    output.send([0x80 | ch, pitch, 0], offAtMs);
   }
 
   private sendCc(c: ScheduledCc, atBeat: number): void {
-    if (!this.output || !this.clock) return;
+    if (!c.output || !this.clock) return;
     const at = this.clock.timeAt(atBeat);
     if (at === null) return;
     const ch = Math.max(0, Math.min(15, c.channel - 1));
-    this.output.send(
+    c.output.send(
       [0xb0 | ch, Math.max(0, Math.min(127, Math.round(c.cc))), Math.max(0, Math.min(127, Math.round(c.value)))],
       at + this.latencyMs,
     );
@@ -421,7 +465,6 @@ class LiveMidiScheduler {
    *  (from lookahead) would otherwise still fire after a pause/stop with no
    *  matching note-off. */
   private allNotesOff(): void {
-    if (!this.output) return;
     const channels = new Set([
       this.routing.chords.channel,
       this.routing.bass.channel,
@@ -429,9 +472,17 @@ class LiveMidiScheduler {
       this.routing.color.channel,
       this.routing.melody.channel,
     ]);
-    for (const channel of channels) {
-      const ch = Math.max(0, Math.min(15, channel - 1));
-      this.output.send([0xb0 | ch, ALL_NOTES_OFF_CC, 0]);
+    // Every port this session actually wrote to — silencing only the master
+    // would leave a hardware synth holding a note after Stop.
+    const outputs = new Set<MIDIOutput>();
+    if (this.output) outputs.add(this.output);
+    for (const n of this.notes) outputs.add(n.output);
+    for (const c of this.ccs) outputs.add(c.output);
+    for (const out of outputs) {
+      for (const channel of channels) {
+        const ch = Math.max(0, Math.min(15, channel - 1));
+        out.send([0xb0 | ch, ALL_NOTES_OFF_CC, 0]);
+      }
     }
   }
 

@@ -52,7 +52,11 @@ export function useRehearsalTransport({
   countIn,
   beatsPerBar,
 }: RehearsalTransportArgs): RehearsalTransport {
-  const outputId = useMidiSettingsStore((state) => state.midiOutputId);
+  // The click is a percussion part, so it follows the drums stem's port when
+  // that stem has its own hardware out; otherwise the master port.
+  const stemsOutputId = useMidiSettingsStore((state) => state.stemOutputs.drums ?? "");
+  const masterOutputId = useMidiSettingsStore((state) => state.midiOutputId);
+  const outputId = stemsOutputId || masterOutputId;
   // Live is the master when it is the target — the app's playhead follows
   // Live's transport and cannot be started or stopped from here.
   const clockBlocked = !targetUsesAppClock(useDawTargetStore((state) => state.target));

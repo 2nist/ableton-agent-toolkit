@@ -32,7 +32,8 @@ export type IconName =
   | "import"
   | "chevron-left"
   | "chevron-right"
-  | "chevron-down";
+  | "chevron-down"
+  | "popout";
 
 const PATHS: Record<IconName, ReactElement> = {
   // Layout: a panel with a left column — the section workspace.
@@ -168,6 +169,14 @@ const PATHS: Record<IconName, ReactElement> = {
   "chevron-left": <path d="M9.8 3.6 5.4 8l4.4 4.4" />,
   "chevron-right": <path d="M6.2 3.6 10.6 8l-4.4 4.4" />,
   "chevron-down": <path d="M3.6 6.2 8 10.6l4.4-4.4" />,
+  // A panel breaking out of its frame — "open this in its own window".
+  popout: (
+    <>
+      <path d="M9.4 2.9h3.7v3.7" />
+      <path d="M13.1 2.9 7.6 8.4" />
+      <path d="M12.4 9.6v3.1a.9.9 0 0 1-.9.9H3.4a.9.9 0 0 1-.9-.9V4.6a.9.9 0 0 1 .9-.9h3.1" />
+    </>
+  ),
 };
 
 export default function Icon({

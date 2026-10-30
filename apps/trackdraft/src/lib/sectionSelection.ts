@@ -82,3 +82,28 @@ export function sharedRepeats(values: readonly number[]): number | null {
   if (values.length === 0) return null;
   return values.every((value) => value === values[0]) ? values[0] : null;
 }
+
+/**
+ * The spans a multi-section view should draw: one per selected section, in
+ * song order.
+ *
+ * A section that plays several times has one span per pass; a selection is
+ * by SECTION (the spine names sections, not passes), so the first occurrence
+ * stands for it. Fewer than two ids is not a multi-selection — the caller
+ * keeps its one-section surface — so that returns an empty list.
+ */
+export function selectedSpans<T extends { sectionId: string }>(
+  spans: readonly T[],
+  selected: readonly string[],
+): T[] {
+  if (selected.length < 2) return [];
+  const chosen = new Set(selected);
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const span of spans) {
+    if (!chosen.has(span.sectionId) || seen.has(span.sectionId)) continue;
+    seen.add(span.sectionId);
+    out.push(span);
+  }
+  return out;
+}

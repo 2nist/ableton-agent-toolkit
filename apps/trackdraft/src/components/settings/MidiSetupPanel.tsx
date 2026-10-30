@@ -44,6 +44,8 @@ const PROGRAM_OPTIONS = Array.from({ length: 128 }, (_, i) => i + 1);
 export default function MidiSetupPanel({ onClose, inline = false }: { onClose: () => void; inline?: boolean }) {
   const midiOutputId = useMidiSettingsStore((s) => s.midiOutputId);
   const setMidiOutputId = useMidiSettingsStore((s) => s.setMidiOutputId);
+  const stemOutputs = useMidiSettingsStore((s) => s.stemOutputs);
+  const setStemOutput = useMidiSettingsStore((s) => s.setStemOutput);
   const routing = useMidiSettingsStore((s) => s.routing);
   const setChannel = useMidiSettingsStore((s) => s.setChannel);
   const applyProfile = useMidiSettingsStore((s) => s.applyProfile);
@@ -88,10 +90,14 @@ export default function MidiSetupPanel({ onClose, inline = false }: { onClose: (
   }
 
   async function testStem(stem: StemId) {
-    if (!midiOutputId) return;
-    const output = await getMidiOutput(midiOutputId);
+    const outputId = stemOutputs[stem] || midiOutputId;
+    if (!outputId) return;
+    const output = await getMidiOutput(outputId);
     if (output) sendTestNote(output, routing[stem].channel);
   }
+
+  /** A port's display name, for the per-stem summary line. */
+  const portName = (id: string): string => outputs.find((o) => o.id === id)?.name ?? id;
 
   const card = (
     <div
@@ -127,8 +133,12 @@ export default function MidiSetupPanel({ onClose, inline = false }: { onClose: (
         ) : (
           <>
             <label className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
-              Output port
+              Master output
             </label>
+            <p className="text-2xs text-inkMuted mb-1.5">
+              Every stem plays here unless it is given its own port below — that is how one
+              section can drive a drum module and a synth at the same time.
+            </p>
             <div className="space-y-1 mb-4">
               <label className="flex items-center gap-2 text-xs text-inkMuted cursor-pointer">
                 <input type="radio" checked={!midiOutputId} onChange={() => setMidiOutputId("")} />
@@ -205,16 +215,32 @@ export default function MidiSetupPanel({ onClose, inline = false }: { onClose: (
                 const program = instrument.gmProgram ?? routing[stem].gmProgram;
                 return (
                   <div key={stem} className="px-2 py-1.5 border-b border-edge last:border-b-0 space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <div className="flex-1 min-w-0">
                         <div className="text-xs text-ink">{STEM_LABELS[stem]}</div>
                         <div className="font-mono text-3xs text-inkMuted">
                           {target === "live"
                             ? `→ ${LIVE_TEMPLATE_TRACK[stem]}`
                             : `→ ch ${routing[stem].channel}`}
+                          {stemOutputs[stem]
+                            ? ` · ${portName(stemOutputs[stem]!)}`
+                            : " · master port"}
                           {stem === "drums" ? " · percussion" : ""}
                         </div>
                       </div>
+                      <select
+                        className="bg-panelAlt border border-edge rounded px-1 py-0.5 text-2xs font-mono text-ink max-w-[10rem]"
+                        value={stemOutputs[stem] ?? ""}
+                        onChange={(e) => setStemOutput(stem, e.target.value)}
+                        title={`Which MIDI port ${STEM_LABELS[stem]} leaves on. "master" follows the port at the top; pick another to send this stem to its own hardware.`}
+                      >
+                        <option value="">master port</option>
+                        {outputs.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.name}
+                          </option>
+                        ))}
+                      </select>
                       <select
                         className="bg-panelAlt border border-edge rounded px-1 py-0.5 text-xs font-mono text-ink"
                         value={routing[stem].channel}
@@ -230,8 +256,8 @@ export default function MidiSetupPanel({ onClose, inline = false }: { onClose: (
                       <button
                         className="border border-edge text-inkMuted hover:text-ink rounded px-2 py-0.5 text-2xs font-mono disabled:opacity-30"
                         onClick={() => testStem(stem)}
-                        disabled={!midiOutputId}
-                        title={`Send a test note on channel ${routing[stem].channel}`}
+                        disabled={!midiOutputId && !stemOutputs[stem]}
+                        title={`Send a test note on channel ${routing[stem].channel} through ${stemOutputs[stem] ? portName(stemOutputs[stem]!) : "the master port"}`}
                       >
                         Test
                       </button>

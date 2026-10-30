@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listMidiInputs, listMidiOutputs, midiOutSupported, type MidiOutputInfo } from "../lib/playback/liveMidiOut";
+import { STEM_IDS } from "../lib/stems";
 import { useMidiSettingsStore } from "../store/midiSettingsStore";
 
 export interface MidiPorts {
@@ -34,8 +35,15 @@ export function useMidiOutputs(): MidiPorts {
         if (!alive) return;
         setPorts((p) => ({ ...p, outputs }));
         const ids = new Set(outputs.map((o) => o.id));
-        const { midiOutputId, setMidiOutputId } = useMidiSettingsStore.getState();
+        const { midiOutputId, setMidiOutputId, stemOutputs, setStemOutput } = useMidiSettingsStore.getState();
         if (midiOutputId && !ids.has(midiOutputId)) setMidiOutputId("");
+        // A per-stem port vanishes the same way (ids are not stable across
+        // restarts). Clearing it now means the stem falls back to the master
+        // port instead of silently streaming nowhere.
+        for (const stem of STEM_IDS) {
+          const id = stemOutputs[stem];
+          if (id && !ids.has(id)) setStemOutput(stem, "");
+        }
       })
       .catch(() => {
         if (alive) setPorts((p) => ({ ...p, outputs: [] }));

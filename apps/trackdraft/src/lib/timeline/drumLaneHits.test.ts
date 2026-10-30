@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { resolveSectionLaneHits } from "./drumLaneHits";
+import { DRUM_LANE_VOICES, voiceOf } from "@drum/library";
+import { laneHitsFromNotes, resolvePlayedLaneHits, resolveSectionLaneHits } from "./drumLaneHits";
+import { planDrumSections, planDrumStem } from "../midiExport";
+import { stepIndexOf } from "../drums/stepMath";
 import type { BlueprintSection } from "../../types/blueprint";
+import type { SectionSpan } from "../arrangement";
+
+const LANE_OF_VOICE = new Map<string, string>();
+for (const [lane, voices] of Object.entries(DRUM_LANE_VOICES)) {
+  for (const voice of voices as string[]) LANE_OF_VOICE.set(voice, lane);
+}
 
 function makeSection(blocks?: BlueprintSection["drumBlocks"]): BlueprintSection {
   return {
@@ -117,6 +126,55 @@ describe("precedence — authored blocks over the preset", () => {
     expect(base.length).toBeGreaterThan(0);
   });
 
+  it("mirrors the Bend: a strong backbeat puts the 2 & 4 snare in the grid", () => {
+    // `half_time` has no snare near beats 1 or 3; the export's backbeat
+    // inserter adds them when the Bend asks for it, so the grid must too.
+    const halfTime = { ...makeSection(), drumPattern: "half_time" as const };
+    const plain = resolveSectionLaneHits(halfTime, undefined, 0).get("snare") ?? [];
+    const bent = resolveSectionLaneHits(
+      { ...halfTime, bend: { backbeat: 1 } },
+      undefined,
+      0,
+    ).get("snare") ?? [];
+    expect(plain.some((h) => Math.abs(h.beat - 3) <= 0.25)).toBe(false);
+    expect(bent.some((h) => Math.abs(h.beat - 3) < 1e-6)).toBe(true);
+    // Nothing the plain groove played is dropped by strengthening.
+    for (const hit of plain) {
+      expect(bent.some((h) => Math.abs(h.beat - hit.beat) < 1e-6 && h.voice === hit.voice)).toBe(true);
+    }
+  });
+
+  it("draws the same opening bars the exporter plays", () => {
+    const section = { ...makeSection(), bars: 4 };
+    const span: SectionSpan = {
+      sectionId: section.id,
+      section,
+      occurrenceIndex: 0,
+      startBeat: 0,
+      durationBeats: 16,
+      startBar: 0,
+      bars: 4,
+    };
+    const step = 0.25;
+    const windowEnd = 8; // bars 1–2; fills/transitions own the tail
+    const drawn = new Set<string>();
+    for (const [lane, list] of resolveSectionLaneHits(section, undefined, 0)) {
+      for (const hit of list) {
+        if (hit.beat >= windowEnd) continue;
+        drawn.add(`${lane}:${stepIndexOf(hit.beat, step)}`);
+      }
+    }
+    const played = new Set<string>();
+    for (const note of planDrumStem([span], undefined)) {
+      if (note.startTime >= windowEnd) continue;
+      const voice = voiceOf(note.pitch as never);
+      const lane = voice ? LANE_OF_VOICE.get(voice) : undefined;
+      if (!lane) continue;
+      played.add(`${lane}:${stepIndexOf(note.startTime, step)}`);
+    }
+    expect([...drawn].sort()).toEqual([...played].sort());
+  });
+
   it("lets the meter outline beat the preset", () => {
     const outlined = makeSection();
     outlined.drumMeterOutline = { cellBeats: 0.5, cells: [2, 2, 2, 2] as (2 | 3)[], label: "4/4" };
@@ -126,5 +184,109 @@ describe("precedence — authored blocks over the preset", () => {
     const total = (m: Map<string, { beat: number }[]>) => [...m.values()].reduce((n, l) => n + l.length, 0);
     expect(total(a)).toBeGreaterThan(0);
     expect(total(a)).not.toBe(total(b));
+  });
+});
+
+/** One span for a section, so the plan and the lanes are compared on the same
+ *  footing. */
+function spanFor(section: BlueprintSection, startBeat = 0): SectionSpan {
+  return {
+    sectionId: section.id,
+    section,
+    occurrenceIndex: 0,
+    startBeat,
+    durationBeats: section.bars * 4,
+    startBar: 0,
+    bars: section.bars,
+  };
+}
+
+describe("resolvePlayedLaneHits — what the lanes draw is what plays", () => {
+  it("draws the export plan beat for beat, fills and all", () => {
+    const section = makeSection();
+    const spans = [spanFor(section)];
+    const played = resolvePlayedLaneHits(spans, undefined, 0);
+    const plan = planDrumSections(spans, undefined)[0];
+
+    const drawn = [...played.entries()].flatMap(([lane, hits]) =>
+      hits.map((h) => `${lane}:${h.beat.toFixed(4)}:${h.velocity}`),
+    ).sort();
+    const planned = plan.notes
+      .map((n) => {
+        const voice = voiceOf(n.pitch as never);
+        const lane = voice ? LANE_OF_VOICE.get(voice) : undefined;
+        return `${lane}:${n.beat.toFixed(4)}:${n.velocity}`;
+      })
+      .sort();
+    expect(drawn).toEqual(planned);
+  });
+
+  it("shows the mid-section detour instead of the pocket it replaces", () => {
+    const section = makeSection();
+    section.drumVariationOutline = { cells: [3, 3, 3, 3], cellBeats: 2, label: "3" };
+    section.drumVariationBars = 1;
+    section.drumVariationStartBeat = 8;
+    const spans = [spanFor(section)];
+
+    const pocketInWindow = [...resolveSectionLaneHits(section, undefined, 0).values()]
+      .flat()
+      .filter((h) => h.beat >= 8 && h.beat < 12).length;
+    const playedInWindow = [...resolvePlayedLaneHits(spans, undefined, 0).values()]
+      .flat()
+      .filter((h) => h.beat >= 8 && h.beat < 12).length;
+
+    // The detour is sparser than the pocket, so the drawn count must drop —
+    // this is the difference the old ghost overlay only annotated.
+    expect(playedInWindow).toBeGreaterThan(0);
+    expect(playedInWindow).not.toBe(pocketInWindow);
+  });
+
+  it("drops the lanes the planner drops", () => {
+    const section = makeSection();
+    section.drumLaneMute = ["snare"];
+    const played = resolvePlayedLaneHits([spanFor(section)], undefined, 0);
+    expect(played.get("snare")).toBeUndefined();
+    expect(played.get("kick")!.length).toBeGreaterThan(0);
+  });
+
+  it("bins notes by voice into their own lane family", () => {
+    const hits = laneHitsFromNotes([{ beat: 1, pitch: 36, velocity: 100 }], makeSection());
+    expect(hits.get("kick")).toEqual([
+      { beat: 1, velocity: 100, voice: "kick", offGrid: false },
+    ]);
+  });
+});
+
+describe("the lanes a transition rewrites", () => {
+  it("draws the fill the export plays in the final bar, not the pocket", () => {
+    const section = makeSection();
+    section.drumTransitionModel = "buildUp";
+    section.drumTransitionBars = 1;
+    const spans = [spanFor(section)];
+
+    const cells = (hits: ReturnType<typeof resolvePlayedLaneHits>, step: number) => {
+      const out = new Set<string>();
+      const stepCount = Math.floor(16 / step);
+      for (const [lane, list] of hits) {
+        for (const h of list) {
+          const idx = stepIndexOf(h.beat, step);
+          if (idx >= 0 && idx < stepCount && Math.abs(h.beat - idx * step) <= 0.02) out.add(`${lane}:${idx}`);
+        }
+      }
+      return out;
+    };
+
+    const played = resolvePlayedLaneHits(spans, undefined, 0);
+    const pocket = resolveSectionLaneHits(section, undefined, 0);
+    const inFinalBar = (key: string, step: number) => {
+      const idx = Number(key.split(":")[1]);
+      return idx * step >= 12;
+    };
+
+    // The build-up owns the last bar: the drawn cells there are the fill's.
+    const playedFinal = [...cells(played, 0.25)].filter((k) => inFinalBar(k, 0.25));
+    const pocketFinal = [...cells(pocket, 0.25)].filter((k) => inFinalBar(k, 0.25));
+    expect(playedFinal.length).toBeGreaterThan(0);
+    expect(playedFinal).not.toEqual(pocketFinal);
   });
 });

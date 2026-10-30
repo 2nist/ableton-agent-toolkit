@@ -3,7 +3,11 @@ import type { BlueprintSong } from "../../types/blueprint";
 
 // Mutable state the module-level mocks read, so tests can flip port/play
 // state without re-importing the module.
-const midiState = vi.hoisted(() => ({ midiOutputId: "port" as string, outputAvailable: true }));
+const midiState = vi.hoisted(() => ({
+  midiOutputId: "port" as string,
+  outputAvailable: true,
+  stemOutputs: {} as Record<string, string>,
+}));
 const draftState = vi.hoisted(() => ({
   sectionId: "s1" as string | null,
   section: null as { id: string; drumPattern: string } | null,
@@ -45,6 +49,13 @@ vi.mock("./songTransport", () => ({ getSongTransport: () => transport }));
 vi.mock("./liveMidiOut", () => ({
   getLiveMidiScheduler: () => scheduler,
   getMidiOutput: async () => (midiState.outputAvailable ? output : null),
+  resolveStemOutputs: async (overrides: Record<string, string> | undefined) => {
+    const out: Record<string, unknown> = {};
+    for (const [stem, id] of Object.entries(overrides ?? {})) {
+      if (id && midiState.outputAvailable) out[stem] = output;
+    }
+    return out;
+  },
 }));
 vi.mock("./abletonSyncClock", () => ({
   createAbletonSyncClock: (song: unknown) => {
@@ -69,6 +80,7 @@ vi.mock("../../store/midiSettingsStore", () => ({
   useMidiSettingsStore: {
     getState: () => ({
       midiOutputId: midiState.midiOutputId,
+      stemOutputs: midiState.stemOutputs,
       latencyMs: 25,
       routing: {
         drums: { channel: 1 },
@@ -109,6 +121,7 @@ describe("playSong under the Ableton clock", () => {
     vi.clearAllMocks();
     midiState.midiOutputId = "port";
     midiState.outputAvailable = true;
+    midiState.stemOutputs = {};
     scheduler.activeClock = null;
   });
 
@@ -158,6 +171,7 @@ describe("playSong into another DAW", () => {
     vi.clearAllMocks();
     midiState.midiOutputId = "port";
     midiState.outputAvailable = true;
+    midiState.stemOutputs = {};
     ableton.connected = false;
   });
 
@@ -188,11 +202,33 @@ describe("playSong into another DAW", () => {
   });
 });
 
+describe("hardware-only routing (master port Off)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    midiState.midiOutputId = "";
+    midiState.outputAvailable = true;
+    midiState.stemOutputs = { drums: "hw-drums", bass: "hw-bass" };
+    scheduler.activeClock = null;
+  });
+
+  it("streams to the per-stem ports with no master port selected", async () => {
+    const started = await playSong(song(), "other");
+    expect(started).toBe(true);
+    expect(scheduler.start).toHaveBeenCalledTimes(1);
+    const [, out, , opts] = scheduler.start.mock.calls[0];
+    // Nothing is master-routed, so the scheduler gets no master output —
+    // each overridden stem carries its own port instead.
+    expect(out).toBeNull();
+    expect(opts.stemOutputs).toEqual({ drums: output, bass: output });
+  });
+});
+
 describe("liveRefresh", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     midiState.midiOutputId = "port";
     midiState.outputAvailable = true;
+    midiState.stemOutputs = {};
     draftState.sectionId = null;
     draftState.section = null;
     scheduler.loopRegion = null;
@@ -294,6 +330,7 @@ describe("playSectionLoop", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     midiState.midiOutputId = "port";
+    midiState.stemOutputs = {};
   });
 
   it("seeks to the section span and loops it", async () => {

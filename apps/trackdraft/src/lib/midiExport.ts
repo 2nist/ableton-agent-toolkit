@@ -251,7 +251,24 @@ export function planDrumCcStem(spans: SectionSpan[], _song?: BlueprintSong): Mid
   return out.sort((a, b) => a.beat - b.beat);
 }
 
-export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
+/** One section's planned hits, SECTION-RELATIVE (beat 0 = the section's first
+ *  downbeat), and only the kit voices that survive the GM map. */
+export interface SectionDrumPlan {
+  sectionId: string;
+  occurrenceIndex: number;
+  /** `duration` stays optional exactly as the planner emitted it — the bridge
+   *  and the .mid export both read gate lengths from here, so a flatten that
+   *  invented its own would break the parity test (it did: 0.125 → 0.25). */
+  notes: { beat: number; pitch: number; velocity: number; duration?: number }[];
+}
+
+/**
+ * The drum plan per span — the same `planSectionDrumNotes` pass `planDrumStem`
+ * lays out, kept split so a VIEW can draw exactly what plays. Handoff fills
+ * depend on the neighbouring sections, which is why this takes every span and
+ * returns them in order rather than planning one section alone.
+ */
+export function planDrumSections(spans: SectionSpan[], song?: BlueprintSong): SectionDrumPlan[] {
   const inputs: SectionDrumInput[] = spans.map((span) => {
     const section = span.section;
     const profile = resolveEffectiveStyle(section, song);
@@ -295,7 +312,18 @@ export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
 
   const plans = planSectionDrumNotes(inputs, FILL_DATA);
 
+  return spans.map((span, i) => ({
+    sectionId: span.section.id,
+    occurrenceIndex: span.occurrenceIndex,
+    notes: plans[i].notes
+      .filter((n) => GM_DRUM_PITCHES.has(n.pitch))
+      .map((n) => ({ beat: n.beat, pitch: n.pitch, velocity: n.velocity, duration: n.duration })),
+  }));
+}
+
+export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const notes: MidiNote[] = [];
+  const plans = planDrumSections(spans, song);
   for (let i = 0; i < spans.length; i++) {
     const span = spans[i];
     for (const n of plans[i].notes) {
@@ -307,7 +335,7 @@ export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNo
       });
     }
   }
-  return notes.filter((n) => GM_DRUM_PITCHES.has(n.pitch));
+  return notes;
 }
 
 // ---------------------------------------------------------------------------

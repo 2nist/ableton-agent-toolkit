@@ -10,6 +10,7 @@ import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 import { useSongStore } from "../../store/songStore";
 import { useMidiOutputs } from "../../hooks/useMidiOutputs";
 import { getAbletonClock } from "../../lib/playback/abletonClock";
+import { STEM_IDS } from "../../lib/stems";
 import AbletonStatus from "../settings/AbletonStatus";
 
 /**
@@ -32,6 +33,8 @@ export default function SyncFacet() {
   const setTarget = useDawTargetStore((s) => s.setTarget);
   const midiOutputId = useMidiSettingsStore((s) => s.midiOutputId);
   const setMidiOutputId = useMidiSettingsStore((s) => s.setMidiOutputId);
+  const stemOutputs = useMidiSettingsStore((s) => s.stemOutputs);
+  const perStemPorts = STEM_IDS.filter((stem) => Boolean(stemOutputs[stem])).length;
   const { supported, outputs } = useMidiOutputs();
 
   const [connected, setConnected] = useState(false);
@@ -108,7 +111,7 @@ export default function SyncFacet() {
               className="w-full bg-panelAlt border border-edge rounded px-1.5 py-1 font-mono text-[10px]"
               value={midiOutputId}
               onChange={(e) => setMidiOutputId(e.target.value)}
-              title="Where the live MIDI stream is sent"
+              title="Master MIDI out — every stem plays here unless it has its own port in Settings → MIDI Out setup"
             >
               <option value="">Off — no live MIDI</option>
               {outputs.map((o) => (
@@ -117,6 +120,12 @@ export default function SyncFacet() {
                 </option>
               ))}
             </select>
+            {perStemPorts > 0 && (
+              <p className="text-inkMuted leading-snug">
+                {perStemPorts} stem{perStemPorts === 1 ? "" : "s"} on {perStemPorts === 1 ? "its" : "their"} own
+                port{perStemPorts === 1 ? "" : "s"} — set in Settings → MIDI Out setup.
+              </p>
+            )}
             {outputs.length === 0 && (
               <p className="text-inkMuted leading-snug">
                 No ports found — open Audio MIDI Setup and enable the IAC Driver, then reopen this facet.

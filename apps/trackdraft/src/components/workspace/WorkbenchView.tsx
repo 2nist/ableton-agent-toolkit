@@ -18,6 +18,7 @@ import { getSongTransport, type TransportTick } from "../../lib/playback/songTra
 import DrumLineEmbed from "./DrumLineEmbed";
 import { useInspectorStore } from "../../store/inspectorStore";
 import { playSectionLoop, seekTo } from "../../lib/playback/transportControl";
+import { openLyricChordPopout } from "../../lib/popout";
 import IconBtn from "../common/IconBtn";
 import Icon from "../common/Icon";
 import ProgressionEditor from "../harmony/ProgressionEditor";
@@ -152,6 +153,20 @@ export default function WorkbenchView() {
             {s2.label}
           </button>
         ))}
+        <span className="flex-1" />
+        {/* The performer's second screen. Lives here because the workbench is
+            where you play along while editing — Settings kept the only door
+            to it, which read as "lost" (user report 2026-10-30). */}
+        <button
+          type="button"
+          className="flex items-center gap-1 px-2 py-0.5 rounded border border-edge/70 text-[10px] font-mono text-inkMuted hover:text-ink hover:border-inkMuted/60 disabled:opacity-40"
+          onClick={() => currentSong && openLyricChordPopout(currentSong.id)}
+          disabled={!currentSong}
+          title="Open the lyrics & chords popout — a separate window you can leave visible while you play (allow pop-ups for this tab)"
+        >
+          <Icon name="popout" size={11} />
+          lyrics &amp; chords
+        </button>
       </div>
       {/* The section workspace is the CANVAS — the library (left) and the
           inspector (right) are shell chrome around it since slice C, and

@@ -12,6 +12,7 @@ import { getAbletonClock } from "./abletonClock";
 import {
   getLiveMidiScheduler,
   getMidiOutput,
+  resolveStemOutputs,
   type LiveSchedulerOptions,
   type SchedulerClock,
 } from "./liveMidiOut";
@@ -24,7 +25,7 @@ import {
   type DawTarget,
 } from "../../store/dawTargetStore";
 import { sectionSpans } from "../arrangement";
-import type { StemRoutingMap } from "../stems";
+import type { StemId, StemRoutingMap } from "../stems";
 import type { BlueprintSong } from "../../types/blueprint";
 
 /** Scheduler options every start needs from the current settings and the
@@ -34,6 +35,37 @@ import type { BlueprintSong } from "../../types/blueprint";
 function streamOptions(target: DawTarget, extra: LiveSchedulerOptions = {}): LiveSchedulerOptions {
   const { latencyMs } = useMidiSettingsStore.getState();
   return { ...extra, outputLatencyMs: latencyMs, applyOutputOffset: targetUsesAppClock(target) };
+}
+
+/**
+ * What a start should stream into: the master port plus every stem that has
+ * its own hardware port.
+ *
+ * A stem with no override (or whose saved port has vanished) follows the
+ * master, which is what every existing setup expects. The master itself may
+ * be Off when every stem has its own port — a hardware-only rig is a valid
+ * configuration, and the scheduler simply skips stems with nowhere to go.
+ */
+interface ResolvedOutputs {
+  master: MIDIOutput | null;
+  /** A master was selected but its port no longer exists. */
+  stale: boolean;
+  stemOutputs: Partial<Record<StemId, MIDIOutput>>;
+}
+
+async function resolveOutputs(): Promise<ResolvedOutputs> {
+  const { midiOutputId, stemOutputs } = useMidiSettingsStore.getState();
+  const master = midiOutputId ? await getMidiOutput(midiOutputId) : null;
+  return {
+    master,
+    stale: midiOutputId !== "" && master === null,
+    stemOutputs: await resolveStemOutputs(stemOutputs),
+  };
+}
+
+/** Anything to play into — a master port, or at least one hardware stem. */
+function hasAnyOutput(outputs: ResolvedOutputs): boolean {
+  return outputs.master !== null || Object.keys(outputs.stemOutputs).length > 0;
 }
 
 /** Bring Live's timeline to the song's tempo before streaming into it.
@@ -74,15 +106,20 @@ export async function playSong(song: BlueprintSong, target: DawTarget): Promise<
 
   if (target === "live") {
     transport.syncToAbleton(song);
-    // Follow-only when no port is selected (the previous behavior).
-    const { midiOutputId, routing } = useMidiSettingsStore.getState();
-    if (!midiOutputId) return true;
-    const output = await getMidiOutput(midiOutputId);
+    // Follow-only when nothing is routed (the previous behavior).
+    const { routing } = useMidiSettingsStore.getState();
+    const outputs = await resolveOutputs();
     // A stale port still leaves the playhead following Live, which is
     // useful on its own — but the streaming the user asked for isn't
     // happening, so say so rather than pretend it started.
-    if (!output) return false;
-    getLiveMidiScheduler().start(song, output, routing, streamOptions(target, { clock: createAbletonSyncClock(song) }));
+    if (outputs.stale) return false;
+    if (!hasAnyOutput(outputs)) return true;
+    getLiveMidiScheduler().start(
+      song,
+      outputs.master,
+      routing,
+      streamOptions(target, { clock: createAbletonSyncClock(song), stemOutputs: outputs.stemOutputs }),
+    );
     return true;
   }
 
@@ -91,22 +128,25 @@ export async function playSong(song: BlueprintSong, target: DawTarget): Promise<
   const resumeBeat = transport.isPaused() ? transport.getPausedBeat() : null;
   transport.play(song); // resumes from resumeBeat when set
   if (!targetStreamsMidi(target)) return true; // File only — silent playhead
-  const { midiOutputId, routing } = useMidiSettingsStore.getState();
-  if (!midiOutputId) return true; // no port → silent playhead, as before
-  const output = await getMidiOutput(midiOutputId);
-  if (!output) {
+  const { routing } = useMidiSettingsStore.getState();
+  const outputs = await resolveOutputs();
+  if (outputs.stale) {
     // The saved port id is stale (Web MIDI ids change between browser
     // restarts) — don't leave a silent playhead running while the user
     // thinks it's about to sound.
     transport.stop();
     return false;
   }
+  if (!hasAnyOutput(outputs)) return true; // nothing routed → silent playhead, as before
   alignLiveTempo(song);
   getLiveMidiScheduler().start(
     song,
-    output,
+    outputs.master,
     routing,
-    streamOptions(target, resumeBeat != null ? { startBeat: resumeBeat } : {}),
+    streamOptions(target, {
+      ...(resumeBeat != null ? { startBeat: resumeBeat } : {}),
+      stemOutputs: outputs.stemOutputs,
+    }),
   );
   return true;
 }
@@ -126,11 +166,15 @@ export async function seekTo(song: BlueprintSong, target: DawTarget, beat: numbe
   const to = Math.max(0, beat);
   transport.play(song, { startBeat: to });
   if (!targetStreamsMidi(target)) return;
-  const { midiOutputId, routing } = useMidiSettingsStore.getState();
-  if (!midiOutputId) return;
-  const output = await getMidiOutput(midiOutputId);
-  if (!output) return;
-  getLiveMidiScheduler().start(song, output, routing, streamOptions(target, { startBeat: to }));
+  const { routing } = useMidiSettingsStore.getState();
+  const outputs = await resolveOutputs();
+  if (!hasAnyOutput(outputs)) return; // the seek itself still lands
+  getLiveMidiScheduler().start(
+    song,
+    outputs.master,
+    routing,
+    streamOptions(target, { startBeat: to, stemOutputs: outputs.stemOutputs }),
+  );
 }
 
 /** Pause playback — freeze the playhead (and silence the live MIDI out);
@@ -164,7 +208,10 @@ export function stopSong(): void {
 let stagedRefresh: {
   atBeat: number;
   song: BlueprintSong;
-  output: MIDIOutput;
+  /** Master port; null when every stem has its own hardware port. */
+  output: MIDIOutput | null;
+  /** Per-stem hardware ports, resolved when the edit was staged. */
+  stemOutputs: Partial<Record<StemId, MIDIOutput>>;
   routing: StemRoutingMap;
   target: DawTarget;
   loop: { start: number; end: number } | null;
@@ -192,10 +239,9 @@ export async function liveRefresh(song: BlueprintSong): Promise<void> {
   if (!transport.getIsPlaying() || !scheduler.isRunning) return;
   const target = useDawTargetStore.getState().target;
   if (!targetStreamsMidi(target)) return;
-  const { midiOutputId, routing } = useMidiSettingsStore.getState();
-  if (!midiOutputId) return;
-  const output = await getMidiOutput(midiOutputId);
-  if (!output) return;
+  const { routing } = useMidiSettingsStore.getState();
+  const outputs = await resolveOutputs();
+  if (!hasAnyOutput(outputs)) return;
 
   // A re-plan is already queued for this bar — fold the edit into it and
   // let the latest song apply when the boundary arrives. This mutates the
@@ -212,7 +258,16 @@ export async function liveRefresh(song: BlueprintSong): Promise<void> {
   // module slot instead let a callback whose stage had already been
   // replaced or cancelled apply whatever happened to be in the slot when
   // the bar boundary arrived — a re-plan for an edit the user had undone.
-  const stage = { atBeat, song, output, routing, target, loop: scheduler.loopRegion, clock: scheduler.activeClock };
+  const stage = {
+    atBeat,
+    song,
+    output: outputs.master,
+    stemOutputs: outputs.stemOutputs,
+    routing,
+    target,
+    loop: scheduler.loopRegion,
+    clock: scheduler.activeClock,
+  };
   stagedRefresh = stage;
   transport.onNextBar(() => {
     if (stagedRefresh !== stage) return;
@@ -226,6 +281,7 @@ export async function liveRefresh(song: BlueprintSong): Promise<void> {
       opts.loopEnd = s.loop.end;
     }
     if (s.clock) opts.clock = s.clock;
+    opts.stemOutputs = s.stemOutputs;
     scheduler.start(withDrumDraft(s.song), s.output, s.routing, opts);
   });
 }
@@ -252,11 +308,16 @@ export async function playSectionLoop(song: BlueprintSong, sectionId: string): P
   transport.play(song, { ...opts, forceLoop: true });
   const target = useDawTargetStore.getState().target;
   if (!targetStreamsMidi(target)) return true;
-  const { midiOutputId, routing } = useMidiSettingsStore.getState();
-  if (!midiOutputId) return true;
-  const output = await getMidiOutput(midiOutputId);
-  if (!output) return false;
-  getLiveMidiScheduler().start(song, output, routing, streamOptions(target, opts));
+  const { routing } = useMidiSettingsStore.getState();
+  const outputs = await resolveOutputs();
+  if (outputs.stale) return false;
+  if (!hasAnyOutput(outputs)) return true;
+  getLiveMidiScheduler().start(
+    song,
+    outputs.master,
+    routing,
+    streamOptions(target, { ...opts, stemOutputs: outputs.stemOutputs }),
+  );
   return true;
 }
 
@@ -269,11 +330,15 @@ export async function resumeUnlooped(song: BlueprintSong): Promise<void> {
   transport.play(song, { startBeat: beat });
   const target = useDawTargetStore.getState().target;
   if (!targetStreamsMidi(target)) return;
-  const { midiOutputId, routing } = useMidiSettingsStore.getState();
-  if (!midiOutputId) return;
-  const output = await getMidiOutput(midiOutputId);
-  if (!output) return;
-  getLiveMidiScheduler().start(song, output, routing, streamOptions(target, { startBeat: beat }));
+  const { routing } = useMidiSettingsStore.getState();
+  const outputs = await resolveOutputs();
+  if (!hasAnyOutput(outputs)) return;
+  getLiveMidiScheduler().start(
+    song,
+    outputs.master,
+    routing,
+    streamOptions(target, { startBeat: beat, stemOutputs: outputs.stemOutputs }),
+  );
 }
 
 /**
@@ -293,11 +358,15 @@ export async function playLoopRegion(song: BlueprintSong, startBeat: number, end
   transport.play(song, { ...opts, forceLoop: true });
   const target = useDawTargetStore.getState().target;
   if (!targetStreamsMidi(target)) return;
-  const { midiOutputId, routing } = useMidiSettingsStore.getState();
-  if (!midiOutputId) return;
-  const output = await getMidiOutput(midiOutputId);
-  if (!output) return;
-  getLiveMidiScheduler().start(song, output, routing, streamOptions(target, opts));
+  const { routing } = useMidiSettingsStore.getState();
+  const outputs = await resolveOutputs();
+  if (!hasAnyOutput(outputs)) return;
+  getLiveMidiScheduler().start(
+    song,
+    outputs.master,
+    routing,
+    streamOptions(target, { ...opts, stemOutputs: outputs.stemOutputs }),
+  );
 }
 
 /** Overlay the drums editor's live draft (if one exists) onto the song, so

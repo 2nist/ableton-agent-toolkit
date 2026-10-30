@@ -177,6 +177,11 @@ export interface GrooveShelfProps {
   section: BlueprintSection | null;
   /** Pattern the section resolves to right now (auto included). */
   current: DrumPattern | null;
+  /** The baked VARIANT that pattern resolves to — a pattern alone does not
+   *  say which performance plays. Whole-kit cards show this variant for the
+   *  current pattern so the highlighted shape is the beat the sequencer
+   *  plays, not the pattern's generic first take. */
+  currentVariant?: number | null;
   /** `lane` is non-null when the shelf is lane-scoped: the pick then means
    *  "use this figure for THAT drum", leaving the rest of the beat alone. */
   onPick: (
@@ -203,6 +208,7 @@ export default function GrooveShelf(props: GrooveShelfProps) {
     span,
     section,
     current,
+    currentVariant,
     onPick,
     songBeats,
     userBeats,
@@ -296,8 +302,17 @@ export default function GrooveShelf(props: GrooveShelfProps) {
     for (const pattern of Object.keys(PRESET_DATA) as DrumPattern[]) {
       const variants = PRESET_DATA[pattern]?.variants ?? [];
       let kept = 0;
+      // Whole-kit: the current pattern's one card is the variant this section
+      // actually plays (its seeded performance), so the shelf agrees with the
+      // sequencer. Fall back to the first take when that variant does not fit
+      // this meter.
+      const preferred =
+        scope === null && pattern === current && currentVariant !== undefined && currentVariant !== null
+          ? currentVariant
+          : 0;
+      const first = buildCard(pattern, preferred, bpb, scope) ? preferred : 0;
       for (
-        let index = 0;
+        let index = first;
         index < variants.length && kept < perPattern;
         index += 1
       ) {
@@ -316,7 +331,7 @@ export default function GrooveShelf(props: GrooveShelfProps) {
       }
     }
     return out;
-  }, [bpb, scope, saved, savedCards]);
+  }, [bpb, scope, saved, savedCards, current, currentVariant]);
 
   const range = useMemo(() => axisRange(cards), [cards]);
   const touched = AXES.filter((a) => lens[a.id] !== undefined);
@@ -357,6 +372,7 @@ export default function GrooveShelf(props: GrooveShelfProps) {
         </span>
         <span className="font-mono text-2xs text-track uppercase">
           {current ?? "auto"}
+          {currentVariant !== undefined && currentVariant !== null ? ` · v${currentVariant + 1}` : ""}
         </span>
         <span className="flex-1" />
         <span className="font-mono text-2xs text-inkMuted/70">
@@ -539,7 +555,10 @@ export default function GrooveShelf(props: GrooveShelfProps) {
       {/* the shelf */}
       <div className="flex gap-1.5 px-2 pb-2 overflow-x-auto">
         {ranked.map((card, i) => {
-          const active = current === card.pattern && card.variant === 0;
+          const active =
+            saved === null &&
+            current === card.pattern &&
+            card.variant === (currentVariant ?? 0);
           const savedEntry =
             saved !== null
               ? (savedCards.find((entry) => entry.card === card) ?? null)
@@ -572,7 +591,9 @@ export default function GrooveShelf(props: GrooveShelfProps) {
                       : (DRUM_LANES[scope]!.key as DrumLaneId),
                   );
                 }}
-                title={`${card.label}${scope !== null ? ` · replaces the ${DRUM_LANES[scope]?.label ?? ""} only` : ""}${
+                title={`${card.label}${
+                  card.variant > 0 ? ` · variation ${card.variant + 1}` : ""
+                }${scope !== null ? ` · replaces the ${DRUM_LANES[scope]?.label ?? ""} only` : ""}${
                   touched.length > 0 ? ` · match ${i + 1}/${ranked.length}` : ""
                 }`}
                 className="shrink-0 rounded-sm border px-1 pt-1 pb-0.5"
@@ -627,6 +648,15 @@ export default function GrooveShelf(props: GrooveShelfProps) {
                 >
                   {card.label}
                 </span>
+                {active && card.variant > 0 && (
+                  <span
+                    className="block text-center font-mono"
+                    style={{ fontSize: 6.5, color: P.track, opacity: 0.9, letterSpacing: "0.04em" }}
+                    title={`This section plays variation ${card.variant + 1} of ${card.label}`}
+                  >
+                    v{card.variant + 1}
+                  </span>
+                )}
               </button>
             </div>
           );

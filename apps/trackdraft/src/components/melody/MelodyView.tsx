@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useSongStore } from "../../store/songStore";
 import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 import { getSongTransport } from "../../lib/playback/songTransport";
-import { getLiveMidiScheduler, getMidiOutput } from "../../lib/playback/liveMidiOut";
+import { getLiveMidiScheduler, getMidiOutput, resolveStemOutputs } from "../../lib/playback/liveMidiOut";
 import { sectionSpans } from "../../lib/arrangement";
 import { updateSection } from "../../lib/sections";
 import { MelodyRecorder, rawNotesToBeats, midiToNoteName } from "../../lib/melody/recorder";
@@ -129,16 +129,18 @@ export default function MelodyView() {
       song,
       loop ? { startBeat, loopStart: loop.start, loopEnd: loop.end } : { startBeat },
     );
-    if (midiOutputId) {
-      const output = await getMidiOutput(midiOutputId);
-      if (output) {
-        getLiveMidiScheduler().start(
-          song,
-          output,
-          midiRouting,
-          loop ? { startBeat, loopStart: loop.start, loopEnd: loop.end } : { startBeat },
-        );
-      }
+    const stemOutputs = await resolveStemOutputs(useMidiSettingsStore.getState().stemOutputs);
+    const output = midiOutputId ? await getMidiOutput(midiOutputId) : null;
+    if (output || Object.keys(stemOutputs).length > 0) {
+      getLiveMidiScheduler().start(
+        song,
+        output,
+        midiRouting,
+        {
+          ...(loop ? { startBeat, loopStart: loop.start, loopEnd: loop.end } : { startBeat }),
+          stemOutputs,
+        },
+      );
     }
   }
 

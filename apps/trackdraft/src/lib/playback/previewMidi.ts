@@ -23,6 +23,7 @@ import {
 import { generateBiTonal, BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR, type BiTonalChord } from "@platform/progression-engine";
 import { KIT_PITCHES, type KitVoice } from "@drum/library";
 import { getMidiOutput } from "./liveMidiOut";
+import type { StemId } from "../stems";
 import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 
 /** Chord voicing register — matches the app's MIDI export / chord clips. */
@@ -48,12 +49,18 @@ export function cancelPreview(): void {
 /** Resolve the currently-selected MIDI output + the channel to preview on
  *  (defaults to the chords channel). Null when no port is selected — the
  *  preview just stays silent rather than erroring. */
-async function previewOutput(channel?: number): Promise<{ output: MIDIOutput; ch: number } | null> {
-  const { midiOutputId, routing } = useMidiSettingsStore.getState();
-  if (!midiOutputId) return null;
-  const output = await getMidiOutput(midiOutputId);
+async function previewOutput(
+  stem: StemId,
+  channel?: number,
+): Promise<{ output: MIDIOutput; ch: number } | null> {
+  const { midiOutputId, stemOutputs, routing } = useMidiSettingsStore.getState();
+  // An audition follows the stem it belongs to, so a hardware-only rig
+  // (master Off, stems on their own ports) still hears what it is editing.
+  const outputId = stemOutputs[stem] || midiOutputId;
+  if (!outputId) return null;
+  const output = await getMidiOutput(outputId);
   if (!output) return null;
-  return { output, ch: Math.max(0, Math.min(15, (channel ?? routing.chords.channel) - 1)) };
+  return { output, ch: Math.max(0, Math.min(15, (channel ?? routing[stem].channel) - 1)) };
 }
 
 /** The shape a chord carries through the app — enough to plan its notes and
@@ -115,7 +122,7 @@ function sendPlannedNote(
  *  performance effect (strum/pulse/arp), the preview is effect-applied so a
  *  strummed chord actually sounds strummed. */
 export async function previewChord(chord: PreviewChord, durationMs = 1200): Promise<void> {
-  const ctx = await previewOutput();
+  const ctx = await previewOutput("chords");
   if (!ctx) return;
   // 120 bpm reference: 500 ms/beat, so the effect's beat-domain offsets map
   // to the wall-clock window the same way the export's beat math intends.
@@ -213,10 +220,10 @@ export async function previewProgression(
   cancelPreview();
   if (chords.length === 0) return;
   const { routing } = useMidiSettingsStore.getState();
-  const chordsCtx = await previewOutput(routing.chords.channel);
+  const chordsCtx = await previewOutput("chords", routing.chords.channel);
   if (!chordsCtx) return; // no port selected — nothing to preview
-  const bassCtx = layers.bass ? await previewOutput(routing.bass.channel) : null;
-  const colorCtx = layers.color ? await previewOutput(routing.color.channel) : null;
+  const bassCtx = layers.bass ? await previewOutput("bass", routing.bass.channel) : null;
+  const colorCtx = layers.color ? await previewOutput("color", routing.color.channel) : null;
 
   const beatMs = 60000 / Math.max(1, bpm);
   const colorNotes = colorCtx ? shiftColorPastRests(colorNotesFor(chords, colorFlavor), chords) : [];
@@ -260,11 +267,12 @@ export async function auditionDrumHit(
   velocity = 96,
   durationMs = 140,
 ): Promise<void> {
-  const { midiOutputId, routing } = useMidiSettingsStore.getState();
-  if (!midiOutputId) return;
+  const { midiOutputId, stemOutputs, routing } = useMidiSettingsStore.getState();
+  const outputId = stemOutputs.drums || midiOutputId;
+  if (!outputId) return;
   const pitch = KIT_PITCHES[voice];
   if (pitch === undefined) return;
-  const output = await getMidiOutput(midiOutputId);
+  const output = await getMidiOutput(outputId);
   if (!output) return;
   const ch = Math.max(0, Math.min(15, (routing.drums?.channel ?? 1) - 1));
   const now = performance.now() + 5;

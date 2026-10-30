@@ -4,6 +4,7 @@ import {
   rangeIds,
   reconcileSelection,
   selectSections,
+  selectedSpans,
   sharedRepeats,
   type SelectionState,
 } from "./sectionSelection";
@@ -101,5 +102,31 @@ describe("sharedRepeats", () => {
     expect(sharedRepeats([2, 2, 2])).toBe(2);
     expect(sharedRepeats([2, 3])).toBeNull();
     expect(sharedRepeats([])).toBeNull();
+  });
+});
+
+describe("selectedSpans", () => {
+  const spans = [
+    { sectionId: "a", pass: 0 },
+    { sectionId: "a", pass: 1 },
+    { sectionId: "b", pass: 0 },
+    { sectionId: "c", pass: 0 },
+  ];
+
+  it("is empty for a single section — that is not a multi-selection", () => {
+    expect(selectedSpans(spans, [])).toEqual([]);
+    expect(selectedSpans(spans, ["b"])).toEqual([]);
+  });
+
+  it("keeps song order whatever order the ids were clicked", () => {
+    expect(selectedSpans(spans, ["c", "a"]).map((s) => s.sectionId)).toEqual(["a", "c"]);
+  });
+
+  it("shows a repeated section once", () => {
+    expect(selectedSpans(spans, ["a", "b"]).map((s) => s.pass)).toEqual([0, 0]);
+  });
+
+  it("ignores ids that are not in the arrangement", () => {
+    expect(selectedSpans(spans, ["a", "zzz", "c"]).map((s) => s.sectionId)).toEqual(["a", "c"]);
   });
 });

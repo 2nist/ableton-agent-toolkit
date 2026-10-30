@@ -11,6 +11,7 @@ import { chordGluePreview } from "../../../lib/midiExport";
 import { uuid } from "../../../lib/uuid";
 import ProgressionEditor from "../ProgressionEditor";
 import HoneycombWheel from "../HoneycombWheel";
+import MidiChordPanel from "../MidiChordPanel";
 import TapeLabel from "../../common/TapeLabel";
 import FitStatus from "../FitStatus";
 import ProgressionFloor from "./ProgressionFloor";
@@ -34,6 +35,7 @@ export default function ComposeDesk({
   analysis,
   selectedChordId,
   activeChordId,
+  playheadBeat,
   onSelectChord,
   onChangeChords,
   onChangeRhythm,
@@ -50,7 +52,7 @@ export default function ComposeDesk({
   onRenameSection,
 }: HarmonyDeskProps) {
   const [extension, setExtension] = useState<"triad" | "seventh">("triad");
-  const [drawer, setDrawer] = useState<"none" | "map" | "rhythm" | "form">(
+  const [drawer, setDrawer] = useState<"none" | "map" | "rhythm" | "form" | "midi">(
     "none",
   );
   /** What just happened, said out loud: a split rewrites the song, and the
@@ -264,6 +266,11 @@ export default function ComposeDesk({
                     hint: "Harmonic rhythm — every chord's share of the cycle",
                   },
                   {
+                    id: "midi",
+                    label: "midi",
+                    hint: "Play chords in from a keyboard — name one, or record the whole progression over the click",
+                  },
+                  {
                     id: "form",
                     label: formStructure.useful
                       ? `form · ${segmentation.sections.length}`
@@ -371,12 +378,14 @@ export default function ComposeDesk({
               size="md"
               className="text-[10px] font-mono uppercase tracking-wider text-inkMuted"
             >
-              {drawer === "map" ? "Map" : "Harmonic rhythm"}
+              {drawer === "map" ? "Map" : drawer === "midi" ? "MIDI in" : "Harmonic rhythm"}
             </TapeLabel>
             <span className="text-inkMuted/60">
               {drawer === "map"
                 ? "the same progression as a walk"
-                : "each chord's share of the cycle"}
+                : drawer === "midi"
+                  ? "play it in — a chord at a time, or the whole take over the click"
+                  : "each chord's share of the cycle"}
             </span>
             <span className="ml-auto flex items-center gap-2">
               {analysis.stats.borrowedCount > 0 && (
@@ -438,6 +447,20 @@ export default function ComposeDesk({
                 onChange={onChangeRhythm}
               />
             </div>
+          )}
+
+          {drawer === "midi" && (
+            <MidiChordPanel
+              song={song}
+              section={section}
+              keyName={keyName}
+              scale={scale}
+              selectedChordId={selectedChordId}
+              playheadBeat={playheadBeat}
+              onChangeChords={onChangeChords}
+              onSelectChord={onSelectChord}
+              onPreviewChord={onPreviewChord}
+            />
           )}
         </div>
       )}

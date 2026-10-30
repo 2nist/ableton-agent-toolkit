@@ -59,6 +59,15 @@ export class ClickTrack {
     this.lastBeatInt = -1;
   }
 
+  /** Play one click `offsetSeconds` from now — the count-in before a
+   *  recording starts, so the first bar lands in time rather than waiting
+   *  for the transport's first tick. Accent marks the downbeat. */
+  clickAt(offsetSeconds = 0, accent = false): void {
+    if (!this.ctx) this.ctx = new AudioContext();
+    if (this.ctx.state === "suspended") void this.ctx.resume();
+    click(this.ctx, this.ctx.currentTime + Math.max(0, offsetSeconds), accent);
+  }
+
   /** Stop and release the AudioContext. */
   dispose(): void {
     this.stop();

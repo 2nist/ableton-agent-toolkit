@@ -26,14 +26,27 @@ import { readStorage, writeStorage } from "./storage";
  *  on read.
  */
 interface MidiSettingsState {
-  /** Selected MIDI output port id ("" = off). */
+  /** Selected MIDI output port id ("" = off). Every stem goes here unless it
+   *  has its own port below. */
   midiOutputId: string;
+  /**
+   * Per-stem output overrides — the external-hardware wiring.
+   *
+   * A section's stems can leave on different interfaces (drums to the drum
+   * module, bass to a synth, everything else to the DAW), so "the MIDI out"
+   * is not one port. Absent/"" means "same as the master port", which keeps
+   * every existing setup working unchanged. Live-only concern: the .mid
+   * export has no ports.
+   */
+  stemOutputs: Partial<Record<StemId, string>>;
   /** 1-based MIDI channel per stem, plus the instrument metadata the export
    *  path uses. Live out only reads `.channel`. */
   routing: StemRoutingMap;
   /** Calibrated output latency in ms — positive delays every note. */
   latencyMs: number;
   setMidiOutputId: (id: string) => void;
+  /** Point one stem at its own port; "" clears it back to the master. */
+  setStemOutput: (stem: StemId, id: string) => void;
   setChannel: (stem: StemId, channel: number) => void;
   setLatencyMs: (ms: number) => void;
   applyProfile: (id: RoutingProfileId) => void;
@@ -45,6 +58,7 @@ const STORAGE_KEY = "trackdraft-midi-settings";
 /** The persisted (non-function) slice of the state. */
 interface PersistedMidiSettings {
   midiOutputId: string;
+  stemOutputs?: Partial<Record<StemId, string>>;
   routing: StemRoutingMap;
   latencyMs: number;
 }
@@ -87,21 +101,44 @@ function initialRouting(): StemRoutingMap {
   return mergeRouting(overlaid, defaultRouting);
 }
 
+/** Keep only real stems with a non-empty id — a stale/foreign key in the
+ *  saved blob must not survive into the scheduler. */
+function initialStemOutputs(): Partial<Record<StemId, string>> {
+  const raw = saved.stemOutputs;
+  if (!raw) return {};
+  const out: Partial<Record<StemId, string>> = {};
+  for (const stem of STEM_IDS) {
+    const id = raw[stem];
+    if (typeof id === "string" && id !== "") out[stem] = id;
+  }
+  return out;
+}
+
 const initialState = {
   midiOutputId: saved.midiOutputId ?? "",
+  stemOutputs: initialStemOutputs(),
   routing: initialRouting(),
   latencyMs: Math.max(-500, Math.min(500, Math.round(saved.latencyMs ?? 0))),
 };
 
 export const useMidiSettingsStore = create<MidiSettingsState>((set, get) => {
   const persist = () => {
-    const { midiOutputId, routing, latencyMs } = get();
-    writeStorage<PersistedMidiSettings>(STORAGE_KEY, { midiOutputId, routing, latencyMs });
+    const { midiOutputId, stemOutputs, routing, latencyMs } = get();
+    writeStorage<PersistedMidiSettings>(STORAGE_KEY, { midiOutputId, stemOutputs, routing, latencyMs });
   };
   return {
     ...initialState,
     setMidiOutputId: (midiOutputId) => {
       set({ midiOutputId });
+      persist();
+    },
+    setStemOutput: (stem, id) => {
+      set((state) => {
+        const stemOutputs = { ...state.stemOutputs };
+        if (id) stemOutputs[stem] = id;
+        else delete stemOutputs[stem];
+        return { stemOutputs };
+      });
       persist();
     },
     setChannel: (stem, channel) => {
