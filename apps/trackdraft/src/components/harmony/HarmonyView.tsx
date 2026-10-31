@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { NOTE_TO_PC, noteName, pitchClass } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
@@ -29,9 +29,11 @@ import { useSectionShortcuts } from "./useSectionShortcuts";
 import SectionComparison from "./workspace/SectionComparison";
 import { useHarmonyWorkspaceStore } from "../../store/harmonyWorkspaceStore";
 import { sectionSpans } from "../../lib/arrangement";
-import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
+import { usePlayhead } from "../../hooks/usePlayhead";
 import { useActiveChord } from "../../hooks/useActiveChord";
 import HarmonyWorkspace, { HarmonyDeskBar } from "./workspace/HarmonyWorkspace";
+import MultiSectionStrip from "./workspace/MultiSectionStrip";
+import type { HarmonyDeskBandProps } from "./workspace/types";
 import ModeInferenceCard from "./ModeInferenceCard";
 import { previewChord } from "../../lib/playback/previewMidi";
 
@@ -49,15 +51,12 @@ export default function HarmonyView() {
   const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
   const selectedChordId = useHarmonySelectionStore((s) => s.selectedChordId);
-  const [tick, setTick] = useState<TransportTick | null>(null);
 
   // The canvas follows the transport: the chord under the playhead is
   // highlighted in every mode, so the view "moves with the timeline" while
-  // the song plays instead of being a static map.
-  useEffect(() => {
-    const transport = getSongTransport();
-    return transport.onTick(setTick);
-  }, []);
+  // the song plays instead of being a static map. Quantised to a sixteenth —
+  // a chord is at least a beat long.
+  const tick = usePlayhead();
   const setSelectedChordId = useHarmonySelectionStore((s) => s.setSelectedChordId);
 
   const song = currentSong;
@@ -192,32 +191,62 @@ export default function HarmonyView() {
   const stackChords = stackAll.reduce((sum, entry) => sum + entry.chords.length, 0);
 
   /** True when a meter outline (drums/Bend grid) decides chord timing, so the
-   *  chords' own `beats` are not what plays — the rhythm strip goes read-only. */
-  const chordsFollowOutline = !!(
-    activeSection &&
-    (activeSection.harmonyMeterOutline ??
-      (activeSection.harmonyFollowsDrums === false ? null : activeSection.drumMeterOutline ?? null))
-  );
+   *  chords' own `beats` are not what plays — the rhythm strip goes read-only.
+   *  Per section, because a strip renders several at once. */
+  function chordsFollowOutlineOf(target: BlueprintSection): boolean {
+    return !!(
+      target.harmonyMeterOutline ??
+      (target.harmonyFollowsDrums === false ? null : target.drumMeterOutline ?? null)
+    );
+  }
 
-  function updateChords(chords: Chord[]) {
-    if (!activeSection) return;
-    updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, chords })));
+  /** Every writer below takes the section it writes. The multi-section strip
+   *  renders one desk per band, so "the active section" is no longer the only
+   *  target — and a handler that silently wrote the focused section instead of
+   *  the band you touched would be the worst kind of bug in this view. */
+  function updateChordsOf(target: BlueprintSection, chords: Chord[]) {
+    updateCurrentSong((s) => updateSection(s, target.id, (sec) => ({ ...sec, chords })));
   }
 
   /** Harmonic-rhythm edits write the chords' `beats` and the section's
    *  `beatsPerChord` default together. */
-  function updateRhythm(chords: Chord[], beatsPerChord: number) {
-    if (!activeSection) return;
+  function updateRhythmOf(target: BlueprintSection, chords: Chord[], beatsPerChord: number) {
     updateCurrentSong((s) =>
-      updateSection(s, activeSection.id, (sec) => ({ ...sec, chords, beatsPerChord })),
+      updateSection(s, target.id, (sec) => ({ ...sec, chords, beatsPerChord })),
     );
   }
 
   // Snap the section's `bars` to one clean pass of its progression — wired
   // to the fit status in the hex workspace's bottom-right corner.
-  function setSectionBars(bars: number) {
-    if (!activeSection) return;
-    updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, bars })));
+  function setSectionBarsOf(target: BlueprintSection, bars: number) {
+    updateCurrentSong((s) => updateSection(s, target.id, (sec) => ({ ...sec, bars })));
+  }
+
+  /** The section's own key/scale — a modulation, or the song's default. */
+  function keyOf(target: BlueprintSection): NoteName {
+    const raw = target.key ?? song?.key ?? "C";
+    return raw in NOTE_TO_PC ? (raw as NoteName) : "C";
+  }
+
+  function scaleOf(target: BlueprintSection) {
+    return target.scale ?? song?.scale ?? "ionian";
+  }
+
+  /** The homes in force for ONE section: what the author set, or what the key
+   *  finder proposes for the progression as it actually plays. */
+  function regionsOf(target: BlueprintSection): TonicRegion[] {
+    const occurrences = resolveChordOccurrences(target, sectionDurationBeats(target)).map(
+      (occurrence) => ({
+        root: occurrence.chord.root,
+        quality: occurrence.chord.quality,
+        startTime: occurrence.startTime,
+        duration: occurrence.duration,
+      }),
+    );
+    return effectiveTonicRegions(target.tonicRegions, occurrences, {
+      scale: scaleOf(target),
+      fallbackKey: keyOf(target),
+    });
   }
 
   /** Bulk edits over the multi-selection — each one a single undo step. */
@@ -281,11 +310,6 @@ export default function HarmonyView() {
     updateCurrentSong((s) => splitSection(s, section.id, splits));
     reselectAfterEdit(previousSelection, previousIds);
     setSelectedChordId(null);
-  }
-
-  function splitIntoSectionParts(splits: SectionSplit[]) {
-    if (!activeSection) return;
-    splitSectionOf(activeSection, splits);
   }
 
   /** Cut at a bar of the strip — the same verb, expressed in bars. */
@@ -364,12 +388,6 @@ export default function HarmonyView() {
     );
   }
 
-  /** The same write, scoped to the section on screen. */
-  function transposeSection(semitones: number) {
-    if (!activeSection) return;
-    transposeSectionOf(activeSection, semitones);
-  }
-
   if (song.sections.length === 0) {
     return (
       <div className="p-4 max-w-5xl">
@@ -380,48 +398,58 @@ export default function HarmonyView() {
     );
   }
 
-  /** The desk props, built once: the multi-selection branch and the plain
-   *  one render the same workspace, and two copies of this list already
-   *  drifted apart once. */
-  /** The desk props, built once: the multi-selection branch and the plain one
-   *  render the same workspace, and two copies of this list drifted apart the
-   *  last time they were written out separately. */
-  const deskProps = activeSection
-    ? {
-        song,
-        section: activeSection,
-        keyName: effectiveKey,
-        scale: effectiveScale,
-        regions: effectiveRegions,
-        selectedChordId,
-        activeChordId,
-        playheadBeat,
-        outlineGoverned: chordsFollowOutline,
-        onSelectChord: setSelectedChordId,
-        onChangeChords: updateChords,
-        onChangeRhythm: updateRhythm,
-        onSetBars: setSectionBars,
-        onTransposeSong: transposeSong,
-        onTransposeSection: transposeSection,
-        onChangeRegions: (regions: TonicRegion[] | undefined) =>
-          updateCurrentSong((s) => updateSection(s, activeSection.id, (sec) => ({ ...sec, tonicRegions: regions }))),
-        // Section-scoped, unlike the chord/region writers above: the foot
-        // band's Voices tab edits the generated bass and colour layers, which
-        // belong to the section as a whole.
-        onChangeSection: (updater: (sec: BlueprintSection) => BlueprintSection) =>
-          updateCurrentSong((s) => updateSection(s, activeSection.id, updater)),
-        onPreviewChord: (chord: Chord) => void previewChord(chord),
-        onSplitSection: splitIntoSectionParts,
-        onSplitSectionAt: (chordId: string) => splitSectionAtChordOf(activeSection, chordId),
-        onSplitSectionAtBar: (bar: number) => splitSectionAtBarOf(activeSection, bar),
-        onMergeWithNext:
-          song.sections.findIndex((entry) => entry.id === activeSection.id) < song.sections.length - 1
-            ? () => mergeSectionOf(activeSection)
-            : null,
-        onRenameSection: (name: string) => renameSectionOf(activeSection, name),
-      }
-    : null;
+  /**
+   * Everything one desk needs for ONE section.
+   *
+   * It takes the section rather than reading the focused one, because the
+   * strip renders a desk per selected band — and the file already carries a
+   * scar from writing this list twice ("two copies of it drifted apart the
+   * last time"). One builder, both paths.
+   */
+  function deskPropsFor(target: BlueprintSection): HarmonyDeskBandProps {
+    const keyName = keyOf(target);
+    const scale = scaleOf(target);
+    const regions = regionsOf(target);
+    const isActive = target.id === activeSection?.id;
+    return {
+      song: song!,
+      section: target,
+      keyName,
+      scale,
+      regions,
+      playheadBeat,
+      selectedChordId: isActive ? selectedChordId : null,
+      activeChordId: isActive ? activeChordId : null,
+      outlineGoverned: chordsFollowOutlineOf(target),
+      onSelectChord: (chordId) => {
+        // Selecting a chord in a band focuses that band first, so the dock
+        // edits the chord you actually clicked.
+        if (!isActive) setSelectedSectionId(target.id);
+        setSelectedChordId(chordId);
+      },
+      onChangeChords: (chords) => updateChordsOf(target, chords),
+      onChangeRhythm: (chords, beatsPerChord) => updateRhythmOf(target, chords, beatsPerChord),
+      onSetBars: (bars) => setSectionBarsOf(target, bars),
+      onTransposeSong: transposeSong,
+      onTransposeSection: (semitones) => transposeSectionOf(target, semitones),
+      onChangeRegions: (next) =>
+        updateCurrentSong((s) =>
+          updateSection(s, target.id, (sec) => ({ ...sec, tonicRegions: next })),
+        ),
+      onChangeSection: (updater) => updateCurrentSong((s) => updateSection(s, target.id, updater)),
+      onSplitSection: (splits) => splitSectionOf(target, splits),
+      onSplitSectionAt: (chordId) => splitSectionAtChordOf(target, chordId),
+      onSplitSectionAtBar: (bar) => splitSectionAtBarOf(target, bar),
+      onMergeWithNext:
+        song!.sections.findIndex((entry) => entry.id === target.id) < song!.sections.length - 1
+          ? () => mergeSectionOf(target)
+          : null,
+      onRenameSection: (name: string) => renameSectionOf(target, name),
+      onPreviewChord: (chord: Chord) => void previewChord(chord),
+    };
+  }
 
+  const deskProps = activeSection ? deskPropsFor(activeSection) : null;
   return (
     <div className="p-3 space-y-2">
       <HarmonyDeskBar />
@@ -500,7 +528,14 @@ export default function HarmonyView() {
             </span>
           </div>
 
-          {deskProps && <HarmonyWorkspace {...deskProps} />}
+          {/* The strip: every selected section on one bar grid, each band a
+              real desk, so a transition can be read and edited in place. */}
+          <MultiSectionStrip
+            song={song}
+            bands={stackAll.map((entry) => ({ section: entry, props: deskPropsFor(entry) }))}
+            activeSectionId={activeSection?.id ?? null}
+            onFocus={setSelectedSectionId}
+          />
         </div>
       ) : (
         deskProps && <HarmonyWorkspace {...deskProps} />

@@ -280,7 +280,7 @@ export default function MidiChordPanel({
       window.setTimeout(() => {
         setCountIn(null);
         if (!capturingRef.current) return;
-        if (clickEnabled) click.start();
+        if (clickEnabled) click.start(beatsPerBar);
         startedRef.current = true;
         transport.play(song, {
           startBeat: span.startBeat,

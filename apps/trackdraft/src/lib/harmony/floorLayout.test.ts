@@ -5,6 +5,7 @@ import {
   appendChord,
   closeRestAt,
   extendIntoRestAt,
+  floorBars,
   insertChordAt,
   floorLength,
   floorSlots,
@@ -331,5 +332,34 @@ describe("floorSlotsFilled — the progression looped across the section", () =>
     const filled = floorSlotsFilled(four, 16).map((slot) => [slot.chord.id, slot.start, slot.end]);
     expect(filled).toEqual(spans(four));
     expect(filled).toHaveLength(4);
+  });
+});
+
+describe("floorBars — the bar count the strip sizes its bands by", () => {
+  const section = (bars: number, numerator = 4, denPower = 2) =>
+    ({
+      bars,
+      timeSignatureNumerator: numerator,
+      timeSignatureDenPower: denPower,
+    }) as never;
+
+  it("counts the section's own bars", () => {
+    expect(floorBars([chord("a", 4)], section(7))).toBe(7);
+  });
+
+  it("pads a short section out to two bars of drop room", () => {
+    // One bar has nowhere to drop a chord; the floor always keeps two.
+    expect(floorBars([chord("a", 4)], section(1))).toBe(2);
+  });
+
+  it("grows past the section when the progression is longer than its bars", () => {
+    // 16 beats of chords in a 2-bar section: the progression must still fit.
+    const chords = [chord("a", 4), chord("b", 4), chord("c", 4), chord("d", 4)];
+    expect(floorBars(chords, section(2))).toBe(4);
+  });
+
+  it("measures in the section's own meter", () => {
+    // 7/8 bars are 3.5 beats, so 7 beats of chords need two of them.
+    expect(floorBars([chord("a", 7)], section(1, 7, 3))).toBe(2);
   });
 });

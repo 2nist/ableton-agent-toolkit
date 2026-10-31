@@ -40,6 +40,7 @@ import {
   type BarsPerView,
 } from "../../drums/blocks/meterGrid";
 import {
+  floorBars,
   floorLength,
   floorSlotsFilled,
   removeChord,
@@ -102,10 +103,6 @@ const MIN_DEPTH = 14;
 /** The plate's height is NOT fixed: it follows the window's content, so a
  *  wide 5-bar view is a short plate and a 1-bar zoom is a tall one. A fixed
  *  height is what made the grid look out of proportion to the chords. */
-/** How much empty floor to keep past the end of the progression, in bars, so
- *  there is always somewhere to drop a chord. */
-const ELBOW_BARS = 2;
-
 const VIEW_KEY = "trackdraft-harmony-bars-view";
 
 /** Four bars is the honest default: a 4-bar section is the same as ALL, and
@@ -204,6 +201,13 @@ export interface ProgressionFloorProps {
   /** Ghost boundaries for a proposed split (`segmentChordStream`). Null or
    *  absent means no preview is open. */
   segments?: readonly DetectedSection[] | null;
+  /** Force the bar window instead of the saved preference. The multi-section
+   *  strip needs every band showing all its bars, because a band that pages
+   *  independently can't share a bar grid with its neighbours. */
+  barsPerView?: BarsPerView;
+  /** Bars before this section in the song, printed on the ruler so a band in
+   *  the multi-section strip keeps the song's own bar numbers. */
+  barOffset?: number;
   /** What a click on the ladder writes: the row's triad or its seventh. */
   extension: FloorExtension;
   onExtensionChange: (extension: FloorExtension) => void;
@@ -244,6 +248,8 @@ export default function ProgressionFloor({
   onSplitSectionAt,
   onMergeWithNext,
   onRenameSection,
+  barsPerView: forcedBarsView,
+  barOffset,
   extension,
   onExtensionChange,
   glue,
@@ -286,7 +292,7 @@ export default function ProgressionFloor({
   const [stageH, setStageH] = useState(420);
   const [storedBarsView, setStoredBarsView] =
     useState<BarsPerView>(loadBarsView);
-  const barsPerView = storedBarsView;
+  const barsPerView = forcedBarsView ?? storedBarsView;
   const [firstBar, setFirstBar] = useState(0);
   const setSelectedSectionId = useFocusedSectionStore(
     (state) => state.setSelectedSectionId,
@@ -358,11 +364,7 @@ export default function ProgressionFloor({
   const rests = useMemo(() => restsBetween(chords), [chords]);
   /** The plate's own width in beats: the span, plus drop room past the last
    *  chord (the drums' bars-per-view model, on a harmony grid). */
-  const sectionBeats = Math.max(
-    spanBeats,
-    beatsPerBar * Math.max(2, ELBOW_BARS),
-  );
-  const bars = Math.max(1, Math.ceil(sectionBeats / beatsPerBar));
+  const bars = floorBars(chords, section);
   const barsShown = barsPerView === "all" ? bars : Math.min(bars, barsPerView);
   const lastFirstBar = Math.max(0, bars - barsShown);
   const windowFirstBar = Math.min(Math.max(0, firstBar), lastFirstBar);
@@ -882,6 +884,7 @@ export default function ProgressionFloor({
           beatsPerBar={beatsPerBar}
           windowStart={windowStart}
           windowFirstBar={windowFirstBar}
+          barOffset={barOffset}
           barRange={barRange ?? null}
           onBarPointerDown={beginBarSweep}
           scale={scale}

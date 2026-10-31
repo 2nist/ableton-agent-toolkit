@@ -476,6 +476,9 @@ export default function HoneycombWheel({
           <marker id="hw-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill={P.track} />
           </marker>
+          <pattern id="hw-pencil-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="5" stroke="rgba(38,34,27,0.3)" strokeWidth="1.2" />
+          </pattern>
         </defs>
 
         {/* Modulation seams: the lattice re-roots, so show the translation
@@ -566,6 +569,7 @@ export default function HoneycombWheel({
                   strokeWidth={isLatest ? 2.5 : 1.2}
                   style={isLatest ? { filter: "url(#hw-glow)" } : undefined}
                 />
+                {P.handDrawn && <polygon points={hexPoints(SD - 2)} fill="url(#hw-pencil-hatch)" fillOpacity={0.62} stroke="none" pointerEvents="none" />}
                 {isSelected && (
                   <polygon points={hexPoints(SD + 2)} fill="none" stroke={P.track} strokeWidth={2}
                     strokeDasharray="3 2" style={{ pointerEvents: "none" }} />
@@ -683,6 +687,7 @@ export default function HoneycombWheel({
                 strokeDasharray={isChoice ? "4 3" : undefined}
                 style={isCurrent ? { filter: "url(#hw-glow)" } : undefined}
               />
+              {P.handDrawn && <polygon points={hexPoints(S - 2, handSeed)} fill="url(#hw-pencil-hatch)" fillOpacity={isChoice ? 0.3 : 0.62} stroke="none" pointerEvents="none" />}
               {isPlaying && (
                 <polygon points={hexPoints(S + 4, handSeed)} fill="none" stroke={P.select} strokeWidth={2.4} style={{ pointerEvents: "none" }} />
               )}

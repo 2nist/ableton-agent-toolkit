@@ -378,6 +378,11 @@ export default function HarmonyScene({
         onWheel={handleWheel}
         onContextMenu={(event) => event.preventDefault()}
       >
+        <defs>
+          <pattern id="harmony-scene-pencil-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="5" stroke="rgba(38,34,27,0.3)" strokeWidth="1.2" />
+          </pattern>
+        </defs>
         <rect x={0} y={0} width={width} height={height} fill={P.scene} />
 
         {/* Accidental lanes — b / ♮ / # — so a borrowed chord visibly leaves
@@ -463,21 +468,24 @@ export default function HarmonyScene({
         {/* Chord boxes, painter's order, lit by how square-on each face is. */}
         {projected.map((face, index) => {
           const hue = P.hues[face.node.degree] ?? P.hues[0];
+          const points = face.points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
           return (
-            <polygon
-              key={`face-${face.node.step}-${index}`}
-              points={face.points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ")}
-              fill={shadeHex(hue.fill, face.shade * face.fade)}
-              stroke={
-                face.node.chord.id === activeChordId
-                  ? P.select
-                  : shadeHex(hue.rim, face.shade * face.fade)
-              }
-              strokeWidth={face.node.chord.id === activeChordId ? 2 : 0.6}
-              strokeOpacity={face.node.chord.id === activeChordId ? 0.95 : 0.5 * face.fade}
-              data-chord-id={face.node.chord.id}
-              style={{ cursor: "pointer" }}
-            />
+            <g key={`face-${face.node.step}-${index}`}>
+              <polygon
+                points={points}
+                fill={shadeHex(hue.fill, face.shade * face.fade)}
+                stroke={
+                  face.node.chord.id === activeChordId
+                    ? P.select
+                    : shadeHex(hue.rim, face.shade * face.fade)
+                }
+                strokeWidth={face.node.chord.id === activeChordId ? 2 : 0.6}
+                strokeOpacity={face.node.chord.id === activeChordId ? 0.95 : 0.5 * face.fade}
+                data-chord-id={face.node.chord.id}
+                style={{ cursor: "pointer" }}
+              />
+              {P.handDrawn && <polygon points={points} fill="url(#harmony-scene-pencil-hatch)" fillOpacity={0.62 * face.fade} stroke="none" pointerEvents="none" />}
+            </g>
           );
         })}
 

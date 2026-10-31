@@ -16,6 +16,7 @@ import TapeLabel from "../../common/TapeLabel";
 import FitStatus from "../FitStatus";
 import ProgressionFloor from "./ProgressionFloor";
 import { segmentChordStream } from "../../../lib/harmony/segmentSections";
+import type { BarsPerView } from "../../drums/blocks/meterGrid";
 import type { HarmonyDeskProps } from "./types";
 
 /** Write the progression.
@@ -27,6 +28,8 @@ import type { HarmonyDeskProps } from "./types";
  *  drawers under the floor.
  */
 export default function ComposeDesk({
+  barsPerView,
+  barOffset,
   song,
   section,
   keyName,
@@ -50,7 +53,14 @@ export default function ComposeDesk({
   onSplitSectionAtBar,
   onMergeWithNext,
   onRenameSection,
-}: HarmonyDeskProps) {
+}: HarmonyDeskProps & {
+  /** Force every band to show all its bars — the multi-section strip needs
+   *  that so neighbouring bands share one bar grid. */
+  barsPerView?: BarsPerView;
+  /** Bars before this section in the song — the strip prints the song's own
+   *  bar numbers instead of restarting at 1 on every band. */
+  barOffset?: number;
+}) {
   const [extension, setExtension] = useState<"triad" | "seventh">("triad");
   const [drawer, setDrawer] = useState<"none" | "map" | "rhythm" | "form" | "midi">(
     "none",
@@ -219,6 +229,8 @@ export default function ComposeDesk({
   return (
     <div className="relative min-w-0">
       <ProgressionFloor
+        barsPerView={barsPerView}
+        barOffset={barOffset}
         chords={section.chords}
         analysis={analysis}
         keyName={keyName}

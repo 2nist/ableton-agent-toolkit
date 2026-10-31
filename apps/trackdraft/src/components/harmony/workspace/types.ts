@@ -45,3 +45,8 @@ export interface HarmonyDeskProps {
   onRenameSection: (name: string) => void;
   onPreviewChord?: (chord: Chord) => void;
 }
+
+/** A band's props before its analysis: the multi-section strip builds one of
+ *  these per selected section and lets each band compute its own analysis, so
+ *  scrolling a strip never re-analyses a section that did not change. */
+export type HarmonyDeskBandProps = Omit<HarmonyDeskProps, "analysis">;

@@ -30,6 +30,9 @@ export interface FloorSceneProps {
   beatsPerBar: number;
   windowStart: number;
   windowFirstBar: number;
+  /** Bars before this section in the song — the ruler counts from it, so a
+   *  band in a multi-section strip reads "bar 8", not "bar 1" again. */
+  barOffset?: number;
   /** Bars the author has swept on the ruler, as absolute bar indices. */
   barRange: { from: number; to: number } | null;
   onBarPointerDown: (bar: number, event: React.PointerEvent) => void;
@@ -72,6 +75,7 @@ export default function FloorScene({
   beatsPerBar,
   windowStart,
   windowFirstBar,
+  barOffset = 0,
   barRange,
   onBarPointerDown,
   scale,
@@ -143,6 +147,7 @@ export default function FloorScene({
   return (
     <svg
       ref={svgRef}
+      data-texture={P.handDrawn ? "pencil" : undefined}
       width={width}
       height={height}
       className="block touch-none select-none"
@@ -153,6 +158,11 @@ export default function FloorScene({
       onContextMenu={onContextMenu}
       onWheel={onWheel}
     >
+      <defs>
+        <pattern id="floor-pencil-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="5" stroke="rgba(38,34,27,0.3)" strokeWidth="1.2" />
+        </pattern>
+      </defs>
       {/* bar ruler — a fixed strip, not part of the projection */}
       <g>
         <rect x={0} y={0} width={width} height={RULER_H} fill={P.deep} />
@@ -176,7 +186,10 @@ export default function FloorScene({
             y: 0,
             z: (index + 1) * beatsPerBar * BEAT_Z,
           });
+          // Local bar index, zero-based: every sweep and range in this view
+          // is section-relative, so only the printed number takes the offset.
           const barNumber = windowFirstBar + index + 1;
+          const barLabel = barNumber + barOffset;
           const swept =
             barRange !== null &&
             barNumber - 1 >= barRange.from &&
@@ -198,7 +211,7 @@ export default function FloorScene({
                     onBarPointerDown(barNumber - 1, event);
                   }}
                 >
-                  <title>{`Bar ${barNumber} — drag across bars to select them`}</title>
+                  <title>{`Bar ${barLabel} — drag across bars to select them`}</title>
                 </rect>
               )}
               {index <= fit.gridBars && (
@@ -221,7 +234,7 @@ export default function FloorScene({
                   fillOpacity={0.72}
                   pointerEvents="none"
                 >
-                  {barNumber}
+                  {barLabel}
                 </text>
               )}
             </g>
@@ -472,6 +485,7 @@ export default function FloorScene({
                 {echo ? ` · loop pass ${(node.pass ?? 0) + 1}` : ""}
               </title>
             </polygon>
+            {P.handDrawn && <polygon points={points} fill="url(#floor-pencil-hatch)" fillOpacity={isPreview ? 0.15 : 0.62} pointerEvents="none" />}
             {!isPreview && heat > 0.02 && (
               <polygon
                 points={points}

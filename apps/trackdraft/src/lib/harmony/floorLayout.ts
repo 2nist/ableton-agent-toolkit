@@ -1,4 +1,4 @@
-import type { Chord } from "../../types/blueprint";
+import { meanBeatsPerBar, sectionDurationBeats, type BlueprintSection, type Chord } from "../../types/blueprint";
 
 /**
  * Where a chord sits on the floor, and how a gesture becomes schema.
@@ -113,6 +113,19 @@ export function floorLength(chords: readonly Chord[]): number {
 }
 
 /** The silence on the floor: leading, between, and trailing. */
+/** How many bars the floor lays out for a section — the span it must cover,
+ *  padded to at least two bars of drop room.
+ *
+ *  Shared rather than inlined because the multi-section strip sizes its bands
+ *  from this number: if the strip and the floor disagreed by even one bar, the
+ *  bars of two adjacent bands would stop lining up, which is the one thing a
+ *  comparison view has to get right. */
+export function floorBars(chords: readonly Chord[], section: BlueprintSection): number {
+  const beatsPerBar = Math.max(1, meanBeatsPerBar(section));
+  const span = Math.max(sectionDurationBeats(section), floorLength(chords));
+  return Math.max(1, Math.ceil(Math.max(span, beatsPerBar * 2) / beatsPerBar));
+}
+
 export function restsBetween(
   chords: readonly Chord[],
 ): { start: number; beats: number }[] {
