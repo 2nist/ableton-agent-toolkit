@@ -49,6 +49,20 @@ function clearFailure(key: string): void {
   for (const listener of failureListeners) listener(null);
 }
 
+/** Report a failed write that did not go through `localStorage` — the
+ *  desktop library's file adapter writes through the host bridge, and a
+ *  failure there is exactly as destructive as a full quota. Without this
+ *  the banner only ever fired in the browser build. */
+export function reportStorageFailure(key: string, error: unknown): void {
+  reportFailure(key, error);
+}
+
+/** The inverse: a write through a non-`localStorage` path succeeded, so the
+ *  banner for that key can come down. */
+export function clearStorageFailure(key: string): void {
+  clearFailure(key);
+}
+
 /** Read + JSON.parse a key; any failure (corrupt JSON, privacy mode,
  *  missing key) returns `fallback` instead of throwing. */
 export function readStorage<T>(key: string, fallback: T): T {
@@ -101,6 +115,10 @@ export interface DebouncedWriter<T> {
    *  from the shell's pagehide/visibility handler so closing the tab
    *  mid-edit cannot drop the last keystroke. */
   flushPending: () => void;
+  /** Is an edit still waiting on the debounce? A repository asks this before
+   *  accepting a change from another tab: refreshing under an unsaved edit
+   *  would throw the typing away. */
+  hasPending: () => boolean;
 }
 
 /** Every debounced writer created in the app, so one pagehide handler can
@@ -141,6 +159,9 @@ export function createDebouncedWriter<T>(
       timeout = null;
       hasPending = false;
       persist(value);
+    },
+    hasPending(): boolean {
+      return hasPending;
     },
     flushPending(): void {
       if (!hasPending) return;

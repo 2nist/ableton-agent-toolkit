@@ -49,6 +49,8 @@ export default function MidiSetupPanel({ onClose, inline = false }: { onClose: (
   const routing = useMidiSettingsStore((s) => s.routing);
   const setChannel = useMidiSettingsStore((s) => s.setChannel);
   const applyProfile = useMidiSettingsStore((s) => s.applyProfile);
+  const clockOutId = useMidiSettingsStore((s) => s.clockOutId);
+  const setClockOutId = useMidiSettingsStore((s) => s.setClockOutId);
   const latencyMs = useMidiSettingsStore((s) => s.latencyMs);
   const setLatencyMs = useMidiSettingsStore((s) => s.setLatencyMs);
   const target = useDawTargetStore((s) => s.target);
@@ -340,6 +342,44 @@ export default function MidiSetupPanel({ onClose, inline = false }: { onClose: (
               >
                 reset
               </button>
+            </div>
+
+            <div className="border-t border-edge pt-3 mb-4">
+              <label className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+                MIDI clock out
+              </label>
+              <p className="text-2xs text-inkMuted mb-1.5">
+                Send MIDI clock (24 ppqn, with start/stop and song position) so a DAW follows TrackDraft's transport.
+                Works on any DAW — no bridge, no plugin. Separate from the note port, so a hardware rig can keep its
+                stems while the DAW follows the clock.
+              </p>
+              <select
+                className="w-full bg-panelAlt border border-edge rounded px-1.5 py-1 text-xs text-ink"
+                value={clockOutId}
+                onChange={(e) => setClockOutId(e.target.value)}
+                title="Port the timing clock leaves on — pick a virtual port your DAW listens to"
+              >
+                <option value="">Off</option>
+                {outputs.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+              {target === "live" ? (
+                <p className="text-2xs text-warn mt-1">
+                  Under the Live target, Live drives the transport, so no clock is sent. Switch the target to another
+                  DAW to make TrackDraft the clock master.
+                </p>
+              ) : (
+                clockOutId !== "" && (
+                  <p className="text-2xs text-inkMuted mt-1">
+                    In your DAW: enable this port as a MIDI input, then turn on external MIDI-clock sync for it (in
+                    Live, that is the input's <span className="text-ink">Sync</span> button). If your DAW can't follow
+                    MIDI clock at all, the project and MIDI exports are the way in.
+                  </p>
+                )
+              )}
             </div>
 
             <div className="border-t border-edge pt-3 text-xs text-inkMuted space-y-1.5">

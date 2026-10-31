@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { BlueprintSong } from "../../types/blueprint";
 import { downloadSongJson, pushSongToAbleton } from "../../lib/exportImport";
 import { downloadSongMidi } from "../../lib/midiExport";
+import { downloadSongRpp } from "../../lib/reaper/rppProject";
 import { useDawTargetStore } from "../../store/dawTargetStore";
 
 /** Studio's export/send actions tucked under a single button — Export JSON,
@@ -55,8 +56,8 @@ export default function ExportMenu({ song }: { song: BlueprintSong }) {
         aria-expanded={open}
         title={
           target === "live"
-            ? "Export this song — JSON blueprint, multi-track MIDI, or straight to Ableton"
-            : "Export this song — JSON blueprint or a multi-track MIDI file for your DAW"
+            ? "Export this song — JSON blueprint, multi-track MIDI, a REAPER project, or straight to Ableton"
+            : "Export this song — JSON blueprint, a multi-track MIDI file, or a REAPER project"
         }
         onClick={() => setOpen((o) => !o)}
       >
@@ -64,7 +65,7 @@ export default function ExportMenu({ song }: { song: BlueprintSong }) {
         <span className={`text-[9px] opacity-70 transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-30 w-44 rounded-md border border-edge bg-panel shadow-xl overflow-hidden">
+        <div className="absolute right-0 top-full mt-1 z-30 w-52 rounded-md border border-edge bg-panel shadow-xl overflow-hidden">
           <button
             className="w-full text-left text-xs px-3 py-1.5 text-ink hover:bg-panelAlt"
             onClick={() => {
@@ -83,6 +84,16 @@ export default function ExportMenu({ song }: { song: BlueprintSong }) {
             }}
           >
             Export MIDI
+          </button>
+          <button
+            className="w-full text-left text-xs px-3 py-1.5 text-ink hover:bg-panelAlt"
+            title="Export this song as a REAPER project (.rpp) — five named tracks, one item per section, the arrangement as regions, and the song's tempo, all ready to open."
+            onClick={() => {
+              setOpen(false);
+              downloadSongRpp(song);
+            }}
+          >
+            Export REAPER project
           </button>
           {target === "live" && (
             <button

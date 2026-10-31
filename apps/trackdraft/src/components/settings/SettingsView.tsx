@@ -9,8 +9,9 @@ import {
 } from "../../store/dawTargetStore";
 import DataFilesSection from "./DataFilesSection";
 import MidiSetupPanel from "./MidiSetupPanel";
-import MidiTemplateGuide from "./MidiTemplateGuide";
+import MidiReceivingGuide from "./MidiReceivingGuide";
 import ExportMenu from "./ExportMenu";
+import StorageSection from "./StorageSection";
 import DirSetupModal from "../dashboard/DirSetupModal";
 import TapeLabel from "../common/TapeLabel";
 import { openLyricChordPopout } from "../../lib/popout";
@@ -71,9 +72,9 @@ export default function SettingsView() {
             type="button"
             className="text-[10px] font-mono text-accent/80 hover:text-accent border border-edge/70 rounded px-1.5 py-0.5"
             onClick={() => setGuideOpen(true)}
-            title="One-time Live-side setup: the IAC port pick and the per-track MIDI From repoint"
+            title="One-time receiving-side setup: the virtual port, and where each stem lands — with steps for Live, REAPER, or any other DAW"
           >
-            Live template guide
+            Receiving DAW guide
           </button>
         </header>
         <div className="p-3 space-y-3">
@@ -103,7 +104,7 @@ export default function SettingsView() {
         <div className="p-3 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-ink">Song outputs</span>
-            <span className="text-[10px] text-inkMuted/60">JSON blueprint · multi-track MIDI · straight to Ableton</span>
+            <span className="text-[10px] text-inkMuted/60">JSON blueprint · multi-track MIDI · REAPER project · straight to Ableton</span>
             <span className="flex-1" />
             {currentSong && <ExportMenu song={currentSong} />}
           </div>
@@ -142,6 +143,10 @@ export default function SettingsView() {
         </div>
       </section>
 
+      {/* The library's own footprint — the number that would have shown the
+          localStorage ceiling long before an autosave hit it. */}
+      <StorageSection />
+
       {/* Data files — the engine's editable tables */}
       <DataFilesSection />
 
@@ -172,7 +177,7 @@ export default function SettingsView() {
         </div>
       </section>
 
-      {guideOpen && <MidiTemplateGuide onClose={() => setGuideOpen(false)} />}
+      {guideOpen && <MidiReceivingGuide onClose={() => setGuideOpen(false)} />}
       <DirSetupModal open={dirsOpen} onClose={() => setDirsOpen(false)} />
     </div>
   );

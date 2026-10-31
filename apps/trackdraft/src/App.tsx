@@ -16,6 +16,7 @@ import SettingsView from "./components/settings/SettingsView";
 import LyricChordPopout from "./components/popout/LyricChordPopout";
 import StorageWarning from "./components/shell/StorageWarning";
 import ConfirmHost from "./components/common/ConfirmHost";
+import ErrorBoundary from "./components/common/ErrorBoundary";
 
 // Labs pull in @measured/puck (and its editor stack). They are dev tools, not
 // part of the songwriting loop — statically importing them put ~4 MB of Puck
@@ -63,31 +64,35 @@ function App() {
         <StorageWarning />
         <ConfirmHost />
         <Suspense fallback={null}>
-          <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/song/:songId" element={<SongEditorLayout />}>
-            <Route index element={<Navigate to="workbench" replace />} />
-            <Route path="structure" element={<StructureView />} />
-            <Route path="harmony" element={<HarmonyView />} />
-            <Route path="drums" element={<DrumsTab />} />
-            <Route path="lyrics" element={<LyricsView />} />
-            <Route path="melody" element={<MelodyView />} />
-            <Route path="workbench" element={<WorkbenchView />} />
-            <Route path="library" element={<LibraryView />} />
-            <Route path="settings" element={<SettingsView />} />
-          </Route>
-          {/* Top-level, not nested under SongEditorLayout — deliberately
-              chrome-free (no header/nav/dock) for a window meant to be
-              glanced at from across a room while playing. */}
-          <Route path="/song/:songId/popout" element={<LyricChordPopout />} />
-          <Route path="/sandbox" element={<LivePreviewSandbox />} />
-          <Route path="/canvas" element={<RenderCanvasLayout />} />
-          <Route path="/genre-workbench" element={<GenreWorkbench />} />
-          <Route path="/design-lab" element={<DesignLab />} />
-          <Route path="/studio-log" element={<StudioLogLab />} />
-          <Route path="/ui-kit-sandbox" element={<Navigate to="/design-lab" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          {/* Last line: a crash inside the shell itself (not just a view)
+              still leaves a readable screen instead of a blank tab. */}
+          <ErrorBoundary label="TrackDraft">
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/song/:songId" element={<SongEditorLayout />}>
+                <Route index element={<Navigate to="workbench" replace />} />
+                <Route path="structure" element={<StructureView />} />
+                <Route path="harmony" element={<HarmonyView />} />
+                <Route path="drums" element={<DrumsTab />} />
+                <Route path="lyrics" element={<LyricsView />} />
+                <Route path="melody" element={<MelodyView />} />
+                <Route path="workbench" element={<WorkbenchView />} />
+                <Route path="library" element={<LibraryView />} />
+                <Route path="settings" element={<SettingsView />} />
+              </Route>
+              {/* Top-level, not nested under SongEditorLayout — deliberately
+                  chrome-free (no header/nav/dock) for a window meant to be
+                  glanced at from across a room while playing. */}
+              <Route path="/song/:songId/popout" element={<LyricChordPopout />} />
+              <Route path="/sandbox" element={<LivePreviewSandbox />} />
+              <Route path="/canvas" element={<RenderCanvasLayout />} />
+              <Route path="/genre-workbench" element={<GenreWorkbench />} />
+              <Route path="/design-lab" element={<DesignLab />} />
+              <Route path="/studio-log" element={<StudioLogLab />} />
+              <Route path="/ui-kit-sandbox" element={<Navigate to="/design-lab" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </ErrorBoundary>
         </Suspense>
       </div>
     </BrowserRouter>

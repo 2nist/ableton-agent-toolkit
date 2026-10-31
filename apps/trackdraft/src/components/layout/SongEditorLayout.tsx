@@ -1,4 +1,4 @@
-import { Outlet, useNavigate, useParams } from "react-router-dom";
+import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
@@ -7,11 +7,14 @@ import { stopSong, liveRefresh } from "../../lib/playback/transportControl";
 import Spine from "../shell/Spine";
 import NavRail from "../shell/NavRail";
 import InspectorRail from "../shell/InspectorRail";
+import ErrorBoundary from "../common/ErrorBoundary";
 
 export default function SongEditorLayout() {
   const { songId } = useParams<{ songId: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const songs = useSongStore((s) => s.songs);
+  const hydrated = useSongStore((s) => s.hydrated);
   const openSong = useSongStore((s) => s.openSong);
 
   // Playback deliberately survives tab-to-tab navigation (so you can edit
@@ -79,6 +82,9 @@ export default function SongEditorLayout() {
   }, [songs, songId, currentSongId, openSong]);
 
   if (!song) {
+    // The repository may still be reading the library — claiming the song is
+    // missing before that finishes is a lie the user sees flash by.
+    if (!hydrated) return null;
     return (
       <div className="p-4">
         <p className="text-inkMuted">Song not found.</p>
@@ -104,7 +110,12 @@ export default function SongEditorLayout() {
       <div className="flex-1 flex min-h-0">
         <NavRail />
         <main className="flex-1 overflow-y-auto min-w-0">
-          <Outlet />
+          {/* Scoped to the canvas: a view that throws leaves the spine — and
+              the transport and the autosave flush living in it — running.
+              The route is the reset key, so switching tabs re-arms it. */}
+          <ErrorBoundary label="This view" embedded resetKey={`${songId ?? ""}${location.pathname}`}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
         <InspectorRail />
       </div>

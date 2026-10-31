@@ -23,6 +23,14 @@ type BridgeState = "unknown" | "up" | "down";
  */
 export default function AbletonStatus({ connected }: { connected: boolean }) {
   const [bridge, setBridge] = useState<BridgeState>("unknown");
+  const [liveError, setLiveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Live can reject a request while the socket is perfectly healthy — the
+    // two are independent, so the error gets its own line rather than
+    // replacing the connection dot.
+    return getAbletonClock().onChange((state) => setLiveError(state.liveError));
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -42,8 +50,22 @@ export default function AbletonStatus({ connected }: { connected: boolean }) {
     };
   }, []);
 
+  const errorFacet = liveError ? (
+    <span
+      className="text-[10px] font-mono text-danger max-w-[16rem] truncate"
+      title={`Ableton reported: ${liveError}`}
+    >
+      ● Live error — {liveError}
+    </span>
+  ) : null;
+
   if (connected) {
-    return <span className="text-[10px] font-mono text-ok">● connected</span>;
+    return (
+      <span className="flex items-center gap-2 min-w-0">
+        <span className="text-[10px] font-mono text-ok shrink-0">● connected</span>
+        {errorFacet}
+      </span>
+    );
   }
 
   function retry() {
@@ -54,39 +76,41 @@ export default function AbletonStatus({ connected }: { connected: boolean }) {
 
   if (bridge === "down") {
     return (
-      <span className="flex items-center gap-1">
+      <span className="flex items-center gap-1 min-w-0">
         <span
-          className="text-[10px] font-mono text-warn"
+          className="text-[10px] font-mono text-warn shrink-0"
           title="The osc-bridge isn't running. Start it with `npm run bridge` (start-all.sh does this automatically), and make sure Ableton Live is open."
         >
           ○ bridge not running
         </span>
         <button
-          className="text-[10px] text-inkMuted hover:text-accent font-mono"
+          className="text-[10px] text-inkMuted hover:text-accent font-mono shrink-0"
           onClick={retry}
           title="Re-check the bridge connection"
         >
           ↻
         </button>
+        {errorFacet}
       </span>
     );
   }
 
   return (
-    <span className="flex items-center gap-1">
+    <span className="flex items-center gap-1 min-w-0">
       <span
-        className="text-[10px] font-mono text-inkMuted/60"
+        className="text-[10px] font-mono text-inkMuted/60 shrink-0"
         title="Connecting to the osc-bridge… If this sticks, enable AbletonOSC in Live: Preferences → Link, Tempo & MIDI → Control Surface."
       >
         ○ connecting…
       </span>
       <button
-        className="text-[10px] text-inkMuted hover:text-accent font-mono"
+        className="text-[10px] text-inkMuted hover:text-accent font-mono shrink-0"
         onClick={retry}
         title="Reconnect to the osc-bridge"
       >
         ↻
       </button>
+      {errorFacet}
     </span>
   );
 }

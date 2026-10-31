@@ -14,7 +14,7 @@ import { sectionSpans, spanIndexForTick, type SectionSpan } from "../../lib/arra
 import { updateSection } from "../../lib/sections";
 import { useRoleStyle } from "../../lib/roleColors";
 import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playback/drumPreview";
-import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
+import { usePlayhead } from "../../hooks/usePlayhead";
 import DrumLineEmbed from "./DrumLineEmbed";
 import { useInspectorStore } from "../../store/inspectorStore";
 import { playSectionLoop, seekTo } from "../../lib/playback/transportControl";
@@ -77,13 +77,14 @@ type Surface = (typeof SURFACES)[number]["id"];
  */
 export default function WorkbenchView() {
   const currentSong = useSongStore((s) => s.currentSong());
+  const hydrated = useSongStore((s) => s.hydrated);
   const navigate = useNavigate();
   const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
-  const [tick, setTick] = useState<TransportTick | null>(null);
   const [surface, setSurface] = useState<Surface>("section");
-
-  useEffect(() => getSongTransport().onTick(setTick), []);
+  // Quantised to a sixteenth (see `usePlayhead`) — this view renders every
+  // layer's face and was the most expensive 60 fps subscriber of the lot.
+  const tick = usePlayhead();
 
   const song = currentSong;
   const spans = useMemo(() => (song ? sectionSpans(song) : []), [song]);
@@ -118,6 +119,9 @@ export default function WorkbenchView() {
   }, [spans, selectedSectionId, setSelectedSectionId]);
 
   if (!song) {
+    // The repository may still be reading the library — claiming the song is
+    // missing before that finishes is a lie the user sees flash by.
+    if (!hydrated) return null;
     return (
       <div className="p-4">
         <p className="text-inkMuted">Song not found.</p>

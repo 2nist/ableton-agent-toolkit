@@ -9,6 +9,27 @@ Not "Extensions vs. M4L" — **Node execution context vs. browser/webview execut
 
 This is why `packages/ui-kit` can share real component code across both hosts, and why only `packages/ui-kit/src/bridge.ts` needs to know which host it's in.
 
+## Where the song library lives
+
+`lib/persistence/songRepository.ts` is the only thing that knows, and it picks one of three adapters once at module load, so `songStore` writes to a repository instead of branching on its host:
+
+| Adapter | When | Shape |
+|---|---|---|
+| disk | desktop (host bridge present) | one JSON file per song in the library directory, written only when the object changed |
+| IndexedDB | browser | one record per song (`{id, order, song}`), diffed by identity, in one transaction per batch |
+| localStorage | browser without IndexedDB | the whole library as one JSON string under `trackdraft-songs` |
+
+The browser path used to be the third row only, and that was a trap. localStorage is capped at roughly 2.5M UTF-16 characters per origin, and every autosave rewrote the entire library into it — so a corpus import (the rock catalogue alone is 149 songs / 4.4 MB) failed the write, and *every later write failed too, including deletions*, because shrinking the library was itself a save. A reload then restored the oversized library: a genuine deadlock, escaped only by the "Download backup" button on the autosave banner.
+
+Hence IndexedDB, with two rules that matter:
+
+- **Migration is verified before it is destructive.** A library found under `trackdraft-songs` is written to the database, `countSongRecords()` is checked, and the key is deleted only if every song landed. The legacy key is also dropped on any later load where it is fully covered, so an interrupted migration does not leak quota forever.
+- **Failure falls back rather than losing data.** If `indexedDB.open` is blocked (private mode, embedded webview, another tab mid-upgrade) the adapter degrades to reading and writing the legacy key — precisely the old behaviour — instead of presenting an empty library.
+
+Durability note: unlike a `localStorage.setItem`, an IndexedDB commit is asynchronous, so the `pagehide` flush is best-effort rather than guaranteed. That is the same trade the disk adapter has always made, and the 1.5 s autosave debounce means at most the last few keystrokes are at risk.
+
+Settings → **Library storage** shows the footprint that made the failure invisible for so long: the serialised size, the song count, which backend is in use, and how much of the origin's quota is gone (`lib/persistence/libraryStorageInfo.ts`). It escalates at 75% of the IndexedDB quota, and — on the localStorage fallback, where the ceiling is hard — at 1.5M and 2M characters, printing the "saves are about to fail permanently" warning at the point where deleting songs would no longer be writable either.
+
 ## Verified host bridges
 
 | Host | Detect via | Send | Receive |
@@ -90,6 +111,109 @@ order: zero double executions.
 
 The queue stays on disk on purpose: a command survives a bridge restart, and
 the file scan keeps working if the bridge dies mid-session.
+
+## Delivery: what actually leaves the app
+
+Live is an **adapter**, not the app's identity. Everything a song can become
+is organised as a ladder, and only the top rung needs a vendor API:
+
+| Rung | Artifact | Needs |
+|---|---|---|
+| 0 | JSON blueprint | nothing |
+| 1 | `.mid` (one track per stem, GM channels + programs) | nothing |
+| 2 | A written setup guide for the receiving DAW | nothing |
+| 3 | A native project file — currently `.rpp` | nothing |
+| 4 | In-place commit (cue points, tracks, clips, pad remap) | the Live extension |
+
+Rungs 0–3 are why "DAW-agnostic" is a fact rather than a claim: a song can be
+handed to REAPER as an editable project, or to anything else as a MIDI file,
+without a bridge, a plugin, or a licence. Rung 4 stays available for Live and
+can be earned by another DAW later — the gap between rungs is effort, not
+architecture.
+
+### REAPER projects (rung 3)
+
+`lib/reaper/rppProject.ts` writes a `.rpp`: five named tracks, one item per
+section, the arrangement as regions, and the song's tempo. It reads the same
+`sectionSpans` and stem planners as the `.mid` export and the live stream, so
+all three describe one song.
+
+Three details in that format silently corrupt a project if you get them
+wrong, which is why they are spelled out here:
+
+- **`POSITION` / `LENGTH` / `MARKER` are in seconds, not beats.** Beats put
+  every item and region in the wrong place at any tempo other than 60.
+- **Items carry their own MIDI resolution** (`HASDATA 1 960 QN`, REAPER's own),
+  and the `E <delta> <status> <d1> <d2>` events are hex, relative to the
+  previous event, and **relative to the item's start** — absolute song beats
+  delay every note by the section's position.
+- **The project tempo is the flat `TEMPO <bpm> <num> <den> 0` line.** A
+  `<TEMPOENVEX>` point on its own does nothing: REAPER loads the project at its
+  default 120 and every seconds-based item ends up off the beat ruler. (Real
+  REAPER projects use one form or the other, depending on whether they have a
+  tempo envelope — the flat line is the one that always applies.)
+
+Item length is derived from the item's own last event **tick**, not from beat
+arithmetic, so a note-off can never fall outside the item that holds it. A note
+that rings past a section line makes its item run past the next section's
+start, so consecutive items on that track overlap by exactly that tail (a
+sustained pad, typically). That is deliberate — clipping at the boundary would
+cut the sustain, and REAPER plays overlapping items on a track correctly. Each
+note's on and off always live in the same item, so content stays disjoint and
+nothing double-triggers.
+
+**Verified against REAPER itself**, not just against our own reader: a 13-section
+song exported and then loaded and re-saved by REAPER 6.82 produces the same 4
+tracks, 52 items and 4,066 notes, with **zero** differences in note start times
+or durations, the same tempo, regions and item overlaps. Re-saving through the
+DAW's own writer is the check that proves the format, and it is what caught the
+tempo line and the item-length bug — a round-trip through our own parser could
+not have.
+
+### Logic: rung 1 is the whole integration
+
+Logic is the test of whether the ladder is real, because Logic offers almost
+nothing to build against — no scripting dictionary for project content, no
+OSC (verified: the installed Logic 10.7.9 ships no "Open Sound Control"
+strings), and a `.logicx` bundle that is an undocumented binary container.
+What it does have, read out of its own help text:
+
+| Capability | Logic's own wording | What it buys us |
+|---|---|---|
+| `File → Import MIDI File` | "Import a MIDI file into your project." | rung 1 — the whole delivery path |
+| MIDI clock in | Sync Mode → **Manual Sync (Tempo Interpreter)**: "receiving MIDI clock impulses that are recognized as valid beats" | our clock can drive Logic |
+| MIDI clock out | Sync Mode → Internal: "Logic Pro transmitting MIDI clock", per output with a start position | Logic could drive us instead |
+| MMC in | "Listen to MIDI Machine Control (MMC) input" | transport control — but MMC is SysEx, and our `requestMIDIAccess` asks for `{ sysex: false }` |
+
+That is why the `.mid` had to learn to carry markers: for a DAW whose only
+door is a file import, tempo, meter and section markers *are* the integration.
+Writing `.logicx` directly is possible — `logicxkit` (Apache-2.0) adds MIDI
+regions and notes to a project with Logic-confirmed writes — but it is
+macOS-only, needs a template Logic itself saved, accepts only one internal
+format version, and has to be a local helper. That is a rung 3 purchase we
+should not make until someone is paying for it.
+
+### MIDI clock out
+
+`lib/playback/midiClockOut.ts` sends 24 ticks per quarter note plus
+start/stop/continue and Song Position Pointer, so a DAW can follow
+TrackDraft's transport with no bridge at all. It follows the *same*
+`SchedulerClock` the note stream is timed from, so the DAW's grid and the
+streamed parts cannot describe two timelines, and it works with no note
+stream at all (clock-only sync). Ticks are queued ahead with explicit
+timestamps and derived from absolute beat numbers (`tick / 24`), so a late
+timer wake-up shortens the queue rather than the clock. The Live target does
+not send clock: there Live is the master.
+
+### One wire vocabulary
+
+Every path that puts a note on a wire — preview, live out, `.mid`, `.rpp` —
+goes through `lib/midi/wire.ts` for pitch/velocity clamping. Masking with
+`& 0x7f` is not clamping: it turns 128 into 0 and 130 into 2, which is how an
+export can sound right in a file and wrong in an audition. The same module
+keeps the app's **1-based** channels separate from the **0-based** index the
+wire uses (`channelToIndex` vs `clampChannelIndex`), because mixing the two
+shifts a whole stem by one channel.
 
 ## MIDI import: classify the tracks, then use each for what it is
 
