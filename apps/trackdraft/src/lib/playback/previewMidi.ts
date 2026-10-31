@@ -23,6 +23,7 @@ import {
 import { generateBiTonal, BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR, type BiTonalChord } from "@platform/progression-engine";
 import { KIT_PITCHES, type KitVoice } from "@drum/library";
 import { getMidiOutput } from "./liveMidiOut";
+import { pitchToWire, velocityToWire } from "../midi/wire";
 import type { StemId } from "../stems";
 import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 
@@ -39,6 +40,11 @@ const PREVIEW_VELOCITY = 96;
 const MAX_SUSTAIN_MS = 1600;
 
 let activeTimers: ReturnType<typeof setTimeout>[] = [];
+
+/** Bumped by every new progression preview. `cancelPreview()` runs before the
+ *  port lookups, so two quick clicks could both get past it and schedule
+ *  their timers — a stale preview then played under the new one. */
+let previewGeneration = 0;
 
 /** Stop any progression preview still running. */
 export function cancelPreview(): void {
@@ -113,9 +119,12 @@ function sendPlannedNote(
 ): void {
   const on = startMs + note.startTime * beatMs;
   const off = on + Math.min(note.duration * beatMs, MAX_SUSTAIN_MS);
-  const vel = Math.max(1, Math.min(127, note.velocity));
-  ctx.output.send([0x90 | ctx.ch, note.pitch & 0x7f, vel], on);
-  ctx.output.send([0x80 | ctx.ch, note.pitch & 0x7f, 0], off);
+  // Clamped, not masked — see lib/midi/wire.ts. A voicing whose top note runs
+  // past 127 used to audition a note near the bottom of the keyboard while
+  // the export of the same chord wrote 127.
+  const pitch = pitchToWire(note.pitch);
+  ctx.output.send([0x90 | ctx.ch, pitch, velocityToWire(note.velocity)], on);
+  ctx.output.send([0x80 | ctx.ch, pitch, 0], off);
 }
 
 /** Audition a single chord on the chords channel. When the chord carries a
@@ -154,9 +163,11 @@ function scheduleBlock(
   activeTimers.push(
     setTimeout(() => {
       const now = performance.now() + 20;
-      for (const p of pitches) ctx.output.send([0x90 | ctx.ch, p & 0x7f, velocity], now);
+      const wire = pitches.map(pitchToWire);
+      const vel = velocityToWire(velocity);
+      for (const p of wire) ctx.output.send([0x90 | ctx.ch, p, vel], now);
       const off = now + Math.min(durMs, MAX_SUSTAIN_MS);
-      for (const p of pitches) ctx.output.send([0x80 | ctx.ch, p & 0x7f, 0], off);
+      for (const p of wire) ctx.output.send([0x80 | ctx.ch, p, 0], off);
     }, Math.max(0, startMs)),
   );
 }
@@ -218,12 +229,16 @@ export async function previewProgression(
   colorFlavor?: string,
 ): Promise<void> {
   cancelPreview();
+  const generation = ++previewGeneration;
   if (chords.length === 0) return;
   const { routing } = useMidiSettingsStore.getState();
   const chordsCtx = await previewOutput("chords", routing.chords.channel);
   if (!chordsCtx) return; // no port selected — nothing to preview
   const bassCtx = layers.bass ? await previewOutput("bass", routing.bass.channel) : null;
   const colorCtx = layers.color ? await previewOutput("color", routing.color.channel) : null;
+  // A newer preview started while these ports were resolving: it owns the
+  // timers now, so this one must not schedule a note.
+  if (generation !== previewGeneration) return;
 
   const beatMs = 60000 / Math.max(1, bpm);
   const colorNotes = colorCtx ? shiftColorPastRests(colorNotesFor(chords, colorFlavor), chords) : [];
@@ -276,6 +291,7 @@ export async function auditionDrumHit(
   if (!output) return;
   const ch = Math.max(0, Math.min(15, (routing.drums?.channel ?? 1) - 1));
   const now = performance.now() + 5;
-  output.send([0x90 | ch, pitch & 0x7f, Math.max(1, Math.min(127, Math.round(velocity)))], now);
-  output.send([0x80 | ch, pitch & 0x7f, 0], now + Math.max(20, durationMs));
+  const wire = pitchToWire(pitch);
+  output.send([0x90 | ch, wire, velocityToWire(velocity)], now);
+  output.send([0x80 | ch, wire, 0], now + Math.max(20, durationMs));
 }

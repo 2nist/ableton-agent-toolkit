@@ -17,7 +17,7 @@ import { sectionSpans, type SectionSpan } from "../../../lib/arrangement";
 import { selectedSpans } from "../../../lib/sectionSelection";
 import { resolvePlayedLaneHits, type LaneHit } from "../../../lib/timeline/drumLaneHits";
 import { planDrumSections } from "../../../lib/midiExport";
-import { getSongTransport, type TransportTick } from "../../../lib/playback/songTransport";
+import { usePlayhead } from "../../../hooks/usePlayhead";
 import {
   inferPatternForSection,
   resolveSectionVariant,
@@ -34,7 +34,7 @@ import {
 } from "../../../types/blueprint";
 import { DRUM_LANES, laneColor } from "../laneStyle";
 import { VOICE_LABEL } from "../voiceStyle";
-import { usePalette } from "../../../theme/palette";
+import { usePalette, withAlpha } from "../../../theme/palette";
 import { withLaneFigure } from "./laneFigurePick";
 import {
   addUserBeat,
@@ -443,11 +443,12 @@ export default function DrumBlocksView() {
 
   // ---- playhead ---------------------------------------------------------------
 
-  /** The app transport's position, tick by tick. The drums view is where you
-   *  listen to a beat, so it is the one screen that has to say WHERE in the
-   *  section that sound is coming from. */
-  const [tick, setTick] = useState<TransportTick | null>(null);
-  useEffect(() => getSongTransport().onTick(setTick), []);
+  /** The app transport's position. The drums view is where you listen to a
+   *  beat, so it is the one screen that has to say WHERE in the section that
+   *  sound is coming from — which is a 16th-note question, so it reads the
+   *  quantised playhead (and that highlight is also the step grid's own
+   *  resolution: a cell lights when the playhead enters it, not between). */
+  const tick = usePlayhead();
 
   const playhead = useMemo(() => {
     if (!tick || views.length === 0) return null;
@@ -1383,7 +1384,7 @@ export default function DrumBlocksView() {
               style={{
                 borderColor: barsPerView === n ? P.track : P.grid,
                 color: barsPerView === n ? P.track : P.label,
-                background: barsPerView === n ? "rgba(232,181,74,0.12)" : "transparent",
+                background: barsPerView === n ? withAlpha(P.track, 0.12) : "transparent",
               }}
               title={
                 multi
@@ -1529,7 +1530,7 @@ export default function DrumBlocksView() {
             >
               <defs>
                 <pattern id="pencil-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(44)">
-                  <line x1="0" y1="0" x2="0" y2="5" stroke="rgba(38,34,27,0.30)" strokeWidth="1.15" />
+                  <line x1="0" y1="0" x2="0" y2="5" stroke={withAlpha(P.label, 0.30)} strokeWidth="1.15" />
                 </pattern>
               </defs>
 
@@ -1543,7 +1544,7 @@ export default function DrumBlocksView() {
                   const isAnchor = view.span.section.id === anchorSpan?.section.id;
                   return (
                     <g key={`band-${view.span.sectionId}`} pointerEvents="none">
-                      <rect x={view.x} y={0} width={view.width} height={bandH - 2} fill="rgba(232,181,74,0.08)" />
+                      <rect x={view.x} y={0} width={view.width} height={bandH - 2} fill={withAlpha(P.track, 0.08)} />
                       <text
                         x={view.x + 4} y={bandH - 5}
                         fontSize={9} fontFamily="'IBM Plex Mono', monospace"
@@ -1569,7 +1570,7 @@ export default function DrumBlocksView() {
                         <g key={`bn-${view.span.sectionId}-${b}`}>
                           <rect
                             x={x} y={rulerTop} width={barPx} height={RULER_H}
-                            fill={inSel ? "rgba(232,181,74,0.10)" : "transparent"}
+                            fill={inSel ? withAlpha(P.track, 0.10) : "transparent"}
                           />
                           <text
                             x={x + 4} y={rulerTop + 15}
@@ -1678,7 +1679,7 @@ export default function DrumBlocksView() {
                     y={laneTop}
                     width={(to - from + 1) * barPx}
                     height={LANE_COUNT * ROW_H}
-                    fill="rgba(232,181,74,0.06)"
+                    fill={withAlpha(P.track, 0.06)}
                     pointerEvents="none"
                   />
                 );
@@ -1701,8 +1702,8 @@ export default function DrumBlocksView() {
                               y={laneTop + li * ROW_H + 2}
                               width={(Math.abs(viewSel!.toBar - viewSel!.fromBar) + 1) * barPx}
                               height={ROW_H - 4}
-                              fill="rgba(232,181,74,0.10)"
-                              stroke="rgba(232,181,74,0.35)"
+                              fill={withAlpha(P.track, 0.10)}
+                              stroke={withAlpha(P.track, 0.35)}
                               strokeWidth={1}
                               pointerEvents="none"
                             />
@@ -1754,7 +1755,7 @@ export default function DrumBlocksView() {
 
               {velDrag && velDrag.moved && (
                 <g pointerEvents="none">
-                  <rect x={velDrag.x + 14} y={velDrag.y - 46} width={72} height={32} rx={5} fill="rgba(11,13,17,0.95)" stroke={P.track} strokeOpacity={0.6} />
+                  <rect x={velDrag.x + 14} y={velDrag.y - 46} width={72} height={32} rx={5} fill={withAlpha(P.deep, 0.95)} stroke={P.track} strokeOpacity={0.6} />
                   <text x={velDrag.x + 50} y={velDrag.y - 31} textAnchor="middle" fontSize={13} fontWeight={600} fontFamily="'IBM Plex Mono', monospace" fill={P.track}>
                     {PARAM_SPECS[velDrag.param].format(velDrag.value, velDrag.view.grid.stepBeats, velDrag.laneKey)}
                   </text>

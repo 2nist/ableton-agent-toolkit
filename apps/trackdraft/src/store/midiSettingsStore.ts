@@ -42,12 +42,17 @@ interface MidiSettingsState {
   /** 1-based MIDI channel per stem, plus the instrument metadata the export
    *  path uses. Live out only reads `.channel`. */
   routing: StemRoutingMap;
+  /** Port to send MIDI clock on ("" = off). Separate from `midiOutputId`
+   *  on purpose: a DAW can follow the clock on one port while the parts
+   *  stream to another (or to none at all). */
+  clockOutId: string;
   /** Calibrated output latency in ms — positive delays every note. */
   latencyMs: number;
   setMidiOutputId: (id: string) => void;
   /** Point one stem at its own port; "" clears it back to the master. */
   setStemOutput: (stem: StemId, id: string) => void;
   setChannel: (stem: StemId, channel: number) => void;
+  setClockOutId: (id: string) => void;
   setLatencyMs: (ms: number) => void;
   applyProfile: (id: RoutingProfileId) => void;
   resetRouting: () => void;
@@ -60,6 +65,7 @@ interface PersistedMidiSettings {
   midiOutputId: string;
   stemOutputs?: Partial<Record<StemId, string>>;
   routing: StemRoutingMap;
+  clockOutId: string;
   latencyMs: number;
 }
 
@@ -118,13 +124,20 @@ const initialState = {
   midiOutputId: saved.midiOutputId ?? "",
   stemOutputs: initialStemOutputs(),
   routing: initialRouting(),
+  clockOutId: typeof saved.clockOutId === "string" ? saved.clockOutId : "",
   latencyMs: Math.max(-500, Math.min(500, Math.round(saved.latencyMs ?? 0))),
 };
 
 export const useMidiSettingsStore = create<MidiSettingsState>((set, get) => {
   const persist = () => {
-    const { midiOutputId, stemOutputs, routing, latencyMs } = get();
-    writeStorage<PersistedMidiSettings>(STORAGE_KEY, { midiOutputId, stemOutputs, routing, latencyMs });
+    const { midiOutputId, stemOutputs, routing, clockOutId, latencyMs } = get();
+    writeStorage<PersistedMidiSettings>(STORAGE_KEY, {
+      midiOutputId,
+      stemOutputs,
+      routing,
+      clockOutId,
+      latencyMs,
+    });
   };
   return {
     ...initialState,
@@ -143,6 +156,10 @@ export const useMidiSettingsStore = create<MidiSettingsState>((set, get) => {
     },
     setChannel: (stem, channel) => {
       set((s) => ({ routing: { ...s.routing, [stem]: { ...s.routing[stem], channel: clampChannel(channel) } } }));
+      persist();
+    },
+    setClockOutId: (clockOutId) => {
+      set({ clockOutId });
       persist();
     },
     setLatencyMs: (ms) => {

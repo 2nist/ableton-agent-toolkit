@@ -1,6 +1,7 @@
 import osc from "osc";
 const { UDPPort } = osc;
 import { WebSocketServer, type WebSocket } from "ws";
+import { createBeatPoll } from "./beatPoll.js";
 import { parseOscReply, type BridgeEvent } from "./protocol.js";
 
 export interface TelemetryState {
@@ -25,6 +26,12 @@ export interface PositionBridgeOptions {
   host?: string;
   /** How often to re-send the start_listen subscriptions. */
   resubscribeIntervalMs?: number;
+  /** How often to POLL `/live/song/get/beat` while a client is connected.
+   *  AbletonOSC's `start_listen/beat` pushes one INTEGER per beat; this asks
+   *  for the float position instead, which is what lets the app follow Live
+   *  rather than interpolate between heartbeats. 0 keeps the old integer-only
+   *  feed. See `beatPoll.ts` for the measured difference. */
+  beatPollIntervalMs?: number;
   /** Called for every event relayed, before it's broadcast — for logging/observability. */
   onEvent?: (event: BridgeEvent) => void;
 }
@@ -36,6 +43,7 @@ const DEFAULTS: Required<Omit<PositionBridgeOptions, "onEvent">> = {
   websocketPort: 8081,
   host: "127.0.0.1",
   resubscribeIntervalMs: 5000,
+  beatPollIntervalMs: 33,
 };
 
 export interface PositionBridge {
@@ -105,6 +113,34 @@ export function startPositionBridge(options: PositionBridgeOptions = {}): Positi
   udpPort.on("message", (message) => {
     const event = parseOscReply(message.address, message.args);
     if (!event) return;
+    if (event.type === "beat") {
+      beatsSincePoll += 1;
+    } else if (
+      event.type === "raw" &&
+      event.address === "/live/error" &&
+      beatPoll.polling &&
+      beatsSincePoll === 0 &&
+      event.args.some((arg) => /get\/beat|unknown osc address/i.test(String(arg)))
+    ) {
+      // The address this AbletonOSC doesn't know. Stop asking: the integer
+      // listener still carries the position, and thirty error replies a
+      // second is exactly the sort of traffic this file exists to avoid.
+      beatPoll.stop();
+      beatPollSupported = false;
+      console.log(
+        "[osc-bridge] this AbletonOSC rejected /live/song/get/beat — " +
+          "falling back to its integer beat feed (the app interpolates between beats).",
+      );
+    }
+    if (event.type === "beat" && beatPollSupported === null) {
+      // The probe (or the listener's own push) answered: floats are available.
+      beatPollSupported = true;
+      if (probeTimer !== null) {
+        clearTimeout(probeTimer);
+        probeTimer = null;
+      }
+      armBeatPoll();
+    }
     if (event.type === "beat") lastState.beat = event.beat;
     if (event.type === "playState") lastState.isPlaying = event.isPlaying;
     if (event.type === "selectedTrack") lastState.selectedTrack = event.track;
@@ -127,7 +163,57 @@ export function startPositionBridge(options: PositionBridgeOptions = {}): Positi
     udpPort.send({ address: "/live/view/start_listen/selected_track" });
   }
 
-  udpPort.on("ready", subscribe);
+  const beatPoll = createBeatPoll({
+    intervalMs: config.beatPollIntervalMs,
+    request: () => udpPort.send({ address: "/live/song/get/beat" }),
+  });
+  let udpReady = false;
+  /**
+   * Whether this AbletonOSC answers `get/beat` with a float position.
+   *
+   * Which fractional-position address a given AbletonOSC build supports is not
+   * something we can assume (this repo's own notes plan for
+   * `start_listen/song_time`; `protocol.ts` has always handled `get/beat`
+   * replies). So the bridge PROBES once and only then polls: an unsupported
+   * address would otherwise answer `/live/error` thirty times a second, which
+   * is precisely the log storm this file just stopped producing.
+   */
+  let beatPollSupported: boolean | null = null;
+  let probeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Position replies seen since polling began — proof it is working. */
+  let beatsSincePoll = 0;
+
+  function armBeatPoll(): void {
+    if (!udpReady || beatPollSupported !== true) return;
+    if (clients.size > 0 && !beatPoll.polling) {
+      beatsSincePoll = 0;
+      beatPoll.start();
+    }
+  }
+
+  function probeBeatPoll(): void {
+    if (!(config.beatPollIntervalMs > 0)) return; // explicitly disabled
+    udpPort.send({ address: "/live/song/get/beat" });
+    probeTimer = setTimeout(() => {
+      probeTimer = null;
+      if (beatPollSupported === null) {
+        beatPollSupported = false;
+        console.log(
+          "[osc-bridge] /live/song/get/beat did not answer — keeping the integer beat feed " +
+            "(the app will interpolate between beats). Set BEAT_POLL_MS=0 to skip this probe.",
+        );
+      }
+    }, 1500);
+  }
+
+  udpPort.on("ready", () => {
+    udpReady = true;
+    subscribe();
+    probeBeatPoll();
+    // A window may already be connected (the bridge is usually started by the
+    // same script as the app), so honour that here as well as on connect.
+    armBeatPoll();
+  });
   udpPort.open();
 
   const resubscribeTimer = setInterval(subscribe, config.resubscribeIntervalMs);
@@ -135,8 +221,27 @@ export function startPositionBridge(options: PositionBridgeOptions = {}): Positi
   // --- WebSocket server (bidirectional) ---
 
   const wss = new WebSocketServer({ port: config.websocketPort, host: config.host });
+  // A listen failure (port 8081 already taken by a previous run) is an
+  // `error` event on the server; with no listener it throws and takes the
+  // whole bridge — and with it the REST server — down.
+  wss.on("error", (error) => {
+    console.error("[osc-bridge] websocket server error", error);
+  });
   wss.on("connection", (client) => {
     clients.add(client);
+    // Somebody is listening now, so ask Live where it is — thirty times a
+    // second, until the last client leaves.
+    armBeatPoll();
+    // Likewise per socket: a reset must drop one client, not the process.
+    client.on("error", () => {
+      clients.delete(client);
+      if (clients.size === 0) beatPoll.stop();
+      try {
+        client.terminate();
+      } catch {
+        /* already gone */
+      }
+    });
 
     // Catch-up: send everything we already know to a newly-connected client.
     if (lastState.beat !== undefined) client.send(JSON.stringify({ type: "beat", beat: lastState.beat }));
@@ -168,12 +273,17 @@ export function startPositionBridge(options: PositionBridgeOptions = {}): Positi
       }
     });
 
-    client.on("close", () => clients.delete(client));
+    client.on("close", () => {
+      clients.delete(client);
+      if (clients.size === 0) beatPoll.stop();
+    });
   });
 
   return {
     stop() {
       clearInterval(resubscribeTimer);
+      if (probeTimer !== null) clearTimeout(probeTimer);
+      beatPoll.stop();
       udpPort.close();
       wss.close();
     },

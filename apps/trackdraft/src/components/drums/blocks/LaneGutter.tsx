@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { DrumBlockFx } from "../../../types/blueprint";
-import { usePalette } from "../../../theme/palette";
+import { usePalette, withAlpha } from "../../../theme/palette";
 import { DRUM_LANES, laneColor } from "../laneStyle";
 import { asStepParam, PARAM_SPECS, STEP_PARAMS, type StepParam } from "./stepParams";
 import { FX_PARAMS, FX_SPECS, type FxParam } from "./fxParams";
@@ -121,7 +121,7 @@ export default function LaneGutter(props: LaneGutterProps) {
                     whole lane, shift-click to add */}
                 <rect
                   x={0} y={laneTop + 1} width={width - 2} height={15}
-                  fill={selectedLanes.has(lane.key) ? "rgba(232,181,74,0.12)" : "transparent"}
+                  fill={selectedLanes.has(lane.key) ? withAlpha(P.track, 0.12) : "transparent"}
                   style={{ cursor: "pointer" }}
                   onClick={() => onLaneClick(lane.key)}
                 />
@@ -149,7 +149,7 @@ export default function LaneGutter(props: LaneGutterProps) {
                       </title>
                       <rect
                         x={x} y={laneTop + 2} width={11} height={10} rx={2}
-                        fill={on ? (kind === "mute" ? "rgba(180,84,74,0.22)" : "rgba(232,181,74,0.22)") : "transparent"}
+                        fill={on ? (kind === "mute" ? "rgba(180,84,74,0.22)" : withAlpha(P.track, 0.22)) : "transparent"}
                         stroke={on ? (kind === "mute" ? P.voices.snare : P.track) : P.grid}
                         strokeOpacity={on ? 1 : 0.7}
                       />
@@ -387,7 +387,7 @@ export default function LaneGutter(props: LaneGutterProps) {
                       style={{
                         height: 15, fontSize: 9, fontFamily: "'IBM Plex Mono', monospace",
                         color: active ? P.track : P.label,
-                        background: active ? "rgba(232,181,74,0.14)" : "transparent",
+                        background: active ? withAlpha(P.track, 0.14) : "transparent",
                       }}
                     >
                       {isStep ? PARAM_SPECS[id as StepParam].label : FX_SPECS[id as FxParam].label}

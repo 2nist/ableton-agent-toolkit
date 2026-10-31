@@ -30,6 +30,7 @@ interface MidiEvent {
     | "keySig"
     | "trackName"
     | "instrumentName"
+    | "marker"
     | "endOfTrack"
     | "unknown";
   /** 0-based MIDI channel, as the status nibble carries it. */
@@ -183,6 +184,9 @@ function parseTrack(data: Uint8Array, offset: number, end: number): MidiTrack {
           break;
         case 0x04: // Instrument name
           events.push({ tick, type: "instrumentName", name: new TextDecoder().decode(metaData) });
+          break;
+        case 0x06: // Marker — the arrangement, as an importer can read it
+          events.push({ tick, type: "marker", name: new TextDecoder().decode(metaData) });
           break;
         case 0x2f: // End of track
           events.push({ tick, type: "endOfTrack" });

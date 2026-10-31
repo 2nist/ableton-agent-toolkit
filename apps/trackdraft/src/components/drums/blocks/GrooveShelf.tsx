@@ -14,7 +14,7 @@ import type { DrumLaneId, SavedBeat } from "../../../types/blueprint";
 import { savedBeatVariant } from "../../../lib/drums/savedBeats";
 import type { BlueprintSection } from "../../../types/blueprint";
 import { DRUM_LANES, laneColor } from "../laneStyle";
-import { usePalette } from "../../../theme/palette";
+import { usePalette, withAlpha } from "../../../theme/palette";
 import { beatsPerBarOf } from "../../../lib/timeline/beatMap";
 
 /**
@@ -599,7 +599,7 @@ export default function GrooveShelf(props: GrooveShelfProps) {
                 className="shrink-0 rounded-sm border px-1 pt-1 pb-0.5"
                 style={{
                   borderColor: active ? P.track : P.grid,
-                  background: active ? "rgba(232,181,74,0.10)" : "transparent",
+                  background: active ? withAlpha(P.track, 0.10) : "transparent",
                 }}
               >
                 <svg

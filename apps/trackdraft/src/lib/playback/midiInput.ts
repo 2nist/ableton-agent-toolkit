@@ -112,6 +112,19 @@ export async function connectMidiInputs(
   };
 
   const refresh = () => {
+    // A device that went away is a dead object; keeping its listener in
+    // `attached` retained it (and its port) for the life of the page and
+    // made the "inputs changed" list a mix of real and removed devices.
+    const present = new Set<MIDIInput>(access.inputs.values());
+    for (const [input, listener] of attached) {
+      if (present.has(input)) continue;
+      try {
+        input.removeEventListener("midimessage", listener);
+      } catch {
+        /* the port is already gone */
+      }
+      attached.delete(input);
+    }
     for (const input of access.inputs.values()) attach(input);
     options.onInputsChanged?.(describe(access.inputs, ignoreName));
   };

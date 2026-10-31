@@ -273,8 +273,66 @@ describe("songToMidi", () => {
     expect(melodyOns.some((n) => n.pitch === 62 && n.tick === 480)).toBe(true); // beat 1 = 480 ticks
   });
 
-  it("omits the melody notes when no section has a melody (empty melody track)", () => {
-    const bytes = songToMidi(testSong());
+  it("clamps an out-of-range pitch instead of wrapping it into another note", () => {
+    // `& 0x7f` used to wrap 132 → 4 and -1 → 127: the export and the live
+    // stream of the same song then disagreed about what it sounds like.
+    const song = testSong();
+    song.sections[0].melody = {
+      notes: [
+        { pitch: 132, startTime: 0, duration: 1, velocity: 96 },
+        { pitch: -4, startTime: 1, duration: 1, velocity: 96 },
+      ],
+    };
+    const melodyTrack = parseMidiBytes(songToMidi(song)).tracks[5];
+    const pitches = melodyTrack.events
+      .filter((e) => e.type === "noteOn" && e.note !== undefined)
+      .map((e) => e.note!);
+    expect(pitches).toContain(127);
+    expect(pitches).toContain(0);
+    expect(pitches).not.toContain(4);
+  });
+
+  it("keeps both attacks when the same pitch overlaps itself", () => {
+    // A note-off silences whatever is sounding on that pitch, so the second
+    // attack used to be cut short by the first note's off. The earlier note
+    // now ends a tick before the later one starts.
+    const song = testSong();
+    song.sections[0].melody = {
+      notes: [
+        { pitch: 60, startTime: 0, duration: 2, velocity: 96 },
+        { pitch: 60, startTime: 1, duration: 1, velocity: 96 },
+      ],
+    };
+    const events = parseMidiBytes(songToMidi(song)).tracks[5]!.events.filter(
+      (e) => e.note === 60 && (e.type === "noteOn" || e.type === "noteOff"),
+    );
+
+    const ons = events.filter((e) => e.type === "noteOn").map((e) => e.tick);
+    const offs = events.filter((e) => e.type === "noteOff").map((e) => e.tick);
+    expect(ons).toEqual([0, 480]); // both attacks survive
+    // First note shortened to end just before the second begins…
+    expect(offs).toContain(479);
+    // …and the second keeps its own length.
+    expect(offs).toContain(960);
+    // No note-off lands on the same tick as a note-on for this pitch.
+    for (const on of ons) expect(offs).not.toContain(on);
+  });
+
+  it("drops a literal duplicate attack instead of writing an off/on pair on one tick", () => {
+    const song = testSong();
+    song.sections[0].melody = {
+      notes: [
+        { pitch: 60, startTime: 0, duration: 1, velocity: 96 },
+        { pitch: 60, startTime: 0, duration: 1, velocity: 96 },
+      ],
+    };
+    const ons = parseMidiBytes(songToMidi(song)).tracks[5]!.events.filter(
+      (e) => e.type === "noteOn" && e.note === 60,
+    );
+    expect(ons).toHaveLength(1);
+  });
+
+  it("omits the melody notes when no section has a melody (empty melody track)", () => {    const bytes = songToMidi(testSong());
     const parsed = parseMidiBytes(bytes);
     const melodyTrack = parsed.tracks[5];
     const melodyOns = melodyTrack.events.filter((e) => e.type === "noteOn");

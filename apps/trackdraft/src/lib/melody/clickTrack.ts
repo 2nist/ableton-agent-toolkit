@@ -15,8 +15,10 @@
 
 import { getSongTransport } from "../playback/songTransport";
 
-/** Accent (bar start) interval, in beats — assumes 4/4 for now. */
-const ACCENT_EVERY = 4;
+/** Accent interval when the caller doesn't say — a plain 4/4. Every caller
+ *  here knows its section's meter and passes it (`start(beatsPerBar)`), so
+ *  this default only covers a caller that has no song in scope. */
+const DEFAULT_BEATS_PER_BAR = 4;
 
 /** Click pitch (Hz): the accented downbeat is a brighter A, the regular
  *  beats a softer D. */
@@ -28,17 +30,27 @@ export class ClickTrack {
   private unsub: (() => void) | null = null;
   private lastBeatInt = -1;
   private running = false;
+  /** Where the click started, so accents land on the SECTION's downbeat
+   *  rather than on song beat 0 — a 3-bar intro would otherwise put every
+   *  accent a beat off for the rest of the tune. */
+  private originBeat = 0;
+  /** The section's meter. 7/8 bars are 3.5 beats long, so this is read as a
+   *  fractional bar length, not an integer count of beats. */
+  private beatsPerBar = DEFAULT_BEATS_PER_BAR;
 
   get isRunning(): boolean {
     return this.running;
   }
 
   /** Start clicking on every beat while the transport plays. Safe to call
-   *  repeatedly — a second call while running is a no-op. */
-  start(): void {
+   *  repeatedly — a second call while running is a no-op. `beatsPerBar` is
+   *  the meter to accent on; omit it only when there is no section to ask. */
+  start(beatsPerBar: number = DEFAULT_BEATS_PER_BAR): void {
     if (this.running) return;
     this.running = true;
     this.lastBeatInt = -1;
+    this.beatsPerBar = beatsPerBar > 0 ? beatsPerBar : DEFAULT_BEATS_PER_BAR;
+    this.originBeat = getSongTransport().getBeat();
     if (!this.ctx) this.ctx = new AudioContext();
     if (this.ctx.state === "suspended") void this.ctx.resume();
     const ctx = this.ctx;
@@ -47,7 +59,13 @@ export class ClickTrack {
       const b = Math.floor(tick.beat);
       if (b === this.lastBeatInt) return;
       this.lastBeatInt = b;
-      if (this.running) click(ctx, ctx.currentTime + 0.002, b % ACCENT_EVERY === 0);
+      if (!this.running) return;
+      // Distance from the section's own downbeat, folded into the bar. Works
+      // for a fractional bar length (7/8 = 3.5) because the click still lands
+      // on the nearest whole beat to each bar line.
+      const since = b - this.originBeat;
+      const inBar = since - Math.floor(since / this.beatsPerBar) * this.beatsPerBar;
+      click(ctx, ctx.currentTime + 0.002, inBar < 1e-6);
     });
   }
 

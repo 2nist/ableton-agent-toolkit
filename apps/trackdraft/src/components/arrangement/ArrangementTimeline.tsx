@@ -1,5 +1,5 @@
 import { grooveOf } from "../../lib/drums/grooveModel";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
@@ -7,7 +7,8 @@ import { sectionSpans, spanIndexForTick, totalBars, type SectionSpan } from "../
 import { useRoleStyle } from "../../lib/roleColors";
 import { classifySong } from "../../lib/classification";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
-import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
+import type { TransportTick } from "../../lib/playback/songTransport";
+import { usePlayhead } from "../../hooks/usePlayhead";
 import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import { rangeIds } from "../../lib/sectionSelection";
 import { drumFamilyLabel } from "../../lib/playback/drumPreview";
@@ -124,9 +125,9 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
   const sweptRef = useRef(false);
   const spans = useMemo(() => sectionSpans(song), [song]);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [tick, setTick] = useState<TransportTick | null>(null);
-
-  useEffect(() => getSongTransport().onTick(setTick), []);
+  // Quantised to a sixteenth — the block playhead reads the same grid the
+  // blocks are laid out on, at ~1/8th of the render cost of the raw tick.
+  const tick = usePlayhead();
 
   if (spans.length === 0) return null;
 

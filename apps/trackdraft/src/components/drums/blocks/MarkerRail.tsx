@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { Palette } from "../../../theme/palette";
+import { withAlpha, type Palette } from "../../../theme/palette";
 import type { SectionMarkers } from "./transitionMarkers";
 
 export const MARKER_ROW_H = 9;
@@ -112,7 +112,7 @@ export default function MarkerRail({ markers, beatToX, top, P, onTransition, onD
             width={transW}
             height={MARKER_ROW_H}
             rx={2}
-            fill={transition.manual ? "rgba(232,181,74,0.16)" : "rgba(86,95,112,0.13)"}
+            fill={transition.manual ? withAlpha(P.track, 0.16) : withAlpha(P.grid, 0.13)}
             stroke={transStroke}
             strokeWidth={1}
             strokeDasharray={transition.manual ? undefined : "2 2"}

@@ -46,6 +46,7 @@ const LOCAL_CORPORA = [
 export default function Dashboard() {
   const handDrawn = usePalette().handDrawn;
   const songs = useSongStore((s) => s.songs);
+  const loadInfo = useSongStore((s) => s.loadInfo);
   const importSong = useSongStore((s) => s.importSong);
   const dirs = useDirectoryStore((s) => s.dirs);
   const listings = useDirectoryStore((s) => s.listings);
@@ -408,6 +409,21 @@ export default function Dashboard() {
               <ActionBar />
 
               <FilterBar filters={filters} onChange={setFilters} />
+
+              {/* Files the host could not parse are still on disk — say so,
+                  because from here they simply look like deleted songs. */}
+              {loadInfo && loadInfo.unreadable > 0 && (
+                <div
+                  role="status"
+                  className="mx-3 mt-2 rounded border border-warn/50 bg-warn/10 px-2.5 py-1.5 text-2xs text-ink"
+                >
+                  <span className="font-medium text-warn">
+                    {loadInfo.unreadable} song file{loadInfo.unreadable === 1 ? "" : "s"} could not be read.
+                  </span>{" "}
+                  Nothing was deleted — they are still in{" "}
+                  <span className="font-mono break-all">{loadInfo.dir}</span>.
+                </div>
+              )}
             </div>
 
             <SongTable

@@ -23,7 +23,8 @@ import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, e
 import { planColorStem } from "./colorStem";
 import { planMelodyStem } from "./melody/melodyStem";
 import { GM_ROUTING, STEM_LABELS, clampChannel, clampProgram, type StemId, type StemRoutingMap } from "./stems";
-import { barLengths, beatsPerBar, type BlueprintSong } from "../types/blueprint";
+import { clampChannelIndex, pitchToWire, velocityToWire } from "./midi/wire";
+import { barLengths, beatsPerBar, meterForLength, type BlueprintSong } from "../types/blueprint";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -432,24 +433,68 @@ function buildTrackChunk(events: RawMidiEvent[], meta: { name?: string; instrume
   return [...header, ...bytes];
 }
 
-/** Converts a stem's MidiNote[] into raw MIDI note on/off events. */
+/** Converts a stem's MidiNote[] into raw MIDI note on/off events.
+ *
+ *  Two things happen here that used to be left to luck:
+ *
+ *  1. Values are CLAMPED (see lib/midi/wire.ts), not masked. `& 0x7f` turned
+ *     an out-of-range pitch into a valid-looking *different* note (128 → 0,
+ *     -1 → 127), so the export and the live stream of the same song disagreed.
+ *
+ *  2. Same-pitch overlaps are resolved. A note-off silences whatever is
+ *     sounding on that pitch, so two overlapping notes of the same pitch cut
+ *     each other short — the second attack disappeared for its first frames,
+ *     which the chord + colour layers can produce easily. The earlier note now
+ *     ends just before the later one starts (and a literal duplicate attack is
+ *     dropped), so every note keeps its attack.
+ */
 function notesToEvents(notes: MidiNote[], channel: number): RawMidiEvent[] {
-  const events: RawMidiEvent[] = [];
-  for (const note of notes) {
-    const startTick = Math.round(note.startTime * TICKS_PER_QUARTER);
-    const durationTicks = Math.max(1, Math.round(note.duration * TICKS_PER_QUARTER));
-    const endTick = startTick + durationTicks;
-    const vel = Math.max(1, Math.min(127, note.velocity));
+  // `stemEvents` already converted the routing channel to a 0-based wire
+  // index, so this clamps — it does not subtract another one.
+  const ch = clampChannelIndex(channel);
 
+  const prepared = notes
+    .map((note) => {
+      const startTick = Math.max(0, Math.round(note.startTime * TICKS_PER_QUARTER));
+      const durationTicks = Math.max(1, Math.round(note.duration * TICKS_PER_QUARTER));
+      return {
+        pitch: pitchToWire(note.pitch),
+        velocity: velocityToWire(note.velocity),
+        startTick,
+        endTick: startTick + durationTicks,
+      };
+    })
+    .sort((a, b) => a.startTick - b.startTick || a.pitch - b.pitch);
+
+  const kept: typeof prepared = [];
+  const sounding = new Map<number, (typeof prepared)[number]>();
+  for (const note of prepared) {
+    const previous = sounding.get(note.pitch);
+    if (previous) {
+      // The same attack twice on the same pitch is inaudible — and writing it
+      // would put a note-off and a note-on on the same tick for no reason.
+      if (previous.startTick === note.startTick) continue;
+      if (previous.endTick >= note.startTick) {
+        // End the earlier note just before this one starts. When the notes are
+        // one tick apart this collapses to a clean "off then on" retrigger.
+        previous.endTick = Math.max(previous.startTick + 1, note.startTick - 1);
+      }
+    }
+    sounding.set(note.pitch, note);
+    kept.push(note);
+  }
+
+  const events: RawMidiEvent[] = [];
+  for (const note of kept) {
     // Note on
     events.push({
-      tick: startTick,
-      data: [0x90 | (channel & 0x0f), note.pitch & 0x7f, vel],
+      tick: note.startTick,
+      data: [0x90 | ch, note.pitch, note.velocity],
     });
     // Note off
     events.push({
-      tick: endTick,
-      data: [0x80 | (channel & 0x0f), note.pitch & 0x7f, 0x40],
+      tick: note.endTick,
+      data: [0x80 | ch, note.pitch, 0x40],
     });
   }
   return events;
@@ -482,6 +527,72 @@ function programFor(song: BlueprintSong, stem: StemId, routing: StemRoutingMap):
   if (stem === "drums") return null;
   const program = song.instruments?.[stem]?.gmProgram ?? routing[stem].gmProgram;
   return program === undefined || program === null ? null : clampProgram(program);
+}
+
+/** One `0x06` marker meta event per section occurrence, named the way the
+ *  `.rpp` export names its regions ("Verse", "Verse (2)").
+ *
+ *  Without these the `.mid` carries the parts, tempo and meter but says
+ *  nothing about the arrangement — and for a DAW whose only door is
+ *  File > Import MIDI (Logic, for one) that is the difference between
+ *  "five tracks of notes" and "a song you can navigate". Markers are
+ *  meta events, so a DAW that ignores them loses nothing. */
+function markerEvents(spans: SectionSpan[]): RawMidiEvent[] {
+  const seen = new Map<string, number>();
+  return spans.map((span, index) => {
+    const base = span.section.name?.trim() || `Section ${index + 1}`;
+    const count = (seen.get(base) ?? 0) + 1;
+    seen.set(base, count);
+    const name = count > 1 ? `${base} (${count})` : base;
+    const text = Array.from(new TextEncoder().encode(name));
+    return {
+      tick: Math.max(0, Math.round(span.startBeat * TICKS_PER_QUARTER)),
+      data: [0xff, 0x06, ...writeVarLen(text.length), ...text],
+    };
+  });
+}
+
+/** One `0x58` time-signature meta event at every point the written meter
+ *  actually changes, walking real bars rather than trusting the song header.
+ *
+ *  4/4 is a property of a BAR, and a song is a sequence of bars whose lengths
+ *  the engine already knows (`barLengths`). Walking them means a 7/8 section,
+ *  a mixed-meter medley and a `meterMap` all export the meter a DAW needs to
+ *  draw the right bar lines — which is also what the section markers are
+ *  aligned to. */
+function timeSignatureEvents(spans: SectionSpan[], song: BlueprintSong): RawMidiEvent[] {
+  const events: RawMidiEvent[] = [];
+  let last: { numerator: number; denominator: number } | null = null;
+
+  const push = (beat: number, meter: { numerator: number; denominator: number }): void => {
+    if (last && last.numerator === meter.numerator && last.denominator === meter.denominator) return;
+    last = meter;
+    events.push({
+      tick: Math.max(0, Math.round(beat * TICKS_PER_QUARTER)),
+      data: [0xff, 0x58, 0x04, meter.numerator, Math.round(Math.log2(meter.denominator)), 24, 8],
+    });
+  };
+
+  if (spans.length === 0) {
+    // No sections yet: the header is all there is to say.
+    push(0, { numerator: song.timeSignatureNumerator, denominator: song.timeSignatureDenominator });
+    return events;
+  }
+
+  for (const span of spans) {
+    const lengths = barLengths(span.section);
+    if (lengths.length === 0) {
+      // A section with no bars (mid-edit) still declares a meter.
+      push(span.startBeat, meterForLength(beatsPerBar(span.section)));
+      continue;
+    }
+    let beat = span.startBeat;
+    for (const length of lengths) {
+      push(beat, meterForLength(length));
+      beat += length;
+    }
+  }
+  return events;
 }
 
 /** The instrument label to write for `stem`: the song's own name for it
@@ -534,12 +645,17 @@ export function songToMidi(song: BlueprintSong, routing: StemRoutingMap = GM_ROU
     data: [0xff, 0x51, 0x03, ...writeU24(microsPerQuarter)],
   });
 
-  // Time signature
-  const tsDenPower = Math.round(Math.log2(song.timeSignatureDenominator));
-  conductorEvents.push({
-    tick: 0,
-    data: [0xff, 0x58, 0x04, song.timeSignatureNumerator, tsDenPower, 24, 8],
-  });
+  // Time signature(s) — not just the song header's.
+  //
+  // Sections carry their own meter and may change it bar by bar
+  // (`meterMap`), so one event at tick 0 LIES for anything in an odd meter:
+  // a 7/8 tune exported as 4/4, with the DAW's bar lines disagreeing with the
+  // music and with the cue points every other adapter derives from the same
+  // spans. Emit a 0x58 wherever the written meter actually changes.
+  conductorEvents.push(...timeSignatureEvents(spans, song));
+
+  // Section markers — the arrangement, in the only place a `.mid` can say it.
+  conductorEvents.push(...markerEvents(spans));
 
   // Key signature
   const { sharps, major } = keySignature(song);

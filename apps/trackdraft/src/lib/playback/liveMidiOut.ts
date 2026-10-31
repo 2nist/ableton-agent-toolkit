@@ -2,6 +2,7 @@ import { sectionSpans } from "../arrangement";
 import { planChordStem, planBassStem, planDrumStem, planDrumCcStem, type MidiNote } from "../midiExport";
 import { planColorStem } from "../colorStem";
 import { planMelodyStem } from "../melody/melodyStem";
+import { channelToIndex, pitchToWire, velocityToWire } from "../midi/wire";
 import { LIVE_ROUTING, STEM_IDS, clampChannel, type StemId, type StemRoutingMap } from "../stems";
 import type { BlueprintSong } from "../../types/blueprint";
 
@@ -94,11 +95,10 @@ export async function resolveStemOutputs(
  *  before hitting Play. Note on, then note off ~300ms later, both
  *  future-timestamped so they dispatch on time even if the tab is busy. */
 export function sendTestNote(output: MIDIOutput, channel: number, pitch = 60, velocity = 100): void {
-  const ch = Math.max(0, Math.min(15, channel - 1));
+  const ch = channelToIndex(channel);
   const now = performance.now() + 50;
-  const p = Math.max(0, Math.min(127, Math.round(pitch)));
-  const v = Math.max(1, Math.min(127, Math.round(velocity)));
-  output.send([0x90 | ch, p, v], now);
+  const p = pitchToWire(pitch);
+  output.send([0x90 | ch, p, velocityToWire(velocity)], now);
   output.send([0x80 | ch, p, 0], now + 300);
 }
 
@@ -344,6 +344,13 @@ class LiveMidiScheduler {
     return this.synced ? this.clock : null;
   }
 
+  /** The clock the current schedule is timed from, whether external or the
+   *  app's own — null when nothing is running. MIDI clock out follows this so
+   *  the ticks and the notes share one anchor. */
+  get runningClock(): SchedulerClock | null {
+    return this.timerId !== null ? this.clock : null;
+  }
+
   private tick(): void {
     if (!this.clock) return;
     const pos = this.clock.position();
@@ -433,9 +440,9 @@ class LiveMidiScheduler {
     // Calibrated latency shifts both ends together, so note lengths are
     // untouched — only when the whole stream lands.
     const onAtMs = scheduledAtMs + this.latencyMs;
-    const ch = Math.max(0, Math.min(15, channel - 1)); // MIDI wire format is 0-based
-    const pitch = Math.max(0, Math.min(127, Math.round(note.pitch)));
-    const velocity = Math.max(1, Math.min(127, Math.round(note.velocity)));
+    const ch = channelToIndex(channel); // MIDI wire format is 0-based
+    const pitch = pitchToWire(note.pitch);
+    const velocity = velocityToWire(note.velocity);
     const offAtMs = onAtMs + Math.max(0.02, note.duration) * this.secPerBeat * 1000;
 
     output.send([0x90 | ch, pitch, velocity], onAtMs);
@@ -446,7 +453,7 @@ class LiveMidiScheduler {
     if (!c.output || !this.clock) return;
     const at = this.clock.timeAt(atBeat);
     if (at === null) return;
-    const ch = Math.max(0, Math.min(15, c.channel - 1));
+    const ch = channelToIndex(c.channel);
     c.output.send(
       [0xb0 | ch, Math.max(0, Math.min(127, Math.round(c.cc))), Math.max(0, Math.min(127, Math.round(c.value)))],
       at + this.latencyMs,

@@ -41,7 +41,10 @@ describe("preview routing", () => {
     useMidiSettingsStore.setState({ midiOutputId: "", stemOutputs: {} });
   });
 
-  it("auditions a chord through the chords stem's port when the master is off", async () => {
+  // These import the whole preview graph (music theory, progression engine,
+  // drum library) on first use — seconds of module work that a loaded CI
+  // worker can stretch past the default timeout.
+  it("auditions a chord through the chords stem's port when the master is off", { timeout: 20_000 }, async () => {
     const { previewChord } = await import("./previewMidi");
     await previewChord({ root: "C", quality: "maj" }, 200);
 
@@ -49,7 +52,7 @@ describe("preview routing", () => {
     expect(drumPort.sent.length).toBe(0);
   });
 
-  it("auditions a drum hit through the drums stem's port", async () => {
+  it("auditions a drum hit through the drums stem's port", { timeout: 20_000 }, async () => {
     const { auditionDrumHit } = await import("./previewMidi");
     await auditionDrumHit("kick");
 
@@ -57,7 +60,7 @@ describe("preview routing", () => {
     expect(chordPort.sent.length).toBe(0);
   });
 
-  it("stays silent when neither the stem nor the master has a port", async () => {
+  it("stays silent when neither the stem nor the master has a port", { timeout: 20_000 }, async () => {
     useMidiSettingsStore.setState({ midiOutputId: "", stemOutputs: {} });
     const { previewChord, auditionDrumHit } = await import("./previewMidi");
     await previewChord({ root: "C", quality: "maj" }, 200);

@@ -1,5 +1,5 @@
 import { euclidOnsetSteps } from "@drum/library";
-import { usePalette } from "../../../theme/palette";
+import { usePalette, withAlpha } from "../../../theme/palette";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 /**
@@ -78,14 +78,14 @@ export default function SelectionPad({
           chips, necklace and hit targets all grow together */}
       <g transform={`translate(${panelX} ${panelY}) scale(${PAD_SCALE}) translate(${-panelX} ${-panelY})`}>
       {/* panel — background only; everything interactive sits on top */}
-      <rect x={panelX} y={panelY} width={PAD_PANEL_W} height={PAD_PANEL_H} rx={6} fill="rgba(11,13,17,0.9)" stroke={P.track} strokeOpacity={0.4} strokeWidth={1} pointerEvents="none" />
+      <rect x={panelX} y={panelY} width={PAD_PANEL_W} height={PAD_PANEL_H} rx={6} fill={withAlpha(P.deep, 0.9)} stroke={P.track} strokeOpacity={0.4} strokeWidth={1} pointerEvents="none" />
 
       {/* mode buttons — part of the same cluster */}
       {(["euclid", "motion"] as const).map((m, i) => (
         <g key={m} onClick={() => onMode(m)} onPointerDown={(e) => e.stopPropagation()} style={{ cursor: "pointer" }}>
           <rect
             x={panelX + 78} y={panelY + 10 + i * 24} width={64} height={16} rx={3}
-            fill={mode === m ? "rgba(232,181,74,0.14)" : P.deep}
+            fill={mode === m ? withAlpha(P.track, 0.14) : P.deep}
             stroke={mode === m ? P.track : P.grid} strokeWidth={1}
           />
           <text

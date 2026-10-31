@@ -4,6 +4,8 @@ import { useSongStore } from "../../store/songStore";
 import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 import { getSongTransport } from "../../lib/playback/songTransport";
 import { getLiveMidiScheduler, getMidiOutput, resolveStemOutputs } from "../../lib/playback/liveMidiOut";
+import { streamOptions } from "../../lib/playback/transportControl";
+import { useDawTargetStore } from "../../store/dawTargetStore";
 import { sectionSpans } from "../../lib/arrangement";
 import { updateSection } from "../../lib/sections";
 import { MelodyRecorder, rawNotesToBeats, midiToNoteName } from "../../lib/melody/recorder";
@@ -122,25 +124,36 @@ export default function MelodyView() {
    *  plus (when a MIDI port is selected) the live scheduler that streams
    *  every stem, now including the Melody channel. `startBeat` seeks
    *  playback to a beat (e.g. a section's start); `loop` loops that beat
-   *  region so a section repeats while the user records it. */
+   *  region so a section repeats while the user records it.
+   *
+   *  Ports are resolved BEFORE the transport starts and the scheduler gets
+   *  the same `streamOptions` every other surface builds, so the backing
+   *  track you record against is calibrated (and render-offset) exactly like
+   *  normal playback and like the export. */
   async function startPlayback(startBeat = 0, loop: { start: number; end: number } | null = null) {
     const transport = getSongTransport();
-    transport.play(
-      song,
-      loop ? { startBeat, loopStart: loop.start, loopEnd: loop.end } : { startBeat },
-    );
-    const stemOutputs = await resolveStemOutputs(useMidiSettingsStore.getState().stemOutputs);
-    const output = midiOutputId ? await getMidiOutput(midiOutputId) : null;
+    const target = useDawTargetStore.getState().target;
+    const region = loop ? { startBeat, loopStart: loop.start, loopEnd: loop.end } : { startBeat };
+    // Ports first (same anchor rule as playSong), and a browser without Web
+    // MIDI or with access denied resolves to "nothing routed" rather than
+    // throwing — the playhead must still start.
+    let stemOutputs: Awaited<ReturnType<typeof resolveStemOutputs>> = {};
+    let output: Awaited<ReturnType<typeof getMidiOutput>> = null;
+    try {
+      [stemOutputs, output] = await Promise.all([
+        resolveStemOutputs(useMidiSettingsStore.getState().stemOutputs),
+        midiOutputId ? getMidiOutput(midiOutputId) : Promise.resolve(null),
+      ]);
+    } catch {
+      stemOutputs = {};
+      output = null;
+    }
+    transport.play(song, region);
     if (output || Object.keys(stemOutputs).length > 0) {
-      getLiveMidiScheduler().start(
-        song,
-        output,
-        midiRouting,
-        {
-          ...(loop ? { startBeat, loopStart: loop.start, loopEnd: loop.end } : { startBeat }),
-          stemOutputs,
-        },
-      );
+      getLiveMidiScheduler().start(song, output, midiRouting, {
+        ...streamOptions(target, region),
+        stemOutputs,
+      });
     }
   }
 
@@ -262,10 +275,11 @@ export default function MelodyView() {
         await startPlayback(looping ? targetSpan.startBeat : startBeat, loopRegion);
       }
 
-      // Metronome click to help keep time.
+      // Metronome click to help keep time — accented on this section's
+      // downbeat, in its own meter.
       if (clickEnabled) {
         if (!clickTrackRef.current) clickTrackRef.current = new ClickTrack();
-        clickTrackRef.current.start();
+        clickTrackRef.current.start(beatsPerBar(targetSpan.section));
       }
 
       recordStartBeatRef.current = startBeat;

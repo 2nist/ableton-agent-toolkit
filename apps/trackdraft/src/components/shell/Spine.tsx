@@ -11,7 +11,8 @@ import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import IconBtn from "../common/IconBtn";
 import ImportAnalysisButton from "../drums/ImportAnalysisButton";
 import ThemeToggle from "../common/ThemeToggle";
-import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
+import { getSongTransport } from "../../lib/playback/songTransport";
+import { usePlayhead, usePlayheadFrames } from "../../hooks/usePlayhead";
 import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
 import { useSongStore } from "../../store/songStore";
 import { useDawTargetStore } from "../../store/dawTargetStore";
@@ -91,13 +92,28 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
   const id = songId ?? song.id;
-  const [tick, setTick] = useState<TransportTick | null>(null);
   const barPx = useTimeViewportStore((s) => s.scales.song);
   const setBarPx = (px: number) => useTimeViewportStore.getState().setScale("song", px);
   /** Auto-follow the playhead while playing; drops off on manual scroll. */
   const [follow, setFollow] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
   const [loopOn, setLoopOn] = useState(false);
+  /** A one-line, self-clearing transport message. Play used to fail without
+   *  a word when the saved Web MIDI port had gone (ids change on every
+   *  browser restart), which reads as a dead button. */
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function announce(message: string) {
+    setNotice(message);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 6000);
+  }
+  useEffect(
+    () => () => {
+      if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    },
+    [],
+  );
   /** Ruler-drawn loop region, in BARS (inclusive a..b). */
   const [region, setRegion] = useState<{ a: number; b: number } | null>(null);
   const [regionDraft, setRegionDraft] = useState<{ a: number; b: number } | null>(null);
@@ -140,18 +156,23 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   const updateCurrentSong = useSongStore((s) => s.updateCurrentSong);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  // The quantised playhead (a sixteenth). The playhead LINE does not use this
+  // — it is written straight to the DOM on every frame (see `usePlayheadFrames`
+  // below), so a smooth cursor costs no React work at all.
+  const tick = usePlayhead();
+  const transportPlaying = tick.isPlaying;
+
   useEffect(() => {
+    // Pause state and the loop/region teardown only need to run when the
+    // transport actually changes state, not sixty times a second.
     const transport = getSongTransport();
-    return transport.onTick((t) => {
-      setTick(t);
-      setIsPaused(transport.isPaused());
-      // A hard stop (not a pause) also drops the section loop + region.
-      if (!t.isPlaying && !transport.isPaused()) {
-        setLoopOn(false);
-        setRegion(null);
-      }
-    });
-  }, []);
+    setIsPaused(transport.isPaused());
+    // A hard stop (not a pause) also drops the section loop + region.
+    if (!transportPlaying && !transport.isPaused()) {
+      setLoopOn(false);
+      setRegion(null);
+    }
+  }, [transportPlaying]);
 
   // The timeline renders the DRAFT-resized song while a resize gesture is
   // live — a pure recompute per frame, no store writes, no undo spam.
@@ -175,18 +196,46 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
 
   // Playhead position — pixel-exact in bar space. Within a span, progress
   // maps to its BARS (bar-linear), so a 7/8 bar still spans `barPx`.
-  let playheadPx: number | null = null;
-  if (spans.length > 0 && tick && (tick.isPlaying || tick.beat > 0)) {
-    const span =
-      (liveIndex != null ? spans[liveIndex] : null) ??
-      spans.find((s) => tick.beat >= s.startBeat && tick.beat < s.startBeat + s.durationBeats) ??
-      null;
-    if (span) {
-      const frac =
-        span.durationBeats > 0 ? Math.max(0, Math.min(1, (tick.beat - span.startBeat) / span.durationBeats)) : 0;
-      playheadPx = (span.startBar + frac * span.bars) * barPx;
+  //
+  // Two readers want this and they want it differently: React wants the
+  // quantised position (below, for the paused/stopped case and for the first
+  // paint), and the animation wants it every frame. Both go through the same
+  // function, so they cannot disagree — the frame path just skips React.
+  const playheadPxAt = (beat: number): number | null => {
+    if (spans.length === 0) return null;
+    const span = spans.find((s) => beat >= s.startBeat && beat < s.startBeat + s.durationBeats) ?? null;
+    if (!span) return null;
+    const frac = span.durationBeats > 0 ? Math.max(0, Math.min(1, (beat - span.startBeat) / span.durationBeats)) : 0;
+    return (span.startBar + frac * span.bars) * barPx;
+  };
+  const playheadVisible = spans.length > 0 && (tick.isPlaying || tick.beat > 0);
+  const playheadPx = playheadVisible ? playheadPxAt(tick.beat) : null;
+
+  // The frame path reads the latest closure through refs (spans/barPx/follow
+  // all change under it: a resize draft reflows the timeline mid-playback).
+  const playheadMathRef = useRef(playheadPxAt);
+  playheadMathRef.current = playheadPxAt;
+  const followRef = useRef(follow);
+  followRef.current = follow;
+  const playheadElRef = useRef<HTMLDivElement | null>(null);
+
+  usePlayheadFrames((beat) => {
+    const el = playheadElRef.current;
+    if (!el) return;
+    const px = playheadMathRef.current(beat);
+    if (px == null) return;
+    // `transform`, not `left`: a compositor-only change, and no layout pass
+    // for every frame of a long song.
+    el.style.transform = `translateX(${px}px)`;
+
+    if (!followRef.current) return;
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const margin = 64;
+    if (px < scroller.scrollLeft + margin || px > scroller.scrollLeft + scroller.clientWidth - margin) {
+      scroller.scrollLeft = Math.max(0, px - scroller.clientWidth / 2);
     }
-  }
+  });
 
   // Bar · beat readout for the log sheet's tape counter. Derived from the same
   // absolute beat the playhead uses, through the section's meter map, so a
@@ -201,16 +250,8 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     return { bar: span.startBar + at.bar, beat: at.beatInBar };
   }, [tick, spans]);
 
-  // Auto-follow: keep the playhead inside a comfort band while playing.
-  useEffect(() => {
-    if (!follow || !tick?.isPlaying || playheadPx == null) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    const margin = 64;
-    if (playheadPx < el.scrollLeft + margin || playheadPx > el.scrollLeft + el.clientWidth - margin) {
-      el.scrollLeft = Math.max(0, playheadPx - el.clientWidth / 2);
-    }
-  }, [follow, tick?.isPlaying, playheadPx]);
+  // Auto-follow lives in the frame callback above — it only needs to run when
+  // the playhead actually moves, and that is exactly where it moved.
 
   // A different song is a different timeline: don't restore the previous
   // song's scroll position into it.
@@ -446,7 +487,10 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
   async function togglePlay() {
     if (tick?.isPlaying) return;
     setRegion(null); // a plain play is not the region loop
-    await playSong(song, target);
+    const started = await playSong(song, target);
+    if (!started) {
+      announce("That MIDI port isn't available any more — choose one in Settings › MIDI.");
+    }
   }
   function pausePlayback() {
     pauseSong();
@@ -467,6 +511,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     setRegion(null); // section loop and region loop are mutually exclusive
     const ok = await playSectionLoop(song, sectionId);
     if (ok) setLoopOn(true);
+    else announce("That MIDI port isn't available any more — choose one in Settings › MIDI.");
   }
 
   /** Bar index for a client X position, clamped to the song — CONTENT-space
@@ -672,6 +717,15 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           onClick={() => void toggleLoop()}
           icon="loop"
         />
+        {notice && (
+          <span
+            role="status"
+            className="shrink-0 max-w-[22rem] truncate text-[9px] text-danger"
+            title={notice}
+          >
+            {notice}
+          </span>
+        )}
         {handDrawn && (
           <>
             <span className="w-px h-3.5 bg-edge/80 mx-1 shrink-0" />
@@ -937,11 +991,18 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
               })}
             </div>
 
-            {/* Playhead — spans the ruler and the blocks. */}
+            {/* Playhead — spans the ruler and the blocks. Position is written
+                imperatively every frame (`transform`); React only owns whether
+                it exists at all. */}
             {playheadPx != null && (
               <div
+                ref={playheadElRef}
                 className="absolute top-0 bottom-0 w-px bg-accent pointer-events-none z-20"
-                style={{ left: playheadPx, boxShadow: `0 0 4px 1px ${P.track}` }}
+                style={{
+                  left: 0,
+                  transform: `translateX(${playheadPx}px)`,
+                  boxShadow: `0 0 4px 1px ${P.track}`,
+                }}
               />
             )}
           </div>

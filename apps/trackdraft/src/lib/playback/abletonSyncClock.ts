@@ -42,6 +42,26 @@ const AGREEMENT_RATIO = 1.1;
 const PLAUSIBLE_MIN_MS = 100; // 600bpm
 const PLAUSIBLE_MAX_MS = 2000; // 30bpm
 
+/** A position further than this from where the clock expected it is a seek
+ *  (or Live's loop wrapping), not drift — snap instead of slewing. */
+const RESYNC_BEATS = 0.5;
+
+/** Below this advance since the last position, a message is a SAMPLE of the
+ *  timeline rather than an announcement of a beat boundary. */
+const DENSE_STEP_BEATS = 0.5;
+
+/** How much of the remaining error one dense position sample corrects.
+ *
+ *  Hard-anchoring on every message is right for a sparse feed — one message
+ *  per beat IS the beat boundary, and trusting it exactly is what stops error
+ *  accumulating across beats. It is wrong for a dense one: at 30 Hz the
+ *  arrival jitter is imported thirty times a second, so a bridge with ±9 ms of
+ *  network jitter measured WORSE than the integer push it replaced
+ *  (p95 12.8 ms vs 10.2 ms — see `timing.test.ts`). Correcting a quarter per
+ *  sample is a first-order filter: it converges in a few samples and
+ *  attenuates message noise ~4×, which is what lets a dense feed help. */
+const SLEW_FACTOR = 0.25;
+
 /** Median of a small sample — the tempo estimate itself. */
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -60,9 +80,11 @@ export class AbletonSyncClock implements SchedulerClock {
   private heldSongBeat: number | null = null;
   private playing = false;
   private lastBeatValue: number | null = null;
-  /** Arrival time of the last new beat; null when there is no previous beat
-   *  to measure an interval against (first message, or across a pause). */
-  private lastBeatAtMs: number | null = null;
+  /** Where the last tempo sample started: a position plus the wall time it
+   *  arrived. A sample is taken once the master has advanced a WHOLE beat
+   *  from here, so one beat yields one sample whether the bridge sent one
+   *  integer beat or thirty float positions. */
+  private tempoRef: { beat: number; atMs: number } | null = null;
   /** Per-beat intervals measured from Live's messages; median is the rate.
    *  Seeded from the song's bpm, which is only a guess until Live answers. */
   private beatMsSamples: number[] = [];
@@ -115,7 +137,7 @@ export class AbletonSyncClock implements SchedulerClock {
     this.playing = false;
     this.heldSongBeat = null;
     this.lastBeatValue = null;
-    this.lastBeatAtMs = null;
+    this.tempoRef = null;
     this.beatMsSamples = [];
   }
 
@@ -135,7 +157,7 @@ export class AbletonSyncClock implements SchedulerClock {
       this.anchor = null;
       // The next message won't be one beat after the last one (the gap spans
       // the pause) — don't let it pollute the measured tempo.
-      this.lastBeatAtMs = null;
+      this.tempoRef = null;
       if (wasPlaying) this.notify();
       return;
     }
@@ -143,15 +165,32 @@ export class AbletonSyncClock implements SchedulerClock {
     const wasPlaying = this.playing;
     this.playing = true;
 
-    const isNewBeat = beat !== this.lastBeatValue;
-    if (isNewBeat) this.measureTempo(beat, now);
+    const previousBeat = this.lastBeatValue;
+    const isNewBeat = beat !== previousBeat;
+    if (isNewBeat) {
+      this.lastBeatValue = beat;
+      this.measureTempo(beat, now);
+    }
 
     const beatOffset = this.song.beatOffset ?? 0;
     if (isNewBeat) {
-      // A beat boundary just crossed — hard re-anchor. This is the line that
-      // stops drift: whatever the interpolation accumulated is discarded
-      // every beat rather than carried into the next one.
-      this.anchor = { songBeat: Math.max(0, beat - beatOffset), atMs: now };
+      // The master just said where it is. Correct the anchor — all the way
+      // for a first position or a real jump, a quarter of the way otherwise,
+      // so a dense feed smooths instead of shaking (see SLEW_FACTOR).
+      const target = Math.max(0, beat - beatOffset);
+      // A message announcing a new whole beat is a beat boundary: trust it
+      // exactly. Anything closer together than that is a sample of the
+      // timeline, and gets filtered (see SLEW_FACTOR).
+      const advance = previousBeat === null ? Infinity : beat - previousBeat;
+      const dense = advance > 0 && advance < DENSE_STEP_BEATS;
+      const predicted = this.anchor
+        ? this.anchor.songBeat + (now - this.anchor.atMs) / this.msPerBeat
+        : null;
+      if (!dense || predicted === null || Math.abs(target - predicted) > RESYNC_BEATS) {
+        this.anchor = { songBeat: target, atMs: now };
+      } else {
+        this.anchor = { songBeat: predicted + (target - predicted) * SLEW_FACTOR, atMs: now };
+      }
     } else if (this.anchor === null) {
       // Nothing fresh to anchor to: either resuming mid-beat (continue from
       // the frozen position) or the first thing we've heard (use the last
@@ -164,21 +203,30 @@ export class AbletonSyncClock implements SchedulerClock {
     if (isNewBeat || !wasPlaying) this.notify();
   }
 
-  /** Measure the interval this beat arrived after the previous one and fold
-   *  it into the rate. Uses the *beat count* between messages, not just the
-   *  elapsed time, so a skipped message reads as one long beat rather than
-   *  poisoning the estimate. */
+  /** Fold a position into the tempo estimate.
+   *
+   *  One sample per WHOLE beat advanced — so a bridge that pushes one integer
+   *  beat per beat and a bridge that pushes thirty float positions a second
+   *  both produce one sample per beat, and a skipped message still reads as
+   *  one long beat rather than poisoning the estimate. */
   private measureTempo(beat: number, now: number): void {
-    const previousBeat = this.lastBeatValue;
-    const sinceMs = this.lastBeatAtMs;
-    this.lastBeatValue = beat;
-    this.lastBeatAtMs = now;
-    if (previousBeat === null || sinceMs === null) return;
+    const ref = this.tempoRef;
+    if (ref === null) {
+      this.tempoRef = { beat, atMs: now };
+      return;
+    }
 
-    const beats = beat - previousBeat;
-    // Backwards (a rewind, or Live's loop wrapping) says nothing about tempo.
-    if (beats < 1) return;
-    const perBeat = (now - sinceMs) / beats;
+    const beats = beat - ref.beat;
+    if (beats <= 0) {
+      // Backwards (a rewind, or Live's loop wrapping) says nothing about
+      // tempo — and the reference has to move, or every later sample would be
+      // measured across the wrap.
+      this.tempoRef = { beat, atMs: now };
+      return;
+    }
+    if (beats < 1) return; // not a whole beat yet — keep the reference
+    const perBeat = (now - ref.atMs) / beats;
+    this.tempoRef = { beat, atMs: now };
     if (perBeat < PLAUSIBLE_MIN_MS || perBeat > PLAUSIBLE_MAX_MS) return;
 
     this.beatMsSamples.push(perBeat);

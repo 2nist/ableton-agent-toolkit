@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { drumPocket, pocketSummary, buildEuclideanOutline, twoThreeCellCounts } from "@drum/library";
 import { beatsPerBar, type BlueprintSection } from "../../../types/blueprint";
-import { usePalette } from "../../../theme/palette";
+import { usePalette, withAlpha } from "../../../theme/palette";
 
 /**
  * GROOVE-AS-GLUE — the drums' pocket, made visible and clickable.
@@ -82,7 +82,7 @@ export default function GrooveGlue({
       style={{
         borderColor: on ? P.track : P.grid,
         color: on ? P.track : P.label,
-        background: on ? "rgba(232,181,74,0.14)" : "transparent",
+        background: on ? withAlpha(P.track, 0.14) : "transparent",
       }}
     >
       {label}
@@ -102,7 +102,7 @@ export default function GrooveGlue({
         style={{
           borderColor: active ? P.track : P.grid,
           color: active ? P.track : P.label,
-          background: active ? "rgba(232,181,74,0.12)" : "transparent",
+          background: active ? withAlpha(P.track, 0.12) : "transparent",
         }}
       >
         <span aria-hidden>⛓</span>

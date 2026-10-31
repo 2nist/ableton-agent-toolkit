@@ -94,6 +94,9 @@ class SongTransport {
   private tickListeners = new Set<(tick: TransportTick) => void>();
   /** Guard + queue for `emit` — see its doc. */
   private emitting = false;
+  /** Throttle state for the cross-window post — see `post`. */
+  private lastPostAt = 0;
+  private lastPostedPlaying = false;
   private emitQueue: TransportTick[] = [];
   private abletonUnsub: (() => void) | null = null;
   /** The clock following Live in this mode — owned here (not by the MIDI
@@ -436,11 +439,30 @@ class SongTransport {
             reportTickListenerError(error);
           }
         }
-        this.getChannel().postMessage(next);
+        this.post(next);
       }
     } finally {
       this.emitting = false;
     }
+  }
+
+  /**
+   * Forward one tick to the other windows.
+   *
+   * Every subscriber in THIS page reads `onTick` (or the quantised playhead
+   * store) directly; the channel exists for the lyric/chord popout, which is a
+   * separate window that re-renders on every message it receives. Ten
+   * structured clones a second is more than that window can show, and sixty
+   * was pure cost — but a change of play STATE always goes, so a popout can
+   * never miss a stop or a start and sit there looking like it is playing.
+   */
+  private post(tick: TransportTick): void {
+    const now = performance.now();
+    const stateChange = tick.isPlaying !== this.lastPostedPlaying;
+    if (!stateChange && now - this.lastPostAt < 100) return;
+    this.lastPostAt = now;
+    this.lastPostedPlaying = tick.isPlaying;
+    this.getChannel().postMessage(tick);
   }
 }
 

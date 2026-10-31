@@ -11,7 +11,9 @@
  */
 
 import { useSongStore } from "../../store/songStore";
+import { useDawTargetStore } from "../../store/dawTargetStore";
 import { getSongTransport } from "./songTransport";
+import { playSong, stopSong } from "./transportControl";
 import { getAbletonClock } from "./abletonClock";
 import type { BlueprintSong } from "../../types/blueprint";
 import type { ChordQuality, ScaleType } from "@music-theory/core";
@@ -84,13 +86,19 @@ function handleEncoder(target: EncoderTarget, rawValue: number, song: BlueprintS
   const delta = Math.sign(dir);
   if (delta === 0) return;
 
+  // A physical encoder produces dozens of CCs per twist. Committing each
+  // one as its own undo step evicted the whole history in a single
+  // gesture, so encoders edit transiently (ONE undo per twist).
   const store = useSongStore.getState();
+  /** Every detent of THIS control folds into one undo step. */
+  const edit = (updater: Parameters<typeof store.updateCurrentSongTransient>[0]) =>
+    store.updateCurrentSongTransient(updater, `encoder:${target}`);
 
   switch (target) {
     case "scale_root": {
       const idx = NOTE_NAMES.indexOf(song.key);
       const next = NOTE_NAMES[rotateIndex(idx >= 0 ? idx : 0, NOTE_NAMES.length, delta)]!;
-      store.updateCurrentSong((s) => ({ ...s, key: next }));
+      edit((s) => ({ ...s, key: next }));
       // Push to Ableton when the bridge is connected.
       getAbletonClock().sendCommand("/live/song/set/root_note", [next]);
       break;
@@ -98,7 +106,7 @@ function handleEncoder(target: EncoderTarget, rawValue: number, song: BlueprintS
     case "scale_type": {
       const idx = SCALE_TYPES.indexOf(song.scale);
       const next = SCALE_TYPES[rotateIndex(idx >= 0 ? idx : 0, SCALE_TYPES.length, delta)]!;
-      store.updateCurrentSong((s) => ({ ...s, scale: next }));
+      edit((s) => ({ ...s, scale: next }));
       getAbletonClock().sendCommand("/live/song/set/scale_name", [next]);
       break;
     }
@@ -115,7 +123,7 @@ function handleEncoder(target: EncoderTarget, rawValue: number, song: BlueprintS
       if (!chord) return;
       const qIdx = CHORD_QUALITIES.indexOf(chord.quality);
       const nextQuality = CHORD_QUALITIES[rotateIndex(qIdx >= 0 ? qIdx : 0, CHORD_QUALITIES.length, delta)]!;
-      store.updateCurrentSong((s) => ({
+      edit((s) => ({
         ...s,
         sections: s.sections.map((sec) =>
           sec.id === section.id
@@ -140,7 +148,7 @@ function handleEncoder(target: EncoderTarget, rawValue: number, song: BlueprintS
     }
     case "tempo": {
       const bpm = Math.min(300, Math.max(20, song.bpm + delta));
-      store.updateCurrentSong((s) => ({ ...s, bpm }));
+      edit((s) => ({ ...s, bpm }));
       getAbletonClock().sendCommand("/live/song/set/tempo", [bpm]);
       break;
     }
@@ -148,7 +156,7 @@ function handleEncoder(target: EncoderTarget, rawValue: number, song: BlueprintS
       const curVelocity = song.sections[0]?.velocity ?? "mf";
       const vIdx = VELOCITY_PRESETS.indexOf(curVelocity);
       const next = VELOCITY_PRESETS[rotateIndex(vIdx >= 0 ? vIdx : 4, VELOCITY_PRESETS.length, delta)]!;
-      store.updateCurrentSong((s) => ({
+      edit((s) => ({
         ...s,
         sections: s.sections.map((sec) => ({ ...sec, velocity: next })),
       }));
@@ -166,11 +174,15 @@ function handleDisplayButton(index: number, song: BlueprintSong) {
 
   switch (index) {
     case 2: {
-      // Toggle transport playback.
+      // Toggle transport playback through the SAME control the on-screen
+      // Play button uses. Calling `transport.play()` directly meant the
+      // hardware button produced a silent playhead with no MIDI stream, and
+      // did nothing at all under the Live target (where `play()` refuses
+      // because Live owns the transport).
       if (transport.getIsPlaying()) {
-        transport.stop();
+        stopSong();
       } else {
-        transport.play(song);
+        void playSong(song, useDawTargetStore.getState().target);
       }
       break;
     }

@@ -5,7 +5,7 @@ import { beatsPerBarOf } from "../../../lib/timeline/beatMap";
 import type { BlueprintSection, DrumBlockFx } from "../../../types/blueprint";
 import type { LaneHits } from "../../../lib/timeline/drumLaneHits";
 import { DRUM_LANES, laneColor } from "../laneStyle";
-import { usePalette } from "../../../theme/palette";
+import { usePalette, withAlpha } from "../../../theme/palette";
 import { EuclidRing, FxPanel, MotionRing, VelocityPanel } from "./SelectionDisplays";
 import { euclidBlocksFor, fxBlocksFor, fxForLanes, motionBlockFor, motionLabelFor, upsertModeBlocks } from "./selectionMath";
 import type { VelocityOp } from "./velocityOps";
@@ -285,7 +285,7 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
               {/* selection band */}
               <rect
                 x={selX1} y={rowTop(loLane)} width={Math.max(2, selX2 - selX1)} height={(hiLane - loLane + 1) * ROW_H}
-                fill="rgba(232,181,74,0.06)" stroke={P.track} strokeOpacity={0.55} strokeWidth={1.2} strokeDasharray="5 4"
+                fill={withAlpha(P.track, 0.06)} stroke={P.track} strokeOpacity={0.55} strokeWidth={1.2} strokeDasharray="5 4"
               />
 
               {/* lanes */}

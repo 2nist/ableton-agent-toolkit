@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
@@ -12,7 +12,7 @@ import {
 import { sectionSpans, spanIndexForTick } from "../../lib/arrangement";
 import { useRoleStyle } from "../../lib/roleColors";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
-import { getSongTransport, type TransportTick } from "../../lib/playback/songTransport";
+import { usePlayhead } from "../../hooks/usePlayhead";
 import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import {
   drumFamilyLabel,
@@ -70,13 +70,10 @@ export default function StudioConsole({ song }: { song: BlueprintSong }) {
   const id = songId ?? song.id;
   const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
   const spans = useMemo(() => sectionSpans(song), [song]);
-  const [tick, setTick] = useState<TransportTick | null>(null);
-
-  useEffect(() => {
-    const transport = getSongTransport();
-    const unsubscribe = transport.onTick(setTick);
-    return () => unsubscribe();
-  }, []);
+  // Quantised to a sixteenth: every readout here (chord under the playhead,
+  // section progress) is grid-quantised, so the raw 60 fps tick was paying
+  // for precision nothing displayed.
+  const tick = usePlayhead();
 
   // Follow the playhead while playing; otherwise the section the user
   // clicked (the Bend-panel target); first section as a last resort.

@@ -30,6 +30,7 @@ function emit(now: number, state: Partial<AbletonClockState>): void {
     connected: true,
     abletonBeat: null,
     isPlaying: true,
+    liveError: null,
     ...state,
   });
 }
@@ -190,5 +191,55 @@ describe("AbletonSyncClock", () => {
 
     expect(bridge.listener).toBeNull();
     expect(clock.position()).toBeNull();
+  });
+
+  /**
+   * Dense position feeds (a 30 Hz `get/beat` poll, or AbletonOSC's fractional
+   * `song_time`) carry arrival jitter with every sample. Trusting each one
+   * measured WORSE than the integer push it replaces (p95 12.8 ms vs 10.2 ms
+   * in timing.test.ts), so dense samples are corrected a quarter at a time and
+   * sparse beat boundaries are still trusted exactly.
+   */
+  it("filters a dense sample instead of jumping to it", () => {
+    const clock = createAbletonSyncClock({ bpm: 120 }); // 500 ms/beat
+    emit(0, { abletonBeat: 10 });
+
+    // 100 ms later the master reports 0.1 beats earlier than this clock
+    // predicts (10.2). A quarter of the 0.1-beat error is corrected.
+    emit(100, { abletonBeat: 10.1 });
+    expect(clock.position()).toBeCloseTo(10.2 - 0.1 * 0.25, 6);
+    // …and NOT the reported 10.1: that would hand the scheduler the jitter.
+    expect(clock.position()).toBeGreaterThan(10.1);
+  });
+
+  it("converges on a dense feed instead of tracking it verbatim", () => {
+    const clock = createAbletonSyncClock({ bpm: 120 });
+    emit(0, { abletonBeat: 10 });
+    const sample = (i: number) => emit(i * 50, { abletonBeat: (i * 50 - 20) / 500 + 10 });
+
+    sample(1);
+    const firstError = Math.abs(clock.position()! - ((1 * 50 - 20) / 500 + 10));
+    for (let i = 2; i <= 10; i += 1) sample(i);
+    const settled = Math.abs(clock.position()! - ((10 * 50 - 20) / 500 + 10));
+
+    // A first-order filter: most of the error gone within a few samples, and
+    // the rest inside 5 ms — without the per-sample noise a hard anchor would
+    // have handed the scheduler.
+    expect(settled).toBeLessThan(firstError / 2);
+    expect(settled).toBeLessThan(0.01);
+  });
+
+  it("still snaps when the master genuinely jumps", () => {
+    const clock = createAbletonSyncClock({ bpm: 120 });
+    emit(0, { abletonBeat: 10 });
+    emit(100, { abletonBeat: 30 }); // a seek, or Live's loop wrapping
+    expect(clock.position()).toBe(30);
+  });
+
+  it("still trusts a beat boundary exactly", () => {
+    const clock = createAbletonSyncClock({ bpm: 120 });
+    emit(0, { abletonBeat: 10 });
+    emit(490, { abletonBeat: 11 }); // arrived 10 ms early, but it IS beat 11
+    expect(clock.position()).toBe(11);
   });
 });

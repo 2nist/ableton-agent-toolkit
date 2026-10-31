@@ -6,12 +6,18 @@ import type { BlueprintSong } from "../../types/blueprint";
 const midiState = vi.hoisted(() => ({
   midiOutputId: "port" as string,
   outputAvailable: true,
+  /** Simulates a browser WITH Web MIDI (Chrome/Electron). */
+  midiSupported: true,
   stemOutputs: {} as Record<string, string>,
 }));
 const draftState = vi.hoisted(() => ({
   sectionId: "s1" as string | null,
   section: null as { id: string; drumPattern: string } | null,
 }));
+
+/** Everything a start touches, in the order it ran — the contract under test
+ *  is that ports are resolved BEFORE either clock starts (see playSong). */
+const midiIo = vi.hoisted(() => ({ getMidiOutput: vi.fn() }));
 
 const transport = vi.hoisted(() => ({
   getIsPlaying: vi.fn(() => true),
@@ -48,7 +54,8 @@ const abletonSync = vi.hoisted(() => ({
 vi.mock("./songTransport", () => ({ getSongTransport: () => transport }));
 vi.mock("./liveMidiOut", () => ({
   getLiveMidiScheduler: () => scheduler,
-  getMidiOutput: async () => (midiState.outputAvailable ? output : null),
+  getMidiOutput: midiIo.getMidiOutput,
+  midiOutSupported: () => midiState.midiSupported,
   resolveStemOutputs: async (overrides: Record<string, string> | undefined) => {
     const out: Record<string, unknown> = {};
     for (const [stem, id] of Object.entries(overrides ?? {})) {
@@ -63,6 +70,11 @@ vi.mock("./abletonSyncClock", () => ({
     return abletonSync.clock;
   },
 }));
+/** Port lookup stands in for `navigator.requestMIDIAccess` — it is the async
+ *  step whose position in the start sequence is the bug being pinned. */
+midiIo.getMidiOutput.mockImplementation(async () =>
+  midiState.outputAvailable ? output : null,
+);
 /** The bridge connection: only its "am I connected" answer and the tempo
  *  command matter here. */
 const ableton = vi.hoisted(() => ({
@@ -120,6 +132,7 @@ describe("playSong under the Ableton clock", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     midiState.midiOutputId = "port";
+    midiState.midiSupported = true;
     midiState.outputAvailable = true;
     midiState.stemOutputs = {};
     scheduler.activeClock = null;
@@ -170,6 +183,7 @@ describe("playSong into another DAW", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     midiState.midiOutputId = "port";
+    midiState.midiSupported = true;
     midiState.outputAvailable = true;
     midiState.stemOutputs = {};
     ableton.connected = false;
@@ -191,6 +205,39 @@ describe("playSong into another DAW", () => {
 
     expect(scheduler.start).toHaveBeenCalledTimes(1);
     expect(ableton.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it("resolves the port before starting either clock, so the notes and the playhead share one anchor", async () => {
+    // The scheduler anchors its own clock at `start()`. Starting the
+    // playhead first and awaiting `requestMIDIAccess` after it put the
+    // streamed notes that await behind the cursor — first play (permission
+    // prompt) was the worst case, and every start drifted a little.
+    await playSong(song(), "other");
+
+    const resolveAt = midiIo.getMidiOutput.mock.invocationCallOrder[0]!;
+    const playAt = transport.play.mock.invocationCallOrder[0]!;
+    const startAt = scheduler.start.mock.invocationCallOrder[0]!;
+    expect(resolveAt).toBeLessThan(playAt);
+    expect(playAt).toBeLessThan(startAt);
+  });
+
+  it("never starts a playhead when the port is stale", async () => {
+    midiState.outputAvailable = false;
+    expect(await playSong(song(), "other")).toBe(false);
+    expect(transport.play).not.toHaveBeenCalled();
+    expect(transport.stop).not.toHaveBeenCalled(); // never started, nothing to roll back
+    midiState.outputAvailable = true;
+  });
+
+  it("still starts the playhead where Web MIDI isn't available at all", async () => {
+    // Safari/Firefox/iPad: `requestMIDIAccess` doesn't exist. Resolving the
+    // port happens BEFORE the transport now, so a throw here would have
+    // turned "no MIDI" into "Play does nothing".
+    midiState.midiSupported = false;
+    expect(await playSong(song(), "other")).toBe(true);
+    expect(transport.play).toHaveBeenCalledTimes(1);
+    expect(scheduler.start).not.toHaveBeenCalled();
+    midiState.midiSupported = true;
   });
 
   it("sends nothing at all for File only", async () => {
@@ -227,6 +274,7 @@ describe("liveRefresh", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     midiState.midiOutputId = "port";
+    midiState.midiSupported = true;
     midiState.outputAvailable = true;
     midiState.stemOutputs = {};
     draftState.sectionId = null;
@@ -330,6 +378,7 @@ describe("playSectionLoop", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     midiState.midiOutputId = "port";
+    midiState.midiSupported = true;
     midiState.stemOutputs = {};
   });
 

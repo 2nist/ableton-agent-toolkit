@@ -13,7 +13,8 @@ import { audioToBlueprintSong, textToBlueprintSong } from "./parseAudio";
 import { parseMcgillJcrd, parseRockCorpusJcrd } from "./parseJcrd";
 import { parseMozartJcrd } from "./parseMozart";
 import { parseChartFileName, parseCorpusFileName } from "./corpusFileName";
-import { searchLrclib, parseSyncedLyrics } from "../youtube";
+import { searchLrclib } from "../youtube";
+import { attachLyrics } from "../lyrics/attachLyrics";
 import { buildLyricDocument, detectRepeatedBlocks, assignLinesToSection, mergeLinesIntoSection } from "../lyrics/sectionize";
 import { alsToBlueprintSong, alsXmlToBlueprintSong } from "./parseAbleton";
 import { musicXmlToBlueprintSong } from "./parseMusicXml";
@@ -35,8 +36,6 @@ function isMozartJcrd(raw: unknown): boolean {
 export type ParseResult =
   | { ok: true; song: BlueprintSong }
   | { ok: false; error: string };
-
-const INSTRUMENTAL_ROLES = new Set(["solo", "intro", "outro", "breakdown"]);
 
 /**
  * Auto-detect sections from repeated lyric patterns in synced lyrics.
@@ -153,46 +152,37 @@ async function enrichWithLrclib(song: BlueprintSong): Promise<BlueprintSong> {
     const lrclib = await searchLrclib(song.title, song.artist);
     if (!lrclib?.syncedLyrics) return song;
 
-    const timeline = parseSyncedLyrics(lrclib.syncedLyrics, song.bpm);
-    if (timeline.length === 0) return song;
+    // Same placement the Lyrics dock's hand search uses, so an automatic
+    // attach and a user-picked one can't disagree about where a line lands —
+    // including the per-section meter, which this used to get wrong.
+    const placed = attachLyrics(
+      song,
+      { syncedLyrics: lrclib.syncedLyrics, plainLyrics: lrclib.plainLyrics },
+      lrclib.id
+        ? {
+            provider: "lrclib",
+            id: lrclib.id,
+            trackName: lrclib.trackName,
+            artistName: lrclib.artistName,
+            albumName: lrclib.albumName,
+            duration: lrclib.duration,
+            chosenByUser: false,
+          }
+        : undefined,
+    );
+    if (!placed.attached) return song;
 
-    const fullText = lrclib.plainLyrics || timeline.map((t) => t.text).join("\n");
-    const lyricsTimeline = timeline.map((t) => ({ text: t.text, startBeat: t.startBeat }));
-
-    if (song.sections.length > 0) {
-      let cumulativeBeats = 0;
-      for (const section of song.sections) {
-        const sectionBeats = section.bars * section.timeSignatureNumerator;
-        const endBeat = cumulativeBeats + sectionBeats;
-        if (INSTRUMENTAL_ROLES.has(section.role)) { cumulativeBeats = endBeat; continue; }
-        const sectionLyrics = lyricsTimeline.filter((l) => l.startBeat >= cumulativeBeats && l.startBeat < endBeat);
-        section.lyrics = sectionLyrics.length > 0 ? sectionLyrics.map((l) => l.text).join("\n") : undefined;
-        section.lyricsTimeline = sectionLyrics.length > 0 ? sectionLyrics : undefined;
-        cumulativeBeats = endBeat;
-      }
-    } else {
-      const sectionId = crypto.randomUUID();
-      song.sections = [{
-        id: sectionId,
-        name: "Full Song",
-        role: "verse",
-        bars: Math.max(16, Math.ceil(timeline.length / 4)),
-        chords: [],
-        beatsPerChord: 4,
-        velocity: "mf",
-        timeSignatureNumerator: song.timeSignatureNumerator,
-        timeSignatureDenPower: Math.log2(song.timeSignatureDenominator),
-        lyrics: fullText,
-        lyricsTimeline,
-      }];
-      song.arrangement = [{ sectionId, repeats: 1 }];
+    let attached = placed.song;
+    if (attached.provenance) {
+      attached.provenance.warnings = [...(attached.provenance.warnings ?? []), "LRCLIB synced lyrics attached"];
     }
-    if (song.provenance) song.provenance.warnings = [...(song.provenance.warnings ?? []), "LRCLIB synced lyrics attached"];
 
     // After attaching synced lyrics, attempt chorus detection from repeated patterns
-    song = autoSectionFromRepeats(song);
-  } catch {}
-  return song;
+    attached = autoSectionFromRepeats(attached);
+    return attached;
+  } catch {
+    return song;
+  }
 }
 
 /** How to read a picked file's bytes — the ONLY difference between the dev

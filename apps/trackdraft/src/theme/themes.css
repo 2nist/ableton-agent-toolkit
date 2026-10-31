@@ -100,7 +100,10 @@
 
   /* Static grain: a background image drawn once, never a live filter — the
      paper must not re-rasterise with the transport. */
-  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E");
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+  /* Transparent second pass, not a darker palette value: colored surfaces
+     keep their measured fill while the pencil remains visible over them. */
+  --pencil-hatch: repeating-linear-gradient(45deg, rgb(var(--c-ink) / 0.3) 0 1.2px, transparent 1.2px 3.8px);
   --scroll-thumb: rgb(var(--c-ink) / 0.22);
   --scroll-thumb-hover: rgb(var(--c-ink) / 0.38);
 
@@ -279,6 +282,12 @@ body {
 [data-theme="logsheet"] .ledger--margin {
   box-shadow: inset 20px 0 0 -19px var(--ledger-margin);
   padding-left: 8px;
+}
+
+/* Transparent pencil strokes over a color chip/card. Callers must use
+   backgroundColor rather than the background shorthand so this layer survives. */
+[data-theme="logsheet"] .pencil-fill {
+  background-image: var(--pencil-hatch);
 }
 
 /* A hand-drawn step cell: uneven corners, a sub-degree lean, and a second

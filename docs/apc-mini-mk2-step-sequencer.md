@@ -440,13 +440,21 @@ sensitive) is a cheap add-on on top.
   `clockWorker` + lookahead pattern (like `songTransport.ts`). BPM is pushed to Live
   via `/live/song/set/tempo` and mirrored back; patterns stay in time with Live to
   within one beat's handoff.
-- **Follow Live transport (phase-locked):** extend `osc-bridge` to also relay a
-  fine-grained song position. `osc-bridge` today subscribes only to
-  `/live/song/start_listen/beat` (integer, once per beat) and `is_playing` — not
-  enough for 16th-note steps. Add a listener on `/live/song/start_listen/song_time`
-  (fractional beats) to `protocol.ts`/`bridge.ts`, and have the step clock phase-lock
-  to it while still scheduling note-on/off through the lookahead worker. This is the
-  change that makes "the sequencer follows where Live's playhead is" feel right.
+- **Follow Live transport (phase-locked):** the bridge now also relays a
+  fine-grained song position (done 2026-10-30). It probes
+  `/live/song/get/beat` — which answers with fractional beats — and, if it
+  answers, polls it at 30 Hz while a client is connected
+  (`packages/osc-bridge/src/beatPoll.ts`; `BEAT_POLL_MS=0` restores the old
+  integer-only feed). The receiving clock (`abletonSyncClock.ts`) trusts a
+  sparse beat boundary exactly but *filters* dense samples (a first-order slew),
+  because hard-anchoring on each 30 Hz sample imported arrival jitter thirty
+  times a second and measured worse than the integer push it replaced.
+  Measured note-placement error with `apps/trackdraft/src/lib/playback/timing
+  .test.ts`: p95 3.0 ms → 1.9 ms on a loopback bridge, 10.2 ms → 9.3 ms with
+  ±9 ms of jitter. An AbletonOSC that rejects `get/beat` falls back to the
+  integer feed automatically. The alternative (a listener on
+  `/live/song/start_listen/song_time`, which older notes here suggested) would
+  reach the same place without polling, if a build supports it.
 
 ### 6.2 Double-handling of the faders (important)
 

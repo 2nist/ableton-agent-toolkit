@@ -12,6 +12,7 @@ import { getAbletonClock } from "./abletonClock";
 import {
   getLiveMidiScheduler,
   getMidiOutput,
+  midiOutSupported,
   resolveStemOutputs,
   type LiveSchedulerOptions,
   type SchedulerClock,
@@ -24,6 +25,7 @@ import {
   useDawTargetStore,
   type DawTarget,
 } from "../../store/dawTargetStore";
+import { createWallClock, getMidiClockSender } from "./midiClockOut";
 import { sectionSpans } from "../arrangement";
 import type { StemId, StemRoutingMap } from "../stems";
 import type { BlueprintSong } from "../../types/blueprint";
@@ -31,8 +33,12 @@ import type { BlueprintSong } from "../../types/blueprint";
 /** Scheduler options every start needs from the current settings and the
  *  active target: the calibrated output latency, and whether the song's
  *  render offset applies (everything but Live — Live's clock carries its own
- *  calibration in `beatOffset`). */
-function streamOptions(target: DawTarget, extra: LiveSchedulerOptions = {}): LiveSchedulerOptions {
+ *  calibration in `beatOffset`).
+ *
+ *  Exported because the melody recorder starts the scheduler itself; it must
+ *  build the same options or the take is recorded against a backing track
+ *  that is calibrated differently from every other surface. */
+export function streamOptions(target: DawTarget, extra: LiveSchedulerOptions = {}): LiveSchedulerOptions {
   const { latencyMs } = useMidiSettingsStore.getState();
   return { ...extra, outputLatencyMs: latencyMs, applyOutputOffset: targetUsesAppClock(target) };
 }
@@ -51,21 +57,68 @@ interface ResolvedOutputs {
   /** A master was selected but its port no longer exists. */
   stale: boolean;
   stemOutputs: Partial<Record<StemId, MIDIOutput>>;
+  /** The MIDI clock port, when one is selected and exists. */
+  clockOut: MIDIOutput | null;
 }
 
 async function resolveOutputs(): Promise<ResolvedOutputs> {
-  const { midiOutputId, stemOutputs } = useMidiSettingsStore.getState();
-  const master = midiOutputId ? await getMidiOutput(midiOutputId) : null;
-  return {
-    master,
-    stale: midiOutputId !== "" && master === null,
-    stemOutputs: await resolveStemOutputs(stemOutputs),
-  };
+  const { midiOutputId, stemOutputs, clockOutId } = useMidiSettingsStore.getState();
+  // No Web MIDI at all (Safari/Firefox/iPad) is an ordinary state, not an
+  // error — and this now runs BEFORE the transport starts, so letting
+  // `requestMIDIAccess` throw would stop playback entirely instead of just
+  // leaving the stream silent.
+  if (!midiOutSupported()) return { master: null, stale: false, stemOutputs: {}, clockOut: null };
+  try {
+    const master = midiOutputId ? await getMidiOutput(midiOutputId) : null;
+    return {
+      master,
+      stale: midiOutputId !== "" && master === null,
+      stemOutputs: await resolveStemOutputs(stemOutputs),
+      clockOut: clockOutId ? await getMidiOutput(clockOutId) : null,
+    };
+  } catch {
+    // Access denied / revoked mid-session: behave like "nothing routed".
+    return { master: null, stale: false, stemOutputs: {}, clockOut: null };
+  }
 }
 
 /** Anything to play into — a master port, or at least one hardware stem. */
 function hasAnyOutput(outputs: ResolvedOutputs): boolean {
   return outputs.master !== null || Object.keys(outputs.stemOutputs).length > 0;
+}
+
+/**
+ * Start MIDI clock out for this transport, or stop it when no clock port is
+ * selected. The ticks follow the SAME clock the notes are timed from, so the
+ * receiving DAW's grid and the streamed parts can't describe two timelines;
+ * a clock-only rig (port selected, nothing streamed) falls back to the app's
+ * own wall clock at the song's tempo.
+ *
+ * Call it *after* the scheduler starts, so `runningClock` exists, and pass the
+ * same `startBeat` the transport started from — a receiver counts from zero
+ * when it hears Start, so a launch offset would put its bar 1 at our beat 0.
+ */
+function startClockOut(song: BlueprintSong, startBeat: number, output: MIDIOutput | null): void {
+  const sender = getMidiClockSender();
+  const { latencyMs } = useMidiSettingsStore.getState();
+  if (!output) {
+    sender.stop();
+    return;
+  }
+  sender.start({
+    output,
+    clock: getLiveMidiScheduler().runningClock ?? createWallClock(song.bpm, startBeat),
+    bpm: song.bpm,
+    startBeat,
+    latencyMs,
+  });
+}
+
+/** Follow a re-based note clock (the next-bar live re-plan) without telling
+ *  the receiver to restart. */
+function reanchorClockOut(startBeat: number): void {
+  const clock = getLiveMidiScheduler().runningClock;
+  if (clock) getMidiClockSender().reanchor(clock, startBeat);
 }
 
 /** Bring Live's timeline to the song's tempo before streaming into it.
@@ -95,8 +148,14 @@ function alignLiveTempo(song: BlueprintSong): void {
  *   the paused beat; otherwise plays from the top.
  * - File only: the app's own clock and nothing on the wire.
  *
+ * Ports are resolved BEFORE the transport starts. The scheduler anchors its
+ * own clock at the moment `start()` runs, so starting the playhead first and
+ * awaiting `navigator.requestMIDIAccess` after it put the two clocks — and
+ * therefore the notes and the cursor — that await apart. Every entry point
+ * here resolves first, then starts, so one `t0` covers both.
+ *
  * Returns true when playback started (or needs no MIDI port); false when a
- * selected port was stale and playback was rolled back — the caller can
+ * selected port was stale and playback never started — the caller can
  * surface that (e.g. alert) rather than fail silently.
  */
 export async function playSong(song: BlueprintSong, target: DawTarget): Promise<boolean> {
@@ -105,10 +164,13 @@ export async function playSong(song: BlueprintSong, target: DawTarget): Promise<
   clearStagedRefresh();
 
   if (target === "live") {
-    transport.syncToAbleton(song);
+    // Live is the master here, so TrackDraft sends no clock — and a sender
+    // left running from another target would fight Live's transport.
+    getMidiClockSender().stop();
     // Follow-only when nothing is routed (the previous behavior).
     const { routing } = useMidiSettingsStore.getState();
     const outputs = await resolveOutputs();
+    transport.syncToAbleton(song);
     // A stale port still leaves the playhead following Live, which is
     // useful on its own — but the streaming the user asked for isn't
     // happening, so say so rather than pretend it started.
@@ -123,31 +185,43 @@ export async function playSong(song: BlueprintSong, target: DawTarget): Promise<
     return true;
   }
 
+  if (!targetStreamsMidi(target)) {
+    // File only — silent playhead. MIDI clock out still applies: syncing a
+    // DAW's transport to ours without streaming a single note is a legitimate
+    // rig (and the cheapest way to try clock sync).
+    const outputs = await resolveOutputs();
+    transport.play(song);
+    startClockOut(song, 0, outputs.clockOut);
+    return true;
+  }
+
   // Grab the paused beat BEFORE play() consumes it, so the live MIDI
   // scheduler can resume from the same place as the playhead.
   const resumeBeat = transport.isPaused() ? transport.getPausedBeat() : null;
-  transport.play(song); // resumes from resumeBeat when set
-  if (!targetStreamsMidi(target)) return true; // File only — silent playhead
   const { routing } = useMidiSettingsStore.getState();
   const outputs = await resolveOutputs();
   if (outputs.stale) {
     // The saved port id is stale (Web MIDI ids change between browser
-    // restarts) — don't leave a silent playhead running while the user
-    // thinks it's about to sound.
-    transport.stop();
+    // restarts) — don't start a silent playhead the user thinks is about to
+    // sound.
     return false;
   }
-  if (!hasAnyOutput(outputs)) return true; // nothing routed → silent playhead, as before
   alignLiveTempo(song);
-  getLiveMidiScheduler().start(
-    song,
-    outputs.master,
-    routing,
-    streamOptions(target, {
-      ...(resumeBeat != null ? { startBeat: resumeBeat } : {}),
-      stemOutputs: outputs.stemOutputs,
-    }),
-  );
+  transport.play(song); // resumes from resumeBeat when set
+  // Nothing routed means a silent playhead, as before — but MIDI clock out
+  // doesn't need a note stream, so a clock-only rig still starts counting.
+  if (hasAnyOutput(outputs)) {
+    getLiveMidiScheduler().start(
+      song,
+      outputs.master,
+      routing,
+      streamOptions(target, {
+        ...(resumeBeat != null ? { startBeat: resumeBeat } : {}),
+        stemOutputs: outputs.stemOutputs,
+      }),
+    );
+  }
+  startClockOut(song, resumeBeat ?? 0, outputs.clockOut);
   return true;
 }
 
@@ -164,17 +238,24 @@ export async function seekTo(song: BlueprintSong, target: DawTarget, beat: numbe
   const transport = getSongTransport();
   clearStagedRefresh();
   const to = Math.max(0, beat);
-  transport.play(song, { startBeat: to });
-  if (!targetStreamsMidi(target)) return;
+  if (!targetStreamsMidi(target)) {
+    transport.play(song, { startBeat: to });
+    return;
+  }
+  // Resolve before starting, so the stream and the playhead share one
+  // anchor (see playSong).
   const { routing } = useMidiSettingsStore.getState();
   const outputs = await resolveOutputs();
-  if (!hasAnyOutput(outputs)) return; // the seek itself still lands
-  getLiveMidiScheduler().start(
-    song,
-    outputs.master,
-    routing,
-    streamOptions(target, { startBeat: to, stemOutputs: outputs.stemOutputs }),
-  );
+  transport.play(song, { startBeat: to });
+  if (hasAnyOutput(outputs)) {
+    getLiveMidiScheduler().start(
+      song,
+      outputs.master,
+      routing,
+      streamOptions(target, { startBeat: to, stemOutputs: outputs.stemOutputs }),
+    );
+  }
+  startClockOut(song, to, outputs.clockOut); // the seek itself still lands
 }
 
 /** Pause playback — freeze the playhead (and silence the live MIDI out);
@@ -183,6 +264,7 @@ export function pauseSong(): void {
   clearStagedRefresh();
   getSongTransport().pause();
   getLiveMidiScheduler().pause();
+  getMidiClockSender().stop();
 }
 
 /** Stop playback — the transport and any live MIDI scheduling; resets to
@@ -191,6 +273,7 @@ export function stopSong(): void {
   clearStagedRefresh();
   getSongTransport().stop();
   getLiveMidiScheduler().stop();
+  getMidiClockSender().stop();
 }
 
 /**
@@ -283,6 +366,7 @@ export async function liveRefresh(song: BlueprintSong): Promise<void> {
     if (s.clock) opts.clock = s.clock;
     opts.stemOutputs = s.stemOutputs;
     scheduler.start(withDrumDraft(s.song), s.output, s.routing, opts);
+    reanchorClockOut(s.atBeat);
   });
 }
 
@@ -303,21 +387,25 @@ export async function playSectionLoop(song: BlueprintSong, sectionId: string): P
     loopStart: span.startBeat,
     loopEnd: span.startBeat + span.durationBeats,
   };
+  const target = useDawTargetStore.getState().target;
+  // Resolve before starting, so the stream and the playhead share one
+  // anchor (see playSong).
+  const { routing } = useMidiSettingsStore.getState();
+  const outputs = targetStreamsMidi(target) ? await resolveOutputs() : null;
+  if (outputs?.stale) return false;
   // forceLoop: loop even when the section spans the whole song — "loop this
   // part until I turn it off" means forever, not until the song ends.
   transport.play(song, { ...opts, forceLoop: true });
-  const target = useDawTargetStore.getState().target;
-  if (!targetStreamsMidi(target)) return true;
-  const { routing } = useMidiSettingsStore.getState();
-  const outputs = await resolveOutputs();
-  if (outputs.stale) return false;
-  if (!hasAnyOutput(outputs)) return true;
-  getLiveMidiScheduler().start(
-    song,
-    outputs.master,
-    routing,
-    streamOptions(target, { ...opts, stemOutputs: outputs.stemOutputs }),
-  );
+  if (!outputs) return true;
+  if (hasAnyOutput(outputs)) {
+    getLiveMidiScheduler().start(
+      song,
+      outputs.master,
+      routing,
+      streamOptions(target, { ...opts, stemOutputs: outputs.stemOutputs }),
+    );
+  }
+  startClockOut(song, span.startBeat, outputs.clockOut);
   return true;
 }
 
@@ -327,18 +415,25 @@ export async function resumeUnlooped(song: BlueprintSong): Promise<void> {
   transport.clockSource = "internal";
   clearStagedRefresh();
   const beat = transport.getBeat();
-  transport.play(song, { startBeat: beat });
   const target = useDawTargetStore.getState().target;
-  if (!targetStreamsMidi(target)) return;
+  if (!targetStreamsMidi(target)) {
+    transport.play(song, { startBeat: beat });
+    return;
+  }
+  // Resolve before starting, so the stream and the playhead share one
+  // anchor (see playSong).
   const { routing } = useMidiSettingsStore.getState();
   const outputs = await resolveOutputs();
-  if (!hasAnyOutput(outputs)) return;
-  getLiveMidiScheduler().start(
-    song,
-    outputs.master,
-    routing,
-    streamOptions(target, { startBeat: beat, stemOutputs: outputs.stemOutputs }),
-  );
+  transport.play(song, { startBeat: beat });
+  if (hasAnyOutput(outputs)) {
+    getLiveMidiScheduler().start(
+      song,
+      outputs.master,
+      routing,
+      streamOptions(target, { startBeat: beat, stemOutputs: outputs.stemOutputs }),
+    );
+  }
+  startClockOut(song, beat, outputs.clockOut);
 }
 
 /**
@@ -355,18 +450,25 @@ export async function playLoopRegion(song: BlueprintSong, startBeat: number, end
   const from = Math.max(0, startBeat);
   const to = Math.max(from + 0.25, endBeat);
   const opts = { startBeat: from, loopStart: from, loopEnd: to };
-  transport.play(song, { ...opts, forceLoop: true });
   const target = useDawTargetStore.getState().target;
-  if (!targetStreamsMidi(target)) return;
+  if (!targetStreamsMidi(target)) {
+    transport.play(song, { ...opts, forceLoop: true });
+    return;
+  }
+  // Resolve before starting, so the stream and the playhead share one
+  // anchor (see playSong).
   const { routing } = useMidiSettingsStore.getState();
   const outputs = await resolveOutputs();
-  if (!hasAnyOutput(outputs)) return;
-  getLiveMidiScheduler().start(
-    song,
-    outputs.master,
-    routing,
-    streamOptions(target, { ...opts, stemOutputs: outputs.stemOutputs }),
-  );
+  transport.play(song, { ...opts, forceLoop: true });
+  if (hasAnyOutput(outputs)) {
+    getLiveMidiScheduler().start(
+      song,
+      outputs.master,
+      routing,
+      streamOptions(target, { ...opts, stemOutputs: outputs.stemOutputs }),
+    );
+  }
+  startClockOut(song, from, outputs.clockOut);
 }
 
 /** Overlay the drums editor's live draft (if one exists) onto the song, so
