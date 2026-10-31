@@ -41,28 +41,28 @@ export default function RhymeSuggestions({ vocabulary }: RhymeSuggestionsProps) 
         }}
       >
         <input
-          className="flex-1 bg-panelAlt border border-edge rounded px-2 py-1 text-sm"
+          className="min-w-0 flex-1 rounded border border-edge bg-panelAlt px-2 py-1 text-2xs"
           placeholder="Word to rhyme…"
           value={word}
           onChange={(e) => setWord(e.target.value)}
         />
-        <button type="submit" className="text-sm border border-edge rounded px-3 py-1 hover:bg-panelAlt">
+        <button type="submit" className="shrink-0 rounded border border-edge px-2 py-1 text-2xs hover:bg-panelAlt">
           {loading ? "…" : "Find"}
         </button>
       </form>
       {offline && (
-        <p className="text-[10px] text-inkMuted">
+        <p className="text-2xs text-inkMuted">
           Datamuse unreachable — showing a rough local guess (matching endings, not real phonetics) from this song's lyrics only.
         </p>
       )}
       <div className="flex flex-wrap gap-1">
         {results.map((r) => (
-          <span key={r.word} className="text-xs bg-panelAlt rounded px-2 py-0.5">
+          <span key={r.word} className="rounded bg-panelAlt px-1.5 py-0.5 text-2xs">
             {r.word}
           </span>
         ))}
         {results.length === 0 && !loading && (
-          <p className="text-xs text-inkMuted">No suggestions yet.</p>
+          <p className="text-2xs text-inkMuted">No suggestions yet.</p>
         )}
       </div>
     </div>

@@ -9,7 +9,7 @@ function Field({ label, value }: { label: string; value?: string }) {
   if (!value) return null;
   return (
     <div>
-      <p className="text-[10px] text-inkMuted uppercase tracking-wide">{label}</p>
+      <p className="text-2xs text-inkMuted uppercase tracking-wide">{label}</p>
       <p className="text-xs leading-5">{value}</p>
     </div>
   );

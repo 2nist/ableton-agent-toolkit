@@ -30,6 +30,16 @@ const RAW = {
   detected: { harmony: 0.99, tension: 0.08 },
   provenance: { source: "audio-extract", extractedAt: "2026-09-21T00:00:00Z", warnings: ["low confidence"] },
   blueprintAcks: { "sec-1:candidate": true },
+  lyricsSource: {
+    provider: "lrclib",
+    id: 4242,
+    trackName: "Layla",
+    artistName: "Derek and the Dominos",
+    albumName: "Layla and Other Assorted Love Songs",
+    duration: 425,
+    attachedAt: "2026-09-21T00:00:00Z",
+    chosenByUser: true,
+  },
   createdAt: "2026-09-01T00:00:00Z",
 };
 
@@ -49,6 +59,20 @@ describe("parseImportedSong — whitelist rebuild", () => {
     expect(song.outputOffsetBeats).toBe(-1);
     expect(song.provenance?.source).toBe("audio-extract");
     expect(song.blueprintAcks).toEqual({ "sec-1:candidate": true });
+    // Which record the words came from — dropped once already by this same
+    // whitelist, which made the lyrics search forget what it had attached.
+    expect(song.lyricsSource).toEqual(RAW.lyricsSource);
+  });
+
+  it("drops a malformed lyrics source rather than trusting it", () => {
+    const noId = parseImportedSong({ ...RAW, lyricsSource: { provider: "lrclib", trackName: "Layla" } });
+    expect(noId.lyricsSource).toBeUndefined();
+
+    const wrongProvider = parseImportedSong({
+      ...RAW,
+      lyricsSource: { ...RAW.lyricsSource, provider: "genius" },
+    });
+    expect(wrongProvider.lyricsSource).toBeUndefined();
   });
 
   it("still rejects invalid files and leaves absent fields absent", () => {

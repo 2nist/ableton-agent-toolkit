@@ -34,7 +34,7 @@ function plural(n: number, word: string): string {
 function SparkField({ label, text }: { label: string; text: string }) {
   return (
     <div>
-      <p className="text-[10px] text-inkMuted uppercase tracking-wide">{label}</p>
+      <p className="text-2xs text-inkMuted uppercase tracking-wide">{label}</p>
       <p className="text-xs leading-4">{text}</p>
     </div>
   );
@@ -62,7 +62,7 @@ function LineRow({ line, analysis, schemeLetter, report }: {
     .join(" · ");
 
   return (
-    <li className="text-[11px] leading-4">
+    <li className="text-xs leading-4">
       <div className="flex gap-2 items-baseline">
         <span className="flex-1 min-w-0 truncate" title={line}>
           {line.split(/(\s+)/).map((token, j) => {
@@ -88,7 +88,7 @@ function LineRow({ line, analysis, schemeLetter, report }: {
         </span>
       </div>
       {notes.length > 0 && (
-        <p className="text-[10px] text-inkMuted" title={detail}>
+        <p className="text-2xs text-inkMuted" title={detail}>
           ⚑ {notes.join(" · ")}
         </p>
       )}
@@ -195,7 +195,7 @@ export default function LyricsBriefPanel() {
         <ul className="space-y-1.5">
           {brief.prompts.map((prompt, i) => (
             <li key={`${prompt.kind}-${i}`} className="flex gap-2">
-              <span className="text-[9px] uppercase tracking-wide text-inkMuted w-14 shrink-0 pt-0.5">
+              <span className="text-3xs uppercase tracking-wide text-inkMuted w-14 shrink-0 pt-0.5">
                 {LABELS[prompt.kind]}
               </span>
               <span className="text-xs leading-4">{prompt.text}</span>
@@ -216,13 +216,13 @@ export default function LyricsBriefPanel() {
           </button>
         </div>
         <div>
-          <p className="text-[10px] text-inkMuted uppercase tracking-wide">
+          <p className="text-2xs text-inkMuted uppercase tracking-wide">
             Subject{spark.subject.own ? " · yours" : ""}
           </p>
           <p className="text-xs leading-4">{spark.subject.text}</p>
           {!spark.subject.own && (
             <button
-              className="text-[10px] text-inkMuted underline hover:text-ink"
+              className="text-2xs text-inkMuted underline hover:text-ink"
               onClick={() => bumpSubjectRoll(song.id)}
               title="The subject is song-level and sticky — shuffling here changes it for every section"
             >
@@ -237,7 +237,7 @@ export default function LyricsBriefPanel() {
           {(["section", "song"] as const).map((option) => (
             <button
               key={option}
-              className={`text-[10px] px-1.5 py-0.5 rounded border ${
+              className={`text-2xs px-1.5 py-0.5 rounded border ${
                 level === option ? "border-accent text-accent" : "border-edge text-inkMuted hover:text-ink"
               }`}
               onClick={() => setSparkLevel(activeSection.id, option)}
@@ -256,7 +256,7 @@ export default function LyricsBriefPanel() {
       <div className="border border-edge rounded bg-panel p-3 space-y-2">
         <div className="flex items-center justify-between">
           <TapeLabel as="p" size="md" className="text-xs text-inkMuted uppercase tracking-wide">Line check</TapeLabel>
-          {schemeText && <span className="font-mono text-[10px] text-inkMuted" title="Rhyme scheme">{schemeText}</span>}
+          {schemeText && <span className="font-mono text-2xs text-inkMuted" title="Rhyme scheme">{schemeText}</span>}
         </div>
         {sung.length === 0 ? (
           <p className="text-xs text-inkMuted">
@@ -281,9 +281,9 @@ export default function LyricsBriefPanel() {
             })}
           </ul>
         )}
-        {pending && <p className="text-[10px] text-inkMuted">Looking up pronunciations…</p>}
+        {pending && <p className="text-2xs text-inkMuted">Looking up pronunciations…</p>}
         {unknownWords.length > 0 && (
-          <p className="text-[10px] text-inkMuted">
+          <p className="text-2xs text-inkMuted">
             Guessed (not in the dictionary): <span className="text-ink">{unknownWords.join(", ")}</span> — dotted
             above; their stress is a guess.
           </p>

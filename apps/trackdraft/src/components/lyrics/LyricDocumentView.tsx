@@ -279,14 +279,14 @@ export default function LyricDocumentView({ song, onChange }: LyricDocumentViewP
     <div className="space-y-2">
       {repeatedBlocks.length > 0 && (
         <div className="border border-edge rounded bg-panel p-2 space-y-1">
-          <p className="text-[10px] text-inkMuted uppercase tracking-wide">Repeated lines detected</p>
+          <p className="text-2xs text-inkMuted uppercase tracking-wide">Repeated lines detected</p>
           {repeatedBlocks.slice(0, 3).map((block, i) => (
             <div key={i} className="flex items-center justify-between gap-2 text-xs">
               <span className="text-inkMuted truncate">
                 &ldquo;{block.normalizedText.split("\n")[0]}&hellip;&rdquo; &times; {block.occurrences.length}
               </span>
               <button
-                className="text-[10px] border border-edge rounded px-2 py-0.5 text-inkMuted hover:text-ink hover:bg-panelAlt whitespace-nowrap"
+                className="text-2xs border border-edge rounded px-2 py-0.5 text-inkMuted hover:text-ink hover:bg-panelAlt whitespace-nowrap"
                 onClick={() => applyBlockAsChorus(block.occurrences, "Chorus")}
               >
                 Mark as Chorus
@@ -298,11 +298,11 @@ export default function LyricDocumentView({ song, onChange }: LyricDocumentViewP
 
       {range != null && (
         <div className="flex items-center gap-1.5 flex-wrap border border-edge rounded bg-panel px-2 py-1.5">
-          <span className="text-[10px] text-inkMuted">
+          <span className="text-2xs text-inkMuted">
             {selectedCount} line{selectedCount === 1 ? "" : "s"} &rarr;
           </span>
           <select
-            className="bg-panelAlt border border-edge rounded text-[10px] px-1.5 py-0.5"
+            className="bg-panelAlt border border-edge rounded text-2xs px-1.5 py-0.5"
             value={moveTargetId}
             onChange={(e) => setMoveTargetId(e.target.value)}
           >
@@ -314,15 +314,15 @@ export default function LyricDocumentView({ song, onChange }: LyricDocumentViewP
             ))}
           </select>
           <button
-            className="text-[10px] border border-edge rounded px-2 py-0.5 text-inkMuted hover:text-ink disabled:opacity-30"
+            className="text-2xs border border-edge rounded px-2 py-0.5 text-inkMuted hover:text-ink disabled:opacity-30"
             disabled={!moveTargetId}
             onClick={handleMoveToSection}
           >
             Move
           </button>
-          <span className="text-[10px] text-inkMuted mx-0.5">|</span>
+          <span className="text-2xs text-inkMuted mx-0.5">|</span>
           <select
-            className="bg-panelAlt border border-edge rounded text-[10px] px-1.5 py-0.5"
+            className="bg-panelAlt border border-edge rounded text-2xs px-1.5 py-0.5"
             value={addRole}
             onChange={(e) => setAddRole(e.target.value as SectionRole)}
           >
@@ -333,7 +333,7 @@ export default function LyricDocumentView({ song, onChange }: LyricDocumentViewP
             ))}
           </select>
           <input
-            className="bg-panelAlt border border-edge rounded text-[10px] px-1.5 py-0.5 w-28"
+            className="bg-panelAlt border border-edge rounded text-2xs px-1.5 py-0.5 w-28"
             placeholder="Name"
             value={addName}
             onChange={(e) => setAddName(e.target.value)}
@@ -341,25 +341,25 @@ export default function LyricDocumentView({ song, onChange }: LyricDocumentViewP
               if (e.key === "Enter") handleAddSection();
             }}
           />
-          <button className="text-[10px] bg-accent text-accentInk rounded px-2 py-0.5 font-medium" onClick={handleAddSection}>
+          <button className="text-2xs bg-accent text-accentInk rounded px-2 py-0.5 font-medium" onClick={handleAddSection}>
             Add Section
           </button>
-          <span className="text-[10px] text-inkMuted mx-0.5">|</span>
+          <span className="text-2xs text-inkMuted mx-0.5">|</span>
           <button
-            className="text-[10px] border border-edge rounded px-2 py-0.5 text-inkMuted hover:text-ink"
+            className="text-2xs border border-edge rounded px-2 py-0.5 text-inkMuted hover:text-ink"
             title="Split the section so the first selected line starts a new one"
             onClick={handleSplitAtSelection}
           >
             Split
           </button>
           <button
-            className="text-[10px] border border-edge rounded px-2 py-0.5 text-inkMuted hover:text-ink"
+            className="text-2xs border border-edge rounded px-2 py-0.5 text-inkMuted hover:text-ink"
             title="Park these lines in the Unassigned tray"
             onClick={handleUnassign}
           >
             Unassign
           </button>
-          <button className="text-[10px] text-inkMuted hover:text-ink px-1" onClick={clearSelection}>
+          <button className="text-2xs text-inkMuted hover:text-ink px-1" onClick={clearSelection}>
             ✕
           </button>
         </div>
@@ -445,7 +445,7 @@ export default function LyricDocumentView({ song, onChange }: LyricDocumentViewP
             <button
               key={r}
               type="button"
-              className={`h-[22px] px-2 rounded-sm text-[10px] font-mono tracking-wide hover:brightness-125 ${
+              className={`h-[22px] px-2 rounded-sm text-2xs font-mono tracking-wide hover:brightness-125 ${
                 r === song.sections.find((s) => s.id === popover.sectionId)?.role ? "ring-1 ring-accent" : ""
               }`}
               style={{ background: roleStyle(r).bg, color: roleStyle(r).text }}
@@ -497,10 +497,10 @@ function TransitionPopover({ song, sectionId, auto, x, y, onSetModel, onSetBars,
 
   return (
     <div className="fixed z-50 w-48 rounded border border-edge bg-panel shadow-lg p-2 space-y-1.5" style={{ left: x, top: y }}>
-      <div className="text-[9px] uppercase tracking-wide text-inkMuted">Ending gesture</div>
+      <div className="text-3xs uppercase tracking-wide text-inkMuted">Ending gesture</div>
       <button
         type="button"
-        className={`w-full text-left text-[10px] px-1.5 py-1 rounded border ${
+        className={`w-full text-left text-2xs px-1.5 py-1 rounded border ${
           manual === null ? "border-accent text-accent" : "border-edge text-inkMuted hover:text-ink"
         }`}
         onClick={() => onSetModel(sectionId, null)}
@@ -512,7 +512,7 @@ function TransitionPopover({ song, sectionId, auto, x, y, onSetModel, onSetBars,
         <button
           key={m}
           type="button"
-          className={`w-full text-left text-[10px] px-1.5 py-1 rounded border ${
+          className={`w-full text-left text-2xs px-1.5 py-1 rounded border ${
             manual === m ? "border-edge bg-panelAlt" : "border-edge/60 hover:bg-panelAlt"
           }`}
           style={{ color: TRANSITION_COLOR[m] }}
@@ -523,7 +523,7 @@ function TransitionPopover({ song, sectionId, auto, x, y, onSetModel, onSetBars,
         </button>
       ))}
       {manual !== null && (
-        <div className="flex items-center gap-1 text-[10px] text-inkMuted">
+        <div className="flex items-center gap-1 text-2xs text-inkMuted">
           <span>over last</span>
           <button className="px-1 border border-edge rounded hover:text-ink" onClick={() => onSetBars(sectionId, manualBars - 1)}>
             −
@@ -537,7 +537,7 @@ function TransitionPopover({ song, sectionId, auto, x, y, onSetModel, onSetBars,
       )}
       <button
         type="button"
-        className="w-full text-left text-[10px] text-inkMuted hover:text-ink border-t border-edge/60 pt-1.5"
+        className="w-full text-left text-2xs text-inkMuted hover:text-ink border-t border-edge/60 pt-1.5"
         onClick={() => onOpenDrums(sectionId)}
         title="Pattern · Detour · Transition tools for this section in the right rail"
       >
@@ -635,15 +635,15 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
         )}
         {props.play && (
           <span
-            className="text-[9px] font-mono px-1 py-0.5 rounded border border-accent/50 text-accent whitespace-nowrap"
+            className="text-3xs font-mono px-1 py-0.5 rounded border border-accent/50 text-accent whitespace-nowrap"
             title={props.play.playing ? "Playing now" : "Playhead paused here — press play to resume"}
           >
             {props.play.playing ? "▶" : "⏸"}
             {props.play.passCount > 1 ? ` ${props.play.occurrenceIndex + 1}/${props.play.passCount}` : ""}
           </span>
         )}
-        {block.kind === "instrumental" && <span className="text-[9px] px-1 rounded border border-edge text-inkMuted/70">instrumental</span>}
-        {isUnassigned && <span className="text-[9px] px-1 rounded border border-dashed border-warn/40 text-warn/80">parked</span>}
+        {block.kind === "instrumental" && <span className="text-3xs px-1 rounded border border-edge text-inkMuted/70">instrumental</span>}
+        {isUnassigned && <span className="text-3xs px-1 rounded border border-dashed border-warn/40 text-warn/80">parked</span>}
         <span className="text-2xs text-inkMuted font-mono">
           {section.bars} bars · {section.beatsPerChord}/chord · {meter}
         </span>
@@ -665,7 +665,7 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
             section's authored progression */}
         {props.play?.chordLabel && (
           <button
-            className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-accent/60 text-accent hover:bg-accent/10 whitespace-nowrap"
+            className="text-2xs font-mono px-1.5 py-0.5 rounded border border-accent/60 text-accent hover:bg-accent/10 whitespace-nowrap"
             title="Sounding now — click to open this chord's harmony tools"
             onClick={() => {
               if (props.play?.chordId) props.onChordClick(section.id, props.play.chordId);
@@ -676,7 +676,7 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
         )}
         {/* harmony (hex) disclosure */}
         <button
-          className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+          className={`text-2xs font-mono px-1.5 py-0.5 rounded border ${
             props.hexOpen ? "border-accent/60 text-accent" : "border-edge text-inkMuted hover:text-ink"
           }`}
           title="Show this section's harmony — the hex walk and its chords"
@@ -686,7 +686,7 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
         </button>
         {/* transition chip — manual (solid) or role-driven auto (dashed) */}
         <button
-          className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+          className={`text-2xs font-mono px-1.5 py-0.5 rounded border ${
             manual !== null ? "border-edge" : "border-dashed border-edge/70"
           } ${shownModel ? "" : "opacity-60"}`}
           style={shownModel ? { color: TRANSITION_COLOR[shownModel] } : undefined}
@@ -719,7 +719,7 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
                   {section.chords.map((c) => (
                     <button
                       key={c.id}
-                      className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                      className={`text-2xs font-mono px-1.5 py-0.5 rounded border ${
                         props.play?.chordId === c.id
                           ? "border-accent/60 text-accent"
                           : "border-edge text-inkMuted hover:text-ink hover:border-accent/60"
@@ -732,13 +732,13 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
                     </button>
                   ))}
                 </div>
-                <p className="text-[9px] text-inkMuted/60 font-sans">
+                <p className="text-3xs text-inkMuted/60 font-sans">
                   {section.chords.length} chord{section.chords.length === 1 ? "" : "s"} · {harmonicRhythmNote(section.chords.length, section.bars)}
                 </p>
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-[10px] font-sans text-inkMuted">
+            <div className="flex items-center gap-2 text-2xs font-sans text-inkMuted">
               <span className="italic">No chords yet for “{section.name}”.</span>
               <button className="border border-edge rounded px-2 py-0.5 hover:text-ink" onClick={props.onOpenHarmony}>
                 Open Harmony &rarr;
@@ -750,7 +750,7 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
 
       {/* body */}
       {block.kind === "instrumental" ? (
-        <div className="px-2 py-1 italic opacity-60 text-[11px]" style={{ color: r.text }}>
+        <div className="px-2 py-1 italic opacity-60 text-xs" style={{ color: r.text }}>
           &mdash; {INSTRUMENTAL_LABEL[section.role] ?? `Instrumental ${section.role}`} &mdash;
         </div>
       ) : (
@@ -798,7 +798,7 @@ function SongTextBlockView(props: SongTextBlockViewProps) {
             );
           })}
           {isUnassigned && block.lines.length > 0 && (
-            <p className="px-2 pb-1 text-[9px] font-sans text-warn/70 italic">
+            <p className="px-2 pb-1 text-3xs font-sans text-warn/70 italic">
               Parked — select lines and Move, or Add Section, to file them into the form.
             </p>
           )}
@@ -831,7 +831,7 @@ function SplitHandle({ label, onSplit }: { label: string; onSplit: () => void })
       }}
     >
       <span className="absolute left-3 right-3 top-1/2 border-t border-dashed border-accent/60" />
-      <span className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 bg-panel px-1 text-[9px] text-accent font-sans">✂ split</span>
+      <span className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 bg-panel px-1 text-3xs text-accent font-sans">✂ split</span>
     </button>
   );
 }

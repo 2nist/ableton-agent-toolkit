@@ -999,6 +999,24 @@ export interface SavedBeatNote {
  */
 export type SongTables = Partial<Record<"colour" | "styles" | "transitions", unknown>>;
 
+/** The record a song's words were taken from. */
+export interface LyricsSourceRef {
+  /** Only LRCLIB today; the field is a union so another provider can be
+   *  added without reshaping saved songs. */
+  provider: "lrclib";
+  /** LRCLIB's record id — the stable handle, not the title. */
+  id: number;
+  trackName: string;
+  artistName?: string;
+  albumName?: string;
+  /** Seconds, as LRCLIB reports it. */
+  duration?: number;
+  /** When it was attached (ISO). */
+  attachedAt?: string;
+  /** True when a person picked this record, false when the importer did. */
+  chosenByUser?: boolean;
+}
+
 export interface BlueprintSong {
   id: string;
   title: string;
@@ -1083,6 +1101,14 @@ export interface BlueprintSong {
   suiteGroup?: SuiteGroup;
   alternates?: AlternateDraft[];
   status?: ProductionStatus;
+  /** Where the song's words came from, when they were not typed here.
+   *
+   *  Kept on the song (not in a settings blob) because it is a fact about
+   *  this song's content: it lets the lyrics search say "you already used
+   *  this one", and it makes a wrong pick reversible without guessing which
+   *  record the importer chose. Absent → nobody recorded a source (words
+   *  were typed, or came from a file). */
+  lyricsSource?: LyricsSourceRef;
   provenance?: Provenance;
 
   createdAt: string;

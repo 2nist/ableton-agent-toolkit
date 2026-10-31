@@ -22,6 +22,9 @@ export interface LyricsQuery {
 }
 
 export interface LyricsCandidate {
+  /** LRCLIB's own record id, when the candidate came from the API — the
+   *  stable key for deduping two queries that return the same record. */
+  id?: number;
   trackName: string;
   artistName?: string;
   duration?: number;
@@ -72,7 +75,7 @@ export function titleSimilarity(a: string, b: string): number {
 }
 
 /** An artist string that tells us nothing — corpora are full of these. */
-function isUnknownArtist(artist: string | undefined): boolean {
+export function isUnknownArtist(artist: string | undefined): boolean {
   if (!artist) return true;
   const normal = normalizeForMatch(artist);
   return (

@@ -210,6 +210,16 @@ export function parseImportedSong(
     narrative: (obj.narrative as BlueprintSong["narrative"]) ?? undefined,
     detected: (obj.detected as BlueprintSong["detected"]) ?? undefined,
     provenance: (obj.provenance as BlueprintSong["provenance"]) ?? undefined,
+    // Which record the words came from. Validated rather than trusted: a
+    // saved song with a malformed ref would make the lyrics search claim a
+    // record it never used, so the id and provider have to be sane.
+    lyricsSource:
+      obj.lyricsSource &&
+      typeof obj.lyricsSource === "object" &&
+      (obj.lyricsSource as BlueprintSong["lyricsSource"])!.provider === "lrclib" &&
+      typeof (obj.lyricsSource as BlueprintSong["lyricsSource"])!.id === "number"
+        ? (obj.lyricsSource as BlueprintSong["lyricsSource"])
+        : undefined,
     // Suggestion acknowledgments (mode-inference / one-shot cards) must
     // survive import too — same whitelist-drop class as bend/detected
     // above; without this a re-import re-asks questions the user already
