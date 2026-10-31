@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { readStorage, writeStorage } from "./storage";
+import { STORAGE_KEYS } from "../lib/persistence/keys";
 
 /** Which desk of the Harmony workspace is open. A desk is a *place* — it
  *  changes what the canvas is for, not which page you are on. */
@@ -45,7 +46,7 @@ interface HarmonyWorkspaceState {
   resetDisplay: () => void;
 }
 
-const STORAGE_KEY = "trackdraft-harmony-workspace";
+const STORAGE_KEY = STORAGE_KEYS.harmonyWorkspace.key;
 
 interface StoredShape {
   /** Bumped when a default changed in a way a stale value would contradict. */

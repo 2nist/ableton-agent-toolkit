@@ -1,8 +1,9 @@
 import { PALETTES, type HueSet, type VoiceColors } from "../../theme/palette";
 import { readStorage } from "../../store/storage";
 import { CSS_TOKENS, hexToChannels } from "./tokens";
+import { STORAGE_KEYS } from "../../lib/persistence/keys";
 
-export const EDITOR_STORAGE_KEY = "trackdraft-studio-log-workshop-v1";
+export const EDITOR_STORAGE_KEY = STORAGE_KEYS.studioLogWorkshop.key;
 export type FontRole = "printed" | "mechanical" | "written" | "marker";
 export type FontId = "courier" | "plex" | "reenie" | "marker";
 export const FONT_OPTIONS: Record<FontId, { name: string; stack: string; weights: string }> = {

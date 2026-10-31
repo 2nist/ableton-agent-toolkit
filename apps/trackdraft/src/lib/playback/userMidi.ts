@@ -17,6 +17,7 @@ import { playSong, stopSong } from "./transportControl";
 import { getAbletonClock } from "./abletonClock";
 import type { BlueprintSong } from "../../types/blueprint";
 import type { ChordQuality, ScaleType } from "@music-theory/core";
+import { SCALES } from "../scales";
 
 // ---------------------------------------------------------------------------
 // MIDI channel constants (USER_MODE_START_CHANNEL = 10, channels 10-17)
@@ -30,7 +31,7 @@ const USER_CHANNEL_COUNT = 8;
 // ---------------------------------------------------------------------------
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-const SCALE_TYPES: ScaleType[] = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
+const SCALE_TYPES: readonly ScaleType[] = SCALES;
 const CHORD_QUALITIES: ChordQuality[] = ["maj", "min", "dim", "aug", "7", "maj7", "min7", "m7b5", "sus2", "sus4"];
 const VELOCITY_PRESETS = ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"] as const;
 

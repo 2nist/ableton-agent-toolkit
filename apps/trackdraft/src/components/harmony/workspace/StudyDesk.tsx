@@ -23,6 +23,7 @@ export default function StudyDesk({
   analysis,
   selectedChordId,
   onSelectChord,
+  leading,
 }: HarmonyDeskProps) {
   const beatsPerBar = Math.max(1, Math.round(meanBeatsPerBar(section)));
   const songs = useSongStore((s) => s.songs);
@@ -50,6 +51,7 @@ export default function StudyDesk({
       <div className="min-w-0 space-y-3">
         <div className="rounded border border-edge bg-panel">
           <div className="flex items-center gap-2 border-b border-edge px-2 py-1.5">
+            {leading}
             <TapeLabel
               size="md"
               className="text-[10px] font-mono uppercase tracking-wider text-inkMuted"
@@ -72,7 +74,7 @@ export default function StudyDesk({
                       : "border-edge text-inkMuted hover:text-ink"
                   }`}
                 >
-                  {mode === "table" ? "Table" : "3D"}
+                  {mode === "table" ? "Table" : "Orbit"}
                 </button>
               ))}
             </div>

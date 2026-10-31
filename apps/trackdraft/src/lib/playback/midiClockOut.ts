@@ -21,6 +21,7 @@
  */
 
 import type { SchedulerClock } from "./liveMidiOut";
+import { secondsPerBeat } from "../time/clock";
 
 /** MIDI clock resolution, fixed by the specification. */
 export const MIDI_CLOCK_PPQ = 24;
@@ -58,7 +59,7 @@ export function firstTickAfter(fromTick: number): number {
  *  borrow one from — clock-only sync, where the DAW follows the app's
  *  transport but nothing is streamed to it. */
 export function createWallClock(bpm: number, startBeat = 0, now = performance.now()): SchedulerClock {
-  const secPerBeat = 60 / Math.max(1, bpm);
+  const secPerBeat = secondsPerBeat(Math.max(1, bpm));
   return {
     position: () => startBeat + (performance.now() - now) / 1000 / secPerBeat,
     timeAt: (beat) => now + (beat - startBeat) * secPerBeat * 1000,
@@ -122,7 +123,7 @@ export class MidiClockSender {
     const { output, clock, bpm } = opts;
     this.output = output;
     this.clock = clock;
-    this.secPerBeat = 60 / Math.max(1, bpm);
+    this.secPerBeat = secondsPerBeat(Math.max(1, bpm));
     this.latencyMs = Math.max(-500, Math.min(500, Math.round(opts.latencyMs ?? 0)));
     this.held = false;
 

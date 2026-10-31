@@ -3,6 +3,7 @@ import { PRESET_PROGRESSIONS, SCALE_NAMES, MODE_DATA, pitchClass, noteName } fro
 import type { NoteName, ChordQuality } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
 import { askConfirm } from "../../lib/confirm";
+import { STORAGE_KEYS } from "../../lib/persistence/keys";
 
 interface PresetPickerProps {
   keyName: NoteName;
@@ -14,7 +15,7 @@ interface PresetPickerProps {
 }
 
 const PRESET_ENTRIES = Object.entries(PRESET_PROGRESSIONS);
-const STORAGE_KEY = "trackdraft-custom-presets";
+const STORAGE_KEY = STORAGE_KEYS.customPresets.key;
 
 /** Family grouping for the preset dropdown — makes the long list scannable
  *  instead of one flat wall. The presets carry no category field, so this

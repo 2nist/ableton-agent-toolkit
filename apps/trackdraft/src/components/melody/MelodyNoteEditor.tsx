@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SCALE_INTERVALS, pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { MelodyNote } from "../../types/blueprint";
+import { KEY_PRIORITY, useGlobalKeys } from "../../hooks/useGlobalKeys";
 import { midiToNoteName } from "../../lib/melody/recorder";
 import {
   MAX_VELOCITY,
@@ -365,20 +366,16 @@ export default function MelodyNoteEditor({
 
   // Escape cancels a gesture in flight; Delete/Backspace removes the selected
   // note. Both are announced in the toolbar hint — neither is required.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && (/^(input|textarea|select)$/i.test(target.tagName) || target.isContentEditable)) return;
-      if (event.key === "Escape" && drag.current) {
-        handlePointerCancel();
-      } else if ((event.key === "Delete" || event.key === "Backspace") && selected != null) {
-        event.preventDefault();
-        deleteSelected();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  });
+  useGlobalKeys(({ event }) => {
+    if (event.key === "Escape" && drag.current) {
+      handlePointerCancel();
+      return true;
+    }
+    if ((event.key === "Delete" || event.key === "Backspace") && selected != null) {
+      deleteSelected();
+      return true;
+    }
+  }, KEY_PRIORITY.surface);
 
   const selectedNote = selected != null ? local[selected] : undefined;
   const bars = Math.max(1, Math.ceil(sectionBeats / perBar));

@@ -27,6 +27,7 @@ import { useMidiChordInput } from "../../hooks/useMidiChordInput";
 import { targetUsesAppClock, useDawTargetStore } from "../../store/dawTargetStore";
 import { useMidiSettingsStore } from "../../store/midiSettingsStore";
 import { uuid } from "../../lib/uuid";
+import { secondsPerBeat } from "../../lib/time/clock";
 
 interface MidiChordPanelProps {
   song: BlueprintSong;
@@ -257,7 +258,7 @@ export default function MidiChordPanel({
     // extra count-in (Live has its own).
     if (clockBlocked) return;
 
-    const beatSeconds = 60 / Math.max(1, song.bpm);
+    const beatSeconds = secondsPerBeat(Math.max(1, song.bpm));
     const countInBeats = countInEnabled ? beatsPerBar : 0;
 
     if (clickEnabled) {

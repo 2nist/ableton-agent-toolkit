@@ -7,6 +7,90 @@ polished*. The phases at the end are executed against this document, one slice a
 
 ---
 
+## Progress — 2026-10-30 (pre-beta unification pass)
+
+Landed, verified (tsc clean · 1671 tests green · production build clean):
+
+- **P8 keyboard baseline is now real.** `hooks/useGlobalKeys.ts` is the one
+  registry: a priority stack (overlay → surface → shell), one `keydown`
+  listener, first handler that returns `true` consumes the event. Twelve ad-hoc
+  listeners became three — the registry, `Modal`'s capture-phase focus trap, and
+  the Shift-modifier tracker in `DrumBlocksView` (state, not a command).
+  `useGlobalKeys.test.ts` pins the arbitration. This closed a live bug: the
+  spine and the drums editor both claimed `Escape`.
+- **`MicroLabel` is adopted** (the §2 T1 queue's top item): 18 sites in 9 files,
+  with `size` (3xs/2xs), `as`, `className` and `title` — the same shape that made
+  `TapeLabel` stick at 28 files. The literal recipe now appears zero times.
+- **One time axis.** `ArrangementTimeline` reads `timeViewportStore` and is
+  bar-linear; its private `PX_PER_BEAT = 2` + 64px floor (which let a 1-bar intro
+  and a 4-bar verse draw the same width) are gone. Proportions are exact at every
+  zoom level, and the spine's zoom now moves both surfaces.
+- **One clock.** `lib/time/clock.ts#secondsPerBeat` replaces six hand-written
+  `60 / bpm`. `lib/scales.ts#SCALES` replaces four copies of the mode list.
+- **One drum write path.** `writeDrumSection()` in `drumsDraftStore.ts` owns
+  "clear the staged draft, then write" — five scattered `clearDraft()` calls
+  dropped to three legitimate ones (bulk write, revert, section change).
+- **Six dead components deleted** (1,125 lines: `SelectionWorkbench`,
+  `SelectionPad`, `MelodyPianoRoll`, `ChordCard`, `SectionMarker`,
+  `FloatingToolbar`) plus the dead `common/index.ts` barrel. The Puck registry
+  is now an explicit allow-list (`src/puck.manifest.ts`) instead of a directory
+  scan, so a component nothing imports can no longer acquire a fake consumer.
+- **Harmony "form" tool fixed.** It was a drawer value with no renderer: it
+  opened an empty overlay mislabelled "Harmonic rhythm" on top of the form
+  segments it was supposed to reveal. It is now a floor annotation toggle, and
+  the drawer titles come from a `Record` instead of a ternary chain.
+- **Dashboard header unified** into `DashboardHeader` (the two copies had drifted
+  and the wordmark painted under the theme toggle below ~1100px). The four lab
+  links moved to Settings, where the workspace doc already says labs live.
+- **Persistence has one registry.** `lib/persistence/keys.ts` declares every
+  durable key with a **scope** (`song` · `device` · `ui` · `lab`) and an owner;
+  all 25 call sites now import from it instead of re-typing a string.
+  `keys.test.ts` fails if a `"trackdraft-*"` literal appears anywhere else, so a
+  new key cannot be added without deciding what kind of state it is. The §5
+  table below is now generated from the same decisions.
+- **`KeySelector` was dead** (no live consumer, only the sandbox registry) and is
+  deleted — the workbench's `SongSettingsStrip` is the one key/scale/tempo
+  editor. `EmptyState` (unused primitive) removed too. The manifest comment now
+  separates real product surfaces from the three T1 primitives (`Select`,
+  `TextField`, `Modal`) that live in the sandbox on purpose.
+- **"3D" no longer means two things**: the floor's camera preset is **tilt**
+  (`front · tilt · top`) and the study desk's `HarmonyScene` mode is **Orbit**.
+- **Harmony lost a whole chrome band.** The desk switcher owned its own
+  full-width bordered row above every desk — 31px, a "Harmony" label repeating
+  the left rail, and a permanent sentence of instructional copy. It is now
+  `HarmonyDeskSwitch`, injecting as the **first control of each desk's own
+  toolbar row** (the `leading` prop on `HarmonyDeskProps`), with the sentence
+  moved into the option tooltips. Verified: the compose row now reads
+  `COMPOSE REHEARSE STUDY · TONIC D aeolian · SECTION Intro …` on one line, the
+  canvas gained 33px, and the switch stays reachable in all three multi-select
+  branches.
+- **Multi-section bands render `compact`.** Every band in the strip used to be
+  a full `ComposeDesk` — complete toolbar, foot band and footer — inside a
+  ~200px column, so `7 bars` collided with `RHYTHM`, `Root` overlapped
+  `Walking`, and the 118px foot band covered a third of the plate. A band is
+  now its header plus the floor (308px each, measured); per-section tools belong
+  to the focused section, which the band header switches to. `compact` threads
+  `ComposeDesk → ProgressionFloor`, where it zeroes the foot height so the scene
+  fit reclaims the space instead of leaving a hole.
+- **Chord lenses have one host.** `ChordSurface` owns the three views that open
+  over the floor (map · rhythm · midi) and the one table that describes them
+  (`CHORD_VIEWS`). Before, they were a hand-written enum in `ComposeDesk`, a
+  label ternary, and ~90 lines of conditional JSX — which is how `form` ended up
+  as a "view" with no renderer. Its contract is a `Pick<>` of the desk props, so
+  a lens physically cannot be handed section-splitting verbs. The open lens is
+  now persisted (`trackdraft-harmony-chord-view`), which removes the old
+  asymmetry where the desk survived a reload and the lens didn't.
+- **`Segmented` extracted** — the app's most repeated control. Twelve
+  `flex overflow-hidden rounded border` groups with identical `aria-pressed`
+  wiring were written by hand; the harmony toolbar's BARS / PLACE / VIEW rows and
+  the desk switch now share one component with two documented sizes. This is
+  deliberately a *group* primitive, not a generic `<Button>`: 404 of 413 buttons
+  are multi-line JSX with per-site structure, so there is no honest bulk
+  conversion for them, and a regex sweep is how tag-pairing gets broken (it was,
+  once, during the `MicroLabel` pass).
+
+---
+
 ## 0. Product posture
 
 **Identity:** a songwriting cockpit that behaves like one piece of studio hardware —
@@ -220,16 +304,25 @@ model).
 **Stores**: `use<Domain>Store` · selection = `use<Domain>SelectionStore` · drafts =
 `use<Domain>DraftStore`. Persistence only via `store/storage.ts` helpers.
 
-**The persisted-keys table is the complete list of durable state** (keep it that way):
+**The persisted-keys registry is the complete list of durable state**
+(`apps/trackdraft/src/lib/persistence/keys.ts` — 26 keys: 6 `song` (one of them
+the desktop library mirror), 7 `device`, 12 `ui`, 1 `lab`).
 
-| Key | Owner |
-|---|---|
-| `trackdraft-songs` | songStore |
-| `trackdraft-current-song-id` | songStore (raw) |
-| `trackdraft-clock-source` | songStore (raw) |
-| `trackdraft-directories` | directoryStore |
-| `trackdraft-midi-settings` | midiSettingsStore |
-| `trackdraft-lyrics-spark` | lyricsSparkStore |
+It is enforced, not aspirational: `keys.test.ts` fails if a `"trackdraft-*"`
+literal appears anywhere outside the registry, so adding a key forces the
+scope decision. What the scope means:
+
+| Scope | Rule | Cost of losing it |
+|---|---|---|
+| `song` | belongs to the music; travels with the library | **data loss** |
+| `device` | per-machine setup (ports, folders, clock, theme) | re-setup once |
+| `ui` | a view preference (zoom, open drawer, chosen tab) | an annoyance |
+| `lab` | design surfaces outside the songwriting loop | nothing |
+
+The `ui` row is the one to watch: twelve keys is a lot of durable view state,
+and any of them that starts holding something you would *miss* has been filed in
+the wrong scope. Anything genuinely authored belongs in `BlueprintSong`, not
+here.
 
 **New song-field checklist** (any schema addition, enforced by the existing test):
 schema (`song-blueprint`) → rebuild → `parseImportedSong` whitelist + `exportImport.test.ts`

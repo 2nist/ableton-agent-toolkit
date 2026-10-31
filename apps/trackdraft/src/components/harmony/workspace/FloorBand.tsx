@@ -10,6 +10,7 @@ import {
   type BarsPerView,
 } from "../../drums/blocks/meterGrid";
 import { SectionNameInput } from "./SectionNameInput";
+import Segmented from "../../common/Segmented";
 
 export type FloorPreset = "front" | "threeQuarter" | "top";
 export type FloorExtension = "triad" | "seventh";
@@ -22,8 +23,8 @@ const VIEW_PRESETS = [
   },
   {
     id: "threeQuarter",
-    label: "3D",
-    hint: "Free camera — drag empty floor to orbit",
+    label: "tilt",
+    hint: "Free camera — drag empty floor to tilt and orbit the plate",
   },
   {
     id: "top",
@@ -33,6 +34,8 @@ const VIEW_PRESETS = [
 ] as const;
 
 export interface FloorBandProps {
+  /** Rendered before the tonic — the desk switcher. */
+  leading?: React.ReactNode;
   keyName: NoteName;
   scale: ScaleType;
   tonicSteps: number;
@@ -108,10 +111,12 @@ export default function FloorBand({
   chordCount,
   cycleBeats,
   tools,
+  leading,
 }: FloorBandProps) {
   const [renaming, setRenaming] = useState<string | null>(null);
   return (
     <div className="mb-1.5 flex flex-wrap items-center gap-2 font-mono text-[9px] text-inkMuted/70">
+      {leading}
       <button
         type="button"
         data-tonic
@@ -219,80 +224,42 @@ export default function FloorBand({
         </button>
       )}
 
-      <span className="flex items-center gap-1">
-        <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">
-          bars
-        </span>
-        <span className="flex overflow-hidden rounded border border-edge">
-          {BARS_PER_VIEW_OPTIONS.map((option) => (
-            <button
-              key={String(option)}
-              type="button"
-              aria-pressed={barsPerView === option}
-              onClick={() => onBarsViewChange(option)}
-              title={
-                option === "all"
-                  ? "Whole progression per view"
-                  : `${option} bar${option === 1 ? "" : "s"} per view — the bar arrows walk the section`
-              }
-              className={`border-r border-edge px-1 py-0.5 last:border-r-0 ${
-                barsPerView === option
-                  ? "bg-accent text-accentInk"
-                  : "hover:text-ink"
-              }`}
-            >
-              {option === "all" ? "ALL" : option}
-            </button>
-          ))}
-        </span>
-      </span>
+      <Segmented
+        label="bars"
+        value={barsPerView}
+        onChange={onBarsViewChange}
+        options={BARS_PER_VIEW_OPTIONS.map((option) => ({
+          id: option,
+          label: option === "all" ? "ALL" : option,
+          hint:
+            option === "all"
+              ? "Whole progression per view"
+              : `${option} bar${option === 1 ? "" : "s"} per view — the bar arrows walk the section`,
+        }))}
+      />
+
+      <Segmented
+        label="place"
+        value={extension}
+        onChange={onExtensionChange}
+        options={(["triad", "seventh"] as const).map((option) => ({
+          id: option,
+          label: option === "triad" ? "triad" : "7th",
+          hint: `A click on the ladder places the row's ${option === "triad" ? "diatonic triad" : "diatonic seventh"} — a row between two scale steps takes the nearer one's chord`,
+        }))}
+      />
 
       <span className="flex items-center gap-1">
-        <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">
-          place
-        </span>
-        <span className="flex overflow-hidden rounded border border-edge">
-          {(["triad", "seventh"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={extension === option}
-              onClick={() => onExtensionChange(option)}
-              title={`A click on the ladder places the row's ${option === "triad" ? "diatonic triad" : "diatonic seventh"} — a row between two scale steps takes the nearer one's chord`}
-              className={`border-r border-edge px-1 py-0.5 last:border-r-0 ${
-                extension === option
-                  ? "bg-accent text-accentInk"
-                  : "hover:text-ink"
-              }`}
-            >
-              {option === "triad" ? "triad" : "7th"}
-            </button>
-          ))}
-        </span>
-      </span>
-
-      <span className="flex items-center gap-1">
-        <span className="text-[8px] uppercase tracking-wider text-inkMuted/70">
-          view
-        </span>
-        <span className="flex overflow-hidden rounded border border-edge">
-          {VIEW_PRESETS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={preset === option.id}
-              onClick={() => onPresetChange(option.id)}
-              title={option.hint}
-              className={`border-r border-edge px-1 py-0.5 last:border-r-0 ${
-                preset === option.id
-                  ? "bg-accent text-accentInk"
-                  : "hover:text-ink"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </span>
+        <Segmented
+          label="view"
+          value={preset}
+          onChange={onPresetChange}
+          options={VIEW_PRESETS.map((option) => ({
+            id: option.id,
+            label: option.label,
+            hint: option.hint,
+          }))}
+        />
         {!locked && (
           <span
             className="text-[8px] text-track"

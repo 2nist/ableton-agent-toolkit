@@ -11,13 +11,14 @@ import {
 import { useSongStore } from "../../../store/songStore";
 import { useTimeSelectionStore } from "../../../store/timeSelectionStore";
 import { useFocusedSectionStore } from "../../../store/focusedSectionStore";
-import { useDrumsDraftStore } from "../../../store/drumsDraftStore";
+import { useDrumsDraftStore, writeDrumSection } from "../../../store/drumsDraftStore";
 import { updateSection } from "../../../lib/sections";
 import { sectionSpans, type SectionSpan } from "../../../lib/arrangement";
 import { selectedSpans } from "../../../lib/sectionSelection";
 import { resolvePlayedLaneHits, type LaneHit } from "../../../lib/timeline/drumLaneHits";
 import { planDrumSections } from "../../../lib/midiExport";
 import { usePlayhead } from "../../../hooks/usePlayhead";
+import { KEY_PRIORITY, useGlobalKeys } from "../../../hooks/useGlobalKeys";
 import {
   inferPatternForSection,
   resolveSectionVariant,
@@ -74,6 +75,7 @@ import {
 import { clampParam, PARAM_SPECS, type ParamDraftNote, type StepParam } from "./stepParams";
 import { scaleVelocity, velocityOpFactor, type VelocityOp } from "./velocityOps";
 import type { FxParam } from "./fxParams";
+import { STORAGE_KEYS } from "../../../lib/persistence/keys";
 
 /**
  * The Drum Blocks view — rebuilt around three ideas.
@@ -291,14 +293,14 @@ export default function DrumBlocksView() {
   const draftSectionId = useDrumsDraftStore((s) => s.sectionId);
   const draftSection = useDrumsDraftStore((s) => s.section);
 
-  const [barsPerView, setBarsPerView] = useState<BarsPerView>(() => loadJson<BarsPerView>("trackdraft-drums-bars-view", 2));
+  const [barsPerView, setBarsPerView] = useState<BarsPerView>(() => loadJson<BarsPerView>(STORAGE_KEYS.drumsBarsView.key, 2));
   const [sel, setSel] = useState<BarSel | null>(null);
   const [copyArm, setCopyArm] = useState<BarSel | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [velDrag, setVelDrag] = useState<VelDrag | null>(null);
   const [fxPreview, setFxPreview] = useState<{ laneKey: string; id: FxParam; value: number } | null>(null);
-  const [stepSel, setStepSel] = useState<Record<string, StepParam>>(() => loadJson("trackdraft-drums-step-sel", {}));
-  const [fxSel, setFxSel] = useState<Record<string, FxParam | null>>(() => loadJson("trackdraft-drums-fx-sel", {}));
+  const [stepSel, setStepSel] = useState<Record<string, StepParam>>(() => loadJson(STORAGE_KEYS.drumsStepSel.key, {}));
+  const [fxSel, setFxSel] = useState<Record<string, FxParam | null>>(() => loadJson(STORAGE_KEYS.drumsFxSel.key, {}));
   const [width, setWidth] = useState(900);
   const [shiftHeld, setShiftHeld] = useState(false);
 
@@ -574,17 +576,22 @@ export default function DrumBlocksView() {
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("blur", blur);
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setCopyArm(null); setSel(null); }
-    };
-    window.addEventListener("keydown", esc);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
-      window.removeEventListener("keydown", esc);
     };
   }, []);
+
+  // Escape is a SURFACE key here: it clears this editor's arm/selection and
+  // consumes the event, so the shell's Escape (which clears the spine's
+  // palette and loop region) no longer fires on the same press.
+  useGlobalKeys(({ event: e }) => {
+    if (e.key !== "Escape") return;
+    setCopyArm(null);
+    setSel(null);
+    return true;
+  }, KEY_PRIORITY.surface);
 
   // ---- selection ---------------------------------------------------------------
 
@@ -706,12 +713,9 @@ export default function DrumBlocksView() {
    */
   const writeSection = useCallback(
     (sectionId: string, base: BlueprintSection, mutate: (sec: BlueprintSection) => BlueprintSection) => {
-      useDrumsDraftStore.getState().clearDraft();
-      updateCurrentSong((song) =>
-        updateSection(song, sectionId, (sec) => mutate(sec ?? base)),
-      );
+      writeDrumSection(sectionId, (sec) => mutate(sec ?? base));
     },
-    [updateCurrentSong],
+    [],
   );
 
   /** M / S — a per-lane mixer flag on the section (draft → Apply). */
@@ -768,13 +772,11 @@ export default function DrumBlocksView() {
   const applyDraft = useCallback(() => {
     const st = useDrumsDraftStore.getState();
     if (st.sectionId && st.section) {
-      const sectionId = st.sectionId;
-      const next = st.section;
-      updateCurrentSong((s) => updateSection(s, sectionId, () => next));
-      useDrumsDraftStore.getState().clearDraft();
+      const { sectionId, section: next } = st;
+      writeDrumSection(sectionId, () => next);
     }
     setEditorOpen(false);
-  }, [updateCurrentSong]);
+  }, []);
 
   const revertDraft = useCallback(() => {
     useDrumsDraftStore.getState().clearDraft();
@@ -1379,7 +1381,7 @@ export default function DrumBlocksView() {
             <button
               key={String(n)}
               disabled={multi}
-              onClick={() => { setBarsPerView(n); saveJson("trackdraft-drums-bars-view", n); }}
+              onClick={() => { setBarsPerView(n); saveJson(STORAGE_KEYS.drumsBarsView.key, n); }}
               className="font-mono text-2xs rounded-sm px-1.5 py-0.5 border disabled:cursor-not-allowed"
               style={{
                 borderColor: barsPerView === n ? P.track : P.grid,
@@ -1778,10 +1780,10 @@ export default function DrumBlocksView() {
               selectedLanes={new Set(sel?.lanes ?? [])}
               onLaneClick={(laneKey) => selectLane(laneKey as DrumLaneId)}
               onStepSel={(laneKey, param) => {
-                setStepSel((m) => { const next = { ...m, [laneKey]: param }; saveJson("trackdraft-drums-step-sel", next); return next; });
+                setStepSel((m) => { const next = { ...m, [laneKey]: param }; saveJson(STORAGE_KEYS.drumsStepSel.key, next); return next; });
               }}
               onFxSel={(laneKey, id) => {
-                setFxSel((m) => { const next = { ...m, [laneKey]: id }; saveJson("trackdraft-drums-fx-sel", next); return next; });
+                setFxSel((m) => { const next = { ...m, [laneKey]: id }; saveJson(STORAGE_KEYS.drumsFxSel.key, next); return next; });
               }}
               silentLanes={silentLanes}
               mutedLanes={mutedLanes}

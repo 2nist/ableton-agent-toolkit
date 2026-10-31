@@ -31,7 +31,7 @@ import { useHarmonyWorkspaceStore } from "../../store/harmonyWorkspaceStore";
 import { sectionSpans } from "../../lib/arrangement";
 import { usePlayhead } from "../../hooks/usePlayhead";
 import { useActiveChord } from "../../hooks/useActiveChord";
-import HarmonyWorkspace, { HarmonyDeskBar } from "./workspace/HarmonyWorkspace";
+import HarmonyWorkspace, { HarmonyDeskSwitch } from "./workspace/HarmonyWorkspace";
 import MultiSectionStrip from "./workspace/MultiSectionStrip";
 import type { HarmonyDeskBandProps } from "./workspace/types";
 import ModeInferenceCard from "./ModeInferenceCard";
@@ -452,16 +452,20 @@ export default function HarmonyView() {
   const deskProps = activeSection ? deskPropsFor(activeSection) : null;
   return (
     <div className="p-3 space-y-2">
-      <HarmonyDeskBar />
-
       {desk === "study" && stackAll.length > 1 ? (
-        <SectionComparison
-          song={song}
-          sections={stackAll}
-          onFocus={(sectionId) => setSelectedSectionId(sectionId)}
-        />
+        <div className="space-y-2">
+          <div className="flex items-center">
+            <HarmonyDeskSwitch />
+          </div>
+          <SectionComparison
+            song={song}
+            sections={stackAll}
+            onFocus={(sectionId) => setSelectedSectionId(sectionId)}
+          />
+        </div>
       ) : !stacked && desk !== "compose" && stackAll.length > 1 ? (
         <div className="flex flex-wrap items-center gap-2 rounded border border-edge/60 bg-panel/60 px-2 py-1 font-mono text-[9px] text-inkMuted/70">
+          <HarmonyDeskSwitch />
           <span>
             {stackAll.length} sections selected — this desk shows the focused one
           </span>
@@ -477,6 +481,7 @@ export default function HarmonyView() {
         <div className="space-y-2">
           {/* Bulk edits over the whole selection — one undo step each. */}
           <div className="flex flex-wrap items-center gap-1.5 rounded border border-edge bg-panel px-2 py-1 font-mono text-[10px]">
+            <HarmonyDeskSwitch />
             <span className="font-semibold text-ink">{stackAll.length} sections selected</span>
             <span className="text-inkMuted/70">
               {stackBars} bars · {stackChords} chords · edits apply to all of them

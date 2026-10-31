@@ -9,16 +9,16 @@ import { MODE_DATA } from "@music-theory/core";
 import { floorSlots, insertChordAt } from "../../../lib/harmony/floorLayout";
 import { chordGluePreview } from "../../../lib/midiExport";
 import { uuid } from "../../../lib/uuid";
-import ProgressionEditor from "../ProgressionEditor";
-import HoneycombWheel from "../HoneycombWheel";
-import MidiChordPanel from "../MidiChordPanel";
 import TapeLabel from "../../common/TapeLabel";
 import FitStatus from "../FitStatus";
 import ProgressionFloor from "./ProgressionFloor";
+import ChordSurface, { CHORD_VIEWS, useChordView } from "./ChordSurface";
 import { segmentChordStream } from "../../../lib/harmony/segmentSections";
 import type { BarsPerView } from "../../drums/blocks/meterGrid";
 import type { HarmonyDeskProps } from "./types";
 
+/** The three tools that genuinely open OVER the floor. "form" is deliberately
+ *  not one of them — it toggles an annotation on the floor itself. */
 /** Write the progression.
  *
  *  **The floor is the instrument.** A box is a chord, depth is time, the gap
@@ -53,18 +53,25 @@ export default function ComposeDesk({
   onSplitSectionAtBar,
   onMergeWithNext,
   onRenameSection,
+  leading,
+  compact,
 }: HarmonyDeskProps & {
   /** Force every band to show all its bars — the multi-section strip needs
    *  that so neighbouring bands share one bar grid. */
   barsPerView?: BarsPerView;
+  /** Strip band: floor only, no toolbar or foot band. */
+  compact?: boolean;
   /** Bars before this section in the song — the strip prints the song's own
    *  bar numbers instead of restarting at 1 on every band. */
   barOffset?: number;
 }) {
   const [extension, setExtension] = useState<"triad" | "seventh">("triad");
-  const [drawer, setDrawer] = useState<"none" | "map" | "rhythm" | "form" | "midi">(
-    "none",
-  );
+  const [view, setView] = useChordView();
+  /** "form" is not a drawer: it annotates the floor with the parts the chord
+   *  stream already contains. It used to be a drawer value, which opened an
+   *  empty overlay mislabelled "Harmonic rhythm" on top of the very segments
+   *  it was meant to reveal. */
+  const [formOn, setFormOn] = useState(false);
   /** What just happened, said out loud: a split rewrites the song, and the
    *  only other evidence is the section list quietly getting longer. */
   const [notice, setNotice] = useState<string | null>(null);
@@ -229,6 +236,8 @@ export default function ComposeDesk({
   return (
     <div className="relative min-w-0">
       <ProgressionFloor
+        leading={leading}
+        compact={compact}
         barsPerView={barsPerView}
         barOffset={barOffset}
         chords={section.chords}
@@ -265,53 +274,41 @@ export default function ComposeDesk({
               tools
             </span>
             <span className="flex overflow-hidden rounded border border-edge">
-              {(
-                [
-                  {
-                    id: "map",
-                    label: "map",
-                    hint: "The hex lens — the same progression as a walk",
-                  },
-                  {
-                    id: "rhythm",
-                    label: "rhythm",
-                    hint: "Harmonic rhythm — every chord's share of the cycle",
-                  },
-                  {
-                    id: "midi",
-                    label: "midi",
-                    hint: "Play chords in from a keyboard — name one, or record the whole progression over the click",
-                  },
-                  {
-                    id: "form",
-                    label: formStructure.useful
-                      ? `form · ${segmentation.sections.length}`
-                      : "form",
-                    hint: formStructure.useful
-                      ? `This section already contains ${segmentation.sections.length} parts`
-                      : "Detect the sections this chord stream already contains",
-                  },
-                ] as const
-              ).map((entry) => (
+              {CHORD_VIEWS.map((entry) => (
                 <button
                   key={entry.id}
                   type="button"
-                  aria-pressed={drawer === entry.id}
+                  aria-pressed={view === entry.id}
                   title={entry.hint}
-                  onClick={() =>
-                    setDrawer(drawer === entry.id ? "none" : entry.id)
-                  }
-                  className={`border-r border-edge px-1 py-0.5 last:border-r-0 ${
-                    drawer === entry.id
-                      ? "bg-accent text-accentInk"
-                      : entry.id === "form" && formStructure.useful
-                        ? "text-accent hover:bg-accent/10"
-                        : "hover:text-ink"
+                  onClick={() => setView(view === entry.id ? "floor" : entry.id)}
+                  className={`border-r border-edge px-1 py-0.5 ${
+                    view === entry.id ? "bg-accent text-accentInk" : "hover:text-ink"
                   }`}
                 >
                   {entry.label}
                 </button>
               ))}
+              <button
+                type="button"
+                aria-pressed={formOn}
+                title={
+                  formStructure.useful
+                    ? `This section already contains ${segmentation.sections.length} parts — show them on the floor`
+                    : "Detect the sections this chord stream already contains"
+                }
+                onClick={() => setFormOn((on) => !on)}
+                className={`px-1 py-0.5 ${
+                  formOn
+                    ? "bg-accent text-accentInk"
+                    : formStructure.useful
+                      ? "text-accent hover:bg-accent/10"
+                      : "hover:text-ink"
+                }`}
+              >
+                {formStructure.useful
+                  ? `form · ${segmentation.sections.length}`
+                  : "form"}
+              </button>
             </span>
 
             {/* How finely the stream is read — on the band, not behind a
@@ -375,107 +372,41 @@ export default function ComposeDesk({
         sectionName={section.name}
         onBarRange={setBarRange}
         onSplitSectionAtBar={onSplitSectionAtBar}
-        segments={drawer === "form" && formStructure.useful ? formSplits : null}
+        segments={formOn && formStructure.useful ? formSplits : null}
         onSplitSectionAt={onSplitSectionAt}
         onMergeWithNext={onMergeWithNext}
         onRenameSection={onRenameSection}
         status={<FitStatus section={section} onSetBars={onSetBars} />}
       />
 
-      {/* Tools open OVER the floor, never under it: the page is one screen. */}
-      {drawer !== "none" && (
-        <div className="absolute left-3 right-3 top-[38px] z-20 max-h-[min(420px,60%)] overflow-auto rounded border border-edge bg-panel shadow-2xl">
-          <div className="sticky top-0 flex items-center gap-2 border-b border-edge bg-panel px-2 py-1 font-mono text-[9px] text-inkMuted/70">
-            <TapeLabel
-              size="md"
-              className="text-[10px] font-mono uppercase tracking-wider text-inkMuted"
-            >
-              {drawer === "map" ? "Map" : drawer === "midi" ? "MIDI in" : "Harmonic rhythm"}
-            </TapeLabel>
-            <span className="text-inkMuted/60">
-              {drawer === "map"
-                ? "the same progression as a walk"
-                : drawer === "midi"
-                  ? "play it in — a chord at a time, or the whole take over the click"
-                  : "each chord's share of the cycle"}
-            </span>
-            <span className="ml-auto flex items-center gap-2">
-              {analysis.stats.borrowedCount > 0 && (
-                <span className="text-danger">
-                  {analysis.stats.borrowedCount} borrowed
-                </span>
-              )}
-              {analysis.stats.appliedCount > 0 && (
-                <span className="text-accent">
-                  {analysis.stats.appliedCount} applied
-                </span>
-              )}
-            </span>
-            <button
-              type="button"
-              onClick={() => setDrawer("none")}
-              className="rounded border border-edge px-1 hover:text-ink"
-              aria-label="Close tools"
-            >
-              ✕
-            </button>
-          </div>
-
-          {drawer === "map" && (
-            <div className="flex min-h-[300px] items-center justify-center overflow-x-auto px-3 py-2">
-              <HoneycombWheel
-                keyName={keyName}
-                scale={scale}
-                chords={syncedChords}
-                beatsPerChord={section.beatsPerChord}
-                selectedChordId={selectedChordId}
-                activeChordId={activeChordId}
-                onSelectChord={onSelectChord}
-                onChangeChords={onChangeChords}
-                regions={regions}
-                colorFlavor={section.colorFlavor}
-                harmonyOutline={harmonyOutline}
-                onPreviewChord={onPreviewChord}
-                mode="linear"
-                initialScale={44}
-                newChordExtension={extension}
-              />
-            </div>
-          )}
-
-          {drawer === "rhythm" && (
-            <div className="px-2 py-2">
-              <ProgressionEditor
-                chords={syncedChords}
-                keyName={keyName}
-                scale={scale}
-                beatsPerBar={beatsPerBar}
-                sectionBeats={sectionDurationBeats(section)}
-                selectedChordId={selectedChordId}
-                activeChordId={activeChordId}
-                outlineGoverned={false}
-                regions={regions}
-                onSelectChord={(id) => onSelectChord(id)}
-                onChange={onChangeRhythm}
-              />
-            </div>
-          )}
-
-          {drawer === "midi" && (
-            <MidiChordPanel
-              song={song}
-              section={section}
-              keyName={keyName}
-              scale={scale}
-              selectedChordId={selectedChordId}
-              playheadBeat={playheadBeat}
-              onChangeChords={onChangeChords}
-              onSelectChord={onSelectChord}
-              onPreviewChord={onPreviewChord}
-            />
-          )}
-        </div>
-      )}
+      {/* The lenses open OVER the floor, never under it: the page is one
+          screen. Which one is open — and what each one needs — lives in
+          ChordSurface, so adding a fourth is one table entry. */}
+      <ChordSurface
+        view={view}
+        onClose={() => setView("floor")}
+        desk={{
+          song,
+          section,
+          keyName,
+          scale,
+          regions,
+          playheadBeat,
+          selectedChordId,
+          activeChordId,
+          onSelectChord,
+          onChangeChords,
+          onChangeRhythm,
+          onPreviewChord,
+        }}
+        chords={syncedChords}
+        beatsPerBar={beatsPerBar}
+        sectionBeats={sectionDurationBeats(section)}
+        harmonyOutline={harmonyOutline}
+        extension={extension}
+        borrowedCount={analysis.stats.borrowedCount}
+        appliedCount={analysis.stats.appliedCount}
+      />
     </div>
   );
 }

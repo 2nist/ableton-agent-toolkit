@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { readRawStorage, writeRawStorage } from "./storage";
+import { STORAGE_KEYS } from "../lib/persistence/keys";
 
 /**
  * What TrackDraft is playing *into*. One setting, not two.
@@ -39,10 +40,10 @@ interface DawTargetState {
   setTarget: (target: DawTarget) => void;
 }
 
-const STORAGE_KEY = "trackdraft-daw-target";
+const STORAGE_KEY = STORAGE_KEYS.dawTarget.key;
 /** What the clock source used to be stored under, so an existing choice
  *  survives the upgrade instead of snapping back to a default. */
-const LEGACY_CLOCK_SOURCE_KEY = "trackdraft-clock-source";
+const LEGACY_CLOCK_SOURCE_KEY = STORAGE_KEYS.legacyClockSource.key;
 
 function initialTarget(): DawTarget {
   const saved = readRawStorage(STORAGE_KEY);

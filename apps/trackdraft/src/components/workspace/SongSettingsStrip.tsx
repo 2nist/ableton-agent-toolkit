@@ -3,7 +3,7 @@ import type { NoteName, ScaleType } from "@music-theory/core";
 import { useSongStore } from "../../store/songStore";
 import type { BlueprintSong } from "../../types/blueprint";
 
-const SCALES: ScaleType[] = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
+import { SCALES } from "../../lib/scales";
 
 /**
  * Key, scale and tempo — the three values every other element reads, so

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { KEY_PRIORITY, useGlobalKeys } from "../../hooks/useGlobalKeys";
 import { buildEditorCss, type ThemeEditorState } from "./editor";
 import { copyText } from "./tokens";
 import WorkshopColors from "./WorkshopColors";
@@ -16,11 +17,11 @@ export default function ThemeWorkshop({ editor, tokens, onChange, onReset, onClo
 }) {
   const [tab, setTab] = useState<Tab>("colors");
   const [notice, setNotice] = useState("");
-  useEffect(() => {
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", escape);
-    return () => window.removeEventListener("keydown", escape);
-  }, [onClose]);
+  useGlobalKeys(({ event }) => {
+    if (event.key !== "Escape") return;
+    onClose();
+    return true;
+  }, KEY_PRIORITY.overlay);
   async function copyCss() {
     const css = `/* TrackDraft Studio Log — workshop export */\n${buildEditorCss(editor, tokens, '[data-theme="logsheet"]')}\n`;
     setNotice(await copyText(css) ? "CSS copied" : "Clipboard unavailable");

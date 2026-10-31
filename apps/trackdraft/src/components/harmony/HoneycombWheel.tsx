@@ -10,6 +10,7 @@ import { usePalette } from "../../theme/palette";
 import { chordFromDegree, chordsToHoneycombText, chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { degreeRelativeTo, resolveTonicAt } from "../../lib/harmony/tonic";
 import { buildRegionWalk, regionOfCell } from "../../lib/harmony/tonicWalk";
+import { STORAGE_KEYS } from "../../lib/persistence/keys";
 import {
   parseProgression,
   collapseRepeatsForLoopView,
@@ -31,7 +32,7 @@ import {
 const DEFAULT_SCALE = 34;
 const MIN_SCALE = 24;
 const MAX_SCALE = 56;
-const SCALE_KEY = "trackdraft-honeycomb-scale";
+const SCALE_KEY = STORAGE_KEYS.honeycombScale.key;
 
 function readScale(fallback = DEFAULT_SCALE): number {
   try {

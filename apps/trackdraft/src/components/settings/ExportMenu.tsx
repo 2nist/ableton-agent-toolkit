@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { KEY_PRIORITY, useGlobalKeys } from "../../hooks/useGlobalKeys";
 import type { BlueprintSong } from "../../types/blueprint";
 import { downloadSongJson, pushSongToAbleton } from "../../lib/exportImport";
 import { downloadSongMidi } from "../../lib/midiExport";
@@ -19,16 +20,16 @@ export default function ExportMenu({ song }: { song: BlueprintSong }) {
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
     document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
+
+  useGlobalKeys(({ event }) => {
+    if (!open) return;
+    if (event.key !== "Escape") return;
+    setOpen(false);
+    return true;
+  }, KEY_PRIORITY.overlay);
 
   async function sendToAbleton() {
     // Ableton's cue-point creation isn't safe against two near-simultaneous

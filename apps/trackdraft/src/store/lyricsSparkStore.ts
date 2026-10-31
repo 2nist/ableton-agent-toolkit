@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { readStorage, writeStorage } from "./storage";
+import { STORAGE_KEYS } from "../lib/persistence/keys";
 
-const STORAGE_KEY = "trackdraft-lyrics-spark";
+const STORAGE_KEY = STORAGE_KEYS.lyricsSpark.key;
 
 /**
  * The lyrics engine is deterministic: the same section + the same integer

@@ -14,6 +14,7 @@ import {
   type RoutingProfileId,
   type StemId,
 } from "../../lib/stems";
+import MicroLabel from "../common/MicroLabel";
 
 /** Where a stem lands in the Live template. Only the Live target has named
  *  tracks to land on — every other DAW gets "channel N" on a track the user
@@ -134,9 +135,9 @@ export default function MidiSetupPanel({ onClose, inline = false }: { onClose: (
           </div>
         ) : (
           <>
-            <label className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+            <MicroLabel as="label" className="block mb-1">
               Master output
-            </label>
+            </MicroLabel>
             <p className="text-2xs text-inkMuted mb-1.5">
               Every stem plays here unless it is given its own port below — that is how one
               section can drive a drum module and a synth at the same time.
@@ -195,9 +196,9 @@ export default function MidiSetupPanel({ onClose, inline = false }: { onClose: (
               )}
             </div>
 
-            <label className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+            <MicroLabel as="label" className="block mb-1">
               Channels → stems
-            </label>
+            </MicroLabel>
             <div className="flex items-center gap-1 mb-2 flex-wrap">
               {(Object.keys(ROUTING_PROFILES) as RoutingProfileId[]).map((id) => (
                 <button
@@ -345,9 +346,9 @@ export default function MidiSetupPanel({ onClose, inline = false }: { onClose: (
             </div>
 
             <div className="border-t border-edge pt-3 mb-4">
-              <label className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+              <MicroLabel as="label" className="block mb-1">
                 MIDI clock out
-              </label>
+              </MicroLabel>
               <p className="text-2xs text-inkMuted mb-1.5">
                 Send MIDI clock (24 ppqn, with start/stop and song position) so a DAW follows TrackDraft's transport.
                 Works on any DAW — no bridge, no plugin. Separate from the note port, so a hardware rig can keep its

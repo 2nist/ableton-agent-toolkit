@@ -1,6 +1,7 @@
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { ConfidenceLevel } from "../../lib/confidence";
 import { getConfidenceLevels } from "../../lib/confidence";
+import { SCALES } from "../../lib/scales";
 
 /**
  * Every note name the app can store — sharps AND flats.
@@ -14,7 +15,7 @@ import { getConfidenceLevels } from "../../lib/confidence";
 const ALL_KEYS = Object.keys(NOTE_TO_PC).sort(
   (a, b) => (NOTE_TO_PC[a] ?? 0) - (NOTE_TO_PC[b] ?? 0) || a.localeCompare(b),
 );
-const ALL_SCALES = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
+const ALL_SCALES: readonly string[] = SCALES;
 
 export interface Filters {
   search: string;

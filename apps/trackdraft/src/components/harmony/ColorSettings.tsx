@@ -4,6 +4,7 @@ import { BI_TONAL_MATRIX, DEFAULT_COLOR_FLAVOR } from "@platform/progression-eng
 import { DEFAULT_COLOR_OCTAVE } from "../../lib/colorStem";
 import { onTablesChanged, songTablesWith, tableSource, tablesVersion } from "../../lib/dataFiles";
 import { useSongStore } from "../../store/songStore";
+import MicroLabel from "../common/MicroLabel";
 
 /** Every bi-tonal flavor in the engine's matrix, deduped to `[id, label]`
  *  — the options for the Color layer's flavor chips. */
@@ -53,12 +54,9 @@ export default function ColorSettings({ section, onChange }: ColorSettingsProps)
 
   return (
     <div>
-      <span
-        className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1"
-        title="Bi-tonal 'Color Chord' layer for this section — the Color track in MIDI export, Send to Ableton, and real-time MIDI out."
-      >
+      <MicroLabel className="block mb-1" title="Bi-tonal 'Color Chord' layer for this section — the Color track in MIDI export, Send to Ableton, and real-time MIDI out.">
         Color
-      </span>
+      </MicroLabel>
 
       <div className="flex flex-wrap gap-1 mb-2">
         <button

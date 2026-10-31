@@ -140,10 +140,9 @@ export const KEY_MIDI: Record<string, number> = {
 /* ---------------------------------------------------------------
    CONSTANTS — modes
    --------------------------------------------------------------- */
-export const MODE_ORDER: ModeName[] = [
-  "ionian", "dorian", "phrygian", "lydian",
-  "mixolydian", "aeolian", "locrian",
-];
+/** The same seven modes as `lib/scales`, in the order every picker shows
+ *  them — kept as `ModeName[]` so this engine never depends on a UI type. */
+export const MODE_ORDER: ModeName[] = [...SCALES];
 
 export const MODE_LABELS: Record<ModeName, string> = {
   ionian: "Ionian", dorian: "Dorian", phrygian: "Phrygian",
@@ -704,6 +703,7 @@ export function stepLabel(step: HoneycombStep): string {
 import { noteName as noteNameFn, pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
+import { SCALES } from "../scales";
 
 export function letterName(
   keyName: string,

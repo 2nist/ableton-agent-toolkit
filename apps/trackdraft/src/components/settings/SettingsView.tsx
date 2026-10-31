@@ -161,6 +161,7 @@ export default function SettingsView() {
             ["/genre-workbench", "Genre Workbench", "the 119-genre map builder — research a genre, validate, save the map"],
             ["/design-lab", "Design Lab", "tokens, primitives and the component playground"],
             ["/sandbox", "Puck sandbox", "the visual-arrangement experiment (drag-and-drop layout editor)"],
+            ["/canvas", "Render canvas", "a single Puck page rendered with no chrome — the export target"],
           ].map(([href, name, desc]) => (
             <a
               key={href}

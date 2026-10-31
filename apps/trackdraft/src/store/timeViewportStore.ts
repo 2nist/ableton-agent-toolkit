@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { readStorage, createDebouncedWriter } from "./storage";
+import { STORAGE_KEYS } from "../lib/persistence/keys";
 import {
   DEFAULT_SECTION_BAR_PX,
   DEFAULT_SONG_BAR_PX,
@@ -10,7 +11,7 @@ import {
   type TimeDepth,
 } from "../lib/time/timeMath";
 
-export const TIME_VIEWPORT_KEY = "trackdraft-time-viewport";
+export const TIME_VIEWPORT_KEY = STORAGE_KEYS.timeViewport.key;
 
 interface PersistedViewport {
   scales?: Partial<Record<TimeDepth, number>>;

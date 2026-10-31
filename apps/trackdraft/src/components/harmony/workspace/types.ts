@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { NoteName, ScaleType } from "@music-theory/core";
 import type { BlueprintSection, BlueprintSong, Chord, TonicRegion } from "../../../types/blueprint";
 import type { HarmonyAnalysis } from "../../../lib/harmony/analysis";
@@ -44,6 +45,10 @@ export interface HarmonyDeskProps {
   /** Rename this section (structure edit, one undo step). */
   onRenameSection: (name: string) => void;
   onPreviewChord?: (chord: Chord) => void;
+  /** The desk switcher, injected by the workspace so each desk can render it
+   *  as the FIRST control of its own first row. It used to be a separate band
+   *  above every desk — a whole 31px row of chrome for three words. */
+  leading?: ReactNode;
 }
 
 /** A band's props before its analysis: the multi-section strip builds one of

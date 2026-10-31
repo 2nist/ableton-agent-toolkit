@@ -19,6 +19,7 @@ export default function RehearseDesk({
   playheadBeat,
   onTransposeSong,
   onSelectChord,
+  leading,
 }: HarmonyDeskProps) {
   const display = useHarmonyWorkspaceStore((s) => s.display);
   const setTranspose = useHarmonyWorkspaceStore((s) => s.setTranspose);
@@ -62,6 +63,7 @@ export default function RehearseDesk({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded border border-edge bg-panel px-2 py-1.5">
+        {leading}
         <span className="flex items-center gap-1">
           <button
             type="button"

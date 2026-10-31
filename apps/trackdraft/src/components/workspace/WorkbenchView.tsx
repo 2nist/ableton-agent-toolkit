@@ -15,6 +15,7 @@ import { updateSection } from "../../lib/sections";
 import { useRoleStyle } from "../../lib/roleColors";
 import { drumFamilyLabel, resolveSectionVoiceNecklaces } from "../../lib/playback/drumPreview";
 import { usePlayhead } from "../../hooks/usePlayhead";
+import { KEY_PRIORITY, useGlobalKeys } from "../../hooks/useGlobalKeys";
 import DrumLineEmbed from "./DrumLineEmbed";
 import { useInspectorStore } from "../../store/inspectorStore";
 import { playSectionLoop, seekTo } from "../../lib/playback/transportControl";
@@ -45,6 +46,7 @@ import TapeLabel from "../common/TapeLabel";
 import SongSettingsStrip from "./SongSettingsStrip";
 import ArrangementTimeline from "../arrangement/ArrangementTimeline";
 import StudioConsole from "../arrangement/StudioConsole";
+import { STORAGE_KEYS } from "../../lib/persistence/keys";
 
 /** Canonical role order for the header's role menu (same list everywhere). */
 const ROLE_OPTIONS: SectionRole[] = ["intro", "verse", "pre_chorus", "chorus", "bridge", "solo", "breakdown", "outro", "custom"];
@@ -99,24 +101,19 @@ export default function WorkbenchView() {
     setSelectedSectionId(spans[0]!.sectionId);
   }, [song, spans, selectedSectionId, setSelectedSectionId]);
 
-  // The ladder's first navigation step: ←→ walks sections. Ignored while
-  // typing / interacting with form controls (the bend rail's selects, the
-  // song browser) so those stay usable.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-      if (spans.length === 0) return;
-      e.preventDefault();
-      const idx = Math.max(0, spans.findIndex((sp) => sp.sectionId === selectedSectionId));
-      const next = Math.max(0, Math.min(spans.length - 1, idx + (e.key === "ArrowRight" ? 1 : -1)));
-      setSelectedSectionId(spans[next].sectionId);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [spans, selectedSectionId, setSelectedSectionId]);
+  // The ladder's first navigation step: ←→ walks sections. Typing is filtered
+  // by the registry; form controls are excluded here so the bend rail's
+  // selects and the song browser stay usable.
+  useGlobalKeys(({ event: e, typing }) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (typing) return;
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    if (spans.length === 0) return;
+    const idx = Math.max(0, spans.findIndex((sp) => sp.sectionId === selectedSectionId));
+    const next = Math.max(0, Math.min(spans.length - 1, idx + (e.key === "ArrowRight" ? 1 : -1)));
+    setSelectedSectionId(spans[next].sectionId);
+    return true;
+  }, KEY_PRIORITY.shell);
 
   if (!song) {
     // The repository may still be reading the library — claiming the song is
@@ -321,30 +318,30 @@ function SectionWorkspace({
   const roleMenuRef = useRef<HTMLDivElement>(null);
   const [collapsedRows, setCollapsedRows] = useState<Record<string, boolean>>(() => {
     try {
-      return JSON.parse(localStorage.getItem("trackdraft-workbench-rows") || "{}") as Record<string, boolean>;
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS.workbenchRows.key) || "{}") as Record<string, boolean>;
     } catch {
       return {};
     }
   });
 
-  // Dismiss the role menu on outside click / Esc (same pattern as the
-  // spine's context palette).
+  // Dismiss the role menu on outside click; its Escape is an OVERLAY key so
+  // it closes the menu before the shell's Escape does anything else.
   useEffect(() => {
     if (!roleMenu) return;
     const onDown = (e: MouseEvent) => {
       if (roleMenuRef.current && roleMenuRef.current.contains(e.target as Node)) return;
       setRoleMenu(null);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setRoleMenu(null);
-    };
     window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => window.removeEventListener("mousedown", onDown);
   }, [roleMenu]);
+
+  useGlobalKeys(({ event: e }) => {
+    if (!roleMenu) return;
+    if (e.key !== "Escape") return;
+    setRoleMenu(null);
+    return true;
+  }, KEY_PRIORITY.overlay);
 
   /** Chord writes from the embedded progression strip — the same
    *  updateSection path the harmony editor uses, so the spine's chords
@@ -388,7 +385,7 @@ function SectionWorkspace({
     setCollapsedRows((c) => {
       const next = { ...c, [rowId]: !c[rowId] };
       try {
-        localStorage.setItem("trackdraft-workbench-rows", JSON.stringify(next));
+        localStorage.setItem(STORAGE_KEYS.workbenchRows.key, JSON.stringify(next));
       } catch {
         /* collapse state is a nicety, not data — storage full/blocked is fine to ignore */
       }

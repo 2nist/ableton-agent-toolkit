@@ -75,6 +75,7 @@ import FloorBand, { type FloorExtension, type FloorPreset } from "./FloorBand";
 import FloorScene from "./FloorScene";
 import { ChordMenu, RestMenu } from "./FloorMenus";
 import { SectionNameInput } from "./SectionNameInput";
+import { STORAGE_KEYS } from "../../../lib/persistence/keys";
 
 /**
  * THE PROGRESSION FLOOR — the composition surface.
@@ -103,14 +104,14 @@ const MIN_DEPTH = 14;
 /** The plate's height is NOT fixed: it follows the window's content, so a
  *  wide 5-bar view is a short plate and a 1-bar zoom is a tall one. A fixed
  *  height is what made the grid look out of proportion to the chords. */
-const VIEW_KEY = "trackdraft-harmony-bars-view";
+const VIEW_KEY = STORAGE_KEYS.harmonyBarsView.key;
 
 /** Four bars is the honest default: a 4-bar section is the same as ALL, and
  *  a 12-bar one opens readable instead of showing 1300 units of time squeezed
  *  into a plate that is only seven rows tall. */
 const DEFAULT_BARS_VIEW: BarsPerView = 4;
 
-const FOOT_TAB_KEY = "trackdraft-harmony-foot-tab";
+const FOOT_TAB_KEY = STORAGE_KEYS.harmonyFootTab.key;
 
 /** Which lane the foot band opens on. Remembered, because the overlay is the
  *  only place the generated voices are drawn: losing that to a reload looked
@@ -197,6 +198,13 @@ export interface ProgressionFloorProps {
   /** Desk-owned chrome, rendered inside the floor's own band/plate so the
    *  whole view stays one bounded page instead of a stack of blocks. */
   tools?: ReactNode;
+  /** The desk switcher, rendered as the first control of the floor's band. */
+  leading?: ReactNode;
+  /** A band inside the multi-section strip: the floor and nothing else.
+   *  A band is a couple of hundred pixels wide, so the full toolbar, the
+   *  foot band and the footer all overflow it — they belong to the focused
+   *  section, which the band header switches to. */
+  compact?: boolean;
   status?: ReactNode;
   /** Ghost boundaries for a proposed split (`segmentChordStream`). Null or
    *  absent means no preview is open. */
@@ -254,6 +262,8 @@ export default function ProgressionFloor({
   onExtensionChange,
   glue,
   tools,
+  leading,
+  compact = false,
   status,
   segments,
   onChangeSection,
@@ -287,7 +297,7 @@ export default function ProgressionFloor({
   const [showGlue, setShowGlue] = useState(true);
   /** The foot band is editable now, not a readout: one lane at a time. */
   const [footTab, setFootTab] = useState<"effects" | "voices">(loadFootTab);
-  const footH = footTab === "voices" ? FOOT_H_VOICES : FOOT_H;
+  const footH = compact ? 0 : footTab === "voices" ? FOOT_H_VOICES : FOOT_H;
   const plateRef = useRef<HTMLDivElement>(null);
   const [stageH, setStageH] = useState(420);
   const [storedBarsView, setStoredBarsView] =
@@ -739,7 +749,7 @@ export default function ProgressionFloor({
 
   return (
     <div ref={frameRef} className="relative">
-      <FloorBand
+      {!compact && <FloorBand
         keyName={keyName}
         scale={scale}
         tonicSteps={tonicSteps}
@@ -798,7 +808,8 @@ export default function ProgressionFloor({
         chordCount={chords.length}
         cycleBeats={cycleBeats}
         tools={tools}
-      />
+        leading={leading}
+      />}
 
       <div
         ref={plateRef}
@@ -912,6 +923,7 @@ export default function ProgressionFloor({
           canvas spent saying "nothing happening". Tension still exists: it is
           drawn ON the chord boxes (a hot box glows) and fully in Study. This
           space is now editable. */}
+        {!compact && (
         <div
           className="absolute inset-x-0 bottom-0 flex flex-col border-t border-edge/60 bg-deep"
           style={{ height: footH }}
@@ -965,8 +977,10 @@ export default function ProgressionFloor({
             ) : null}
           </div>
         </div>
+        )}
       </div>
 
+      {!compact && (
       <div className="mt-1.5 flex flex-wrap items-center gap-2 font-mono text-[9px] text-inkMuted/70">
         <span className="text-ink">{readout}</span>
         <span className="flex-1" />
@@ -998,6 +1012,7 @@ export default function ProgressionFloor({
         )}
         {beatsPerChord > 0 && <span>{beatsPerChord}b per chord</span>}
       </div>
+      )}
 
       {restMenu && (
         <RestMenu

@@ -27,6 +27,7 @@ import { planBassStem, planChordStem, planDrumStem, type MidiNote } from "../mid
 import { planColorStem } from "../colorStem";
 import { planMelodyStem } from "../melody/melodyStem";
 import { STEM_IDS, STEM_LABELS, type StemId } from "../stems";
+import { secondsPerBeat } from "../time/clock";
 import { pitchToWire, velocityToWire } from "../midi/wire";
 import type { BlueprintSong } from "../../types/blueprint";
 
@@ -62,7 +63,7 @@ function guid(): string {
 }
 
 function secondsAt(beat: number, bpm: number): number {
-  return (beat * 60) / bpm;
+  return beat * secondsPerBeat(bpm);
 }
 
 /** Group a stem's notes into one item per section span, so the project reads

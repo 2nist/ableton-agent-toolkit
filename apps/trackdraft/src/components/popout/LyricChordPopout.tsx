@@ -9,6 +9,7 @@ import type { Chord } from "../../types/blueprint";
 import { TRANSPORT_CHANNEL_NAME, type TransportTick } from "../../lib/playback/songTransport";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import { currentLineIndex, rebaseLyricsTimeline } from "./lyricTimeline";
+import { STORAGE_KEYS } from "../../lib/persistence/keys";
 
 interface ChordSlot {
   chord: Chord;
@@ -29,7 +30,7 @@ function expandChords(section: { chords: Chord[] }, durationBeats: number): Chor
 
 /** Which popout face the performer last chose — persisted so a tab that
  *  prefers the big single-section view stays there across sessions. */
-const POPOUT_MODE_KEY = "trackdraft-popout-mode";
+const POPOUT_MODE_KEY = STORAGE_KEYS.popoutMode.key;
 
 /** The lines a flow block shows: timeline entries when present (one per
  *  sung line — the same shape the section view renders), else the plain

@@ -1,12 +1,13 @@
 import { create } from "zustand";
 import { readStorage, writeStorage } from "./storage";
+import { STORAGE_KEYS } from "../lib/persistence/keys";
 
 /** Which chrome the app is wearing. `dark` is the Ableton-derived palette
  *  that has always been the default; `logsheet` is the studio-log theme
  *  (printed form · pencil · tape · stamps). */
 export type ThemeId = "dark" | "logsheet";
 
-const STORAGE_KEY = "trackdraft-theme";
+const STORAGE_KEY = STORAGE_KEYS.theme.key;
 
 /** The themes a picker can offer, in order, with the label to show. */
 export const THEMES: { id: ThemeId; label: string }[] = [

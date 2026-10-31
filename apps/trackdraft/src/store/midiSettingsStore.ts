@@ -9,6 +9,7 @@ import {
   type StemRoutingMap,
 } from "../lib/stems";
 import { readStorage, writeStorage } from "./storage";
+import { STORAGE_KEYS } from "../lib/persistence/keys";
 
 /** Per-stem MIDI out settings, persisted across sessions.
  *
@@ -58,7 +59,7 @@ interface MidiSettingsState {
   resetRouting: () => void;
 }
 
-const STORAGE_KEY = "trackdraft-midi-settings";
+const STORAGE_KEY = STORAGE_KEYS.midiSettings.key;
 
 /** The persisted (non-function) slice of the state. */
 interface PersistedMidiSettings {

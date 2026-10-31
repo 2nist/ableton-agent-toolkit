@@ -27,13 +27,14 @@ import { getHost } from "../host";
 import { createDebouncedWriter, readRawStorage, readStorage, writeRawStorage, clearStorageFailure, reportStorageFailure } from "../../store/storage";
 import { countSongRecords, deleteSongRecords, readSongRecords, readSongRecordsByIds, writeSongRecords } from "./songDb";
 import type { SongRecord } from "./songDb";
+import { STORAGE_KEYS } from "../persistence/keys";
 
-const SONGS_KEY = "trackdraft-songs";
-const CURRENT_ID_KEY = "trackdraft-current-song-id";
+const SONGS_KEY = STORAGE_KEYS.songs.key;
+const CURRENT_ID_KEY = STORAGE_KEYS.currentSongId.key;
 const AUTOSAVE_DEBOUNCE_MS = 1500;
 /** Storage-failure key for the desktop library — the same string the
  *  debounced writer is keyed on, so the banner names one thing. */
-const LIBRARY_KEY = "host-library";
+const LIBRARY_KEY = STORAGE_KEYS.libraryMirror.key;
 
 export type SongRepositoryKind = "browser" | "disk";
 

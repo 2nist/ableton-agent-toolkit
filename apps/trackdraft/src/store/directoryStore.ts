@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { getHost } from "../lib/host";
 import { kindForFile } from "../lib/importKinds";
 import { readStorage, writeStorage } from "./storage";
+import { STORAGE_KEYS } from "../lib/persistence/keys";
 
 export interface DirectoryConfig {
   path: string;
@@ -34,7 +35,7 @@ interface DirectoryStoreState {
   refreshAll: () => Promise<void>;
 }
 
-const STORAGE_KEY = "trackdraft-directories";
+const STORAGE_KEY = STORAGE_KEYS.directories.key;
 
 export const useDirectoryStore = create<DirectoryStoreState>((set, get) => ({
   dirs: readStorage<DirectoryConfig[]>(STORAGE_KEY, []),

@@ -21,6 +21,7 @@
 import { detectPitch } from "./pitch";
 import { NoteSegmenter, DEFAULT_SEGMENTER_CONFIG, type RawMelodyNote } from "./segmenter";
 import type { MelodyNote } from "../../types/blueprint";
+import { secondsPerBeat } from "../time/clock";
 
 /** One telemetry frame surfaced to the UI (for a live pitch meter) while
  *  recording. */
@@ -159,7 +160,7 @@ export class MelodyRecorder {
  * knob to clean up). Notes get the default velocity.
  */
 export function rawNotesToBeats(raw: RawMelodyNote[], startBeat: number, bpm: number): MelodyNote[] {
-  const secPerBeat = 60 / bpm;
+  const secPerBeat = secondsPerBeat(bpm);
   return raw.map((n) => ({
     pitch: n.pitch,
     startTime: Math.round((startBeat + n.startSec / secPerBeat) * 100) / 100,

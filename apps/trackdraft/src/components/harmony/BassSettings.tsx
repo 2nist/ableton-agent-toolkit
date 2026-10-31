@@ -1,5 +1,6 @@
 import type { BlueprintSection } from "../../types/blueprint";
 import { DEFAULT_BASS_PROFILE } from "@drum/library";
+import MicroLabel from "../common/MicroLabel";
 
 const OCTAVES = [3, 4] as const;
 const MOTIONS = [
@@ -39,12 +40,9 @@ export default function BassSettings({ section, onChange }: BassSettingsProps) {
 
   return (
     <div>
-      <span
-        className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1"
-        title="The generated bass voice for this section — the Bass track in MIDI export, Send to Ableton, and real-time MIDI out. One sustained root per chord by default."
-      >
+      <MicroLabel className="block mb-1" title="The generated bass voice for this section — the Bass track in MIDI export, Send to Ableton, and real-time MIDI out. One sustained root per chord by default.">
         Bass
-      </span>
+      </MicroLabel>
 
       <div className="flex items-center justify-between mb-1.5">
         <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted" title="Register as a MIDI octave — 3 is the standard bass octave (C2), 4 an octave up.">
@@ -86,7 +84,7 @@ export default function BassSettings({ section, onChange }: BassSettingsProps) {
       </div>
 
       <div className="flex items-center justify-between">
-        <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Velocity</span>
+        <MicroLabel size="2xs">Velocity</MicroLabel>
         <div className="flex items-center gap-2">
           <input
             type="range"

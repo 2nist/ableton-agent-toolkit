@@ -4,7 +4,7 @@ import DrumPatternPicker from "./DrumPatternPicker";
 import { useEffect, useRef, useState } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useFocusedSectionStore } from "../../store/focusedSectionStore";
-import { useDrumsDraftStore } from "../../store/drumsDraftStore";
+import { useDrumsDraftStore, writeDrumSection } from "../../store/drumsDraftStore";
 import { updateSection } from "../../lib/sections";
 import { sectionSpans } from "../../lib/arrangement";
 import {
@@ -33,6 +33,7 @@ import {
 import type { BlueprintSection, DrumPattern, DrumTransitionModel, DrumCellVoice, MeterOutline } from "../../types/blueprint";
 import { beatsPerBar } from "../../types/blueprint";
 import TapeLabel from "../common/TapeLabel";
+import MicroLabel from "../common/MicroLabel";
 
 type ToolTab = "pattern" | "variation" | "transition";
 
@@ -251,8 +252,7 @@ export default function DrumPatternTools() {
 
   function apply() {
     if (!isDraft || !draftSection) return;
-    updateCurrentSong((s) => updateSection(s, activeSection.id, () => draftSection));
-    clearDraft();
+    writeDrumSection(activeSection.id, () => draftSection);
   }
 
   /** Auto toggles: on → let the engine pick the groove; clicking it again
@@ -674,9 +674,9 @@ export default function DrumPatternTools() {
                   each cell's kick/snare/hat downbeat voice (`cellVoices`),
                   both of which the export honors. */}
               <div className="border-t border-edge/40 pt-2">
-                <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+                <MicroLabel className="block mb-1">
                   Cells · {outline.label}
-                </span>
+                </MicroLabel>
                 <div className="flex flex-wrap gap-1 items-center">
                   {outline.cells.map((cell, i) => {
                     const voice = outline.cellVoices?.[i] ?? "hat";
@@ -754,9 +754,9 @@ export default function DrumPatternTools() {
             </div>
           ) : necklace ? (
             <div className="border-t border-edge/60 pt-2.5">
-              <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+              <MicroLabel className="block mb-1">
                 Pattern · whole section
-              </span>
+              </MicroLabel>
               <NecklaceRow necklaces={necklace} />
             </div>
           ) : null}
@@ -766,9 +766,9 @@ export default function DrumPatternTools() {
       {tab === "variation" && (
         <div className="space-y-3">
           <div>
-            <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+            <MicroLabel className="block mb-1">
               Detour · this section's ending rhythm detour
-            </span>
+            </MicroLabel>
             {variation ? (
               <div className="space-y-2">
                 <div className="space-y-2">
@@ -802,9 +802,9 @@ export default function DrumPatternTools() {
                 {/* Detour cells — the 2s/3s grouping + per-cell downbeat voice,
                     same editor as the whole-section outline. */}
                 <div className="border-t border-edge/40 pt-2">
-                  <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+                  <MicroLabel className="block mb-1">
                     Detour cells · {variation.label}
-                  </span>
+                  </MicroLabel>
                   <div className="flex flex-wrap gap-1 items-center">
                     {variation.cells.map((cell, i) => {
                       const voice = variation.cellVoices?.[i] ?? "hat";
@@ -881,7 +881,7 @@ export default function DrumPatternTools() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Start beat</span>
+                  <MicroLabel size="2xs">Start beat</MicroLabel>
                   {(() => {
                     const bpb = beatsPerBar(eff);
                     const duration = eff.bars * bpb;
@@ -901,7 +901,7 @@ export default function DrumPatternTools() {
                   })()}
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Bars</span>
+                  <MicroLabel size="2xs">Bars</MicroLabel>
                   <div className="flex items-center gap-2">
                     <button className={CHIP} onClick={() => setVariationBars((eff.drumVariationBars ?? 1) - 1)}>−</button>
                     <span className="font-mono text-2xs tabular-nums text-ink">{eff.drumVariationBars ?? 1}</span>
@@ -927,9 +927,9 @@ export default function DrumPatternTools() {
       {tab === "transition" && (
         <div className="space-y-3">
           <div>
-            <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+            <MicroLabel className="block mb-1">
               Transition · this section's ending
-            </span>
+            </MicroLabel>
             <div className="flex flex-wrap gap-1 mb-2">
               <button className={!eff.drumTransitionModel ? CHIP_ON : CHIP} onClick={() => setTransitionModel(null)}>
                 none
@@ -971,7 +971,7 @@ export default function DrumPatternTools() {
             )}
             {eff.drumTransitionModel && (
               <div className="flex items-center justify-between mb-2">
-                <span className="font-mono text-2xs uppercase tracking-wider text-inkMuted">Bars</span>
+                <MicroLabel size="2xs">Bars</MicroLabel>
                 <div className="flex items-center gap-2">
                   <button className={CHIP} onClick={() => setTransitionBars((eff.drumTransitionBars ?? 1) - 1)}>−</button>
                   <span className="font-mono text-2xs tabular-nums text-ink">{eff.drumTransitionBars ?? 1}</span>
@@ -992,9 +992,9 @@ export default function DrumPatternTools() {
           </div>
 
           <div>
-            <span className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">
+            <MicroLabel className="block mb-1">
               Pattern at this section
-            </span>
+            </MicroLabel>
             {outline ? (
               <div className="space-y-1.5">
                 <NecklaceRow necklaces={outlineNecklaces} />

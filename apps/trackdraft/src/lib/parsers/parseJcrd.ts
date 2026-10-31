@@ -10,6 +10,7 @@
 import type { BlueprintSong, BlueprintSection, Chord } from "../../types/blueprint";
 import type { NoteName, ChordQuality } from "@music-theory/core";
 import type { SectionRole } from "@music-theory/song-structure";
+import { secondsPerBeat } from "../time/clock";
 
 function mapSectionRole(type: string): SectionRole {
   const lower = type.toLowerCase();
@@ -127,9 +128,9 @@ export function parseMcgillJcrd(raw: unknown): BlueprintSong {
 
   for (const ms of rawSections) {
     const chords = ms.chords.map(parseLabel).filter((c): c is Chord => c !== null);
-    const secondsPerBeat = 60 / bpm;
+    const beatSeconds = secondsPerBeat(bpm);
     const durationSeconds = ms.duration_ms / 1000;
-    const totalBeats = durationSeconds / secondsPerBeat;
+    const totalBeats = durationSeconds / beatSeconds;
     const bars = Math.max(2, Math.round(totalBeats / 4));
 
     const section: BlueprintSection = {

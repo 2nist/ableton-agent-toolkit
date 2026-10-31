@@ -24,6 +24,7 @@
  */
 import { normalizeWord, type Pronouncer } from "./phonetics";
 import { readStorage, writeStorage } from "../../store/storage";
+import { STORAGE_KEYS } from "../persistence/keys";
 
 /** word → ARPAbet string, or `null` for a dictionary-confirmed miss. */
 type PronCache = Record<string, string | null>;
@@ -149,5 +150,5 @@ export function createDatamusePronouncer(options: {
 /** The app's shared source — one cache (persisted in localStorage) for every
  *  panel, so a word is only ever looked up once per browser profile. */
 export const pronouncerSource = createDatamusePronouncer({
-  storageKey: "trackdraft-pronunciation-cache",
+  storageKey: STORAGE_KEYS.pronunciationCache.key,
 });

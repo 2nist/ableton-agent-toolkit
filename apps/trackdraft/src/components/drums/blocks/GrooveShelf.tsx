@@ -16,6 +16,7 @@ import type { BlueprintSection } from "../../../types/blueprint";
 import { DRUM_LANES, laneColor } from "../laneStyle";
 import { usePalette, withAlpha } from "../../../theme/palette";
 import { beatsPerBarOf } from "../../../lib/timeline/beatMap";
+import { STORAGE_KEYS } from "../../../lib/persistence/keys";
 
 /**
  * The GROOVE SHELF — pick a groove by SEEING its rhythm.
@@ -228,7 +229,7 @@ export default function GrooveShelf(props: GrooveShelfProps) {
   // fold down to its name — the canvas gets the room instead.
   const [open, setOpen] = useState<boolean>(() => {
     try {
-      return localStorage.getItem("trackdraft-drums-shelf-open") !== "0";
+      return localStorage.getItem(STORAGE_KEYS.drumsShelfOpen.key) !== "0";
     } catch {
       return true;
     }
@@ -236,7 +237,7 @@ export default function GrooveShelf(props: GrooveShelfProps) {
   const toggle = () => {
     setOpen((o) => {
       try {
-        localStorage.setItem("trackdraft-drums-shelf-open", o ? "0" : "1");
+        localStorage.setItem(STORAGE_KEYS.drumsShelfOpen.key, o ? "0" : "1");
       } catch {
         /* ignore */
       }

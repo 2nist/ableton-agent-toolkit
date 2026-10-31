@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useSongStore } from "../../store/songStore";
 import { useDirectoryStore, type DirectoryEntry } from "../../store/directoryStore";
 import { computeConfidence } from "../../lib/confidence";
@@ -13,7 +13,7 @@ import SongTable, { type SortKey, type SortDir } from "./SongTable";
 import TemplatePicker from "./TemplatePicker";
 import ThemeToggle from "../common/ThemeToggle";
 import { usePalette } from "../../theme/palette";
-import TapeLabel from "../common/TapeLabel";
+import DashboardHeader from "./DashboardHeader";
 import DirSetupModal from "./DirSetupModal";
 
 const TYPE_BADGES: Record<string, { label: string; color: string }> = {
@@ -226,41 +226,21 @@ export default function Dashboard() {
           /* Directory listing view */
           <div className="flex flex-col flex-1 min-h-0">
             <div className="shrink-0">
-              <header className="flex items-center justify-between px-4 py-2 border-b border-edge">
-                <div className="flex items-center gap-2">
-                  <button
-                    className="text-inkMuted text-xs hover:text-ink"
-                    onClick={() => setSelectedDir(null)}
-                  >
-                    ← Back
-                  </button>
-                  <h1 className="text-sm font-semibold">{dirLabel}</h1>
-                </div>
-                <div className="flex items-center gap-3 text-[10px] text-inkMuted">
-                  <span>
-                    {isLoadingDir ? "Loading…" : `${filteredDirEntries.length} files`}
-                  </span>
-                  <button
-                    className="text-xs bg-panelAlt border border-edge text-inkMuted hover:text-ink px-2 py-0.5 rounded disabled:opacity-40"
-                    onClick={handleBulkImport}
-                    disabled={importingBulk || isLoadingDir}
-                  >
-                    {importingBulk ? "Importing…" : "Import All"}
-                  </button>
-                  <Link to="/design-lab" className="hover:text-ink">
-                    Design Lab
-                  </Link>
-                  <Link to="/sandbox" className="hover:text-ink">
-                    Sandbox
-                  </Link>
-                  <Link to="/canvas" className="hover:text-ink">
-                    Canvas
-                  </Link>
-                  <Link to="/genre-workbench" className="hover:text-ink">
-                    Genre Maps
-                  </Link>
-                </div>
-              </header>
+              <DashboardHeader
+                title={dirLabel}
+                onBack={() => setSelectedDir(null)}
+              >
+                <span>
+                  {isLoadingDir ? "Loading…" : `${filteredDirEntries.length} files`}
+                </span>
+                <button
+                  className="text-xs bg-panelAlt border border-edge text-inkMuted hover:text-ink px-2 py-0.5 rounded disabled:opacity-40"
+                  onClick={handleBulkImport}
+                  disabled={importingBulk || isLoadingDir}
+                >
+                  {importingBulk ? "Importing…" : "Import All"}
+                </button>
+              </DashboardHeader>
 
               {/* Simple search for dir listings */}
               <div className="px-3 py-2 border-b border-edge">
@@ -371,40 +351,26 @@ export default function Dashboard() {
           /* All Songs view (localStorage) */
           <>
             <div className="shrink-0">
-              <header className="flex items-center justify-between px-4 py-2 border-b border-edge">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <TapeLabel size="lg" tilt="left" className="text-sm font-semibold">TrackDraft</TapeLabel>
-                  {handDrawn && <span className="stamp stamp--tight">Studio log</span>}
-                </div>
-                <div className="flex items-center gap-3 text-[10px] text-inkMuted">
-                  <ThemeToggle />
-                  <span>{songs.length} songs</span>
-                  <span className="flex items-center gap-1">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-ok" />
-                    {confidenceStats.complete}
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-warn" />
-                    {confidenceStats.strong}
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-400" />
-                    {confidenceStats.partial}
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-danger" />
-                    {confidenceStats.draft}
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-500" />
-                    {confidenceStats.empty}
-                  </span>
-                  <Link to="/design-lab" className="hover:text-ink">
-                    Design Lab
-                  </Link>
-                  <Link to="/sandbox" className="hover:text-ink">
-                    Sandbox
-                  </Link>
-                  <Link to="/canvas" className="hover:text-ink">
-                    Canvas
-                  </Link>
-                  <Link to="/genre-workbench" className="hover:text-ink">
-                    Genre Maps
-                  </Link>
-                </div>
-              </header>
+              <DashboardHeader
+                title="TrackDraft"
+                stamp="TrackDraft"
+                badge={handDrawn ? <span className="stamp stamp--tight shrink-0">Studio log</span> : null}
+              >
+                <ThemeToggle />
+                <span>{songs.length} songs</span>
+                <span className="hidden lg:flex items-center gap-1">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-ok" />
+                  {confidenceStats.complete}
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-warn" />
+                  {confidenceStats.strong}
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-400" />
+                  {confidenceStats.partial}
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-danger" />
+                  {confidenceStats.draft}
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-500" />
+                  {confidenceStats.empty}
+                </span>
+              </DashboardHeader>
 
               <ActionBar />
 

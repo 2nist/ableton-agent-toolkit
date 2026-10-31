@@ -22,6 +22,12 @@ import type { HarmonyDeskBandProps } from "./types";
  * you touched. Bands are forced to show all their bars, because a band that
  * pages its own window can't share a grid with its neighbour.
  *
+ * Bands render `compact`: the floor and its header, no toolbar and no foot
+ * band. In a 200px band the full toolbar wrapped into itself and the foot band
+ * covered a third of the plate, so thirty bands' worth of chrome was competing
+ * with the one thing the strip exists to show. Per-section tools live in the
+ * focused section — clicking a band's name switches to it.
+ *
  * Not supported (and not pretended otherwise): dragging a chord *between*
  * bands. That is a section edit, not a chord edit, and it belongs with the
  * split/merge verbs.
@@ -178,6 +184,12 @@ function BandDesk({
     [section.chords, props.keyName, props.scale, props.regions, beatsPerBar],
   );
   return (
-    <ComposeDesk {...props} analysis={analysis} barsPerView="all" barOffset={barOffset} />
+    <ComposeDesk
+      {...props}
+      analysis={analysis}
+      barsPerView="all"
+      barOffset={barOffset}
+      compact
+    />
   );
 }

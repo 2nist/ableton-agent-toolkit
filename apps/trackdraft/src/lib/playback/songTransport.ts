@@ -3,6 +3,7 @@ import { getAbletonClock } from "./abletonClock";
 import { createAbletonSyncClock, type AbletonSyncClock } from "./abletonSyncClock";
 import { beatsPerBar } from "../../types/blueprint";
 import type { BlueprintSong } from "../../types/blueprint";
+import { secondsPerBeat } from "../time/clock";
 
 /** A song-wide playback position, emitted on every tick while playing and
  *  once more (isPlaying: false) when play stops or reaches the end. */
@@ -145,7 +146,7 @@ class SongTransport {
     this.spans = sectionSpans(song);
     if (this.spans.length === 0) return false;
 
-    this.secPerBeat = 60 / song.bpm;
+    this.secPerBeat = secondsPerBeat(song.bpm);
     const lastSpan = this.spans[this.spans.length - 1];
     this.totalBeats = lastSpan.startBeat + lastSpan.durationBeats;
     if (this.totalBeats <= 0) return false;
@@ -220,10 +221,10 @@ class SongTransport {
 
     if (this.isPlaying) {
       const beat = this.currentBeat();
-      this.startedAtMs = performance.now() - beat * (60 / song.bpm) * 1000;
+      this.startedAtMs = performance.now() - beat * secondsPerBeat(song.bpm) * 1000;
     }
     this.spans = spans;
-    this.secPerBeat = 60 / song.bpm;
+    this.secPerBeat = secondsPerBeat(song.bpm);
     this.totalBeats = totalBeats;
   }
 

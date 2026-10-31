@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+import { KEY_PRIORITY, useGlobalKeys } from "../../hooks/useGlobalKeys";
 
 /**
  * Keyboard for the section selection: ⌘A selects every section, Escape drops a
@@ -69,21 +70,17 @@ export function useSectionShortcuts(shortcuts: SectionShortcuts): void {
   const latest = useRef(shortcuts);
   latest.current = shortcuts;
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (isTyping(event.target)) return;
-      const { order, focusedId, onFocus, onExtendTo, onSelectAll, onCollapse } = latest.current;
-      const shortcut = sectionShortcutFor(event, { order, focusedId });
-      if (!shortcut) return;
-      // Escape is not swallowed: it is the app's "get me out" key everywhere.
-      if (shortcut.kind !== "collapse") event.preventDefault();
-      if (shortcut.kind === "all") onSelectAll();
-      else if (shortcut.kind === "collapse") onCollapse();
-      else if (shortcut.kind === "focus") onFocus(shortcut.sectionId);
-      else onExtendTo(shortcut.sectionId);
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  useGlobalKeys(({ event }) => {
+    if (isTyping(event.target)) return;
+    const { order, focusedId, onFocus, onExtendTo, onSelectAll, onCollapse } = latest.current;
+    const shortcut = sectionShortcutFor(event, { order, focusedId });
+    if (!shortcut) return;
+    if (shortcut.kind === "all") onSelectAll();
+    else if (shortcut.kind === "collapse") onCollapse();
+    else if (shortcut.kind === "focus") onFocus(shortcut.sectionId);
+    else onExtendTo(shortcut.sectionId);
+    // Escape is not swallowed: it is the app's "get me out" key everywhere,
+    // and the shell may still need it. Everything else is ours.
+    return shortcut.kind !== "collapse";
+  }, KEY_PRIORITY.surface);
 }

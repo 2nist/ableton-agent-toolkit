@@ -13,6 +13,7 @@ import ImportAnalysisButton from "../drums/ImportAnalysisButton";
 import ThemeToggle from "../common/ThemeToggle";
 import { getSongTransport } from "../../lib/playback/songTransport";
 import { usePlayhead, usePlayheadFrames } from "../../hooks/usePlayhead";
+import { KEY_PRIORITY, useGlobalKeys } from "../../hooks/useGlobalKeys";
 import { pauseSong, playLoopRegion, playSectionLoop, playSong, resumeUnlooped, seekTo, stopSong } from "../../lib/playback/transportControl";
 import { useSongStore } from "../../store/songStore";
 import { useDawTargetStore } from "../../store/dawTargetStore";
@@ -362,52 +363,50 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
 
   // Hotkeys — workbench-wide: space = play/pause · Z = zoom-to-section ·
   // F = fit · L = section loop · [ ] = zoom ladder · Esc closes the palette
-  // and clears the loop region. Skipped while typing in form fields; space
-  // is left to the browser when a button outside the spine has focus
-  // (buttons natively activate on space — handling it there would
-  // double-fire).
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      const a = actionsRef.current;
-      if (!a) return;
-      switch (e.key) {
-        case " ":
-          if (e.repeat) return;
-          if (t?.tagName === "BUTTON" && !t.closest("[data-spine]")) return;
-          e.preventDefault();
-          a.space();
-          break;
-        case "z":
-        case "Z":
-          if (!e.repeat) a.zoomToSection();
-          break;
-        case "f":
-        case "F":
-          if (!e.repeat) a.fit();
-          break;
-        case "l":
-        case "L":
-          if (!e.repeat) a.loop();
-          break;
-        case "[":
-          a.zoom(-1);
-          break;
-        case "]":
-          a.zoom(1);
-          break;
-        case "Escape":
-          a.escape();
-          break;
-        default:
-          break;
-      }
+  // and clears the loop region. Space is left to the browser when a button
+  // outside the spine has focus (buttons natively activate on space).
+  // Transport and song-level navigation are SHELL keys: the lowest priority,
+  // so a focused surface (a lane grid, a modal) always gets them first.
+  useGlobalKeys(({ event: e, typing }) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (typing) return;
+    const t = e.target as HTMLElement | null;
+    const a = actionsRef.current;
+    if (!a) return;
+    switch (e.key) {
+      case " ":
+        if (e.repeat) return;
+        if (t?.tagName === "BUTTON" && !t.closest("[data-spine]")) return;
+        a.space();
+        return true;
+      case "z":
+      case "Z":
+        if (e.repeat) return;
+        a.zoomToSection();
+        return true;
+      case "f":
+      case "F":
+        if (e.repeat) return;
+        a.fit();
+        return true;
+      case "l":
+      case "L":
+        if (e.repeat) return;
+        a.loop();
+        return true;
+      case "[":
+        a.zoom(-1);
+        return true;
+      case "]":
+        a.zoom(1);
+        return true;
+      case "Escape":
+        a.escape();
+        return true;
+      default:
+        return;
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, KEY_PRIORITY.shell);
 
   // Close the context palette on any outside press, scroll, or resize.
   useEffect(() => {

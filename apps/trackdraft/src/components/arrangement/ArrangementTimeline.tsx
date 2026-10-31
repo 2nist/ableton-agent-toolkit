@@ -9,6 +9,7 @@ import { classifySong } from "../../lib/classification";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import type { TransportTick } from "../../lib/playback/songTransport";
 import { usePlayhead } from "../../hooks/usePlayhead";
+import { useTimeViewportStore } from "../../store/timeViewportStore";
 import { useFocusedSectionStore } from "../../store/focusedSectionStore";
 import { rangeIds } from "../../lib/sectionSelection";
 import { drumFamilyLabel } from "../../lib/playback/drumPreview";
@@ -16,10 +17,17 @@ import type { BlueprintSong } from "../../types/blueprint";
 import { usePalette } from "../../theme/palette";
 import TapeLabel from "../common/TapeLabel";
 
-const PX_PER_BEAT = 2;
-// Wide enough for the per-section readout strip (harmony/drums/melody)
-// beneath each block to stay legible — this is a glance-at-the-song view.
-const MIN_BLOCK_WIDTH = 64;
+/**
+ * The arrangement view is the spine's axis at a larger density, so its blocks
+ * stay clickable and its per-section readout strip stays legible.
+ *
+ * It used to be its own axis: a fixed 2px per beat with a 64px floor, so a
+ * 1-bar intro and a 4-bar verse could draw the same width and the spine's zoom
+ * had no effect here. Both surfaces are now bar-linear over the one shared
+ * zoom (`useTimeViewportStore`), and this factor only changes the unit —
+ * proportions are exact at every zoom level.
+ */
+const ARRANGEMENT_BAR_PX_FACTOR = 1.6;
 // Tailwind's `gap-0.5` (0.125rem at the default 16px root) — the block
 // row's own gap, needed here too so the playhead's pixel math accounts
 // for the same spacing between blocks, not just their widths.
@@ -30,13 +38,16 @@ const BLOCK_GAP_PX = 2;
  *  playhead computed from raw `beat * PX_PER_BEAT` would drift out of
  *  alignment with the blocks themselves as soon as any section is short
  *  enough to hit the floor. */
-function blockLefts(spans: SectionSpan[]): number[] {
+function barWidth(barPx: number): number {
+  return barPx * ARRANGEMENT_BAR_PX_FACTOR;
+}
+
+function blockLefts(spans: SectionSpan[], barPx: number): number[] {
   const lefts: number[] = [];
   let cursor = 0;
   for (const span of spans) {
     lefts.push(cursor);
-    const width = Math.max(MIN_BLOCK_WIDTH, span.durationBeats * PX_PER_BEAT);
-    cursor += width + BLOCK_GAP_PX;
+    cursor += span.bars * barWidth(barPx) + BLOCK_GAP_PX;
   }
   return lefts;
 }
@@ -44,14 +55,19 @@ function blockLefts(spans: SectionSpan[]): number[] {
 /** The playhead's x position for the current tick, interpolated within
  *  whichever span it falls in — null when stopped or the tick's beat
  *  doesn't land in any span (e.g. a moment before playback fully starts). */
-function playheadX(spans: SectionSpan[], lefts: number[], tick: TransportTick | null): number | null {
+function playheadX(
+  spans: SectionSpan[],
+  lefts: number[],
+  tick: TransportTick | null,
+  barPx: number,
+): number | null {
   if (!tick || !tick.isPlaying) return null;
   // By identity — a tick's positional index refers to the arrangement as it
   // was when playback started, which any edit since then has invalidated.
   const index = spanIndexForTick(spans, tick);
   if (index < 0) return null;
   const span = spans[index];
-  const width = Math.max(MIN_BLOCK_WIDTH, span.durationBeats * PX_PER_BEAT);
+  const width = span.bars * barWidth(barPx);
   const progress = span.durationBeats > 0 ? (tick.beat - span.startBeat) / span.durationBeats : 0;
   return lefts[index] + Math.max(0, Math.min(1, progress)) * width;
 }
@@ -128,12 +144,13 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
   // Quantised to a sixteenth — the block playhead reads the same grid the
   // blocks are laid out on, at ~1/8th of the render cost of the raw tick.
   const tick = usePlayhead();
+  const barPx = useTimeViewportStore((s) => s.scales.song);
 
   if (spans.length === 0) return null;
 
   const hovered = hoveredIndex !== null ? spans[hoveredIndex] : null;
-  const lefts = blockLefts(spans);
-  const playheadLeft = playheadX(spans, lefts, tick);
+  const lefts = blockLefts(spans, barPx);
+  const playheadLeft = playheadX(spans, lefts, tick, barPx);
 
   return (
     <div className="border border-edge rounded-lg bg-panel p-3 space-y-1.5">
@@ -177,8 +194,7 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
           )}
           {spans.map((span, i) => {
             const style = roleStyle(span.section.role);
-            const rawWidth = span.durationBeats * PX_PER_BEAT;
-            const width = isFinite(rawWidth) ? Math.max(MIN_BLOCK_WIDTH, rawWidth) : MIN_BLOCK_WIDTH;
+            const width = span.bars * barWidth(barPx);
             const isSelected = selectedSectionId === span.sectionId;
             const inSelection = selectedSectionIds.includes(span.sectionId);
             const section = span.section;

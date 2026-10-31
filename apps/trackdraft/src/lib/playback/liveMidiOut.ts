@@ -5,6 +5,7 @@ import { planMelodyStem } from "../melody/melodyStem";
 import { channelToIndex, pitchToWire, velocityToWire } from "../midi/wire";
 import { LIVE_ROUTING, STEM_IDS, clampChannel, type StemId, type StemRoutingMap } from "../stems";
 import type { BlueprintSong } from "../../types/blueprint";
+import { secondsPerBeat } from "../time/clock";
 
 /** Per-stem routing for the live MIDI out — the same shape the file export
  *  takes (see `lib/stems.ts`), so one editor can describe both paths. Only
@@ -307,7 +308,7 @@ class LiveMidiScheduler {
       : [];
     this.lastNoteStart = scheduled.length ? scheduled[scheduled.length - 1].note.startTime : 0;
 
-    this.secPerBeat = 60 / song.bpm;
+    this.secPerBeat = secondsPerBeat(song.bpm);
     this.latencyMs = Math.max(-500, Math.min(500, Math.round(opts.outputLatencyMs ?? 0)));
     this.startBeat = Math.max(0, opts.startBeat ?? 0);
     this.loopStart = opts.loopStart ?? null;

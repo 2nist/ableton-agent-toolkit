@@ -10,6 +10,7 @@ import { resolveSectionLaneHits } from "../timeline/drumLaneHits";
 import { resolveSectionVariant } from "../playback/drumPreview";
 import { laneFigureBlock } from "./laneFigure";
 import { getHost } from "../host";
+import { STORAGE_KEYS } from "../persistence/keys";
 
 /**
  * Saved beats — the writer's own vocabulary.
@@ -30,7 +31,7 @@ import { getHost } from "../host";
 /** Lanes in draw order, so a captured beat always reads the same way. */
 const LANE_ORDER: DrumLaneId[] = ["kick", "snare", "rim", "hat", "cym", "tom"];
 
-export const USER_BEATS_KEY = "trackdraft-user-beats";
+export const USER_BEATS_KEY = STORAGE_KEYS.userBeats.key;
 /** The portable file: `<library>/tables/beats.json`, exported as `trackdraft.beats.json`. */
 export const BEATS_FILENAME = "trackdraft.beats.json";
 

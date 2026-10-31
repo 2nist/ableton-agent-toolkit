@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import type { BlueprintSection } from "../types/blueprint";
+import { useSongStore } from "./songStore";
+import { updateSection } from "../lib/sections";
 
 /** A working draft of a section's drum fields — the in-progress edit the
  *  Pattern editor is previewing live on the timeline before the user
@@ -20,3 +22,20 @@ export const useDrumsDraftStore = create<DrumsDraftState>((set) => ({
   setDraft: (sectionId, section) => set({ sectionId, section }),
   clearDraft: () => set({ sectionId: null, section: null }),
 }));
+
+/**
+ * The one way to write drum fields into the song.
+ *
+ * A staged draft shadows the song on every surface that reads it (the timeline,
+ * the necklaces, the transport's preview), so a direct edit that forgot to drop
+ * the draft first would appear to do nothing. That invariant used to be five
+ * separate `clearDraft()` calls spread across two components, each one a
+ * chance to forget it. It lives here now.
+ */
+export function writeDrumSection(
+  sectionId: string,
+  mutate: (section: BlueprintSection) => BlueprintSection,
+): void {
+  useDrumsDraftStore.getState().clearDraft();
+  useSongStore.getState().updateCurrentSong((song) => updateSection(song, sectionId, mutate));
+}

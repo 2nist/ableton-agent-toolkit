@@ -6,6 +6,7 @@ import type { NoteName } from "@music-theory/core";
 import { NOTE_TO_PC, pitchClass } from "@music-theory/core";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import HexReadout from "../harmony/HexReadout";
+import { KEY_PRIORITY, useGlobalKeys } from "../../hooks/useGlobalKeys";
 import { useRoleStyle } from "../../lib/roleColors";
 import {
   buildLyricDocument,
@@ -244,23 +245,24 @@ export default function LyricDocumentView({ song, onChange }: LyricDocumentViewP
     setPopover(null);
   }
 
-  // Popover dismissal (same pattern as the workbench's role menu).
+  // Popover dismissal (same pattern as the workbench's role menu). The
+  // outside-press is local; Escape goes through the one keyboard registry.
   useEffect(() => {
     if (!popover) return;
     const onDown = (e: MouseEvent) => {
       if (popoverRef.current && popoverRef.current.contains(e.target as Node)) return;
       setPopover(null);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPopover(null);
-    };
     window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => window.removeEventListener("mousedown", onDown);
   }, [popover]);
+
+  useGlobalKeys(({ event: e }) => {
+    if (!popover) return;
+    if (e.key !== "Escape") return;
+    setPopover(null);
+    return true;
+  }, KEY_PRIORITY.overlay);
 
   function beginLineEdit(row: SongTextLine) {
     setEditingLineKey(`${row.line.sectionId}:${row.line.lineIndexInSection}`);

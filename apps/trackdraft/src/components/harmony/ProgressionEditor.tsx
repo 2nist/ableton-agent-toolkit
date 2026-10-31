@@ -24,6 +24,7 @@
 
 import { uuid } from "../../lib/uuid";
 import TapeLabel from "../common/TapeLabel";
+import { STORAGE_KEYS } from "../../lib/persistence/keys";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pitchClass } from "@music-theory/core";
 import type { NoteName, ScaleType } from "@music-theory/core";
@@ -60,7 +61,7 @@ const EDGE_SCROLL_PX = 28;
 /** Pointer travel before a press on a card counts as a reorder drag. */
 const REORDER_THRESHOLD = 4;
 
-const LANES_KEY = "trackdraft-progression-lanes";
+const LANES_KEY = STORAGE_KEYS.progressionLanes.key;
 
 export interface ProgressionLanes {
   voicing: boolean;

@@ -10,6 +10,7 @@ import { EuclidRing, FxPanel, MotionRing, VelocityPanel } from "./SelectionDispl
 import { euclidBlocksFor, fxBlocksFor, fxForLanes, motionBlockFor, motionLabelFor, upsertModeBlocks } from "./selectionMath";
 import type { VelocityOp } from "./velocityOps";
 import TapeLabel from "../../common/TapeLabel";
+import { KEY_PRIORITY, useGlobalKeys } from "../../../hooks/useGlobalKeys";
 
 /**
  * The exploded selection editor — the docked pad opened into a workbench.
@@ -193,11 +194,11 @@ export default function SelectionEditorModal(props: SelectionEditorModalProps) {
     }));
   }, [lanes, range.startBeat, range.endBeat, onWrite]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useGlobalKeys(({ event: e }) => {
+    if (e.key !== "Escape") return;
+    onClose();
+    return true;
+  }, KEY_PRIORITY.overlay);
 
   // ---- render ------------------------------------------------------------------
 

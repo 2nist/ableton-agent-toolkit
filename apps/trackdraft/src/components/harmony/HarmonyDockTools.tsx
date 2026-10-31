@@ -18,6 +18,7 @@ import BassSettings from "./BassSettings";
 import ColorSettings from "./ColorSettings";
 import MeterMapPanel from "./MeterMapPanel";
 import TapeLabel from "../common/TapeLabel";
+import MicroLabel from "../common/MicroLabel";
 
 /** Which rotation (if any) of `buildEuclideanOutline(n, d, k, r)` matches
  *  the outline's cells — so the Offset slider shows a real number rather
@@ -216,12 +217,9 @@ export function HarmonyTools() {
           per-chord beats, on a Euclidean outline (same engine as the drums),
           or following the section's drum meter. */}
       <div className="p-2.5 border-b border-edge">
-        <span
-          className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1"
-          title="How the chord progression advances across the section — the export honors this everywhere (.mid, live out, Send to Ableton)"
-        >
+        <MicroLabel className="block mb-1" title="How the chord progression advances across the section — the export honors this everywhere (.mid, live out, Send to Ableton)">
           Rhythm
-        </span>
+        </MicroLabel>
         <div className="flex gap-1 mb-2">
           {(["beats", "euclid", "drums"] as const).map((m) => (
             <button
@@ -318,7 +316,7 @@ export function HarmonyTools() {
       {/* Preset — the progression template, tucked under the Color flavor
           (it's tall enough to dominate the menu when it sits at the top). */}
       <div className="p-2.5 border-b border-edge">
-        <TapeLabel size="sm" tilt="right" className="font-mono text-3xs uppercase tracking-wider text-inkMuted block mb-1">Preset</TapeLabel>
+        <TapeLabel size="sm" tilt="right" className="block mb-1">Preset</TapeLabel>
         <PresetPicker
           keyName={effectiveKey}
           beatsPerChord={activeSection.beatsPerChord}
