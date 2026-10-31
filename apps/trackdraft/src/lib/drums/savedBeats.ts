@@ -32,9 +32,6 @@ import { STORAGE_KEYS } from "../persistence/keys";
 const LANE_ORDER: DrumLaneId[] = ["kick", "snare", "rim", "hat", "cym", "tom"];
 
 export const USER_BEATS_KEY = STORAGE_KEYS.userBeats.key;
-/** The portable file: `<library>/tables/beats.json`, exported as `trackdraft.beats.json`. */
-export const BEATS_FILENAME = "trackdraft.beats.json";
-
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
 
 /**

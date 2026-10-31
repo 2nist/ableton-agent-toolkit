@@ -142,12 +142,6 @@ export function withAlpha(hex: string, alpha: number): string {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
-
-/** Non-reactive read, for a draw loop that already re-runs every frame. */
-export function paletteFor(theme: ThemeId): Palette {
-  return PALETTES[theme];
-}
-
 /** Reactive read — subscribes to the theme, so switching repaints every
  *  instrument instead of leaving the old ink on the new paper. */
 export function usePalette(): Palette {

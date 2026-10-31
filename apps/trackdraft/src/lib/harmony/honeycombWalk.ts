@@ -135,22 +135,7 @@ export const KEYS: Record<string, string[]> = {
 export const KEY_MIDI: Record<string, number> = {
   C: 48, G: 55, D: 50, A: 45, E: 52, B: 47, "F#": 54,
   Db: 49, Ab: 44, Eb: 51, Bb: 46, F: 53,
-};
-
-/* ---------------------------------------------------------------
-   CONSTANTS — modes
-   --------------------------------------------------------------- */
-/** The same seven modes as `lib/scales`, in the order every picker shows
- *  them — kept as `ModeName[]` so this engine never depends on a UI type. */
-export const MODE_ORDER: ModeName[] = [...SCALES];
-
-export const MODE_LABELS: Record<ModeName, string> = {
-  ionian: "Ionian", dorian: "Dorian", phrygian: "Phrygian",
-  lydian: "Lydian", mixolydian: "Mixolydian",
-  aeolian: "Aeolian", locrian: "Locrian",
-};
-
-/** Maps mode name → the key used to look up intervals in
+};/** Maps mode name → the key used to look up intervals in
  *  SCALE_INTERVALS. */
 export const MODE_TO_SCALE_KEY: Record<ModeName, string> = {
   ionian: "major", dorian: "dorian", phrygian: "phrygian",
@@ -184,44 +169,6 @@ export interface BorrowedMove {
   label: string;
   p: Partial<HoneycombStep>;
 }
-
-/** Borrowed & secondary chord options per scale degree (0-6). */
-export const BORROWED: Record<number, BorrowedMove[]> = {
-  0: [
-    { label: "I7 (V7/IV)", p: { minor: false, suffix: "7" } },
-    { label: "i — parallel minor", p: { minor: true, suffix: "" } },
-    { label: "Imaj7♯11 — lydian", p: { minor: false, suffix: "maj7#11" } },
-  ],
-  1: [
-    { label: "II7 (V/V)", p: { minor: false, suffix: "7" } },
-    { label: "♭II — Neapolitan", p: { acc: -1, minor: false, suffix: "" } },
-    { label: "iiø7 — from minor", p: { minor: true, suffix: "7b5" } },
-  ],
-  2: [
-    { label: "III7 (V/vi)", p: { minor: false, suffix: "7" } },
-    { label: "♭III — borrowed", p: { acc: -1, minor: false, suffix: "" } },
-  ],
-  3: [
-    { label: "iv — minor plagal", p: { minor: true, suffix: "" } },
-    { label: "IV7 — blues", p: { minor: false, suffix: "7" } },
-    { label: "ivm6", p: { minor: true, suffix: "6" } },
-  ],
-  4: [
-    { label: "v — modal", p: { minor: true, suffix: "" } },
-    { label: "V7♭9", p: { minor: false, suffix: "7b9" } },
-    { label: "V7♯9 — Hendrix", p: { minor: false, suffix: "7#9" } },
-  ],
-  5: [
-    { label: "VI7 (V/ii)", p: { minor: false, suffix: "7" } },
-    { label: "♭VI — borrowed", p: { acc: -1, minor: false, suffix: "" } },
-  ],
-  6: [
-    { label: "♭VII — borrowed", p: { acc: -1, minor: false, suffix: "" } },
-    { label: "viiø7", p: { minor: true, suffix: "7b5" } },
-    { label: "VII7 (V/iii)", p: { minor: false, suffix: "7" } },
-  ],
-};
-
 /* ============================================================
    DIATONIC CHORD ENGINE
    ============================================================ */
@@ -701,9 +648,6 @@ export function stepLabel(step: HoneycombStep): string {
  *  Uses `noteName()` from @music-theory/core so enharmonic spelling
  *  (Gb vs F#, B vs Cb) follows the key reference. */
 import { noteName as noteNameFn, pitchClass } from "@music-theory/core";
-import type { NoteName, ScaleType } from "@music-theory/core";
-import type { Chord } from "../../types/blueprint";
-import { SCALES } from "../scales";
 
 export function letterName(
   keyName: string,
@@ -883,26 +827,7 @@ export function getWalkPathD(
       return `${i ? "L" : "M"} ${x} ${y}`;
     })
     .join(" ");
-}
-
-/** Re-roots a section's chords to a new key/scale — root pitch only,
- *  preserving each chord's authored quality/roman-numeral label so a
- *  deliberate substitution isn't silently overwritten by a key change.
- *  Unparseable roman numerals (shouldn't normally happen) are left
- *  untouched rather than guessed at. Shared by HarmonyView (the canvas)
- *  and HarmonyDockTools (the section-rekey control living in the dock) —
- *  one implementation, not two that could drift. */
-export function transposeChords(chords: Chord[], newKeyPc: number, newKeyName: NoteName, newScale: ScaleType): Chord[] {
-  const scaleKey = MODE_TO_SCALE_KEY[newScale as keyof typeof MODE_TO_SCALE_KEY] ?? "major";
-  const intervals = SCALE_INTERVALS[scaleKey];
-  return chords.map((c) => {
-    const step = parseToken(c.romanNumeral);
-    if (!step) return c;
-    const rootPc = ((newKeyPc + intervals[step.deg] + step.acc) % 12 + 12) % 12;
-    return { ...c, root: noteNameFn(rootPc, newKeyName) };
-  });
-}
-export interface VisitBead {
+}export interface VisitBead {
   x: number;
   y: number;
   /** 1-based step number, matching the badge numbering. */

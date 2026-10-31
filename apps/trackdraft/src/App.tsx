@@ -21,7 +21,11 @@ import ErrorBoundary from "./components/common/ErrorBoundary";
 // Labs pull in @measured/puck (and its editor stack). They are dev tools, not
 // part of the songwriting loop — statically importing them put ~4 MB of Puck
 // into the main chunk. Load them only when their route is visited.
-const LivePreviewSandbox = lazy(() => import("./pages/LivePreviewSandbox"));
+// The Puck sandbox is a design lab that talks to localhost:5200 — it is a
+// dev tool, so it is neither routed nor built into the packaged app.
+const LivePreviewSandbox = import.meta.env.DEV
+  ? lazy(() => import("./pages/LivePreviewSandbox"))
+  : null;
 const GenreWorkbench = lazy(() => import("./pages/GenreWorkbench"));
 const DesignLab = lazy(() => import("./pages/DesignLab"));
 const StudioLogLab = lazy(() => import("./pages/studio-log/StudioLogLab"));
@@ -93,7 +97,9 @@ function App() {
                   chrome-free (no header/nav/dock) for a window meant to be
                   glanced at from across a room while playing. */}
               <Route path="/song/:songId/popout" element={<LyricChordPopout />} />
-              <Route path="/sandbox" element={<LivePreviewSandbox />} />
+              {import.meta.env.DEV && LivePreviewSandbox ? (
+                <Route path="/sandbox" element={<LivePreviewSandbox />} />
+              ) : null}
               <Route path="/canvas" element={<RenderCanvasLayout />} />
               <Route path="/genre-workbench" element={<GenreWorkbench />} />
               <Route path="/design-lab" element={<DesignLab />} />

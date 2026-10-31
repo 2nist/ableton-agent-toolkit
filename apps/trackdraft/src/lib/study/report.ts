@@ -10,9 +10,11 @@
 import { displayValue, measureDef, type MeasureDef } from "./fields";
 import type { PanelSpec, StudyFilter, StudyRow } from "./types";
 
-function rawValue(row: StudyRow, field: string): unknown {
+export function rowValue(row: StudyRow, field: string): unknown {
   return (row as unknown as Record<string, unknown>)[field];
 }
+
+const rawValue = rowValue;
 
 function hasField(row: StudyRow, field: string): boolean {
   return Object.prototype.hasOwnProperty.call(row, field);
@@ -45,7 +47,10 @@ export function matchesFilter(row: StudyRow, filter: StudyFilter): boolean {
 }
 
 export function applyFilters(rows: readonly StudyRow[], filters: readonly StudyFilter[]): StudyRow[] {
-  if (filters.length === 0) return [...rows];
+  // No copy when nothing is filtered: the board asks five panels for the same
+  // 65k rows, and a defensive copy per panel was pure waste. Callers that
+  // sort must copy first (`runRows` does).
+  if (filters.length === 0) return rows as StudyRow[];
   return rows.filter((row) => filters.every((filter) => matchesFilter(row, filter)));
 }
 
@@ -107,12 +112,17 @@ export function runBreakdown(
   if (!panel.dimension) return [];
   const measures = resolvedMeasures(panel);
   const groups = groupRows(filtered, panel.dimension);
-  for (const group of groups) {
-    for (const measure of measures) group.values[measure.key] = measureValue(group.rows, measure);
+  // Rank on the first measure, then measure only the groups that survive the
+  // limit — grouping by song on the corpus would otherwise measure 5,877
+  // groups to show nine.
+  const first = measures[0];
+  if (first) {
+    for (const group of groups) group.values[first.key] = measureValue(group.rows, first);
   }
-  const first = measures[0]?.key;
+  const rest = measures.slice(1);
+  const firstKey = first?.key;
   const score = (group: GroupResult) => {
-    const value = first ? group.values[first] : Number.NaN;
+    const value = firstKey ? group.values[firstKey] : Number.NaN;
     return Number.isFinite(value) ? value! : Number.NEGATIVE_INFINITY;
   };
   groups.sort((a, b) => {
@@ -120,7 +130,11 @@ export function runBreakdown(
     if (Number.isFinite(delta) && Math.abs(delta) > 1e-9) return delta;
     return b.n - a.n || a.key.localeCompare(b.key);
   });
-  return groups.slice(0, panel.limit ?? 12);
+  const kept = groups.slice(0, panel.limit ?? 12);
+  for (const group of kept) {
+    for (const measure of rest) group.values[measure.key] = measureValue(group.rows, measure);
+  }
+  return kept;
 }
 
 export interface MatrixResult {
@@ -255,12 +269,14 @@ export function runRows(
   const filtered = applyFilters(rows, filters);
   const first = resolvedMeasures(panel)[0];
   const field = first?.kind === "mean" ? first.field : undefined;
+  // `applyFilters` may hand back the dataset array itself; sort a copy.
+  const ordered = field ? [...filtered] : filtered;
   if (field) {
     const score = (row: StudyRow) => {
-      const value = Number(rawValue(row, field));
+      const value = Number(rowValue(row, field));
       return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
     };
-    filtered.sort((a, b) => score(b) - score(a));
+    ordered.sort((a, b) => score(b) - score(a));
   }
-  return filtered.slice(0, panel.limit ?? 40);
+  return ordered.slice(0, panel.limit ?? 40);
 }

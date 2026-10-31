@@ -567,4 +567,19 @@ export default defineConfig({
   server: {
     port: 5183,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // One vendor chunk + framework chunk: the app chunk changes on every
+        // edit, the vendor chunks do not, so a reload re-downloads less.
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return undefined;
+          if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) {
+            return "react";
+          }
+          return "vendor";
+        },
+      },
+    },
+  },
 });

@@ -37,6 +37,9 @@ export function corpusDataset(index: SongIndex): StudyDataset {
   const sections: SectionRow[] = [];
   const chords: ChordRow[] = [];
   const perSong = new Map<number, { sections: number; chords: number; degrees: Set<string> }>();
+  // Section labels are per song (#1 is a song's first section), not positions
+  // in the corpus file — "#61" on a song's opening section reads as a bug.
+  const sectionNumber = new Map<number, number>();
   const na = Number.NaN;
 
   index.sections.forEach((entry, sectionIndex) => {
@@ -45,6 +48,9 @@ export function corpusDataset(index: SongIndex): StudyDataset {
     const name = index.names[entry.n] ?? "Unknown";
     const { artist, title } = splitName(name);
     const sectionId = `corpus-${entry.n}-${sectionIndex}`;
+    const number = (sectionNumber.get(entry.n) ?? 0) + 1;
+    sectionNumber.set(entry.n, number);
+    const label = `#${number}`;
     const borrowed = degrees.some(isBorrowedDegree);
 
     sections.push({
@@ -57,7 +63,7 @@ export function corpusDataset(index: SongIndex): StudyDataset {
       scale: "",
       meter: "",
       sectionId,
-      section: `#${sectionIndex + 1}`,
+      section: label,
       role: "",
       velocity: "",
       bars: na,
@@ -86,7 +92,7 @@ export function corpusDataset(index: SongIndex): StudyDataset {
         scale: "",
         meter: "",
         sectionId,
-        section: `#${sectionIndex + 1}`,
+        section: label,
         role: "",
         index: index2,
         roman: degree,
@@ -161,5 +167,8 @@ function isBorrowedDegree(degree: string): boolean {
  *  footnote made. */
 export function corpusMatches(index: SongIndex, romans: readonly string[], limit = 6): SongMatch[] {
   const degrees = romans.map(baseNumeral).filter(Boolean);
+  // A single chord is a subsequence of thousands of sections; the matcher's
+  // short-needle path would return arbitrary songs. Two is the floor.
+  if (degrees.length < 2) return [];
   return findMatchingSongs(index, degrees, { maxResults: limit });
 }

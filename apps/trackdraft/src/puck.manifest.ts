@@ -44,5 +44,3 @@ export const PUCK_COMPONENTS = [
   "SongTable",
   "TextField",
 ] as const;
-
-export type PuckComponentName = (typeof PUCK_COMPONENTS)[number];

@@ -24,7 +24,7 @@ import {
   type ScaleType,
 } from "@music-theory/core";
 import { functionalTension } from "@platform/progression-engine";
-import type { BlueprintSection, Chord, TonicRegion } from "../../types/blueprint";
+import type { Chord, TonicRegion } from "../../types/blueprint";
 import { chordDisplayName } from "./chordBuilder";
 import { borrowedChordIds, chordHomes } from "./modeInference";
 import { degreeRelativeTo } from "./tonic";
@@ -330,18 +330,6 @@ export function analyzeSection(
     },
   };
 }
-
-/** Analyze a section straight from the blueprint. */
-export function analyzeSectionOf(
-  section: BlueprintSection,
-  key: NoteName,
-  scale: ScaleType,
-  regions: TonicRegion[] | undefined,
-  beatsPerBar = 4,
-): HarmonyAnalysis {
-  return analyzeSection(section.chords, { key, scale, regions, beatsPerBar });
-}
-
 /**
  * A display transpose — a *view* transform, never a write. Returns a chord
  * with the same id and timing, so selection and edits stay attached.

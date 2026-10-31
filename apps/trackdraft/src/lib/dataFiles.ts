@@ -178,13 +178,6 @@ export function onTablesChanged(listener: () => void): () => void {
     listeners.delete(listener);
   };
 }
-
-/** The table in effect right now for one id (library + song, already merged). */
-export function effectiveTable(id: DataFileId): unknown {
-  const spec = DATA_FILES.find((s) => s.id === id);
-  return spec?.current();
-}
-
 /** Recompute and apply every table from the two layers, then notify. */
 function recompute(): void {
   for (const spec of DATA_FILES) {
@@ -208,12 +201,6 @@ export function applySongTables(overrides?: SongTables | null): void {
   songTables = overrides ?? {};
   recompute();
 }
-
-/** Entries this song overrides, for the settings row. */
-export function songTableOverrides(): SongTables {
-  return songTables;
-}
-
 export interface LoadReport {
   loaded: DataFileId[];
   /** Files that existed but failed validation, with the reason. */

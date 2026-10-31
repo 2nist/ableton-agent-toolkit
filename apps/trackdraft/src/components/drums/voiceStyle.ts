@@ -1,6 +1,5 @@
-import { useMemo } from "react";
 import type { KitVoice } from "@drum/library";
-import { usePalette, type Palette, type VoiceColors } from "../../theme/palette";
+import type { Palette, VoiceColors } from "../../theme/palette";
 
 // Same family of hues as HoneycombWheel's HUES palette (warm/muted, one
 // clear accent per role) — a fresh, voice-specific set rather than a
@@ -34,17 +33,6 @@ const VOICE_FAMILY: Record<KitVoice, keyof VoiceColors> = {
 export function voiceColor(voice: KitVoice, P: Palette): string {
   return P.voices[VOICE_FAMILY[voice] ?? "snare"];
 }
-
-/** Every voice resolved at once — for lists that draw several in one pass. */
-export function useVoiceColors(): Record<KitVoice, string> {
-  const P = usePalette();
-  return useMemo(() => {
-    const out = {} as Record<KitVoice, string>;
-    for (const voice of Object.keys(VOICE_FAMILY) as KitVoice[]) out[voice] = voiceColor(voice, P);
-    return out;
-  }, [P]);
-}
-
 export const VOICE_LABEL: Record<KitVoice, string> = {
   kick: "KICK", snare: "SNR", rim: "RIM", clap: "CLAP",
   shaker: "SHAKER", cowbell: "COWBELL",

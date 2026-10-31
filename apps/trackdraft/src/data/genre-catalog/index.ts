@@ -67,9 +67,3 @@ export const GENRE_CATALOG: SongMap[] = [
 export function getGenreMap(id: string): SongMap | undefined {
   return GENRE_CATALOG.find((m) => m.id === id);
 }
-
-/** All genre map ids currently in the catalog — for checking which genres
- *  have been researched vs. which are still unresearched. */
-export const CATALOGED_GENRE_NAMES: Set<string> = new Set(
-  GENRE_CATALOG.map((m) => m.name.toLowerCase()),
-);

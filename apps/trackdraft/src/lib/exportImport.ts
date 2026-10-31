@@ -264,13 +264,3 @@ export async function pushSongToAbleton(song: BlueprintSong): Promise<{ status: 
   }
   return res.json();
 }
-
-/** Sends a command to the bridge's command queue — used for actions that
- *  don't carry a full blueprint payload (setTempo, etc.). */
-export async function sendAbletonCommand(action: string, payload: Record<string, unknown> = {}): Promise<void> {
-  await fetch(`${abletonBridgeUrl()}/api/command`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, ...payload }),
-  });
-}

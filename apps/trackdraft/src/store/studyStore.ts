@@ -15,7 +15,7 @@ import { create } from "zustand";
 import { createDebouncedWriter, readStorage } from "./storage";
 import { STORAGE_KEYS } from "../lib/persistence/keys";
 import { dimensionDef } from "../lib/study/fields";
-import type { PanelSpec, StudyFilter, StudyScope } from "../lib/study/types";
+import type { PanelKind, PanelSpec, StudyFilter, StudyScope } from "../lib/study/types";
 
 export const STUDY_BOARD_KEY = STORAGE_KEYS.studyBoard.key;
 
@@ -27,22 +27,37 @@ interface PersistedBoard {
   selectedPanelId?: string | null;
 }
 
-export function defaultPanels(scope: StudyScope): PanelSpec[] {
-  if (scope === "catalogue") {
-    return [
-      { id: "leads", kind: "leads", title: "Leads", grain: "chord", measures: [], limit: 6 },
-      { id: "moves", kind: "matrix", title: "Degree transitions", grain: "chord", row: "roman", col: "nextRoman", measures: [] },
-      { id: "degrees", kind: "breakdown", title: "By degree", grain: "chord", dimension: "roman", measures: ["count", "borrowShare"], limit: 9 },
-      { id: "lengths", kind: "distribution", title: "Section length", grain: "section", dimension: "chordCount", measures: [] },
-      { id: "sections", kind: "rows", title: "Sections", grain: "section", measures: ["meanChords"], limit: 12 },
-    ];
+/** A new panel of each kind, with the fields that kind actually uses. */
+export function newPanelSpec(kind: PanelKind): PanelSpec {
+  const id = `${kind}-${Date.now().toString(36)}`;
+  if (kind === "matrix") {
+    return { id, kind, title: "Degree transitions", grain: "chord", row: "roman", col: "nextRoman", measures: [] };
   }
+  if (kind === "distribution") {
+    return { id, kind, title: "Section length", grain: "section", dimension: "bars", measures: [] };
+  }
+  if (kind === "rows") {
+    return { id, kind, title: "Sections", grain: "section", measures: ["meanBars"], limit: 12 };
+  }
+  if (kind === "leads") {
+    return { id, kind, title: "Leads", grain: "section", measures: [], limit: 6 };
+  }
+  return { id, kind, title: "By role", grain: "section", dimension: "role", measures: ["count", "meanTension", "meanBars"], limit: 9 };
+}
+
+export function defaultPanels(scope: StudyScope): PanelSpec[] {
+  const base = ["leads", "matrix", "breakdown", "distribution", "rows"].map((kind) =>
+    newPanelSpec(kind as PanelKind),
+  );
+  if (scope !== "catalogue") return base;
+  // The corpus has degrees, not roles/bars/tension: section length is chord
+  // count, and the breakdown groups by degree.
   return [
-    { id: "leads", kind: "leads", title: "Leads", grain: "section", measures: [], limit: 6 },
-    { id: "moves", kind: "matrix", title: "Degree transitions", grain: "chord", row: "roman", col: "nextRoman", measures: [] },
-    { id: "roles", kind: "breakdown", title: "By role", grain: "section", dimension: "role", measures: ["count", "meanTension", "meanBars"], limit: 9 },
-    { id: "bars", kind: "distribution", title: "Section length", grain: "section", dimension: "bars", measures: [] },
-    { id: "sections", kind: "rows", title: "Sections", grain: "section", measures: ["meanBars"], limit: 12 },
+    { ...newPanelSpec("leads"), grain: "chord" },
+    newPanelSpec("matrix"),
+    { ...newPanelSpec("breakdown"), grain: "chord", dimension: "roman", title: "By degree", measures: ["count", "borrowShare"] },
+    { ...newPanelSpec("distribution"), dimension: "chordCount" },
+    { ...newPanelSpec("rows"), measures: ["meanChords"] },
   ];
 }
 
@@ -77,6 +92,12 @@ function normalizePanel(panel: PanelSpec): PanelSpec {
   for (const key of ["dimension", "row", "col"] as const) {
     const value = next[key];
     if (value && !dimensionDef(grain, value)) delete next[key];
+  }
+  // A panel that lost its grouping (an older field registry) gets the
+  // factory default back instead of rendering an empty projection.
+  if (!next.dimension && (next.kind === "breakdown" || next.kind === "distribution")) {
+    const fallback = newPanelSpec(next.kind).dimension;
+    if (fallback && dimensionDef(grain, fallback)) next.dimension = fallback;
   }
   const title = autoTitle(next);
   if (title && next.title.startsWith("By ")) next.title = title;

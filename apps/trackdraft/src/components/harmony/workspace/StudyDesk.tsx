@@ -2,11 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { PRESET_PROGRESSIONS } from "@music-theory/core";
 import { decodeProgression, type SongIndex } from "@platform/progression-engine";
 import { baseNumeral, corpusMatches, loadCorpusIndex } from "../../../lib/study/corpus";
+import { sectionRuns, warmLibraryRuns } from "../../../lib/study/libraryIndex";
 import type { NoteName } from "@music-theory/core";
-import {
-  analyzeSection,
-  type HarmonyEvent,
-} from "../../../lib/harmony/analysis";
+import type { HarmonyEvent } from "../../../lib/harmony/analysis";
 import { meanBeatsPerBar, type BlueprintSong } from "../../../types/blueprint";
 import { useSongStore } from "../../../store/songStore";
 import TapeLabel from "../../common/TapeLabel";
@@ -49,14 +47,16 @@ export default function StudyDesk({
   // The corpus index is ~400 KB and only the Study desk needs it, so it is
   // loaded on mount and kept for the session.
   const [corpus, setCorpus] = useState<SongIndex | null>(null);
+  const [corpusError, setCorpusError] = useState<string | null>(null);
+  useEffect(() => warmLibraryRuns(songs), [songs]);
   useEffect(() => {
     let cancelled = false;
     void loadCorpusIndex()
       .then((index) => {
         if (!cancelled) setCorpus(index);
       })
-      .catch(() => {
-        /* the card simply stays in its loading state */
+      .catch((error: unknown) => {
+        if (!cancelled) setCorpusError(error instanceof Error ? error.message : String(error));
       });
     return () => {
       cancelled = true;
@@ -335,7 +335,9 @@ export default function StudyDesk({
             </span>
           </div>
           <div className="p-2">
-            {!corpus ? (
+            {corpusError ? (
+              <p className="font-mono text-[10px] text-danger">corpus unavailable</p>
+            ) : !corpus ? (
               <p className="font-mono text-[10px] text-inkMuted/60">loading corpus…</p>
             ) : catalogueMatches.length === 0 ? (
               <p className="font-mono text-[10px] text-inkMuted/60">
@@ -470,24 +472,14 @@ function matchLibrary(
 
   for (const song of songs) {
     if (song.id === currentId) continue;
-    for (const section of song.sections) {
-      if (section.chords.length < 3) continue;
-      const key = (section.key ?? song.key) as NoteName;
-      const scale = section.scale ?? song.scale;
-      const analysis = analyzeSection(section.chords, {
-        key,
-        scale,
-        regions: section.tonicRegions,
-      });
-      const candidate = analysis.events.map(
-        (event) => `${event.degree}:${event.accidental}`,
-      );
-      if (isSubsequence(target, candidate)) {
+    for (const section of sectionRuns(song)) {
+      if (section.degrees.length < 3) continue;
+      if (isSubsequence(target, section.degrees)) {
         matches.push({
-          key: `${song.id}-${section.id}`,
+          key: `${song.id}-${section.sectionId}`,
           title: song.title,
           section: section.name,
-          degrees: analysis.events.map((event) => event.roman).join(" "),
+          degrees: section.romans.join(" "),
         });
       }
       if (matches.length >= 6) return matches;

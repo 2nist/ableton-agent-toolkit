@@ -4,17 +4,9 @@
  * `lib/youtubeFullImport.ts` + `components/dashboard/ActionBar.tsx`.
  */
 
-import { getHost } from "./host";
-import type { BlueprintSong } from "../types/blueprint";
 import { parseSyncedLyrics } from "@music-theory/song-blueprint";
 import { pickLyricsMatch, searchQueries, type LyricsCandidate } from "./lyrics/lrclibMatch";
 export { parseSyncedLyrics };
-
-interface YoutubeMetadata {
-  title: string;
-  artist?: string;
-  videoId: string;
-}
 
 /**
  * Extract a YouTube video ID from various URL formats.
@@ -117,103 +109,4 @@ export async function searchLrclib(
     plainLyrics: best.plainLyrics ?? undefined,
     syncedLyrics: best.syncedLyrics ?? undefined,
   };
-}
-
-/** Get a specific LRCLIB entry by ID (for fetching synced lyrics after search). */
-export async function getLrclibById(id: number): Promise<LrclibResult | null> {
-  try {
-    const res = await fetch(`https://lrclib.net/api/get/${id}`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * YouTube video metadata.
- *
- * Desktop gets it from the main process (there is no dev server to ask); the
- * browser build still uses the Vite endpoint.
- */
-export async function fetchYoutubeMetadata(videoId: string): Promise<YoutubeMetadata | null> {
-  const host = getHost();
-  if (host) {
-    try {
-      return await host.youtubeMeta(videoId);
-    } catch {
-      return null;
-    }
-  }
-  try {
-    const res = await fetch(`/__youtube-meta?videoId=${encodeURIComponent(videoId)}`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Build a BlueprintSong from YouTube + LRCLIB data.
- */
-export function buildYoutubeBlueprintSong(
-  metadata: YoutubeMetadata,
-  lrclib: LrclibResult | null,
-): BlueprintSong {
-  const now = new Date().toISOString();
-  const title = metadata.title || lrclib?.trackName || `YouTube: ${metadata.videoId}`;
-  const artist = metadata.artist || lrclib?.artistName;
-  const sectionId = crypto.randomUUID();
-
-  const song: BlueprintSong = {
-    id: crypto.randomUUID(),
-    title,
-    artist,
-    key: "C",
-    scale: "ionian",
-    bpm: 120,
-    timeSignatureNumerator: 4,
-    timeSignatureDenominator: 4,
-    sections: [],
-    arrangement: [],
-    concept: lrclib ? `YouTube import with synced lyrics` : `YouTube import: ${metadata.videoId}`,
-    provenance: {
-      source: "docx-ingest",
-      extractedAt: now,
-      warnings: [
-        "YouTube metadata only — audio analysis pending.",
-        "BPM and key are defaults — run ChordMiniApp or manual analysis to refine.",
-      ],
-    },
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  // If we have synced lyrics, create a section with timeline
-  if (lrclib?.syncedLyrics) {
-    const timeline = parseSyncedLyrics(lrclib.syncedLyrics, song.bpm);
-    const fullText = lrclib.plainLyrics || timeline.map((t) => t.text).join("\n");
-
-    song.sections.push({
-      id: sectionId,
-      name: "Full Song",
-      role: "verse",
-      bars: Math.max(16, Math.ceil(timeline.length / 4)),
-      chords: [],
-      beatsPerChord: 4,
-      velocity: "mf",
-      timeSignatureNumerator: 4,
-      timeSignatureDenPower: 2,
-      lyrics: fullText,
-      lyricsTimeline: timeline.map((t) => ({
-        text: t.text,
-        startBeat: t.startBeat,
-      })),
-    });
-
-    song.arrangement.push({ sectionId, repeats: 1 });
-  }
-
-  return song;
 }

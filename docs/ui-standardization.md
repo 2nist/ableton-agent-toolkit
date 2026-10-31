@@ -46,6 +46,44 @@ Landed, verified (tsc clean · 1674 tests green · production build clean):
 
 ---
 
+## Progress — 2026-10-31 (Study hardening, before the build)
+
+Landed, verified (tsc clean · 1709 tests green · production build clean):
+
+- **The library index could go stale.** `datasetFingerprint` hashed counts,
+  total bars and title lengths, so editing a chord's root or renaming a
+  section left the cached rows in place. It is now an FNV-1a content
+  signature over exactly the fields the rows read (`signature.ts`), with
+  tests that pin invalidation on a chord edit and a section rename.
+- **The Study desk's "Your library" no longer re-analyses every song.**
+  `lib/study/libraryIndex.ts` caches one key-invariant degree run per section,
+  keyed by the same signature, and warms the library in 15-song turns while
+  the desk is open. Cold ≈ 930 ms for 977 songs (unchanged); warm ≈ **38 ms**
+  for the whole library, where every section click used to pay the full scan.
+- **Catalogue interactions got cheaper.** `computeLeads` is one accumulating
+  pass per dimension instead of grouping row arrays: **99 → 62 ms** over 65k
+  chords (section grain 12.7 → 4.0 ms). `runBreakdown` ranks on the first
+  measure then measures only the surviving groups (grouping by song no longer
+  measures 5,877 groups to show nine). `applyFilters` stops copying when there
+  is nothing to filter, and each panel's projection is memoised on
+  (panel, rows, filters) — an unrelated re-render is now free.
+- **A silent blank panel, caught in the browser:** the default distributions
+  grouped by `bars` / `chordCount`, which were not in the field registry, so
+  `normalizePanel` deleted the grouping on reload and the panel rendered "no
+  rows". Both (and the other numeric columns) are registered now, and a panel
+  that loses its grouping self-heals to the factory default instead of going
+  blank.
+- **Dead code removed:** 21 exported symbols nothing referenced (checked
+  across src, tests, scripts and the other packages) plus the imports they
+  orphaned. One panel factory now serves both the store's defaults and the
+  board's "＋ panel" menu.
+- **Packaging:** the Puck sandbox (`/sandbox`, 3.6 MB chunk, `localhost:5200`
+  command URL) is gated behind `import.meta.env.DEV` and no longer ships in
+  the production build; `manualChunks` splits `react` (157 KB) and `vendor`
+  (375 KB) out of the app chunk (1.73 MB → 1.44 MB).
+
+---
+
 ## Progress — 2026-10-31 (Study discovery board)
 
 Landed, verified (tsc clean · 1703 tests green · production build clean):
@@ -69,7 +107,7 @@ Landed, verified (tsc clean · 1703 tests green · production build clean):
   filter → group → aggregate → sort; `PanelSpec` is persisted as a `ui`
   preference. Five kinds ship: leads · breakdown · matrix (heatmap) ·
   distribution · rows. Adding a data type is a `fields.ts` descriptor, not a
-  screen — 17 dimensions and 19 measures today.
+  screen — 24 dimensions and 21 measures today.
 - **The controls live in the panel they change.** A ✎ on a panel header opens
   an inline editor (grain · grouping · measures · limit · remove). No new
   inspector facet and no extra rail: Study is a desk of Harmony, and a facet

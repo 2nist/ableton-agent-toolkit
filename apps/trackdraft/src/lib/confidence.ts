@@ -69,8 +69,3 @@ export function computeConfidence(song: BlueprintSong): ConfidenceResult {
 export function getConfidenceLevels(): { level: ConfidenceLevel; label: string; color: string }[] {
   return LEVELS.map(({ level, label, color }) => ({ level, label, color }));
 }
-
-/** Default set of active confidence filters (all on). */
-export function defaultConfidenceFilters(): Set<ConfidenceLevel> {
-  return new Set(LEVELS.map((l) => l.level));
-}

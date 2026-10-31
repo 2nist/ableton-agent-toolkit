@@ -12,6 +12,7 @@ import { analyzeSection } from "../harmony/analysis";
 import { classifySong } from "../classification";
 import { grooveOf } from "../drums/grooveModel";
 import type { BlueprintSection, BlueprintSong } from "../../types/blueprint";
+import { librarySignature } from "./signature";
 import type { ChordRow, SectionRow, SongRow, StudyDataset, StudyScope } from "./types";
 
 function meterOf(num: number, denPower: number): string {
@@ -190,24 +191,9 @@ export async function buildDatasetChunked(
   };
 }
 
-/**
- * A cheap structural signature. Hashing 30MB of song JSON on every edit would
- * cost more than the rebuild it is trying to avoid; counts + total bars +
- * title lengths catch structural edits, renames and new songs, which is what
- * the index actually depends on.
- */
+/** Content signature for the cached library index — see `signature.ts` for
+ *  why counts and total bars were not enough (chord edits and renames did not
+ *  invalidate the cache). */
 export function datasetFingerprint(songs: readonly BlueprintSong[]): string {
-  let sections = 0;
-  let chords = 0;
-  let bars = 0;
-  let titleLength = 0;
-  for (const song of songs) {
-    titleLength += song.title.length + (song.artist?.length ?? 0);
-    for (const section of song.sections) {
-      sections += 1;
-      chords += section.chords.length;
-      bars += section.bars;
-    }
-  }
-  return `${songs.length}:${sections}:${chords}:${bars}:${titleLength}`;
+  return librarySignature(songs);
 }

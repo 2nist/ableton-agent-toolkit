@@ -4,28 +4,8 @@ import { generatedPuckConfig } from "../puck.generated";
 import { initializeSandboxStyles } from "@devkit/puck-engine";
 
 const SAVE_URL = "/api/save-sandbox";
-const COMMAND_URL = "http://localhost:5200/api/command";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
-
-/** Dispatch a command to the Ableton extension via the OSC bridge's command queue. */
-export async function dispatchCommand(action: string, payload?: Record<string, unknown>) {
-  try {
-    const res = await fetch(COMMAND_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, payload, timestamp: Date.now() }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const result = await res.json();
-    console.log("📋 Command dispatched:", action, result);
-    return result;
-  } catch (err) {
-    console.error("❌ Command dispatch failed:", err);
-    throw err;
-  }
-}
-
 export default function LivePreviewSandbox() {
   const [data, setData] = useState<Record<string, unknown>>({});
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");

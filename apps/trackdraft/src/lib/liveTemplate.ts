@@ -25,8 +25,3 @@ export const LIVE_TEMPLATE_TRACK_NAMES = [
 ] as const;
 
 export type LiveTemplateTrackName = (typeof LIVE_TEMPLATE_TRACK_NAMES)[number];
-
-/** Template track at a given index (0-based), or undefined past the end. */
-export function liveTemplateTrackName(index: number): LiveTemplateTrackName | undefined {
-  return LIVE_TEMPLATE_TRACK_NAMES[index];
-}

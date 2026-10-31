@@ -38,7 +38,12 @@ export const DIMENSIONS: readonly DimensionDef[] = [
   { key: "section", label: "section name", grain: "common" },
   { key: "role", label: "role", grain: "common" },
   { key: "form", label: "form", grain: "song" },
+  { key: "bpm", label: "bpm", grain: "song" },
+  { key: "totalBars", label: "total bars", grain: "song" },
   { key: "velocity", label: "velocity", grain: "section" },
+  { key: "bars", label: "bars", grain: "section" },
+  { key: "chordCount", label: "chords per section", grain: "section" },
+  { key: "distinctDegrees", label: "distinct degrees", grain: "section" },
   { key: "roman", label: "degree", grain: "chord" },
   { key: "nextRoman", label: "next degree", grain: "chord" },
   { key: "degree", label: "degree number", grain: "chord" },
@@ -46,6 +51,8 @@ export const DIMENSIONS: readonly DimensionDef[] = [
   { key: "fn", label: "function", grain: "chord" },
   { key: "cadence", label: "cadence", grain: "chord" },
   { key: "borrowed", label: "borrowed", grain: "chord" },
+  { key: "tension", label: "tension", grain: "chord" },
+  { key: "durationBeats", label: "beats", grain: "chord" },
 ];
 
 /** Keys repeat across grains on purpose — a measure is only resolved inside

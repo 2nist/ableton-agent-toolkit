@@ -37,17 +37,3 @@ export function handCell(seed: number): CSSProperties {
     "--grow": (0.952 + pick(9, 0, 9) * 0.008).toFixed(3),
   } as CSSProperties;
 }
-
-/** Corner-radius wobble for an SVG cell: `rx`/`ry` can't be set per corner, so
- *  the shape is an ELLIPSE whose two axes disagree by up to ~9% and which leans
- *  up to ±1.2°. A single jittered radius (the old version, ±0.45px) was
- *  indistinguishable from a circle at sequencer sizes. */
-export function handRadius(seed: number, base: number): { rx: number; ry: number; rotate: number } {
-  const h = (Math.imul(seed + 1, 0x9e3779b1) >>> 8) % 1000;
-  const wobble = (bits: number) => 1 + ((((h >>> bits) % 5) - 2) * 0.045);
-  return {
-    rx: Math.max(0.5, base * wobble(0)),
-    ry: Math.max(0.5, base * wobble(8)),
-    rotate: (((h >>> 4) % 7) - 3) * 0.4,
-  };
-}
