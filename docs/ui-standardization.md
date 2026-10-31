@@ -7,6 +7,117 @@ polished*. The phases at the end are executed against this document, one slice a
 
 ---
 
+## Progress — 2026-10-31 (pre-beta unification pass, round 5)
+
+Landed, verified (tsc clean · 1674 tests green · production build clean):
+
+- **One section-block renderer.** The spine's `SpineBlock` and the arrangement
+  timeline's inline block were the last two copies of the same anatomy — role
+  colour, the selected / in-selection ring, a name plus a bars readout, and the
+  left/right resize grips. Both now call `components/arrangement/SectionBlock`
+  with a `variant` (`spine` · `timeline`). The audit's "four renderers" was
+  wrong: there were two. `SectionCard` is a drag wrapper around the already
+  shared `SectionEditor`, and `DrumBlocksView` deliberately draws only a 15px
+  section-name band, so both were left alone.
+- **The block owns no axis.** `width` is a prop because the two surfaces scale
+  bars differently on purpose (the timeline's `ARRANGEMENT_BAR_PX_FACTOR` is
+  documented in its own file). Measured in the DOM after the merge: every
+  timeline block is exactly 40px per bar, every spine block 25px per bar.
+- **Variant chrome stays a slot, it did not become two components.** The spine
+  passes its coverage gauge and now-playing line as `children` (they are
+  absolute-positioned fragments *inside* the button); the timeline's per-stem
+  readout lives *under* the button, so it is a named `readout` prop — and its
+  presence is what makes the block a column with the hover target.
+- **Behaviour was carried across, not re-implemented.** `data-spine-block` /
+  `data-timeline-block` and `data-resize-zone` still sit on the same nodes, so
+  sweep-select, the window-level resize gesture and the right-click palette are
+  untouched. Verified with DOM assertions (not screenshots): a right-edge drag
+  took a 3-bar Intro to 5 bars and put exactly one step on the undo stack
+  (undo returned it to 75px and re-disabled the button); right-click opened the
+  palette and Escape closed it; a sweep across three blocks pressed exactly
+  those three on both surfaces; the timeline's hover line still reads the
+  hovered span's progression and clears on leave.
+- **LOC:** `Spine.tsx` 1300 → 1218, `ArrangementTimeline.tsx` 299 → 285, plus
+  the new `SectionBlock.tsx` (168) — a net **+72 lines**. The growth is the
+  per-variant class table (frames, rings, name/meta type) and the documented
+  interface; what shrank is duplicated anatomy. Still worth it: one resize
+  implementation, one accessibility contract (`type="button"` +
+  `aria-pressed`), and one place that states "the caller owns the axis".
+
+---
+
+## Progress — 2026-10-31 (Study discovery board)
+
+Landed, verified (tsc clean · 1703 tests green · production build clean):
+
+- **Study got depth, not a new station.** The Harmony view's Study desk now
+  carries a discovery board under its per-section analysis: leads · degree
+  transitions · breakdown by any field · distributions · drillable rows, over
+  three grains (song · section · chord event), scoped to this song, the loaded
+  library, or the lead-sheet corpus. A first cut shipped it as a top-level view; that was wrong
+  for the workflow — a fifth door for a desk-sized question — and it was
+  folded back the same day. `/song/:id/study` now redirects to Harmony, and
+  the desk switcher stays the only door.
+- **One derived index, three grains.** `lib/study/dataset.ts` flattens
+  `BlueprintSong[]` into rows using the same `analyzeSection()` the chord
+  strip uses, so a report cannot disagree with a numeral or a tension. Rows
+  carry the coarser grains' facts (a chord row knows its section's role and
+  its song's genre), which is what makes "group by role, measure tension" a
+  one-liner. Library scope builds chunked (25 songs per turn) behind an
+  "indexing n/total…" line.
+- **Panels are specs, not components.** `lib/study/report.ts` is pure
+  filter → group → aggregate → sort; `PanelSpec` is persisted as a `ui`
+  preference. Five kinds ship: leads · breakdown · matrix (heatmap) ·
+  distribution · rows. Adding a data type is a `fields.ts` descriptor, not a
+  screen — 17 dimensions and 19 measures today.
+- **The controls live in the panel they change.** A ✎ on a panel header opens
+  an inline editor (grain · grouping · measures · limit · remove). No new
+  inspector facet and no extra rail: Study is a desk of Harmony, and a facet
+  that appears for one desk would misstate the view's tool set.
+- **Cross-filtering is grain-aware.** A `role` filter narrows every panel; a
+  `roman` filter narrows the chord grain and leaves section/song panels
+  populated rather than blanking them for a column they never had. The chip
+  names its grain (`roman = i · chord`), because a filter that silently does
+  nothing is worse than no filter.
+- **Leads answer "what should I look at?"** `lib/study/leads.ts` always emits
+  two facts about the current scope, then the biggest support-gated
+  deviations (group ≥ 8% of rows, ≤ 75%) between a group and the scope's own
+  average, each carrying the filter that reproduces it.
+- **Verified in the DOM** (screenshots have lied in this repo): this song
+  13 sections / 249 chord events; a matrix cell click produced two chips and
+  narrowed the matrix to 50 events; a section row navigated to
+  `/harmony?section=…`; the inline editor's group-by change re-rendered the
+  panel as "By key" (D · 13 sections); scope Library indexed 60 sections /
+  7 songs / 571 chords; the Catalogue card returned 6 lead-sheet matches for
+  this section's run, and the Catalogue scope reported 7,980 sections ·
+  5,877 songs · 65,320 chords with leads reading "Most-used degree: I (11030
+  of 65320)" and "Most common move: IV → I". A stale board with an invalid
+  grain now self-heals to the defaults instead of rendering the wrong grain.
+- **The corpus is wired.** `@platform/progression-engine` now exports
+  `data/song_sections.json` as a subpath; it loads lazily as its own 371 KB
+  chunk, only when Study needs it. Two surfaces use it: the desk's
+  **Catalogue** card answers the question its old footnote deferred — which
+  lead-sheet songs contain this run (contiguous first, then passing-chord,
+  deduped by song, degrees normalised through one `baseNumeral` rule) — and
+  the board's third scope studies the whole corpus: **5,877 songs · 7,980
+  sections · 65,320 chord events**, grouped and filtered by the same panel
+  engine.
+- **Scopes keep their own boards.** "This song" wants role/tension panels;
+  the corpus has no roles, meter or tension and wants degree transitions and
+  section lengths. Sharing one panel list made two of five panels read
+  "untagged" the moment you switched, so `boards` is per scope and switching
+  back restores what you built.
+- **Unknown data reads as "—", never 0.** Corpus rows carry `NaN` / `""` for
+  everything the index cannot know; `measureValue` returns `NaN` when a
+  measure has no data, grouping maps it to "untagged", and the leads engine
+  falls back from role to song title rather than reporting "100% untagged".
+- **Known edge, stated in the UI:** "Library" is the loaded song store (7
+  songs in this session), not the 977-song directory catalogue. The corpus is
+  degrees only — no key, meter, lyrics or melody — so the board says so in
+  the scope hint and the desk card.
+
+---
+
 ## Progress — 2026-10-30 (pre-beta unification pass)
 
 Landed, verified (tsc clean · 1671 tests green · production build clean):

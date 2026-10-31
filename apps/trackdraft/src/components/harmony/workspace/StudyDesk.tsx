@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PRESET_PROGRESSIONS } from "@music-theory/core";
+import { decodeProgression, type SongIndex } from "@platform/progression-engine";
+import { baseNumeral, corpusMatches, loadCorpusIndex } from "../../../lib/study/corpus";
 import type { NoteName } from "@music-theory/core";
 import {
   analyzeSection,
@@ -9,6 +11,7 @@ import { meanBeatsPerBar, type BlueprintSong } from "../../../types/blueprint";
 import { useSongStore } from "../../../store/songStore";
 import TapeLabel from "../../common/TapeLabel";
 import TensionCurve from "./TensionCurve";
+import StudyBoard from "../../study/StudyBoard";
 import HarmonyScene from "../HarmonyScene";
 import type { HarmonyDeskProps } from "./types";
 
@@ -43,11 +46,33 @@ export default function StudyDesk({
     [songs, song.id, analysis.events],
   );
 
+  // The corpus index is ~400 KB and only the Study desk needs it, so it is
+  // loaded on mount and kept for the session.
+  const [corpus, setCorpus] = useState<SongIndex | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void loadCorpusIndex()
+      .then((index) => {
+        if (!cancelled) setCorpus(index);
+      })
+      .catch(() => {
+        /* the card simply stays in its loading state */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const catalogueMatches = useMemo(
+    () => (corpus ? corpusMatches(corpus, analysis.events.map((event) => event.roman)) : []),
+    [corpus, analysis.events],
+  );
+
   return (
-    <div
-      className="grid gap-3"
-      style={{ gridTemplateColumns: "minmax(0, 1fr) 272px" }}
-    >
+    <div className="space-y-3">
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "minmax(0, 1fr) 272px" }}
+      >
       <div className="min-w-0 space-y-3">
         <div className="rounded border border-edge bg-panel">
           <div className="flex items-center gap-2 border-b border-edge px-2 py-1.5">
@@ -298,6 +323,42 @@ export default function StudyDesk({
         </div>
 
         <div className="rounded border border-edge bg-panel">
+          <div className="flex items-center gap-2 border-b border-edge px-2 py-1.5">
+            <TapeLabel
+              size="md"
+              className="text-[10px] font-mono uppercase tracking-wider text-inkMuted"
+            >
+              Catalogue
+            </TapeLabel>
+            <span className="ml-auto font-mono text-[9px] text-inkMuted/60">
+              {corpus ? catalogueMatches.length : "…"}
+            </span>
+          </div>
+          <div className="p-2">
+            {!corpus ? (
+              <p className="font-mono text-[10px] text-inkMuted/60">loading corpus…</p>
+            ) : catalogueMatches.length === 0 ? (
+              <p className="font-mono text-[10px] text-inkMuted/60">
+                no lead-sheet section contains this run yet.
+              </p>
+            ) : (
+              catalogueMatches.map((match) => (
+                <div key={match.name} className="border-b border-edge/30 py-1 last:border-b-0">
+                  <div className="hand-value text-base leading-none text-accent">{match.name}</div>
+                  <div className="font-mono text-[8.5px] text-inkMuted">
+                    {decodeProgression(match.code).join(" ")}
+                    {match.partial ? " · passing-chord match" : ""}
+                  </div>
+                </div>
+              ))
+            )}
+            <p className="mt-1 font-mono text-[9px] text-inkMuted/60">
+              key-invariant degrees · lead-sheet corpus.
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded border border-edge bg-panel">
           <div className="border-b border-edge px-2 py-1.5">
             <TapeLabel
               size="md"
@@ -341,11 +402,14 @@ export default function StudyDesk({
         </div>
 
         <p className="font-mono text-[9px] leading-relaxed text-inkMuted/60">
-          Corpus index (941 catalogued songs) is built as a committed artifact —
-          not wired in this first slice, so the comparison above is your own
-          library plus the preset shapes.
+          Catalogue matches come from the lead-sheet corpus (5,877 songs ·
+          7,980 sections, degrees only). The discovery board below can study the
+          same corpus as a scope.
         </p>
       </div>
+      </div>
+
+      <StudyBoard song={song} />
     </div>
   );
 }
@@ -359,13 +423,6 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="font-mono text-base leading-tight text-ink">{value}</div>
     </div>
   );
-}
-
-/** Strip a derived numeral to its bare degree, keeping case and accidental. */
-function baseNumeral(roman: string): string {
-  return roman
-    .replace(/^V[0-9maj♭♯]*\//, "")
-    .replace(/(maj7|m7♭5|7♭5|m7|7|°|sus4)$/u, "");
 }
 
 function matchPresets(events: HarmonyEvent[]) {

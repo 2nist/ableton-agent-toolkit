@@ -36,6 +36,7 @@ import type { BlueprintSection, BlueprintSong, SectionRole } from "../../types/b
 import { beatsPerBarOf } from "../../lib/timeline/beatMap";
 import { barAtBeat } from "../../types/blueprint";
 import { usePalette } from "../../theme/palette";
+import { SectionBlock } from "../arrangement/SectionBlock";
 
 /** Zoom presets in px per BAR. Bar-linear on purpose: every bar is the
  *  same width — 7/8 bars included — because the bars are the axis (a
@@ -896,15 +897,24 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
             >
               {spans.map((span, i) => {
                 const prev = i > 0 ? spans[i - 1] : null;
+                // True-scale width (bars × barPx — no min-width floor, which
+                // would drift every later bar out of ruler alignment).
+                const width = Math.max(1, span.bars * barPx);
+                const dots = coverageDots(span.section);
+                const missing = dots.filter((d) => !d.present).map((d) => d.label);
+                const facts = glanceFacts(span, song, width);
                 return (
-                  <SpineBlock
+                  <SectionBlock
                     key={`${span.sectionId}-${span.occurrenceIndex}-${i}`}
                     span={span}
-                    song={song}
-                    barPx={barPx}
+                    width={width}
                     selected={selectedSectionId === span.sectionId}
                     inSelection={selectedSectionIds.includes(span.sectionId)}
-                    live={liveIndex === i}
+                    variant="spine"
+                    showName={width >= 40}
+                    meta={facts.text}
+                    metaTitle={facts.title}
+                    title={`${span.section.name} — ${Math.round(span.bars)} bars${missing.length ? ` · missing: ${missing.join(", ")}` : " · all elements sketched"}`}
                     onSelect={(e) => {
                       // ⇧ extends from the anchor, ⌘ toggles — the same rule
                       // the Studio timeline uses, both through one store.
@@ -920,7 +930,25 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
                     onResize={(e, side) => onResizeStart(e, span, side)}
                     canResizeLeft={!!prev && prev.sectionId !== span.sectionId}
                     canResizeRight
-                  />
+                  >
+                    {/* Coverage gauge — the authored-material map as a cue IN
+                        the block: four segments along the top edge, one per
+                        element in coverageDots order (chords · drums · melody
+                        · lyrics), lit when authored. 2px of edge instead of a
+                        text row (user, 2026-09-21); the block's own tooltip
+                        still names what's missing. */}
+                    <span className="absolute top-0 inset-x-0 h-[2px] flex pointer-events-none">
+                      {dots.map((d) => (
+                        <span
+                          key={d.label}
+                          className={`flex-1 ${d.present ? "bg-current opacity-60" : "bg-current opacity-15"}`}
+                        />
+                      ))}
+                    </span>
+                    {liveIndex === i && (
+                      <span className="absolute inset-x-0 bottom-0 h-0.5 bg-accent opacity-80" title="Now playing" />
+                    )}
+                  </SectionBlock>
                 );
               })}
             </div>
@@ -1153,129 +1181,19 @@ function playGrow(fromEl: HTMLElement, bg: string) {
   }
 }
 
-/** One section block. True-scale width (bars × barPx — no min-width floor,
- *  which would drift every later bar out of ruler alignment; zoom in for
- *  tiny sections instead). Role-colored like the arrangement timeline; the
- *  coverage dots read authored material at a glance (filled = authored,
- *  hollow = missing — "this bridge has no melody yet") and become
- *  clickable doorways in P3. */
-function SpineBlock({
-  span,
-  song,
-  barPx,
-  selected,
-  inSelection,
-  live,
-  onSelect,
-  onMenu,
-  onResize,
-  canResizeLeft = false,
-  canResizeRight = false,
-}: {
-  span: SectionSpan;
-  song: BlueprintSong;
-  barPx: number;
-  /** The focused section — the one single-section views follow. */
-  selected: boolean;
-  /** Part of a multi-selection that also includes other sections. */
-  inSelection: boolean;
-  live: boolean;
-  onSelect: (e: ReactMouseEvent<HTMLButtonElement>) => void;
-  onMenu: (e: ReactMouseEvent<HTMLButtonElement>) => void;
-  onResize?: (e: ReactMouseEvent, side: "left" | "right") => void;
-  canResizeLeft?: boolean;
-  canResizeRight?: boolean;
-}) {
-  const roleStyle = useRoleStyle();
-  const style = roleStyle(span.section.role);
-  const dots = coverageDots(span.section);
-  const missing = dots.filter((d) => !d.present).map((d) => d.label);
-  const w = Math.max(1, span.bars * barPx);
-  const showName = w >= 40;
+/** The block's glance facts, disclosed as it widens: bars, then the
+ *  harmonic rhythm × plays, then the meter — "12b · 4×3 · 4/4"
+ *  (user's format, 2026-09-21 — this replaced the coverage dots row;
+ *  the coverage map lives on as the top-edge gauge instead). */
+function glanceFacts(span: SectionSpan, song: BlueprintSong, width: number): { text: string; title: string } {
   const repeats = repeatsFor(song, span.sectionId);
-  // The block's glance facts, disclosed as it widens: bars, then the
-  // harmonic rhythm × plays, then the meter — "12b · 4×3 · 4/4"
-  // (user's format, 2026-09-21 — this replaced the coverage dots row;
-  // the coverage map lives on as the top-edge gauge instead).
-  const barsLabel = `${Math.round(span.bars)}b`;
-  const rhythmLabel = `${span.section.beatsPerChord}×${repeats}`;
-  const tsLabel = `${span.section.timeSignatureNumerator}/${2 ** span.section.timeSignatureDenPower}`;
-  const facts =
-    w >= 96 ? `${barsLabel} · ${rhythmLabel} · ${tsLabel}` : w >= 64 ? `${barsLabel} · ${rhythmLabel}` : w >= 26 ? barsLabel : "";
-  // Edge zones narrow with the block (30% per side, 1..5px): a fixed 5px
-  // pair fully covered a 1-bar block at the default zoom — every click
-  // landed on a resize zone, so the section could not be SELECTED (and
-  // could not be deleted), and any grab near its middle hit an edge you
-  // didn't mean. 30% keeps a centre window on even the smallest blocks.
-  const edgeW = Math.min(5, Math.max(1, w * 0.3));
-  return (
-    <button
-      type="button"
-      data-spine-block={span.sectionId}
-      aria-pressed={inSelection}
-      className={`relative shrink-0 h-full flex flex-col justify-center items-start overflow-hidden text-left border-r border-black/25 ${[
-        selected
-          ? "ring-1 ring-accent ring-inset z-10"
-          : inSelection
-            ? "ring-1 ring-accent/55 ring-inset z-10 brightness-110"
-            : "hover:brightness-110",
-      ]}`}
-      style={{ width: w, background: style.bg, color: style.text }}
-      onClick={onSelect}
-      onContextMenu={onMenu}
-      title={`${span.section.name} — ${Math.round(span.bars)} bars${missing.length ? ` · missing: ${missing.join(", ")}` : " · all elements sketched"}`}
-    >
-      {/* Edge zones — drag to resize (window-level gesture, see Spine) */}
-      {onResize && (
-        <>
-          {canResizeLeft && (
-            <span
-              data-resize-zone
-              className="absolute left-0 top-0 bottom-0 cursor-ew-resize z-20 hover:bg-accent/30"
-              style={{ width: edgeW }}
-              onMouseDown={(e) => onResize(e, "left")}
-              title="Drag to move this boundary — the previous section grows/shrinks"
-            />
-          )}
-          {canResizeRight && (
-            <span
-              data-resize-zone
-              className="absolute right-0 top-0 bottom-0 cursor-ew-resize z-20 hover:bg-accent/30"
-              style={{ width: edgeW }}
-              onMouseDown={(e) => onResize(e, "right")}
-              title="Drag to resize this section"
-            />
-          )}
-        </>
-      )}
-      {/* Coverage gauge — the authored-material map as a cue IN the block:
-          four segments along the top edge, one per element in
-          coverageDots order (chords · drums · melody · lyrics), lit when
-          authored. 2px of edge instead of a text row (user, 2026-09-21);
-          the block's own tooltip still names what's missing. */}
-      <span className="absolute top-0 inset-x-0 h-[2px] flex pointer-events-none">
-        {dots.map((d) => (
-          <span key={d.label} className={`flex-1 ${d.present ? "bg-current opacity-60" : "bg-current opacity-15"}`} />
-        ))}
-      </span>
-      {/* Section title — 50% up (2026-10-24). The pen themes pin their own
-          size in themes.css (`.hand-value--tight`), so this utility is the
-          dark theme's half of the same decision. */}
-      <span className="hand-value hand-value--tight w-full truncate px-1.5 text-[15px] leading-tight font-medium">
-        {showName ? span.section.name : ""}
-        {showName && span.variation ? <span className="opacity-60"> ({span.variation})</span> : null}
-      </span>
-      {facts && (
-        <span
-          className="px-1.5 mt-0.5 text-[9px] font-mono opacity-70 tabular-nums truncate"
-          title={`${span.section.beatsPerChord} beats per chord · plays ×${repeats} · ${tsLabel} meter`}
-        >
-          {facts}
-        </span>
-      )}
-      {live && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-accent opacity-80" title="Now playing" />}
-    </button>
-  );
+  const bars = `${Math.round(span.bars)}b`;
+  const rhythm = `${span.section.beatsPerChord}×${repeats}`;
+  const meter = `${span.section.timeSignatureNumerator}/${2 ** span.section.timeSignatureDenPower}`;
+  return {
+    text: width >= 96 ? `${bars} · ${rhythm} · ${meter}` : width >= 64 ? `${bars} · ${rhythm}` : width >= 26 ? bars : "",
+    title: `${span.section.beatsPerChord} beats per chord · plays ×${repeats} · ${meter} meter`,
+  };
 }
 
 /** Authored-material presence for a section — the spine's coverage map,

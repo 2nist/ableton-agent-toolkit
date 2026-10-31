@@ -61,6 +61,9 @@ export const STORAGE_KEYS = {
   progressionLanes: { key: "trackdraft-progression-lanes", scope: "ui", owner: "components/harmony/ProgressionEditor" },
   popoutMode: { key: "trackdraft-popout-mode", scope: "ui", owner: "components/popout/LyricChordPopout" },
   workbenchRows: { key: "trackdraft-workbench-rows", scope: "ui", owner: "components/workspace/WorkbenchView" },
+  /** The Study board's scopes and panels (not its filters — a stale
+   *  cross-filter would hide most of the data on reopen). */
+  studyBoard: { key: "trackdraft-study-board", scope: "ui", owner: "store/studyStore" },
   drumsBarsView: { key: "trackdraft-drums-bars-view", scope: "ui", owner: "components/drums/blocks/DrumBlocksView" },
   drumsStepSel: { key: "trackdraft-drums-step-sel", scope: "ui", owner: "components/drums/blocks/DrumBlocksView" },
   drumsFxSel: { key: "trackdraft-drums-fx-sel", scope: "ui", owner: "components/drums/blocks/DrumBlocksView" },

@@ -4,7 +4,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { pitchClass, NOTE_TO_PC } from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, spanIndexForTick, totalBars, type SectionSpan } from "../../lib/arrangement";
-import { useRoleStyle } from "../../lib/roleColors";
 import { classifySong } from "../../lib/classification";
 import { chordDisplayName } from "../../lib/harmony/chordBuilder";
 import type { TransportTick } from "../../lib/playback/songTransport";
@@ -16,6 +15,7 @@ import { drumFamilyLabel } from "../../lib/playback/drumPreview";
 import type { BlueprintSong } from "../../types/blueprint";
 import { usePalette } from "../../theme/palette";
 import TapeLabel from "../common/TapeLabel";
+import { SectionBlock } from "./SectionBlock";
 
 /**
  * The arrangement view is the spine's axis at a larger density, so its blocks
@@ -127,7 +127,6 @@ function progressionText(span: SectionSpan, song: BlueprintSong): string {
  *  three separate blocks, exactly as it becomes three separate clips. */
 export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
   const P = usePalette();
-  const roleStyle = useRoleStyle();
   const navigate = useNavigate();
   const { songId } = useParams<{ songId: string }>();
   const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
@@ -193,7 +192,6 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
             />
           )}
           {spans.map((span, i) => {
-            const style = roleStyle(span.section.role);
             const width = span.bars * barWidth(barPx);
             const isSelected = selectedSectionId === span.sectionId;
             const inSelection = selectedSectionIds.includes(span.sectionId);
@@ -203,78 +201,66 @@ export default function ArrangementTimeline({ song }: { song: BlueprintSong }) {
             const drum = drumFamilyLabel(section, song);
             const jump = (tab: string) => navigate(`/song/${songId}/${tab}?section=${section.id}`);
             return (
-              <div
+              <SectionBlock
                 key={`${span.sectionId}-${span.occurrenceIndex}-${i}`}
-                className="shrink-0 flex flex-col"
-                style={{ width }}
-                onMouseEnter={() => setHoveredIndex(i)}
-                onMouseLeave={() => setHoveredIndex((cur) => (cur === i ? null : cur))}
-                onFocus={() => setHoveredIndex(i)}
-                onBlur={() => setHoveredIndex((cur) => (cur === i ? null : cur))}
-              >
-                {/* the select/edit block itself (role-colored) */}
-                <button
-                  data-timeline-block={span.sectionId}
-                  aria-pressed={inSelection}
-                  className={`h-12 rounded-[4px] flex flex-col items-start justify-center px-2 overflow-hidden transition-opacity text-left ${
-                    isSelected
-                      ? "ring-1 ring-accent ring-inset opacity-100"
-                      : inSelection
-                        ? "ring-1 ring-accent/55 ring-inset opacity-100"
-                        : "hover:opacity-90"
-                  }`}
-                  style={{ background: style.bg, color: style.text }}
-                  onClick={(event) => {
-                    if (sweptRef.current) {
-                      sweptRef.current = false;
-                      return;
-                    }
-                    const mode = event.shiftKey ? "extend" : event.metaKey || event.ctrlKey ? "toggle" : "replace";
-                    selectSection(span.sectionId, mode, sectionOrder);
-                  }}
-                  onDoubleClick={() => jump("harmony")}
-                  title="Click to target its mix · ⇧ for a range · ⌘ to add · drag across blocks · double-click to edit"
-                >
-                  <span className="text-[10.5px] font-medium leading-tight truncate w-full">{section.name}</span>
-                  <span className="text-[9px] opacity-80 font-mono leading-tight">{Math.round(span.bars)} bars</span>
-                </button>
-                {/* readout strip — harmony / drums / melody, each row jumps
-                    into its detail tab for this section */}
-                <div className="text-[9px] font-mono leading-tight mt-1 px-0.5 space-y-0.5">
-                  <div className="flex items-center gap-1 w-full">
-                    {harmony ? (
+                span={span}
+                width={width}
+                selected={isSelected}
+                inSelection={inSelection}
+                variant="timeline"
+                title="Click to target its mix · ⇧ for a range · ⌘ to add · drag across blocks · double-click to edit"
+                meta={`${Math.round(span.bars)} bars`}
+                onSelect={(event) => {
+                  if (sweptRef.current) {
+                    sweptRef.current = false;
+                    return;
+                  }
+                  const mode = event.shiftKey ? "extend" : event.metaKey || event.ctrlKey ? "toggle" : "replace";
+                  selectSection(span.sectionId, mode, sectionOrder);
+                }}
+                onDoubleClick={() => jump("harmony")}
+                onHoverChange={(hovered) => setHoveredIndex((cur) => (hovered ? i : cur === i ? null : cur))}
+                readout={
+                  <>
+                    {/* readout strip — harmony / drums / melody, each row
+                        jumps into its detail tab for this section */}
+                    <div className="text-[9px] font-mono leading-tight mt-1 px-0.5 space-y-0.5">
+                      <div className="flex items-center gap-1 w-full">
+                        {harmony ? (
+                          <button
+                            className="truncate flex-1 text-left text-inkMuted hover:text-accent"
+                            onClick={() => jump("harmony")}
+                            title="This section's harmony — edit in Harmony"
+                          >
+                            {harmony}
+                          </button>
+                        ) : (
+                          <span className="truncate flex-1 text-left text-inkMuted/40">no chords</span>
+                        )}
+                        {melodyCount > 0 && (
+                          <button
+                            className="shrink-0 text-inkMuted/80 hover:text-accent"
+                            onClick={() => jump("melody")}
+                            title={`${melodyCount} melody note(s) — edit in Melody`}
+                          >
+                            ♪{melodyCount}
+                          </button>
+                        )}
+                      </div>
                       <button
-                        className="truncate flex-1 text-left text-inkMuted hover:text-accent"
-                        onClick={() => jump("harmony")}
-                        title="This section's harmony — edit in Harmony"
+                        className="truncate w-full text-left text-inkMuted hover:text-accent"
+                        onClick={() => jump("drums")}
+                        title="This section's drums — edit in Drums"
                       >
-                        {harmony}
+                        {drum}
+                        {song.genre && grooveOf(section).kind === "auto" ? (
+                          <span className="text-accent/80"> · {song.genre}</span>
+                        ) : null}
                       </button>
-                    ) : (
-                      <span className="truncate flex-1 text-left text-inkMuted/40">no chords</span>
-                    )}
-                    {melodyCount > 0 && (
-                      <button
-                        className="shrink-0 text-inkMuted/80 hover:text-accent"
-                        onClick={() => jump("melody")}
-                        title={`${melodyCount} melody note(s) — edit in Melody`}
-                      >
-                        ♪{melodyCount}
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    className="truncate w-full text-left text-inkMuted hover:text-accent"
-                    onClick={() => jump("drums")}
-                    title="This section's drums — edit in Drums"
-                  >
-                    {drum}
-                    {song.genre && grooveOf(section).kind === "auto" ? (
-                      <span className="text-accent/80"> · {song.genre}</span>
-                    ) : null}
-                  </button>
-                </div>
-              </div>
+                    </div>
+                  </>
+                }
+              />
             );
           })}
         </div>

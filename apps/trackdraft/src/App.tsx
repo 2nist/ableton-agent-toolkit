@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { useSongStore } from "./store/songStore";
 import { flushAllPendingWrites } from "./store/storage";
 import { startAtomSqUserMidi, stopAtomSqUserMidi } from "./lib/playback/userMidi";
@@ -26,6 +26,14 @@ const GenreWorkbench = lazy(() => import("./pages/GenreWorkbench"));
 const DesignLab = lazy(() => import("./pages/DesignLab"));
 const StudioLogLab = lazy(() => import("./pages/studio-log/StudioLogLab"));
 const RenderCanvasLayout = lazy(() => import("./components/RenderCanvasLayout"));
+
+/** The discovery board lives in the Harmony Study desk; the short-lived
+ *  top-level /study address (one pre-beta build) lands on the desk instead of
+ *  dead-ending on a blank canvas. */
+function StudyRedirect() {
+  const { songId } = useParams<{ songId: string }>();
+  return <Navigate to={`/song/${songId}/harmony`} replace />;
+}
 
 function App() {
   const hydrate = useSongStore((s) => s.hydrate);
@@ -76,6 +84,7 @@ function App() {
                 <Route path="drums" element={<DrumsTab />} />
                 <Route path="lyrics" element={<LyricsView />} />
                 <Route path="melody" element={<MelodyView />} />
+                <Route path="study" element={<StudyRedirect />} />
                 <Route path="workbench" element={<WorkbenchView />} />
                 <Route path="library" element={<LibraryView />} />
                 <Route path="settings" element={<SettingsView />} />

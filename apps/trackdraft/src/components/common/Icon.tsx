@@ -18,6 +18,7 @@ export type IconName =
   | "mix"
   | "song"
   | "sync"
+  | "study"
   | "play"
   | "pause"
   | "stop"
@@ -87,6 +88,13 @@ const PATHS: Record<IconName, ReactElement> = {
       <circle cx="5.4" cy="11.8" r="1.7" />
       <path d="M7.1 11.8V4.2" />
       <path d="M7.1 4.2c2.6.4 3.8 1.9 2.4 4.2" />
+    </>
+  ),
+  // Three bars — the Study board (a chart, not a station).
+  study: (
+    <>
+      <path d="M2.8 12.6V8.4M8 12.6V3.4M13.2 12.6V6.2" />
+      <path d="M2.2 12.6h11.6" />
     </>
   ),
   // A folder — the browser of sources.
