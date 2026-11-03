@@ -1291,6 +1291,75 @@ void testRhythmXml()
     check (! fallback.slots[0].rhythm.enabled, "with no pattern");
 }
 
+void testSectionKey()
+{
+    auto song = makeSong();
+
+    // A section that does not modulate plays the song's key and mode.
+    checkEqual (song.keyAt (0, 2), 2, "no override means the song's key");
+    check (song.scaleAt (0, td::theory::Scale::dorian) == td::theory::Scale::dorian,
+           "and the song's mode");
+    check (! song.sections[0].modulates(), "and it does not claim to modulate");
+
+    // A modulation carries both halves independently, as the app models them.
+    song.sections[1].hasKey = true;
+    song.sections[1].keyPc = 3;
+    check (song.sections[1].modulates(), "a key alone is a modulation");
+    checkEqual (song.keyAt (1, 0), 3, "the chorus is in E flat");
+    check (song.scaleAt (1, td::theory::Scale::ionian) == td::theory::Scale::ionian,
+           "and keeps the song's mode");
+
+    song.sections[1].hasScale = true;
+    song.sections[1].scale = td::theory::Scale::aeolian;
+    check (song.scaleAt (1, td::theory::Scale::ionian) == td::theory::Scale::aeolian,
+           "a mode alone changes the mode");
+
+    // Out-of-range indices answer with the fallback rather than guessing.
+    checkEqual (song.keyAt (99, 7), 7, "a missing section falls back");
+    check (song.scaleAt (99, td::theory::Scale::lydian) == td::theory::Scale::lydian,
+           "for the mode too");
+}
+
+void testSectionKeyXml()
+{
+    auto song = makeSong();
+    song.sections[1].hasKey = true;
+    song.sections[1].keyPc = 3;
+    song.sections[1].hasScale = true;
+    song.sections[1].scale = td::theory::Scale::aeolian;
+
+    const auto xml = td::toXml (song, "TrackDraftSong");
+    const auto* verseElement = xml.getChildByName ("section");
+    check (verseElement != nullptr && ! verseElement->hasAttribute ("key"),
+           "a section that does not modulate says nothing about its key");
+
+    td::Song loaded;
+    check (td::fromXml (xml, loaded), "the song reads back");
+    check (loaded.sections[1].hasKey, "the modulation survives");
+    checkEqual (loaded.sections[1].keyPc, 3, "with its key");
+    check (loaded.sections[1].scale == td::theory::Scale::aeolian, "and its mode");
+    check (! loaded.sections[0].modulates(), "and the verse is still the song's");
+
+    // A key with no mode survives as a key with no mode.
+    auto keyOnly = makeSong();
+    keyOnly.sections[0].hasKey = true;
+    keyOnly.sections[0].keyPc = 10;
+
+    td::Song reloaded;
+    check (td::fromXml (td::toXml (keyOnly, "TrackDraftSong"), reloaded), "key-only loads");
+    check (reloaded.sections[0].hasKey, "and keeps the key");
+    check (! reloaded.sections[0].hasScale, "without inventing a mode");
+
+    // An unknown mode id is ignored rather than failing the file.
+    const auto odd = juce::parseXML (juce::String (
+        "<TrackDraftSong version=\"2\" count=\"1\"><section name=\"V\" scale=\"somersault\">"
+        "<progression count=\"1\"><slot root=\"0\" quality=\"maj\" beats=\"4\"/></progression>"
+        "</section><arrangement><pass section=\"0\" repeats=\"1\"/></arrangement></TrackDraftSong>"));
+    td::Song fallback;
+    check (odd != nullptr && td::fromXml (*odd, fallback), "an unknown mode still loads");
+    check (! fallback.sections[0].hasScale, "with no mode override");
+}
+
 void testBassPlanning()
 {
     td::BassLine line;
@@ -1740,7 +1809,7 @@ void testSongXml()
       <bass octave="3" motion="root" rhythm="locked" velocity="100"/>
     </progression>
   </section>
-  <section name="Chorus">
+  <section name="Chorus" key="3" scale="aeolian">
     <progression version="1" count="2">
       <slot root="5" quality="maj" beats="4" performance="0" param="0" direction="2"/>
       <slot root="7" quality="7" beats="4" performance="3" param="8" direction="1" rhythm="3001200030002000"/>
@@ -1776,6 +1845,10 @@ void testSongXml()
            "in eighths");
     checkEqual (fromApp.sections[1].progression.bass.octave, 2, "an octave down");
     checkEqual (fromApp.sections[1].progression.bass.velocity, 88, "and softer");
+    check (! fromApp.sections[0].modulates(), "the verse follows the song's key");
+    check (fromApp.sections[1].hasKey, "the chorus modulates");
+    checkEqual (fromApp.sections[1].keyPc, 3, "to E flat");
+    check (fromApp.sections[1].scale == td::theory::Scale::aeolian, "and to aeolian");
     check (fromApp.sections[1].progression.slots[1].rhythm.enabled, "the app's rhythm grid arrives");
     checkEqual (juce::String (fromApp.sections[1].progression.slots[1].rhythm.toDigits()),
                 juce::String ("3001200030002000"), "digit for digit");
@@ -1868,6 +1941,8 @@ int main (int argc, char** argv)
     testRhythmSeeds();
     testRhythmScheduler();
     testRhythmXml();
+    testSectionKey();
+    testSectionKeyXml();
     testBassPlanning();
     testBassXml();
     testVoicingXml();

@@ -97,8 +97,6 @@ void TrackDraftAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     juce::MidiBuffer generated;
     generated.addEvents (midiMessages, 0, -1, 0);
 
-    updateDetection (midiMessages);
-
     TransportSlice transport;
     if (const auto* playHead = getPlayHead())
     {
@@ -124,15 +122,23 @@ void TrackDraftAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     settings.gate = (double) apvts.getRawParameterValue (gateParam)->load();
     settings.enabled = apvts.getRawParameterValue (enabledParam)->load() > 0.5f;
 
+    theory::Scale detectionScale;
     {
         // The cycle is read, not copied: it is only rewritten on the message
         // thread, under this lock, when the song changes.
         const juce::ScopedLock lock (progressionLock);
         scheduler.process (generated, transport, cycle, settings, buffer.getNumSamples());
 
+        // Detection names what the player plays in the key of the section the
+        // transport is in, not the song's — the vocabulary a modulating song
+        // needs. Stopped, there is no section, so the song's key stands.
+        const auto playing = transport.playing
+                                 ? cycle.playingAt (juce::jmax (0.0, transport.ppqStart))
+                                 : SongCycle::Playing {};
+        detectionScale = song.scaleAt (playing.section, scaleFromParameters());
+
         if (transport.playing)
         {
-            const auto playing = cycle.playingAt (juce::jmax (0.0, transport.ppqStart));
             playingSection.store ((int) playing.section);
             playingSlot.store ((int) playing.slot);
             playingPass.store ((int) playing.pass);
@@ -161,6 +167,8 @@ void TrackDraftAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         preview.performance = Performance::block;
         scheduler.audition (generated, preview, settings, buffer.getNumSamples(), getSampleRate());
     }
+
+    updateDetection (midiMessages, detectionScale);
 
     midiMessages.swapWith (generated);
 }
@@ -237,7 +245,14 @@ void TrackDraftAudioProcessor::setDetectionArmed (bool shouldListen)
     }
 }
 
-void TrackDraftAudioProcessor::updateDetection (const juce::MidiBuffer& incoming)
+theory::Scale TrackDraftAudioProcessor::scaleFromParameters() const
+{
+    return (theory::Scale) juce::jlimit (0, (int) theory::Scale::locrian,
+                                        (int) apvts.getRawParameterValue (scaleParam)->load());
+}
+
+void TrackDraftAudioProcessor::updateDetection (const juce::MidiBuffer& incoming,
+                                               theory::Scale scale)
 {
     if (! detectionArmed.load())
     {
@@ -271,9 +286,7 @@ void TrackDraftAudioProcessor::updateDetection (const juce::MidiBuffer& incoming
     }
 
     RecognizeOptions options;
-    options.permitted = theory::diatonicQualities (
-        (theory::Scale) juce::jlimit (0, (int) theory::Scale::locrian,
-                                      (int) apvts.getRawParameterValue (scaleParam)->load()));
+    options.permitted = theory::diatonicQualities (scale);
 
     const int previousRoot = heardRoot.load();
     if (previousRoot >= 0)

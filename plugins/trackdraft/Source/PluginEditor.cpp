@@ -243,7 +243,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
             if (slotIndex >= selectedProgression().count)
                 selectedProgression().count = juce::jmin (Progression::maxSlots, slotIndex + 1);
 
-            const int keyPc = keyBox.getSelectedId() - 1;
+            const int keyPc = workingKeyPc();
             auto& slot = selectedProgression().slots[slotIndex];
             slot.rootPc = ((keyPc + neighbour.rootOffset) % 12 + 12) % 12;
             slot.quality = neighbour.quality;
@@ -267,7 +267,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
             return;
 
         const auto& chord = borrowed[(std::size_t) (id - 1)];
-        const int keyPc = keyBox.getSelectedId() - 1;
+        const int keyPc = workingKeyPc();
         auto& slot = selectedProgression().slots[(std::size_t) selectedSlot];
         slot.rootPc = ((keyPc + chord.rootPc) % 12 + 12) % 12;
         slot.quality = chord.quality;
@@ -412,7 +412,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
 
                                         const auto scale = workingScale();
                                         const auto imported = importProgressionFromFile (
-                                            file, scale, keyBox.getSelectedId() - 1);
+                                            file, scale, workingKeyPc());
 
                                         heardLabel.setText (imported.message, juce::dontSendNotification);
                                         if (imported.ok)
@@ -460,13 +460,14 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
              &detectButton, &useHeardButton, &heardLabel, &octaveSlider, &velocitySlider,
              &gateSlider, &generateButton, &bassButton, &bassOctaveBox, &bassMotionBox,
              &bassRhythmBox, &bassVelocitySlider, &inversionBox, &spreadBox,
-             &rhythmGrid, &clearRhythmButton, &rhythmSeedBox,
+             &rhythmGrid, &clearRhythmButton, &rhythmSeedBox, &ownKeyButton,
              &strip, &presetBox, &presetNameEditor,
              &savePresetButton, &applyAllButton, &renamePresetButton, &deletePresetButton,
              &importButton, &sectionBar, &arrangementBar, &sectionNameEditor,
              &addSectionButton, &duplicateSectionButton, &deleteSectionButton,
              &moveSectionLeftButton, &moveSectionRightButton, &addPassButton,
-             &moreRepeatsButton, &fewerRepeatsButton, &removePassButton, &saveSongButton })
+             &moreRepeatsButton, &fewerRepeatsButton, &removePassButton, &saveSongButton,
+             &sectionKeyBox, &sectionScaleBox })
         addAndMakeVisible (component);
 
     for (auto& button : neighbourButtons)
@@ -479,6 +480,63 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     sectionNameEditor.setColour (juce::TextEditor::outlineColourId, well);
     sectionNameEditor.onReturnKey = [this] { renameSelectedSection(); };
     sectionNameEditor.onFocusLost = [this] { renameSelectedSection(); };
+
+    ownKeyButton.setColour (juce::ToggleButton::textColourId, ink);
+    ownKeyButton.setTooltip ("Give this section its own key and mode instead of the song's");
+    ownKeyButton.onClick = [this] {
+        auto& section = working.sections[selectedSection];
+        if (ownKeyButton.getToggleState())
+        {
+            // Turning it on starts from what the section plays now, so the
+            // music does not change key just because the box was ticked.
+            section.hasKey = true;
+            section.keyPc = workingKeyPc();
+            section.hasScale = true;
+            section.scale = workingScale();
+        }
+        else
+        {
+            section.hasKey = false;
+            section.hasScale = false;
+        }
+
+        commit();
+        rebuildFromProcessor();
+    };
+
+    sectionKeyBox.addItemList (keyNames(), 1);
+    sectionScaleBox.addItemList (scaleNames(), 1);
+    sectionKeyBox.setTooltip ("This section's key");
+    sectionScaleBox.setTooltip ("This section's mode");
+
+    sectionKeyBox.onChange = [this] {
+        if (selectedSection >= working.sections.size())
+            return;
+
+        auto& section = working.sections[selectedSection];
+        if (! section.modulates())
+            return;
+
+        section.hasKey = true;
+        section.keyPc = juce::jlimit (0, 11, sectionKeyBox.getSelectedId() - 1);
+        commit();
+        rebuildFromProcessor();
+    };
+
+    sectionScaleBox.onChange = [this] {
+        if (selectedSection >= working.sections.size())
+            return;
+
+        auto& section = working.sections[selectedSection];
+        if (! section.modulates())
+            return;
+
+        section.hasScale = true;
+        section.scale = (theory::Scale) juce::jlimit (0, (int) theory::Scale::locrian,
+                                                      sectionScaleBox.getSelectedId() - 1);
+        commit();
+        rebuildFromProcessor();
+    };
 
     for (auto* button : { &addSectionButton, &duplicateSectionButton, &deleteSectionButton,
                           &moveSectionLeftButton, &moveSectionRightButton, &addPassButton,
@@ -500,7 +558,8 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
         // A new section starts from the selected one's scale, so it is playable
         // immediately rather than four empty slots.
         working.sections[added].progression.seedFromScale (
-            keyBox.getSelectedId() - 1, workingScale(), 4);
+            working.keyAt (added, juce::jmax (0, keyBox.getSelectedId() - 1)),
+            working.scaleAt (added, globalScale()), 4);
         selectedSection = added;
         selectedSlot = 0;
         selectedPass = working.arrangement.empty() ? 0 : working.arrangement.size() - 1;
@@ -642,7 +701,8 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
 
     for (auto* box : { &keyBox, &scaleBox, &rootBox, &qualityBox, &borrowedBox,
                        &performanceBox, &directionBox, &inversionBox, &spreadBox,
-                       &bassOctaveBox, &bassMotionBox, &bassRhythmBox, &rhythmSeedBox })
+                       &bassOctaveBox, &bassMotionBox, &bassRhythmBox, &rhythmSeedBox,
+                       &sectionKeyBox, &sectionScaleBox })
         box->setColour (juce::ComboBox::backgroundColourId, panel);
 
     generateButton.setColour (juce::ToggleButton::textColourId, ink);
@@ -680,8 +740,16 @@ void TrackDraftAudioProcessorEditor::rebuildFromProcessor()
     if (selectedSlot >= (int) selectedProgression().count)
         selectedSlot = 0;
 
-    sectionNameEditor.setText (working.sections[selectedSection].name,
-                               juce::dontSendNotification);
+    const auto& section = working.sections[selectedSection];
+    sectionNameEditor.setText (section.name, juce::dontSendNotification);
+
+    // A section that does not modulate shows the song's key, greyed, so the
+    // boxes are a readout until "Own key" is ticked.
+    ownKeyButton.setToggleState (section.modulates(), juce::dontSendNotification);
+    sectionKeyBox.setSelectedId (workingKeyPc() + 1, juce::dontSendNotification);
+    sectionScaleBox.setSelectedId ((int) workingScale() + 1, juce::dontSendNotification);
+    sectionKeyBox.setEnabled (section.modulates());
+    sectionScaleBox.setEnabled (section.modulates());
 
     const auto& bass = selectedProgression().bass;
     bassButton.setToggleState (bass.enabled, juce::dontSendNotification);
@@ -750,10 +818,21 @@ void TrackDraftAudioProcessorEditor::rebuildFromProcessor()
     rhythmGrid.setCursor (playingSection == (int) selectedSection ? plugin.playingStep.load() : -1);
 }
 
-theory::Scale TrackDraftAudioProcessorEditor::workingScale() const
+theory::Scale TrackDraftAudioProcessorEditor::globalScale() const
 {
     return (theory::Scale) juce::jlimit (0, (int) theory::Scale::locrian,
                                          juce::jmax (0, scaleBox.getSelectedId() - 1));
+}
+
+theory::Scale TrackDraftAudioProcessorEditor::workingScale() const
+{
+    // The selected section's mode when it modulates, the song's otherwise.
+    return working.scaleAt (selectedSection, globalScale());
+}
+
+int TrackDraftAudioProcessorEditor::workingKeyPc() const
+{
+    return working.keyAt (selectedSection, juce::jmax (0, keyBox.getSelectedId() - 1));
 }
 
 int TrackDraftAudioProcessorEditor::workingDegree() const
@@ -764,7 +843,7 @@ int TrackDraftAudioProcessorEditor::workingDegree() const
     // The slot stores an absolute pitch class; the walk works in degrees, so
     // map it back through the key. A borrowed chord has no degree and falls
     // back to its position, which keeps the walk usable in a chromatic passage.
-    const int keyPc = keyBox.getSelectedId() - 1;
+    const int keyPc = workingKeyPc();
     const int rootPc = selectedProgression().slots[(std::size_t) selectedSlot].rootPc;
     const auto& steps = theory::scaleIntervals (workingScale());
     for (int degree = 0; degree < (int) steps.size(); ++degree)
@@ -790,7 +869,7 @@ void TrackDraftAudioProcessorEditor::rebuildBorrowed()
 {
     borrowedBox.clear (juce::dontSendNotification);
     const auto borrowed = Progression::borrowedChords (workingScale());
-    const int keyPc = keyBox.getSelectedId() - 1;
+    const int keyPc = workingKeyPc();
 
     for (int i = 0; i < (int) borrowed.size(); ++i)
     {
@@ -1001,6 +1080,9 @@ void TrackDraftAudioProcessorEditor::resized()
     deleteSectionButton.setBounds (354, layout::sectionButtonY, 52, 26);
     moveSectionLeftButton.setBounds (410, layout::sectionButtonY, 30, 26);
     moveSectionRightButton.setBounds (444, layout::sectionButtonY, 30, 26);
+    ownKeyButton.setBounds (486, layout::sectionButtonY, 88, 26);
+    sectionKeyBox.setBounds (578, layout::sectionButtonY, 66, 26);
+    sectionScaleBox.setBounds (648, layout::sectionButtonY, 96, 26);
 
     keyBox.setBounds (layout::margin, layout::keysY, 112, 26);
     scaleBox.setBounds (136, layout::keysY, 172, 26);

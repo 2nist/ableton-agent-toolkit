@@ -178,6 +178,13 @@ juce::XmlElement toXml (const Song& song, const juce::String& tagName)
     {
         auto* element = xml.createNewChildElement ("section");
         element->setAttribute ("name", section.name);
+
+        // Only a section that modulates says anything: an absent key means the
+        // song's, which is the plug-in's own parameter.
+        if (section.hasKey)
+            element->setAttribute ("key", section.keyPc);
+        if (section.hasScale)
+            element->setAttribute ("scale", theory::idOf (section.scale));
         element->addChildElement (
             new juce::XmlElement (toXml (section.progression, "progression")));
     }
@@ -227,6 +234,10 @@ bool fromXml (const juce::XmlElement& xml, Song& target)
     {
         juce::String name;
         Progression progression;
+        bool hasKey = false;
+        int keyPc = 0;
+        bool hasScale = false;
+        theory::Scale scale = theory::Scale::ionian;
     };
 
     std::vector<Loaded> loaded;
@@ -240,6 +251,26 @@ bool fromXml (const juce::XmlElement& xml, Song& target)
         Loaded entry;
         entry.name = element->getStringAttribute (
             "name", juce::String ("Section ") + juce::String ((int) loaded.size() + 1));
+
+        if (element->hasAttribute ("key"))
+        {
+            entry.hasKey = true;
+            entry.keyPc = ((element->getIntAttribute ("key", 0) % 12) + 12) % 12;
+        }
+
+        if (element->hasAttribute ("scale"))
+        {
+            const auto id = element->getStringAttribute ("scale");
+            for (int mode = 0; mode <= (int) theory::Scale::locrian; ++mode)
+            {
+                if (id == theory::idOf ((theory::Scale) mode))
+                {
+                    entry.hasScale = true;
+                    entry.scale = (theory::Scale) mode;
+                    break;
+                }
+            }
+        }
         // A section whose chords will not parse keeps its place with the default
         // progression: dropping it would silently renumber every later section
         // and misalign the arrangement that refers to them.
@@ -257,6 +288,10 @@ bool fromXml (const juce::XmlElement& xml, Song& target)
         section.id = (int) song.sections.size() + 1;
         section.name = entry.name;
         section.progression = entry.progression;
+        section.hasKey = entry.hasKey;
+        section.keyPc = entry.keyPc;
+        section.hasScale = entry.hasScale;
+        section.scale = entry.scale;
         song.sections.push_back (section);
     }
 

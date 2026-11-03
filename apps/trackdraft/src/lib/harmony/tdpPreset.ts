@@ -214,7 +214,13 @@ export function toTdpSongXml(song: BlueprintSong): string {
 
   const lines = [`<TrackDraftSong version="2" count="${playable.length}">`];
   for (const section of playable) {
-    lines.push(`  <section name="${escapeAttribute(section.name)}">`);
+    // A section that modulates says so; one that follows the song says nothing,
+    // because the plug-in's Key/Scale parameters are the song's key.
+    const attributes = [`name="${escapeAttribute(section.name)}"`];
+    if (section.key) attributes.push(`key="${pitchClass(section.key)}"`);
+    if (section.scale) attributes.push(`scale="${escapeAttribute(section.scale)}"`);
+
+    lines.push(`  <section ${attributes.join(" ")}>`);
     lines.push(`    <progression version="1" count="${section.chords.length}">`);
     for (const chord of section.chords) lines.push(slotLine(chord, "      "));
     lines.push(bassLine(section.bassProfile, "      "));

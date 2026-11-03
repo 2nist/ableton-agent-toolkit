@@ -93,6 +93,7 @@ notes without a boundary, and disabling emission releases what is sounding.
 |---|---|
 | **Section bar** | The song's sections, one box each. Click to choose one; it lights while the transport is inside it. A section holds up to 8 chords |
 | **Section name / + / Dup / Del / < / >** | Rename the selected section, add an empty one, copy it (chords and all), delete it, or reorder the list. A song keeps at least one section |
+| **Own key / key / mode** | A section that modulates carries its own key and mode; unticked, it follows the song's Key and Scale parameters and the two boxes are a greyed-out readout. Ticking it starts from what the section already plays, so the music does not change key just because the box was ticked |
 | **Arrangement bar** | The order the song plays in — one box per pass, `Chorus x2` when a pass repeats. Click a pass to select it, and the section it plays with it |
 | **+ pass / ± rep / del pass** | Append a pass of the selected section, change how many times the selected pass repeats (1-8), or remove it |
 | **Save song** | Writes every section and the arrangement to the preset folder under the name in the Presets row |
@@ -150,6 +151,10 @@ so an import keeps the first eight chord changes and says so when it truncates.
 
 ## Sharing progressions with the app
 
+A section element carries `key` (a pitch class) and `scale` (a mode id) only when
+it modulates, so a song that never modulates writes exactly the bytes it always
+did.
+
 A slot also carries `inversion` and `spread="open"` when the chord is voiced,
 omitted when it is in root position and close — so a file written before
 voicings existed is byte-identical to one written now. A section carries its
@@ -186,6 +191,11 @@ rather than against each side's assumptions.
   cancelled when the chord changes.
 - Audition (`Preview`) runs on its own sample clock, so it works with the
   transport stopped and never leaves a note ringing.
+- A section's **own key** changes what the plug-in *calls* things, not what it
+  *plays*: slots hold absolute pitch classes, so a modulating song already
+  sounded right. What the key decides is the vocabulary "Detect MIDI" prefers
+  (the playing section's mode, not the song's) and what "Seed from key" and the
+  walk write - a section in E flat is now named and seeded in E flat.
 - A chord sounds as voiced, not as a stack of root-position triads: the
   inversion rotates the tones (`C/E` is E-G-C, so the inversion is audible with
   no bass voice at all) and "open" drops the second-highest tone an octave.

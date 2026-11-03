@@ -51,7 +51,12 @@ private:
     void commitSection (const Progression& next);
     Progression& selectedProgression();
     const Progression& selectedProgression() const;
+    /** The song's mode, from the Scale parameter. */
+    theory::Scale globalScale() const;
+    /** The selected section's mode — its own when it modulates, the song's
+        otherwise — and the same for its key. */
     theory::Scale workingScale() const;
+    int workingKeyPc() const;
     int workingDegree() const;
 
     TrackDraftAudioProcessor& plugin;
@@ -91,6 +96,10 @@ private:
     juce::TextButton deleteSectionButton { "Del" };
     juce::TextButton moveSectionLeftButton { "<" };
     juce::TextButton moveSectionRightButton { ">" };
+    /** This section's own key, when the song modulates. */
+    juce::ToggleButton ownKeyButton { "Own key" };
+    juce::ComboBox sectionKeyBox;
+    juce::ComboBox sectionScaleBox;
     juce::TextButton addPassButton { "+ pass" };
     juce::TextButton moreRepeatsButton { "+ rep" };
     juce::TextButton fewerRepeatsButton { "- rep" };

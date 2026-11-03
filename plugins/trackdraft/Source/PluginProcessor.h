@@ -95,6 +95,9 @@ public:
 
 private:
     juce::AudioProcessorValueTreeState::ParameterLayout makeLayout();
+    /** The song's mode, from the Scale parameter: the fallback for a section
+        that does not modulate. */
+    theory::Scale scaleFromParameters() const;
 
     juce::AudioProcessorValueTreeState apvts;
     juce::ChangeBroadcaster progressionBroadcaster;
@@ -112,7 +115,9 @@ private:
     std::array<bool, 128> heldNotes {};
     std::atomic<int> heardRoot { -1 };
     std::atomic<int> heardQuality { 0 };
-    void updateDetection (const juce::MidiBuffer& incoming);
+    /** `scale` is the playing section's mode, so a modulating song is named
+        with its own vocabulary rather than the song key's. */
+    void updateDetection (const juce::MidiBuffer& incoming, theory::Scale scale);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TrackDraftAudioProcessor)
 };

@@ -36,6 +36,22 @@ struct Song
         int id = 0;
         juce::String name;
         Progression progression;
+
+        /**
+            This section's own key and mode, when it modulates.
+
+            Two independent overrides, because the app models them independently:
+            a section can move to G and keep the mode, or stay on C and change to
+            dorian. Absent means "the song's", which is the plug-in's Key/Scale
+            parameter — so a song that never modulates behaves exactly as it did
+            before these fields existed.
+        */
+        bool hasKey = false;
+        int keyPc = 0;
+        bool hasScale = false;
+        theory::Scale scale = theory::Scale::ionian;
+
+        bool modulates() const noexcept { return hasKey || hasScale; }
     };
 
     /** One entry of the arrangement: the section, and how many passes of it. */
@@ -55,6 +71,12 @@ struct Song
 
     /** Beats in one pass of `index`, 0 when there is no such section. */
     double sectionBeats (std::size_t index) const;
+
+    /** The key `index` plays in, or `fallbackPc` when it does not modulate. */
+    int keyAt (std::size_t index, int fallbackPc) const;
+
+    /** The mode `index` plays in, or `fallback` when it does not modulate. */
+    theory::Scale scaleAt (std::size_t index, theory::Scale fallback) const;
 
     /** Beats in the whole song, repeats included. */
     double totalBeats() const;

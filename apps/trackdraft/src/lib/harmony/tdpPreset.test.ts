@@ -252,7 +252,7 @@ const APP_SONG_XML = `<?xml version="1.0" encoding="UTF-8"?>
       <bass octave="3" motion="root" rhythm="locked" velocity="100"/>
     </progression>
   </section>
-  <section name="Chorus">
+  <section name="Chorus" key="3" scale="aeolian">
     <progression version="1" count="2">
       <slot root="5" quality="maj" beats="4" performance="0" param="0" direction="2"/>
       <slot root="7" quality="7" beats="4" performance="3" param="8" direction="1" rhythm="3001200030002000"/>
@@ -267,7 +267,14 @@ const APP_SONG_XML = `<?xml version="1.0" encoding="UTF-8"?>
 `;
 
 function song(): BlueprintSong {
-  const section = (id: string, name: string, chords: Chord[], bassProfile?: BlueprintSection["bassProfile"]) => ({
+  const section = (
+    id: string,
+    name: string,
+    chords: Chord[],
+    bassProfile?: BlueprintSection["bassProfile"],
+    key?: BlueprintSection["key"],
+    scale?: BlueprintSection["scale"],
+  ) => ({
     id,
     name,
     role: "verse" as const,
@@ -278,6 +285,8 @@ function song(): BlueprintSong {
     timeSignatureNumerator: 4,
     timeSignatureDenPower: 2,
     ...(bassProfile ? { bassProfile } : {}),
+    ...(key ? { key } : {}),
+    ...(scale ? { scale } : {}),
   });
 
   return {
@@ -308,7 +317,7 @@ function song(): BlueprintSong {
           performance: { style: "arp", params: { subdivision: 8, direction: 1 } },
           rhythm: "3001200030002000",
         }),
-      ], { octave: 2, motion: "walking", rhythm: "eighth", velocity: 88 }),
+      ], { octave: 2, motion: "walking", rhythm: "eighth", velocity: 88 }, "Eb", "aeolian"),
     ],
     arrangement: [
       { sectionId: "s1", repeats: 1 },

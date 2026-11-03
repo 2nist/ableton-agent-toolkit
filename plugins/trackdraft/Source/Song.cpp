@@ -20,6 +20,22 @@ double Song::sectionBeats (std::size_t index) const
     return beatsOf (sections[index].progression);
 }
 
+int Song::keyAt (std::size_t index, int fallbackPc) const
+{
+    if (index >= sections.size() || ! sections[index].hasKey)
+        return fallbackPc;
+
+    return ((sections[index].keyPc % 12) + 12) % 12;
+}
+
+theory::Scale Song::scaleAt (std::size_t index, theory::Scale fallback) const
+{
+    if (index >= sections.size() || ! sections[index].hasScale)
+        return fallback;
+
+    return sections[index].scale;
+}
+
 std::size_t Song::indexOf (int sectionId) const
 {
     for (std::size_t i = 0; i < sections.size(); ++i)
