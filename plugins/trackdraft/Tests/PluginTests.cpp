@@ -3,6 +3,8 @@
 #include "Theory/ChordRecognition.h"
 #include "Theory/ChordTheory.h"
 #include "Performance.h"
+#include "PresetStore.h"
+#include "ProgressionXml.h"
 #include "Theory/ChordWalk.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -346,6 +348,145 @@ void testBorrowedChords()
     }
 }
 
+void testReorderAndApplyAll()
+{
+    td::Progression progression;
+    progression.count = 4;
+    for (int i = 0; i < 4; ++i)
+        progression.slots[(std::size_t) i] = { i, td::theory::Quality::maj, 4.0 };
+
+    // Moving forward shifts the slots it passes back by one.
+    progression.moveSlot (0, 2);
+    checkEqual (progression.slots[0].rootPc, 1, "moveSlot forward: first is the old second");
+    checkEqual (progression.slots[1].rootPc, 2, "moveSlot forward: second is the old third");
+    checkEqual (progression.slots[2].rootPc, 0, "moveSlot forward: target is the moved slot");
+
+    // Moving backward shifts the slots it passes forward by one.
+    progression.moveSlot (3, 1);
+    checkEqual (progression.slots[1].rootPc, 3, "moveSlot backward: target is the moved slot");
+    checkEqual (progression.slots[2].rootPc, 2, "moveSlot backward: the rest shift up");
+
+    // Out-of-range and no-op moves leave the progression alone.
+    const auto before = progression;
+    progression.moveSlot (0, 0);
+    progression.moveSlot (9, 1);
+    check (progression.slots[0] == before.slots[0], "a no-op or out-of-range move changes nothing");
+
+    // Articulation can be applied to the whole progression from one slot.
+    progression.count = 3;
+    progression.slots[1].performance = td::Performance::arp;
+    progression.slots[1].param = 6;
+    progression.slots[1].direction = 1;
+    progression.slots[0].performance = td::Performance::block;
+    progression.applyArticulationToAll (1);
+
+    for (std::size_t i = 0; i < progression.count; ++i)
+    {
+        checkEqual ((int) progression.slots[i].performance, (int) td::Performance::arp,
+                    "articulation applied to every slot");
+        checkEqual (progression.slots[i].param, 6, "param applied to every slot");
+        checkEqual (progression.slots[i].direction, 1, "direction applied to every slot");
+    }
+
+    // It must not touch the chords themselves.
+    checkEqual (progression.slots[2].rootPc, 2, "applying articulation leaves the chords alone");
+}
+
+void testProgressionXml()
+{
+    td::Progression original;
+    original.count = 3;
+    original.slots[0] = { 0, td::theory::Quality::maj7, 4.0, td::Performance::strum, 150, 2 };
+    original.slots[1] = { 5, td::theory::Quality::min, 2.0, td::Performance::pulse, 4, 2 };
+    original.slots[2] = { 7, td::theory::Quality::seven, 8.0, td::Performance::arp, 8, 1 };
+
+    const auto xml = td::toXml (original, "TrackDraftHarmony");
+    const auto text = xml.toString();
+
+    auto roundTripped = juce::XmlDocument::parse (text);
+    check (roundTripped != nullptr, "progression XML parses");
+
+    td::Progression read;
+    check (td::fromXml (*roundTripped, read), "progression XML reads back");
+    checkEqual ((int) read.count, 3, "slot count round-trips");
+
+    for (std::size_t i = 0; i < original.count; ++i)
+    {
+        check (read.slots[i] == original.slots[i],
+               "slot " + juce::String ((int) i) + " round-trips exactly");
+    }
+
+    // An unrecognised quality id falls back to major instead of failing the load.
+    juce::XmlElement odd ("TrackDraftPreset");
+    odd.setAttribute ("count", 1);
+    auto* slot = odd.createNewChildElement ("slot");
+    slot->setAttribute ("root", 3);
+    slot->setAttribute ("quality", "not-a-quality");
+    slot->setAttribute ("beats", 4.0);
+
+    td::Progression oddRead;
+    check (td::fromXml (odd, oddRead), "unknown quality still loads");
+    checkEqual ((int) oddRead.slots[0].quality, (int) td::theory::Quality::maj,
+                "unknown quality falls back to major");
+
+    // XML with no slots is refused rather than producing an empty progression.
+    juce::XmlElement empty ("TrackDraftPreset");
+    empty.setAttribute ("count", 0);
+    td::Progression untouched;
+    const auto before = untouched;
+    check (! td::fromXml (empty, untouched), "slotless XML is refused");
+    check (untouched.slots[0] == before.slots[0], "and leaves the target untouched");
+}
+
+void testPresets()
+{
+    // A scratch directory, so the test never writes into the user's presets.
+    auto scratch = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                       .getChildFile ("trackdraft-preset-test-" + juce::String (juce::Random::getSystemRandom().nextInt (100000)));
+    scratch.deleteRecursively();
+
+    td::PresetStore store (scratch);
+
+    td::Progression progression;
+    progression.count = 2;
+    progression.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    progression.slots[1] = { 9, td::theory::Quality::min7, 4.0, td::Performance::strum, 200, 2 };
+
+    juce::String error;
+    check (store.save ("My Song", progression, error), "a preset saves: " + error);
+    check (scratch.isDirectory(), "the preset directory is created");
+
+    const auto names = store.names();
+    checkEqual (names.size(), 1, "one preset is listed");
+    checkEqual (names[0], juce::String ("My Song"), "the preset keeps its human name");
+
+    td::Progression loaded;
+    check (store.load ("My Song", loaded, error), "the preset loads: " + error);
+    checkEqual ((int) loaded.count, 2, "loaded slot count");
+    check (loaded.slots[1] == progression.slots[1], "loaded slot matches what was saved");
+
+    // A name is user text: it must never escape the preset directory.
+    const auto sanitised = td::PresetStore::sanitiseName ("../../etc/passwd");
+    check (! sanitised.contains ("/") && ! sanitised.contains (".."),
+           "path traversal is stripped from a preset name");
+
+    td::PresetStore guarded (scratch);
+    check (guarded.save ("../../escaped", progression, error), "an unsafe name still saves");
+    const auto files = scratch.findChildFiles (juce::File::findFiles, false, "*.tdp.xml");
+    for (const auto& file : files)
+        checkEqual (file.getParentDirectory().getFullPathName(), scratch.getFullPathName(),
+                    "every preset file stays in the preset directory");
+
+    // A missing preset is a clean failure, not a crash or an empty progression.
+    td::Progression untouched;
+    const auto before = untouched;
+    check (! store.load ("No Such Preset", untouched, error), "a missing preset fails");
+    check (error.isNotEmpty(), "and reports why");
+    check (untouched.slots[0] == before.slots[0], "and leaves the target untouched");
+
+    scratch.deleteRecursively();
+}
+
 void testScheduler()
 {
     td::Progression progression;
@@ -506,6 +647,9 @@ int main()
     testRecognition();
     testArticulation();
     testBorrowedChords();
+    testReorderAndApplyAll();
+    testProgressionXml();
+    testPresets();
     testProgressionCycle();
     testScheduler();
 

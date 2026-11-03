@@ -75,8 +75,10 @@ Covers: theory-table parity with `@music-theory/core`, diatonic vocabulary per
 mode, the walk's neighbour and cycle properties, chord recognition (including
 the vocabulary rules and the borrowed-chord fallback), articulation (block,
 strum spread, pulse accents, arp direction), the borrowed-chord set (derived,
-deduplicated, never a chord already in the key), the progression cycle, and
-the scheduling rules — a stopped transport emits
+deduplicated, never a chord already in the key), reordering, applying
+articulation to the whole progression, the XML round-trip, presets (save, list,
+load, missing-preset failure, and that a hostile name cannot escape the preset
+directory), the progression cycle, and the scheduling rules — a stopped transport emits
 nothing, the downbeat sounds the first chord at MIDI 60, a boundary inside a block
 releases the previous chord first, a host loop restarts cleanly, the gate closes
 notes without a boundary, and disabling emission releases what is sounding.
@@ -94,6 +96,9 @@ notes without a boundary, and disabling emission releases what is sounding.
 | **Borrowed chord…** | Chords the *other* modes on this tonic would give the key — bIII, iv, bVI, bVII in a major key — derived at the triad, written into the selected slot |
 | **Articulation** (Block / Strum / Pulse / Arp) | Per slot. Strum uses the app's millisecond spread, Pulse re-strikes on a subdivision with a triangle accent, Arp walks the tones up, down or up-down |
 | **Preview** | Plays the selected slot immediately, transport or not, so you can hear the voicing before committing to it |
+| **Drag a slot** | Click-drag reorders the progression; the drop target shows while dragging |
+| **Apply articulation to all** | Copies the selected slot's articulation onto every slot — one strum setting for the whole progression |
+| **Presets** | Save the progression under a name (one `.tdp.xml` per preset in `~/Library/Application Support/TrackDraft/Presets`), pick one to load it. Names are sanitised to a filename and never allowed to define a path |
 | **Detect MIDI / Use heard** | Arm listening to the notes the host sends in, then write the recognised chord into the selected slot. The readout names both what you played and what the slot says, so the difference is the decision |
 
 The walk row is a port of the app's honeycomb arithmetic, not an invented
@@ -132,6 +137,8 @@ Source/Theory/ChordTheory.*    the app's chord + scale tables, ported
 Source/Theory/ChordWalk.*      hex neighbours / the walk, ported
 Source/Theory/ChordRecognition.*  notes -> chord name, ported
 Source/Performance.*           strum / pulse / arp, ported
+Source/ProgressionXml.*        the one XML writer/reader for a progression
+Source/PresetStore.*           named progressions on disk
 Source/Progression.*           slots, cycle length, diatonic seeding
 Source/ChordScheduler.*        transport → MIDI events (the testable core)
 Source/PluginProcessor.*       APVTS, state, bus/format declarations

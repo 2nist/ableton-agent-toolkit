@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "ProgressionXml.h"
 
 #include <cmath>
 
@@ -179,23 +180,11 @@ void TrackDraftAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         current = progression;
     }
 
-    juce::XmlElement xml ("TrackDraftHarmony");
-    xml.setAttribute ("version", 1);
-
+    auto xml = toXml (current, "TrackDraftHarmony");
     if (auto state = apvts.copyState().createXml())
-        xml.addChildElement (state.release());
-
-    auto* slots = xml.createNewChildElement ("progression");
-    slots->setAttribute ("count", (int) current.count);
-    for (std::size_t i = 0; i < current.count; ++i)
     {
-        auto* slot = slots->createNewChildElement ("slot");
-        slot->setAttribute ("root", current.slots[i].rootPc);
-        slot->setAttribute ("quality", theory::idOf (current.slots[i].quality));
-        slot->setAttribute ("beats", current.slots[i].beats);
-        slot->setAttribute ("performance", (int) current.slots[i].performance);
-        slot->setAttribute ("param", current.slots[i].param);
-        slot->setAttribute ("direction", current.slots[i].direction);
+        auto* wrapper = xml.createNewChildElement ("parameters");
+        wrapper->addChildElement (state.release());
     }
 
     copyXmlToBinary (xml, destData);
@@ -207,41 +196,17 @@ void TrackDraftAudioProcessor::setStateInformation (const void* data, int sizeIn
     if (xml == nullptr || ! xml->hasTagName ("TrackDraftHarmony"))
         return;
 
-    if (auto* state = xml->getChildByName (apvts.state.getType()))
+    // Parameters live under <parameters>; sessions written before that wrapper
+    // existed kept them as a direct child, and those still load.
+    auto* parameters = xml->getChildByName ("parameters");
+    auto* state = parameters != nullptr ? parameters->getChildByName (apvts.state.getType())
+                                        : xml->getChildByName (apvts.state.getType());
+    if (state != nullptr)
         apvts.replaceState (juce::ValueTree::fromXml (*state));
 
-    Progression loaded;
-    if (auto* slots = xml->getChildByName ("progression"))
-    {
-        const int count = juce::jlimit (1, (int) Progression::maxSlots, slots->getIntAttribute ("count", 4));
-        loaded.count = (std::size_t) count;
-
-        int index = 0;
-        for (auto* slot : slots->getChildIterator())
-        {
-            if (index >= count)
-                break;
-
-            const auto qualityId = slot->getStringAttribute ("quality", "maj");
-            theory::Quality quality = theory::Quality::maj;
-            for (const auto& candidate : theory::qualities())
-                if (qualityId == candidate.id)
-                    quality = candidate.quality;
-
-            ChordSlot loadedSlot;
-            loadedSlot.rootPc = juce::jlimit (0, 11, slot->getIntAttribute ("root", 0));
-            loadedSlot.quality = quality;
-            loadedSlot.beats = juce::jmax (0.25, slot->getDoubleAttribute ("beats", 4.0));
-            loadedSlot.performance = (Performance) juce::jlimit (
-                0, 3, slot->getIntAttribute ("performance", 0));
-            loadedSlot.param = juce::jlimit (0, 32, slot->getIntAttribute ("param", 0));
-            loadedSlot.direction = juce::jlimit (0, 2, slot->getIntAttribute ("direction", 2));
-            loaded.slots[(std::size_t) index] = loadedSlot;
-            ++index;
-        }
-    }
-
-    setProgression (loaded);
+    Progression loaded = getProgression();
+    if (fromXml (*xml, loaded))
+        setProgression (loaded);
 }
 
 void TrackDraftAudioProcessor::setDetectionArmed (bool shouldListen)
@@ -332,12 +297,7 @@ bool TrackDraftAudioProcessor::writeHeardChordToSlot (std::size_t slot)
     if (! heard.valid || slot >= Progression::maxSlots)
         return false;
 
-    Progression next;
-    {
-        const juce::ScopedLock lock (progressionLock);
-        next = progression;
-    }
-
+    Progression next = getProgression();
     if (slot >= next.count)
         next.count = slot + 1;
 
@@ -349,12 +309,7 @@ bool TrackDraftAudioProcessor::writeHeardChordToSlot (std::size_t slot)
 
 void TrackDraftAudioProcessor::auditionSlot (std::size_t slot)
 {
-    Progression current;
-    {
-        const juce::ScopedLock lock (progressionLock);
-        current = progression;
-    }
-
+    const auto current = getProgression();
     if (slot >= current.count)
         return;
 

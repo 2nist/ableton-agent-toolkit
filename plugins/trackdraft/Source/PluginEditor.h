@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PresetStore.h"
 #include "Progression.h"
 #include "Theory/ChordWalk.h"
 
@@ -38,12 +39,15 @@ private:
     void rebuildFromProcessor();
     void rebuildNeighbours();
     void rebuildBorrowed();
+    void rebuildPresets();
     void refreshHeardLabel();
     void commit();
+    void commitWith (const Progression& next);
     theory::Scale workingScale() const;
     int workingDegree() const;
 
     TrackDraftAudioProcessor& plugin;
+    PresetStore presets;
     Progression working;
     int selectedSlot = 0;
 
@@ -58,6 +62,11 @@ private:
     /** The six hex neighbours of the selected slot — the walk, one click away. */
     std::array<juce::TextButton, 6> neighbourButtons;
     juce::ComboBox borrowedBox;
+
+    juce::ComboBox presetBox;
+    juce::TextEditor presetNameEditor;
+    juce::TextButton savePresetButton { "Save" };
+    juce::TextButton applyAllButton { "Apply articulation to all" };
 
     juce::ComboBox performanceBox;
     juce::Slider paramSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
@@ -86,11 +95,16 @@ private:
         explicit SlotStrip (TrackDraftAudioProcessorEditor& ownerToUse) : owner (ownerToUse) {}
         void paint (juce::Graphics&) override;
         void mouseDown (const juce::MouseEvent&) override;
+        void mouseDrag (const juce::MouseEvent&) override;
+        void mouseUp (const juce::MouseEvent&) override;
 
         juce::Rectangle<int> boundsFor (int index) const;
+        int indexAt (juce::Point<int> position) const;
 
     private:
         TrackDraftAudioProcessorEditor& owner;
+        int dragFrom = -1;
+        int dragTo = -1;
     };
 
     SlotStrip strip { *this };

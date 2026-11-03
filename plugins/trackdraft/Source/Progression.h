@@ -82,5 +82,11 @@ struct Progression
         (the same chord reachable from two modes) appear once.
     */
     static std::vector<Borrowed> borrowedChords (theory::Scale scale);
+
+    /** Moves slot `from` so it sits at `to`, shifting the slots it passes. */
+    void moveSlot (std::size_t from, std::size_t to);
+
+    /** Copies `source`'s articulation onto every slot (the "apply to all" button). */
+    void applyArticulationToAll (std::size_t source);
 };
 } // namespace td

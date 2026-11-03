@@ -210,13 +210,60 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     heardLabel.setColour (juce::Label::textColourId, inkMuted);
     heardLabel.setFont (juce::Font (juce::FontOptions (13.0f)));
 
+    presetBox.setTextWhenNothingSelected ("Preset...");
+    presetNameEditor.setTextToShowWhenEmpty ("Preset name", inkMuted);
+    presetNameEditor.setColour (juce::TextEditor::backgroundColourId, panel);
+    presetNameEditor.setColour (juce::TextEditor::textColourId, ink);
+    presetNameEditor.setColour (juce::TextEditor::outlineColourId, well);
+
+    presetBox.onChange = [this] {
+        const auto name = presetBox.getText();
+        Progression loaded = working;
+        juce::String error;
+        if (name.isNotEmpty() && presets.load (name, loaded, error))
+        {
+            presetNameEditor.setText (name, juce::dontSendNotification);
+            commitWith (loaded);
+        }
+        else if (error.isNotEmpty())
+        {
+            heardLabel.setText (error, juce::dontSendNotification);
+        }
+    };
+
+    savePresetButton.onClick = [this] {
+        const auto name = presetNameEditor.getText();
+        if (name.trim().isEmpty())
+            return;
+
+        juce::String error;
+        if (presets.save (name, working, error))
+        {
+            rebuildPresets();
+            presetBox.setText (PresetStore::sanitiseName (name), juce::dontSendNotification);
+        }
+        else
+        {
+            heardLabel.setText (error, juce::dontSendNotification);
+        }
+    };
+
+    applyAllButton.onClick = [this] {
+        working.applyArticulationToAll ((std::size_t) selectedSlot);
+        commit();
+        rebuildFromProcessor();
+    };
+
     seedButton.setColour (juce::TextButton::buttonColourId, panel);
+    savePresetButton.setColour (juce::TextButton::buttonColourId, panel);
+    applyAllButton.setColour (juce::TextButton::buttonColourId, panel);
 
     for (auto* component : std::initializer_list<juce::Component*> {
              &keyBox, &scaleBox, &rootBox, &qualityBox, &beatsSlider, &seedButton,
              &previewButton, &borrowedBox, &performanceBox, &paramSlider, &directionBox,
              &detectButton, &useHeardButton, &heardLabel, &octaveSlider, &velocitySlider,
-             &gateSlider, &generateButton, &strip })
+             &gateSlider, &generateButton, &strip, &presetBox, &presetNameEditor,
+             &savePresetButton, &applyAllButton })
         addAndMakeVisible (component);
 
     for (auto& button : neighbourButtons)
@@ -235,7 +282,8 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     plugin.progressionChanged().addChangeListener (this);
     rebuildFromProcessor();
 
-    setSize (760, 470);
+    rebuildPresets();
+    setSize (760, 540);
     startTimerHz (20);
 }
 
@@ -265,7 +313,13 @@ void TrackDraftAudioProcessorEditor::rebuildFromProcessor()
 
         performanceBox.setSelectedId ((int) slot.performance + 1, juce::dontSendNotification);
         directionBox.setSelectedId (slot.direction + 1, juce::dontSendNotification);
-        paramSlider.setValue (slot.param > 0 ? slot.param : 4, juce::dontSendNotification);
+        // The same control means two things: strum spread in milliseconds, or a
+        // subdivision for pulse and arp. Its range follows the slot.
+        const bool strumming = slot.performance == Performance::strum;
+        paramSlider.setRange (strumming ? 20.0 : 1.0, strumming ? 500.0 : 32.0, 1.0);
+        const double defaultValue = strumming ? 150.0 : 4.0;
+        paramSlider.setValue (slot.param > 0 ? (double) slot.param : defaultValue,
+                              juce::dontSendNotification);
         paramSlider.setEnabled (slot.performance != Performance::block);
         directionBox.setEnabled (slot.performance == Performance::arp);
     }
@@ -328,6 +382,14 @@ void TrackDraftAudioProcessorEditor::rebuildBorrowed()
     }
 }
 
+void TrackDraftAudioProcessorEditor::rebuildPresets()
+{
+    presetBox.clear (juce::dontSendNotification);
+    const auto names = presets.names();
+    for (int i = 0; i < names.size(); ++i)
+        presetBox.addItem (names[i], i + 1);
+}
+
 void TrackDraftAudioProcessorEditor::refreshHeardLabel()
 {
     const auto heard = plugin.getHeardChord();
@@ -358,6 +420,15 @@ void TrackDraftAudioProcessorEditor::refreshHeardLabel()
 void TrackDraftAudioProcessorEditor::commit()
 {
     plugin.setProgression (working);
+}
+
+void TrackDraftAudioProcessorEditor::commitWith (const Progression& next)
+{
+    working = next;
+    if (selectedSlot >= (int) working.count)
+        selectedSlot = 0;
+    commit();
+    rebuildFromProcessor();
 }
 
 void TrackDraftAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster*)
@@ -393,6 +464,7 @@ void TrackDraftAudioProcessorEditor::paint (juce::Graphics& g)
     g.drawText ("Walk from the selected chord (hex neighbours)", 16, 250, 420, 14,
                 juce::Justification::centredLeft);
     g.drawText ("Articulation", 16, 348, 120, 14, juce::Justification::centredLeft);
+    g.drawText ("Presets", 16, 466, 120, 14, juce::Justification::centredLeft);
 }
 
 void TrackDraftAudioProcessorEditor::resized()
@@ -422,10 +494,16 @@ void TrackDraftAudioProcessorEditor::resized()
     directionBox.setBounds (208, 364, 92, 26);
     previewButton.setBounds (308, 364, 90, 26);
 
+    applyAllButton.setBounds (404, 364, 200, 26);
+
     octaveSlider.setBounds (16, 400, 120, 26);
     velocitySlider.setBounds (144, 400, 130, 26);
     gateSlider.setBounds (282, 400, 200, 26);
     generateButton.setBounds (492, 400, 252, 26);
+
+    presetBox.setBounds (16, 482, 200, 26);
+    presetNameEditor.setBounds (224, 482, 220, 26);
+    savePresetButton.setBounds (452, 482, 90, 26);
 }
 
 juce::Rectangle<int> TrackDraftAudioProcessorEditor::SlotStrip::boundsFor (int index) const
@@ -458,6 +536,13 @@ void TrackDraftAudioProcessorEditor::SlotStrip::paint (juce::Graphics& g)
         g.setColour (i == owner.selectedSlot ? accent : panel);
         g.drawRoundedRectangle (area, 6.0f, i == owner.selectedSlot ? 2.0f : 1.0f);
 
+        // Where the dragged slot would land.
+        if (dragFrom >= 0 && i == dragTo && dragTo != dragFrom)
+        {
+            g.setColour (accent.withAlpha (0.5f));
+            g.drawRoundedRectangle (area.reduced (2.0f), 5.0f, 2.0f);
+        }
+
         g.setColour (ink);
         g.setFont (juce::Font (juce::FontOptions (18.0f)).boldened());
         g.drawText (theory::chordName (slot.rootPc, slot.quality), area.reduced (4.0f, 12.0f),
@@ -475,16 +560,62 @@ void TrackDraftAudioProcessorEditor::SlotStrip::paint (juce::Graphics& g)
     }
 }
 
-void TrackDraftAudioProcessorEditor::SlotStrip::mouseDown (const juce::MouseEvent& event)
+int TrackDraftAudioProcessorEditor::SlotStrip::indexAt (juce::Point<int> position) const
 {
     for (int i = 0; i < (int) owner.working.count; ++i)
+        if (boundsFor (i).contains (position))
+            return i;
+
+    return -1;
+}
+
+void TrackDraftAudioProcessorEditor::SlotStrip::mouseDown (const juce::MouseEvent& event)
+{
+    const int index = indexAt (event.getPosition());
+    if (index < 0)
+        return;
+
+    owner.selectedSlot = index;
+    dragFrom = index;
+    dragTo = index;
+    owner.rebuildFromProcessor();
+}
+
+void TrackDraftAudioProcessorEditor::SlotStrip::mouseDrag (const juce::MouseEvent& event)
+{
+    if (dragFrom < 0)
+        return;
+
+    // Reordering is a click-drag: the slot under the pointer is where the
+    // dragged one will land, and the strip shows it before the drop.
+    const int over = indexAt (event.getPosition());
+    const int target = over >= 0 ? over : (event.getPosition().x < 0 ? 0
+                                              : (int) owner.working.count - 1);
+
+    if (target != dragTo)
     {
-        if (boundsFor (i).contains (event.getPosition()))
-        {
-            owner.selectedSlot = i;
-            owner.rebuildFromProcessor();
-            return;
-        }
+        dragTo = juce::jlimit (0, (int) owner.working.count - 1, target);
+        repaint();
     }
+}
+
+void TrackDraftAudioProcessorEditor::SlotStrip::mouseUp (const juce::MouseEvent& event)
+{
+    const int from = dragFrom;
+    const int to = dragTo;
+    dragFrom = -1;
+    dragTo = -1;
+
+    if (from < 0 || to < 0 || from == to)
+    {
+        repaint();
+        return;
+    }
+
+    owner.working.moveSlot ((std::size_t) from, (std::size_t) to);
+    owner.selectedSlot = to;
+    owner.commit();
+    owner.rebuildFromProcessor();
+    juce::ignoreUnused (event);
 }
 } // namespace td

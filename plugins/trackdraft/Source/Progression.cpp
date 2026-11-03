@@ -92,4 +92,33 @@ std::vector<Progression::Borrowed> Progression::borrowedChords (theory::Scale sc
 
     return found;
 }
+void Progression::moveSlot (std::size_t from, std::size_t to)
+{
+    if (from >= count || to >= count || from == to)
+        return;
+
+    const auto moved = slots[from];
+    if (from < to)
+        for (std::size_t i = from; i < to; ++i)
+            slots[i] = slots[i + 1];
+    else
+        for (std::size_t i = from; i > to; --i)
+            slots[i] = slots[i - 1];
+
+    slots[to] = moved;
+}
+
+void Progression::applyArticulationToAll (std::size_t source)
+{
+    if (source >= count)
+        return;
+
+    const auto articulation = slots[source];
+    for (std::size_t i = 0; i < count; ++i)
+    {
+        slots[i].performance = articulation.performance;
+        slots[i].param = articulation.param;
+        slots[i].direction = articulation.direction;
+    }
+}
 } // namespace td
