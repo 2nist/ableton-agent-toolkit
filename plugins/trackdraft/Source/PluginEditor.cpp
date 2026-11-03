@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 #include "Import/ChordImport.h"
 #include "PluginProcessor.h"
+#include "Rhythm.h"
 
 namespace td
 {
@@ -459,7 +460,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
              &detectButton, &useHeardButton, &heardLabel, &octaveSlider, &velocitySlider,
              &gateSlider, &generateButton, &bassButton, &bassOctaveBox, &bassMotionBox,
              &bassRhythmBox, &bassVelocitySlider, &inversionBox, &spreadBox,
-             &rhythmGrid, &clearRhythmButton,
+             &rhythmGrid, &clearRhythmButton, &rhythmSeedBox,
              &strip, &presetBox, &presetNameEditor,
              &savePresetButton, &applyAllButton, &renamePresetButton, &deletePresetButton,
              &importButton, &sectionBar, &arrangementBar, &sectionNameEditor,
@@ -612,6 +613,24 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
         rebuildFromProcessor();
     };
 
+    rhythmSeedBox.setTextWhenNothingSelected ("Seed...");
+    rhythmSeedBox.setTooltip ("Fill the grid from the same Euclidean rule the drum engine uses");
+    for (int i = 0; i < (int) rhythmSeeds().size(); ++i)
+        rhythmSeedBox.addItem (rhythmSeeds()[(std::size_t) i].name, i + 1);
+
+    rhythmSeedBox.onChange = [this] {
+        const int id = rhythmSeedBox.getSelectedId();
+        rhythmSeedBox.setSelectedId (0, juce::dontSendNotification);
+        if (id <= 0 || (std::size_t) (id - 1) >= rhythmSeeds().size())
+            return;
+
+        const auto& seed = rhythmSeeds()[(std::size_t) (id - 1)];
+        seedPattern (selectedProgression().slots[(std::size_t) selectedSlot].rhythm,
+                     seed.k, seed.n, seed.rotation);
+        commit();
+        rebuildFromProcessor();
+    };
+
     clearRhythmButton.setColour (juce::TextButton::buttonColourId, panel);
     clearRhythmButton.setColour (juce::TextButton::textColourOffId, ink);
     clearRhythmButton.setTooltip ("Give this slot back to its articulation");
@@ -623,7 +642,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
 
     for (auto* box : { &keyBox, &scaleBox, &rootBox, &qualityBox, &borrowedBox,
                        &performanceBox, &directionBox, &inversionBox, &spreadBox,
-                       &bassOctaveBox, &bassMotionBox, &bassRhythmBox })
+                       &bassOctaveBox, &bassMotionBox, &bassRhythmBox, &rhythmSeedBox })
         box->setColour (juce::ComboBox::backgroundColourId, panel);
 
     generateButton.setColour (juce::ToggleButton::textColourId, ink);
@@ -991,8 +1010,9 @@ void TrackDraftAudioProcessorEditor::resized()
     beatsSlider.setBounds (694, layout::keysY, 50, 26);
 
     strip.setBounds (layout::margin, layout::stripY, layout::width, layout::stripHeight);
-    rhythmGrid.setBounds (layout::margin, layout::rhythmY, layout::width - 110,
+    rhythmGrid.setBounds (layout::margin, layout::rhythmY, layout::width - 216,
                           layout::rhythmHeight);
+    rhythmSeedBox.setBounds (layout::margin + layout::width - 210, layout::rhythmY, 100, 30);
     clearRhythmButton.setBounds (layout::margin + layout::width - 104, layout::rhythmY, 104, 30);
 
     const int neighbourWidth = (layout::width - 5 * 6) / 6;

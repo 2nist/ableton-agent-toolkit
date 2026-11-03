@@ -104,6 +104,7 @@ notes without a boundary, and disabling emission releases what is sounding.
 | **Walk row** | The six hex neighbours of the selected chord. A click writes that chord into the next slot and moves the selection there |
 | **Borrowed chord…** | Chords the *other* modes on this tonic would give the key — bIII, iv, bVI, bVII in a major key — derived at the triad, written into the selected slot |
 | **Rhythm grid** | Sixteen sixteenths for the selected slot: click a step to cycle off → normal → accent → ghost. The grid is *when* and the articulation is *how*, so a strummed grid and an arpeggiated grid are one idea. One bar long, tiled over a longer slot; a grid with no hits is silence, which is different from having no pattern. The cursor follows the transport |
+| **Seed…** | Fills the grid from the same Euclidean rule the drum engine uses: `step_i = round(i · n / k)`, mapped onto the bar. Straight eighths, quarters, three/five/six/seven over the bar, and one rotated three. Hits are normal, with the downbeat and half-bar accented when the loop hits them |
 | **Clear rhythm** | Gives the slot back to its articulation |
 | **Articulation** (Block / Strum / Pulse / Arp) | Per slot. Strum uses the app's millisecond spread, Pulse re-strikes on a subdivision with a triangle accent, Arp walks the tones up, down or up-down |
 | **Inversion / spread** | Which chord tone is in the bass (root, 1st, 2nd … — the list is the chord's own tones, so a 13th offers six) and whether the upper voices stack close or open. The slot strip names the result as a slash chord, `C/E` |
@@ -206,6 +207,12 @@ rather than against each side's assumptions.
   across that sixteenth). A grid is one bar of 4/4 and tiles over a longer slot,
   a shorter slot uses the steps that fit, and the last hit is trimmed so it never
   hangs into the next chord.
+- Seeds are generated, not a library: `Source/Rhythm.*` ports the app's
+  `euclidOnsetSteps`, including its *rounding* form (`k=3, n=8` gives
+  {0, 3, 5}, where Bjorklund gives {0, 3, 6}). Ported as it is, because a grid
+  seeded from the drum engine should agree with it rather than be right on its
+  own. An eight-step loop lands on the eighths, a sixteen-step one on the
+  sixteenths.
 - Levels are velocities relative to the Velocity knob: accent = the knob, normal
   = 80%, ghost = 55%. A grid with no hits is silence; no grid at all means the
   articulation plays the chord across the whole slot, which is what every slot

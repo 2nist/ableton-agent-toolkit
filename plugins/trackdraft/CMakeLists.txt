@@ -46,6 +46,7 @@ target_sources(TrackDraftHarmony PRIVATE
     Source/Progression.cpp
     Source/Song.cpp
     Source/Bass.cpp
+    Source/Rhythm.cpp
     Source/ChordScheduler.cpp
     Source/Theory/ChordTheory.cpp
     Source/Theory/ChordWalk.cpp
@@ -62,6 +63,7 @@ add_library(TrackDraftCore STATIC
     Source/Progression.cpp
     Source/Song.cpp
     Source/Bass.cpp
+    Source/Rhythm.cpp
     Source/ChordScheduler.cpp
     Source/Theory/ChordTheory.cpp
     Source/Theory/ChordWalk.cpp

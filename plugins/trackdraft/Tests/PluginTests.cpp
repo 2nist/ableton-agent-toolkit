@@ -1,4 +1,5 @@
 #include "Bass.h"
+#include "Rhythm.h"
 #include "ChordScheduler.h"
 #include "Progression.h"
 #include "Song.h"
@@ -1037,6 +1038,67 @@ void testRhythmPattern()
     checkEqual (td::RhythmPattern::stepsPerBeat, 4, "four to the beat");
 }
 
+void testRhythmSeeds()
+{
+    // The app's rounding form of the Euclidean rule, spot for spot. No rotation:
+    // these are the values `euclidOnsetSteps` returns.
+    auto asText = [] (const std::vector<int>& steps)
+    {
+        juce::StringArray parts;
+        for (int step : steps)
+            parts.add (juce::String (step));
+
+        return parts.joinIntoString (",");
+    };
+
+    checkEqual (asText (td::euclidSteps (4, 8, 0)), "0,2,4,6", "4 of 8 is straight eighths");
+    checkEqual (asText (td::euclidSteps (3, 8, 0)), "0,3,5", "3 of 8 is the rounding form, not 0,3,6");
+    checkEqual (asText (td::euclidSteps (5, 16, 0)), "0,3,6,10,13", "5 of 16");
+    checkEqual (asText (td::euclidSteps (8, 16, 0)), "0,2,4,6,8,10,12,14", "8 of 16");
+    // 3 of 16 is {0,5,11}; rotating by two moves all three along.
+    checkEqual (asText (td::euclidSteps (3, 16, 2)), "2,7,13", "rotation moves the cycle");
+
+    // A seed fills the bar; the downbeat and half-bar are accented when hit.
+    {
+        td::RhythmPattern pattern;
+        td::seedPattern (pattern, 8, 16, 0);
+        check (pattern.enabled, "a seed enables the grid");
+        checkEqual (juce::String (pattern.toDigits()), juce::String ("3020202030202020"),
+                    "eighths, accented on 1 and 3");
+    }
+
+    {
+        td::RhythmPattern pattern;
+        td::seedPattern (pattern, 3, 16, 0);
+        // 3 of 16 lands on steps 0, 5 and 11; only step 0 is an anchor there.
+        checkEqual (juce::String (pattern.toDigits()), juce::String ("3000020000020000"),
+                    "three over the bar, accented on 1");
+    }
+
+    // An eight-step loop lands on the eighths, not on the first eight sixteenths.
+    {
+        td::RhythmPattern pattern;
+        td::seedPattern (pattern, 4, 8, 0);
+        checkEqual (juce::String (pattern.toDigits()), juce::String ("3000200030002000"),
+                    "quarters, spaced across the bar");
+    }
+
+    // Every offered seed makes a grid with at least two hits — a seed that
+    // plays one note is not a rhythm.
+    for (const auto& seed : td::rhythmSeeds())
+    {
+        td::RhythmPattern pattern;
+        td::seedPattern (pattern, seed.k, seed.n, seed.rotation);
+
+        int hits = 0;
+        for (auto level : pattern.level)
+            if (level != td::RhythmPattern::off)
+                ++hits;
+
+        check (hits >= 2, juce::String ("seed ") + seed.name + " has at least two hits");
+    }
+}
+
 void testRhythmScheduler()
 {
     td::VoiceSettings settings;
@@ -1762,6 +1824,7 @@ int main (int argc, char** argv)
     testVoicing();
     testVoicingScheduler();
     testRhythmPattern();
+    testRhythmSeeds();
     testRhythmScheduler();
     testRhythmXml();
     testBassPlanning();

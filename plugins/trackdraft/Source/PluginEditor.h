@@ -83,6 +83,7 @@ private:
     std::unique_ptr<juce::FileChooser> importChooser;
     juce::TextButton applyAllButton { "Apply feel to section" };
     juce::TextButton clearRhythmButton { "Clear rhythm" };
+    juce::ComboBox rhythmSeedBox;
 
     juce::TextEditor sectionNameEditor;
     juce::TextButton addSectionButton { "+" };
