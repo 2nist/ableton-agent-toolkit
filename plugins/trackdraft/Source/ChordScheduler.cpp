@@ -104,7 +104,7 @@ void ChordScheduler::retireVoices (juce::MidiBuffer& out, double upToPpqInclusiv
 
 void ChordScheduler::process (juce::MidiBuffer& out,
                               const TransportSlice& transport,
-                              const Progression& progression,
+                              const ChordCycle& cycle,
                               const VoiceSettings& settings,
                               int numSamples)
 {
@@ -121,7 +121,7 @@ void ChordScheduler::process (juce::MidiBuffer& out,
         }
     }
 
-    const double loopLength = progression.lengthInBeats();
+    const double loopLength = cycle.lengthInBeats();
 
     // A stopped, rewound or disabled transport must not leave notes ringing.
     if (! transport.playing || ! settings.enabled || loopLength <= 0.0)
@@ -149,9 +149,9 @@ void ChordScheduler::process (juce::MidiBuffer& out,
 
     const double firstCycle = std::floor (transport.ppqStart / loopLength) * loopLength;
     for (double cycleStart = firstCycle; cycleStart <= transport.ppqEnd; cycleStart += loopLength)
-        for (std::size_t slot = 0; slot < progression.count; ++slot)
+        for (std::size_t slot = 0; slot < cycle.slotCount(); ++slot)
         {
-            const double boundary = cycleStart + progression.startBeatOf (slot);
+            const double boundary = cycleStart + cycle.startBeatOf (slot);
             if (boundary >= transport.ppqStart && boundary < transport.ppqEnd)
                 boundaries.push_back ({ boundary, slot });
         }
@@ -177,7 +177,7 @@ void ChordScheduler::process (juce::MidiBuffer& out,
         voices.clear();
         pending.clear();
 
-        scheduleChord (boundary.ppq, progression.slots[boundary.slot], settings);
+        scheduleChord (boundary.ppq, cycle.slotAt (boundary.slot), settings);
         emitPending (out, boundary.ppq, transport.ppqStart, transport.ppqEnd, numSamples);
         cursor = boundary.ppq;
     }

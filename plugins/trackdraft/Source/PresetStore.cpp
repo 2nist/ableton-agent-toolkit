@@ -196,6 +196,12 @@ bool PresetStore::load (const juce::String& name, Progression& target, juce::Str
         return false;
     }
 
+    if (xml->getChildByName ("section") != nullptr)
+    {
+        error = file.getFileName() + " is a whole song, not one section";
+        return false;
+    }
+
     if (! fromXml (*xml, target))
     {
         error = "Preset has no usable slots: " + file.getFileName();
@@ -203,5 +209,70 @@ bool PresetStore::load (const juce::String& name, Progression& target, juce::Str
     }
 
     return true;
+}
+
+bool PresetStore::saveSong (const juce::String& name, const Song& song, juce::String& error)
+{
+    const auto result = folder.createDirectory();
+    if (result.failed())
+    {
+        error = "Cannot create " + folder.getFullPathName() + ": " + result.getErrorMessage();
+        return false;
+    }
+
+    const auto file = fileFor (name);
+    if (! file.replaceWithText (toXml (song, "TrackDraftSong").toString()))
+    {
+        error = "Cannot write " + file.getFullPathName();
+        return false;
+    }
+
+    return true;
+}
+
+bool PresetStore::loadSong (const juce::String& name, Song& target, juce::String& error)
+{
+    const auto file = fileFor (name);
+    if (! file.existsAsFile())
+    {
+        error = "No preset named " + name;
+        return false;
+    }
+
+    const auto xml = juce::XmlDocument::parse (file);
+    if (xml == nullptr)
+    {
+        error = "Preset is not valid XML: " + file.getFileName();
+        return false;
+    }
+
+    // A single progression is not a song, even though `fromXml (Song&)` would
+    // happily wrap it in one section: the caller asked for a song file.
+    if (xml->getChildByName ("section") == nullptr)
+    {
+        error = file.getFileName() + " is one section, not a whole song";
+        return false;
+    }
+
+    if (! fromXml (*xml, target))
+    {
+        error = "Song has no usable sections: " + file.getFileName();
+        return false;
+    }
+
+    return true;
+}
+
+PresetStore::Kind PresetStore::kindOf (const juce::String& name) const
+{
+    const auto file = fileFor (name);
+    if (! file.existsAsFile())
+        return Kind::unusable;
+
+    const auto xml = juce::XmlDocument::parse (file);
+    if (xml == nullptr)
+        return Kind::unusable;
+
+    return xml->getChildByName ("section") != nullptr ? Kind::song : Kind::progression;
 }
 } // namespace td

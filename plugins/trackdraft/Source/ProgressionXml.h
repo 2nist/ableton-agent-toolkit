@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Progression.h"
+#include "Song.h"
 
 #include <juce_core/juce_core.h>
 
@@ -18,4 +19,17 @@ juce::XmlElement toXml (const Progression& progression, const juce::String& tagN
 
 /** Reads a progression, leaving `fallback` untouched when the XML is unusable. */
 bool fromXml (const juce::XmlElement& xml, Progression& target);
+
+/**
+    A whole song: `<section>` elements in authoring order, plus the
+    `<arrangement>` list of passes over them.
+
+    Sections are named by index in the file (they have no persistent identity
+    outside a session), and the arrangement refers to those indices.
+*/
+juce::XmlElement toXml (const Song& song, const juce::String& tagName);
+
+/** Reads a song. A bare progression — a preset, or a session written before
+    songs existed — loads as a song with one section. */
+bool fromXml (const juce::XmlElement& xml, Song& target);
 } // namespace td

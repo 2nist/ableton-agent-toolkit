@@ -36,6 +36,36 @@ juce::StringArray performanceNames()
 {
     return { "Block", "Strum", "Pulse", "Arp" };
 }
+
+/** One place for the vertical rhythm: paint() and resized() both read these. */
+namespace layout
+{
+constexpr int margin = 16;
+constexpr int width = 728;
+constexpr int height = 640;
+
+constexpr int songLabelY = 58;
+constexpr int sectionBarY = 74;
+constexpr int sectionBarHeight = 30;
+constexpr int sectionButtonY = 110;
+constexpr int keysLabelY = 148;
+constexpr int keysY = 164;
+constexpr int stripY = 200;
+constexpr int stripHeight = 88;
+constexpr int walkLabelY = 300;
+constexpr int walkY = 318;
+constexpr int detectY = 356;
+constexpr int heardY = 386;
+constexpr int articulationLabelY = 412;
+constexpr int articulationY = 428;
+constexpr int voiceY = 460;
+constexpr int presetsLabelY = 496;
+constexpr int presetsY = 512;
+constexpr int arrangementLabelY = 546;
+constexpr int arrangementBarY = 562;
+constexpr int arrangementBarHeight = 28;
+constexpr int arrangementButtonY = 598;
+} // namespace layout
 } // namespace
 
 TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioProcessor& p)
@@ -83,20 +113,20 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
         state, "enabled", generateButton);
 
     rootBox.onChange = [this] {
-        if (selectedSlot < (int) working.count)
+        if (selectedSlot < (int) selectedProgression().count)
         {
-            working.slots[(std::size_t) selectedSlot].rootPc = rootBox.getSelectedId() - 1;
+            selectedProgression().slots[(std::size_t) selectedSlot].rootPc = rootBox.getSelectedId() - 1;
             commit();
             rebuildFromProcessor();
         }
     };
 
     qualityBox.onChange = [this] {
-        if (selectedSlot < (int) working.count)
+        if (selectedSlot < (int) selectedProgression().count)
         {
             const int index = juce::jlimit (0, (int) theory::qualities().size() - 1,
                                             qualityBox.getSelectedId() - 1);
-            working.slots[(std::size_t) selectedSlot].quality =
+            selectedProgression().slots[(std::size_t) selectedSlot].quality =
                 theory::qualities()[(std::size_t) index].quality;
             commit();
             rebuildFromProcessor();
@@ -104,18 +134,18 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     };
 
     beatsSlider.onValueChange = [this] {
-        if (selectedSlot < (int) working.count)
+        if (selectedSlot < (int) selectedProgression().count)
         {
-            working.slots[(std::size_t) selectedSlot].beats = beatsSlider.getValue();
+            selectedProgression().slots[(std::size_t) selectedSlot].beats = beatsSlider.getValue();
             commit();
             rebuildFromProcessor();
         }
     };
 
     performanceBox.onChange = [this] {
-        if (selectedSlot < (int) working.count)
+        if (selectedSlot < (int) selectedProgression().count)
         {
-            working.slots[(std::size_t) selectedSlot].performance =
+            selectedProgression().slots[(std::size_t) selectedSlot].performance =
                 (Performance) juce::jlimit (0, 3, performanceBox.getSelectedId() - 1);
             commit();
             rebuildFromProcessor();
@@ -123,17 +153,17 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     };
 
     paramSlider.onValueChange = [this] {
-        if (selectedSlot < (int) working.count)
+        if (selectedSlot < (int) selectedProgression().count)
         {
-            working.slots[(std::size_t) selectedSlot].param = (int) paramSlider.getValue();
+            selectedProgression().slots[(std::size_t) selectedSlot].param = (int) paramSlider.getValue();
             commit();
         }
     };
 
     directionBox.onChange = [this] {
-        if (selectedSlot < (int) working.count)
+        if (selectedSlot < (int) selectedProgression().count)
         {
-            working.slots[(std::size_t) selectedSlot].direction =
+            selectedProgression().slots[(std::size_t) selectedSlot].direction =
                 juce::jlimit (0, 2, directionBox.getSelectedId() - 1);
             commit();
         }
@@ -149,11 +179,11 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
                                                                selectedSlot + 1);
             const auto neighbour = neighboursOf (workingScale(), workingDegree()).at ((size_t) i);
 
-            if (slotIndex >= working.count)
-                working.count = juce::jmin (Progression::maxSlots, slotIndex + 1);
+            if (slotIndex >= selectedProgression().count)
+                selectedProgression().count = juce::jmin (Progression::maxSlots, slotIndex + 1);
 
             const int keyPc = keyBox.getSelectedId() - 1;
-            auto& slot = working.slots[slotIndex];
+            auto& slot = selectedProgression().slots[slotIndex];
             slot.rootPc = ((keyPc + neighbour.rootOffset) % 12 + 12) % 12;
             slot.quality = neighbour.quality;
             if (slot.beats <= 0.0)
@@ -168,7 +198,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     borrowedBox.onChange = [this] {
         const int id = borrowedBox.getSelectedId();
         borrowedBox.setSelectedId (0, juce::dontSendNotification);
-        if (id <= 0 || selectedSlot >= (int) working.count)
+        if (id <= 0 || selectedSlot >= (int) selectedProgression().count)
             return;
 
         const auto borrowed = Progression::borrowedChords (workingScale());
@@ -177,7 +207,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
 
         const auto& chord = borrowed[(std::size_t) (id - 1)];
         const int keyPc = keyBox.getSelectedId() - 1;
-        auto& slot = working.slots[(std::size_t) selectedSlot];
+        auto& slot = selectedProgression().slots[(std::size_t) selectedSlot];
         slot.rootPc = ((keyPc + chord.rootPc) % 12 + 12) % 12;
         slot.quality = chord.quality;
         commit();
@@ -185,16 +215,16 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     };
 
     seedButton.onClick = [this] {
-        working.seedFromScale (keyBox.getSelectedId() - 1,
+        selectedProgression().seedFromScale (keyBox.getSelectedId() - 1,
                                (theory::Scale) juce::jmax (0, scaleBox.getSelectedId() - 1),
-                               working.count);
+                               selectedProgression().count);
         selectedSlot = 0;
         commit();
         rebuildFromProcessor();
     };
 
     previewButton.setColour (juce::TextButton::buttonColourId, panel);
-    previewButton.onClick = [this] { plugin.auditionSlot ((std::size_t) selectedSlot); };
+    previewButton.onClick = [this] { plugin.auditionSlot (selectedSection, (std::size_t) selectedSlot); };
 
     detectButton.setClickingTogglesState (true);
     detectButton.setColour (juce::TextButton::buttonColourId, panel);
@@ -204,7 +234,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
 
     useHeardButton.setColour (juce::TextButton::buttonColourId, panel);
     useHeardButton.onClick = [this] {
-        if (plugin.writeHeardChordToSlot ((std::size_t) selectedSlot))
+        if (plugin.writeHeardChordToSlot (selectedSection, (std::size_t) selectedSlot))
             rebuildFromProcessor();
     };
 
@@ -228,20 +258,46 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
             if (factory.name == name)
             {
                 presetNameEditor.clear();
-                commitWith (factory.progression);
+                commitSection (factory.progression);
                 return;
             }
 
-        Progression loaded = working;
         juce::String error;
-        if (presets.load (name, loaded, error))
+        switch (presets.kindOf (name))
         {
-            presetNameEditor.setText (name, juce::dontSendNotification);
-            commitWith (loaded);
-        }
-        else if (error.isNotEmpty())
-        {
-            heardLabel.setText (error, juce::dontSendNotification);
+            case PresetStore::Kind::song:
+            {
+                Song loaded;
+                if (presets.loadSong (name, loaded, error))
+                {
+                    presetNameEditor.setText (name, juce::dontSendNotification);
+                    commitWith (loaded);
+                }
+                else
+                {
+                    heardLabel.setText (error, juce::dontSendNotification);
+                }
+                break;
+            }
+
+            case PresetStore::Kind::progression:
+            {
+                Progression loaded = selectedProgression();
+                if (presets.load (name, loaded, error))
+                {
+                    presetNameEditor.setText (name, juce::dontSendNotification);
+                    commitSection (loaded);
+                }
+                else
+                {
+                    heardLabel.setText (error, juce::dontSendNotification);
+                }
+                break;
+            }
+
+            case PresetStore::Kind::unusable:
+                heardLabel.setText ("Cannot read " + name, juce::dontSendNotification);
+                break;
         }
     };
 
@@ -302,7 +358,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
                                         {
                                             presetNameEditor.setText (file.getFileNameWithoutExtension(),
                                                                       juce::dontSendNotification);
-                                            commitWith (imported.progression);
+                                            commitSection (imported.progression);
                                         }
                                     });
     };
@@ -313,7 +369,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
             return;
 
         juce::String error;
-        if (presets.save (name, working, error))
+        if (presets.save (name, selectedProgression(), error))
         {
             rebuildPresets();
             presetBox.setText (PresetStore::sanitiseName (name), juce::dontSendNotification);
@@ -325,7 +381,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     };
 
     applyAllButton.onClick = [this] {
-        working.applyArticulationToAll ((std::size_t) selectedSlot);
+        selectedProgression().applyArticulationToAll ((std::size_t) selectedSlot);
         commit();
         rebuildFromProcessor();
     };
@@ -343,11 +399,155 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
              &detectButton, &useHeardButton, &heardLabel, &octaveSlider, &velocitySlider,
              &gateSlider, &generateButton, &strip, &presetBox, &presetNameEditor,
              &savePresetButton, &applyAllButton, &renamePresetButton, &deletePresetButton,
-             &importButton })
+             &importButton, &sectionBar, &arrangementBar, &sectionNameEditor,
+             &addSectionButton, &duplicateSectionButton, &deleteSectionButton,
+             &moveSectionLeftButton, &moveSectionRightButton, &addPassButton,
+             &moreRepeatsButton, &fewerRepeatsButton, &removePassButton, &saveSongButton })
         addAndMakeVisible (component);
 
     for (auto& button : neighbourButtons)
         addAndMakeVisible (button);
+
+    //==== The song ========================================================
+    sectionNameEditor.setTextToShowWhenEmpty ("Section name", inkMuted);
+    sectionNameEditor.setColour (juce::TextEditor::backgroundColourId, panel);
+    sectionNameEditor.setColour (juce::TextEditor::textColourId, ink);
+    sectionNameEditor.setColour (juce::TextEditor::outlineColourId, well);
+    sectionNameEditor.onReturnKey = [this] { renameSelectedSection(); };
+    sectionNameEditor.onFocusLost = [this] { renameSelectedSection(); };
+
+    for (auto* button : { &addSectionButton, &duplicateSectionButton, &deleteSectionButton,
+                          &moveSectionLeftButton, &moveSectionRightButton, &addPassButton,
+                          &moreRepeatsButton, &fewerRepeatsButton, &removePassButton,
+                          &saveSongButton })
+    {
+        button->setColour (juce::TextButton::buttonColourId, panel);
+        button->setColour (juce::TextButton::textColourOffId, ink);
+    }
+
+    addSectionButton.onClick = [this] {
+        const auto added = working.addSection ("Section " + juce::String ((int) working.sections.size() + 1));
+        if (added == Song::npos)
+        {
+            heardLabel.setText ("That is as many sections as a song holds", juce::dontSendNotification);
+            return;
+        }
+
+        // A new section starts from the selected one's scale, so it is playable
+        // immediately rather than four empty slots.
+        working.sections[added].progression.seedFromScale (
+            keyBox.getSelectedId() - 1, workingScale(), 4);
+        selectedSection = added;
+        selectedSlot = 0;
+        selectedPass = working.arrangement.empty() ? 0 : working.arrangement.size() - 1;
+        commit();
+        rebuildFromProcessor();
+    };
+
+    duplicateSectionButton.onClick = [this] {
+        const auto copy = working.duplicateSection (selectedSection);
+        if (copy == Song::npos)
+            return;
+        selectedSection = copy;
+        commit();
+        rebuildFromProcessor();
+    };
+
+    deleteSectionButton.onClick = [this] {
+        if (working.sections.size() <= 1)
+        {
+            heardLabel.setText ("A song keeps at least one section", juce::dontSendNotification);
+            return;
+        }
+        working.removeSection (selectedSection);
+        selectedSection = juce::jmin (selectedSection, working.sections.size() - 1);
+        selectedSlot = 0;
+        commit();
+        rebuildFromProcessor();
+    };
+
+    moveSectionLeftButton.onClick = [this] {
+        if (selectedSection == 0)
+            return;
+        working.moveSection (selectedSection, selectedSection - 1);
+        --selectedSection;
+        commit();
+        rebuildFromProcessor();
+    };
+
+    moveSectionRightButton.onClick = [this] {
+        if (selectedSection + 1 >= working.sections.size())
+            return;
+        working.moveSection (selectedSection, selectedSection + 1);
+        ++selectedSection;
+        commit();
+        rebuildFromProcessor();
+    };
+
+    addPassButton.onClick = [this] {
+        if (! working.appendPass (selectedSection))
+        {
+            heardLabel.setText ("That is as long an arrangement as this holds",
+                                juce::dontSendNotification);
+            return;
+        }
+
+        selectedPass = working.arrangement.empty() ? 0 : working.arrangement.size() - 1;
+        commit();
+        rebuildFromProcessor();
+    };
+
+    moreRepeatsButton.onClick = [this] {
+        if (selectedPass >= working.arrangement.size())
+            return;
+        working.setRepeats (selectedPass, working.arrangement[selectedPass].repeats + 1);
+        commit();
+        rebuildFromProcessor();
+    };
+
+    fewerRepeatsButton.onClick = [this] {
+        if (selectedPass >= working.arrangement.size())
+            return;
+        working.setRepeats (selectedPass, working.arrangement[selectedPass].repeats - 1);
+        commit();
+        rebuildFromProcessor();
+    };
+
+    saveSongButton.setTooltip ("Write every section and the arrangement to the preset folder, "
+                               "under the name in the Presets row");
+    saveSongButton.onClick = [this] {
+        auto name = presetNameEditor.getText().trim();
+        if (name.isEmpty())
+            name = "Song";
+
+        juce::String error;
+        if (presets.saveSong (name, working, error))
+        {
+            rebuildPresets();
+            const auto saved = PresetStore::sanitiseName (name);
+            presetBox.setText (saved, juce::dontSendNotification);
+            heardLabel.setText ("Saved the song as " + saved, juce::dontSendNotification);
+        }
+        else
+        {
+            heardLabel.setText (error, juce::dontSendNotification);
+        }
+    };
+
+    removePassButton.onClick = [this] {
+        if (selectedPass >= working.arrangement.size())
+            return;
+        if (! working.removePass (selectedPass))
+        {
+            heardLabel.setText ("That is the last pass — the song has to play something",
+                                juce::dontSendNotification);
+            return;
+        }
+        if (selectedPass >= working.arrangement.size())
+            selectedPass = working.arrangement.empty() ? 0 : working.arrangement.size() - 1;
+        commit();
+        rebuildFromProcessor();
+    };
 
     for (auto* box : { &keyBox, &scaleBox, &rootBox, &qualityBox, &borrowedBox,
                        &performanceBox, &directionBox })
@@ -363,7 +563,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     rebuildFromProcessor();
 
     rebuildPresets();
-    setSize (760, 540);
+    setSize (760, layout::height);
     startTimerHz (20);
 }
 
@@ -375,13 +575,24 @@ TrackDraftAudioProcessorEditor::~TrackDraftAudioProcessorEditor()
 
 void TrackDraftAudioProcessorEditor::rebuildFromProcessor()
 {
-    working = plugin.getProgression();
-    if (selectedSlot >= (int) working.count)
+    working = plugin.getSong();
+    if (working.sections.empty())
+        working.addSection ("Section");
+
+    if (selectedSection >= working.sections.size())
+        selectedSection = working.sections.size() - 1;
+    if (selectedPass >= working.arrangement.size())
+        selectedPass = working.arrangement.empty() ? 0 : working.arrangement.size() - 1;
+
+    if (selectedSlot >= (int) selectedProgression().count)
         selectedSlot = 0;
 
-    if (selectedSlot < (int) working.count)
+    sectionNameEditor.setText (working.sections[selectedSection].name,
+                               juce::dontSendNotification);
+
+    if (selectedSlot < (int) selectedProgression().count)
     {
-        const auto& slot = working.slots[(std::size_t) selectedSlot];
+        const auto& slot = selectedProgression().slots[(std::size_t) selectedSlot];
         beatsSlider.setValue (slot.beats, juce::dontSendNotification);
         rootBox.setSelectedId (slot.rootPc + 1, juce::dontSendNotification);
         for (int i = 0; i < (int) theory::qualities().size(); ++i)
@@ -404,6 +615,8 @@ void TrackDraftAudioProcessorEditor::rebuildFromProcessor()
         directionBox.setEnabled (slot.performance == Performance::arp);
     }
 
+    rebuildSections();
+    rebuildArrangement();
     rebuildNeighbours();
     rebuildBorrowed();
     refreshHeardLabel();
@@ -418,14 +631,14 @@ theory::Scale TrackDraftAudioProcessorEditor::workingScale() const
 
 int TrackDraftAudioProcessorEditor::workingDegree() const
 {
-    if (selectedSlot >= (int) working.count)
+    if (selectedSlot >= (int) selectedProgression().count)
         return 0;
 
     // The slot stores an absolute pitch class; the walk works in degrees, so
     // map it back through the key. A borrowed chord has no degree and falls
     // back to its position, which keeps the walk usable in a chromatic passage.
     const int keyPc = keyBox.getSelectedId() - 1;
-    const int rootPc = working.slots[(std::size_t) selectedSlot].rootPc;
+    const int rootPc = selectedProgression().slots[(std::size_t) selectedSlot].rootPc;
     const auto& steps = theory::scaleIntervals (workingScale());
     for (int degree = 0; degree < (int) steps.size(); ++degree)
         if (((keyPc + steps[(size_t) degree]) % 12 + 12) % 12 == rootPc)
@@ -474,6 +687,47 @@ void TrackDraftAudioProcessorEditor::rebuildPresets()
         presetBox.addItem (name, id++);
 }
 
+void TrackDraftAudioProcessorEditor::rebuildSections()
+{
+    // The bars draw themselves from `working`, so there is nothing to fill in —
+    // they only need to be told the list changed shape.
+    sectionBar.repaint();
+}
+
+void TrackDraftAudioProcessorEditor::rebuildArrangement()
+{
+    const bool hasPass = selectedPass < working.arrangement.size();
+    moreRepeatsButton.setEnabled (hasPass);
+    fewerRepeatsButton.setEnabled (hasPass);
+    removePassButton.setEnabled (hasPass);
+
+    if (hasPass)
+    {
+        const auto repeats = working.arrangement[selectedPass].repeats;
+        moreRepeatsButton.setButtonText ("+ rep " + juce::String (repeats));
+    }
+    else
+    {
+        moreRepeatsButton.setButtonText ("+ rep");
+    }
+
+    arrangementBar.repaint();
+}
+
+void TrackDraftAudioProcessorEditor::renameSelectedSection()
+{
+    if (working.sections.empty())
+        return;
+
+    const auto name = sectionNameEditor.getText().trim();
+    if (name.isEmpty() || name == working.sections[selectedSection].name)
+        return;
+
+    working.sections[selectedSection].name = name;
+    commit();
+    rebuildSections();
+}
+
 void TrackDraftAudioProcessorEditor::refreshHeardLabel()
 {
     const auto heard = plugin.getHeardChord();
@@ -489,9 +743,9 @@ void TrackDraftAudioProcessorEditor::refreshHeardLabel()
 
     // Show what the slot currently says, so the difference is the thing you
     // read — "you played X, the slot says Y" is the decision to make.
-    if (selectedSlot < (int) working.count)
+    if (selectedSlot < (int) selectedProgression().count)
     {
-        const auto& slot = working.slots[(std::size_t) selectedSlot];
+        const auto& slot = selectedProgression().slots[(std::size_t) selectedSlot];
         const auto slotName = juce::String (theory::chordName (slot.rootPc, slot.quality));
         text << (slotName == heardName ? juce::String ("  (slot matches)")
                                       : juce::String ("  · slot says ") + slotName);
@@ -503,16 +757,45 @@ void TrackDraftAudioProcessorEditor::refreshHeardLabel()
 
 void TrackDraftAudioProcessorEditor::commit()
 {
-    plugin.setProgression (working);
+    plugin.setSong (working);
 }
 
-void TrackDraftAudioProcessorEditor::commitWith (const Progression& next)
+void TrackDraftAudioProcessorEditor::commitWith (const Song& next)
 {
     working = next;
-    if (selectedSlot >= (int) working.count)
-        selectedSlot = 0;
+    if (working.sections.empty())
+        working.addSection ("Section");
+    if (selectedSection >= working.sections.size())
+        selectedSection = working.sections.size() - 1;
+
     commit();
     rebuildFromProcessor();
+}
+
+void TrackDraftAudioProcessorEditor::commitSection (const Progression& next)
+{
+    if (selectedSection >= working.sections.size())
+        return;
+
+    working.sections[selectedSection].progression = next;
+    commit();
+    rebuildFromProcessor();
+}
+
+Progression& TrackDraftAudioProcessorEditor::selectedProgression()
+{
+    // `working` always holds at least one section: `rebuildFromProcessor` and
+    // `commitWith` both enforce it, and the processor never stores an empty song.
+    jassert (! working.sections.empty());
+    return working.sections[juce::jmin (selectedSection, working.sections.size() - 1)]
+        .progression;
+}
+
+const Progression& TrackDraftAudioProcessorEditor::selectedProgression() const
+{
+    jassert (! working.sections.empty());
+    return working.sections[juce::jmin (selectedSection, working.sections.size() - 1)]
+        .progression;
 }
 
 void TrackDraftAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster*)
@@ -524,6 +807,9 @@ void TrackDraftAudioProcessorEditor::timerCallback()
 {
     refreshHeardLabel();
     strip.repaint();
+    // The bars show which section and pass the transport is in.
+    sectionBar.repaint();
+    arrangementBar.repaint();
 }
 
 void TrackDraftAudioProcessorEditor::paint (juce::Graphics& g)
@@ -539,77 +825,253 @@ void TrackDraftAudioProcessorEditor::paint (juce::Graphics& g)
     g.drawText ("MIDI generator - notes go to the track's own instrument",
                 16, 34, 520, 16, juce::Justification::centredLeft);
 
-    auto row = juce::Rectangle<int> (16, 60, 728, 14);
+    auto row = juce::Rectangle<int> (layout::margin, layout::keysLabelY, layout::width, 14);
     g.drawText ("Key", row.removeFromLeft (120), juce::Justification::centredLeft);
     g.drawText ("Scale", row.removeFromLeft (180), juce::Justification::centredLeft);
     g.drawText ("Root", row.removeFromLeft (80), juce::Justification::centredLeft);
     g.drawText ("Quality", row.removeFromLeft (190), juce::Justification::centredLeft);
 
-    g.drawText ("Walk from the selected chord (hex neighbours)", 16, 250, 420, 14,
+    g.drawText ("Sections  (" + juce::String ((int) working.sections.size()) + ")",
+                layout::margin, layout::songLabelY, 420, 14, juce::Justification::centredLeft);
+    g.drawText ("Walk from the selected chord (hex neighbours)", layout::margin, layout::walkLabelY,
+                420, 14, juce::Justification::centredLeft);
+    g.drawText ("Articulation", layout::margin, layout::articulationLabelY, 120, 14,
                 juce::Justification::centredLeft);
-    g.drawText ("Articulation", 16, 348, 120, 14, juce::Justification::centredLeft);
-    g.drawText ("Presets", 16, 466, 120, 14, juce::Justification::centredLeft);
+    g.drawText ("Presets", layout::margin, layout::presetsLabelY, 120, 14,
+                juce::Justification::centredLeft);
+    g.drawText ("Arrangement", layout::margin, layout::arrangementLabelY, 120, 14,
+                juce::Justification::centredLeft);
+
+    // What the arrangement adds up to, so the form can be read at a glance.
+    g.setColour (accent.withAlpha (0.85f));
+    g.drawText (juce::String (working.totalBeats() / 4.0, 1) + " bars",
+                layout::margin + 400, layout::arrangementLabelY, layout::width - 400, 14,
+                juce::Justification::centredRight);
 }
 
 void TrackDraftAudioProcessorEditor::resized()
 {
-    keyBox.setBounds (16, 76, 112, 26);
-    scaleBox.setBounds (136, 76, 172, 26);
-    rootBox.setBounds (316, 76, 72, 26);
-    qualityBox.setBounds (396, 76, 182, 26);
+    sectionBar.setBounds (layout::margin, layout::sectionBarY, layout::width,
+                          layout::sectionBarHeight);
 
-    seedButton.setBounds (586, 76, 100, 26);
-    beatsSlider.setBounds (694, 76, 50, 26);
+    // Name, then the five structural buttons: the row is where sections are
+    // made and moved, the bar above is where they are chosen.
+    sectionNameEditor.setBounds (layout::margin, layout::sectionButtonY, 240, 26);
+    addSectionButton.setBounds (264, layout::sectionButtonY, 30, 26);
+    duplicateSectionButton.setBounds (298, layout::sectionButtonY, 52, 26);
+    deleteSectionButton.setBounds (354, layout::sectionButtonY, 52, 26);
+    moveSectionLeftButton.setBounds (410, layout::sectionButtonY, 30, 26);
+    moveSectionRightButton.setBounds (444, layout::sectionButtonY, 30, 26);
 
-    strip.setBounds (16, 112, 728, 88);
+    keyBox.setBounds (layout::margin, layout::keysY, 112, 26);
+    scaleBox.setBounds (136, layout::keysY, 172, 26);
+    rootBox.setBounds (316, layout::keysY, 72, 26);
+    qualityBox.setBounds (396, layout::keysY, 182, 26);
+    seedButton.setBounds (586, layout::keysY, 100, 26);
+    beatsSlider.setBounds (694, layout::keysY, 50, 26);
 
-    const int neighbourWidth = (728 - 5 * 6) / 6;
+    strip.setBounds (layout::margin, layout::stripY, layout::width, layout::stripHeight);
+
+    const int neighbourWidth = (layout::width - 5 * 6) / 6;
     for (int i = 0; i < 6; ++i)
-        neighbourButtons[(size_t) i].setBounds (16 + i * (neighbourWidth + 6), 266,
-                                                neighbourWidth, 30);
+        neighbourButtons[(size_t) i].setBounds (layout::margin + i * (neighbourWidth + 6),
+                                                layout::walkY, neighbourWidth, 30);
 
-    borrowedBox.setBounds (16, 304, 300, 26);
-    detectButton.setBounds (324, 304, 110, 26);
-    useHeardButton.setBounds (440, 304, 100, 26);
-    heardLabel.setBounds (16, 332, 728, 18);
+    borrowedBox.setBounds (layout::margin, layout::detectY, 300, 26);
+    detectButton.setBounds (324, layout::detectY, 110, 26);
+    useHeardButton.setBounds (440, layout::detectY, 100, 26);
+    heardLabel.setBounds (layout::margin, layout::heardY, layout::width, 18);
 
-    performanceBox.setBounds (16, 364, 110, 26);
-    paramSlider.setBounds (132, 364, 70, 26);
-    directionBox.setBounds (208, 364, 92, 26);
-    previewButton.setBounds (308, 364, 90, 26);
+    performanceBox.setBounds (layout::margin, layout::articulationY, 110, 26);
+    paramSlider.setBounds (132, layout::articulationY, 70, 26);
+    directionBox.setBounds (208, layout::articulationY, 92, 26);
+    previewButton.setBounds (308, layout::articulationY, 90, 26);
+    applyAllButton.setBounds (404, layout::articulationY, 220, 26);
 
-    applyAllButton.setBounds (404, 364, 200, 26);
+    octaveSlider.setBounds (layout::margin, layout::voiceY, 120, 26);
+    velocitySlider.setBounds (144, layout::voiceY, 130, 26);
+    gateSlider.setBounds (282, layout::voiceY, 200, 26);
+    generateButton.setBounds (492, layout::voiceY, 252, 26);
 
-    octaveSlider.setBounds (16, 400, 120, 26);
-    velocitySlider.setBounds (144, 400, 130, 26);
-    gateSlider.setBounds (282, 400, 200, 26);
-    generateButton.setBounds (492, 400, 252, 26);
+    presetBox.setBounds (layout::margin, layout::presetsY, 190, 26);
+    presetNameEditor.setBounds (214, layout::presetsY, 180, 26);
+    savePresetButton.setBounds (402, layout::presetsY, 64, 26);
+    renamePresetButton.setBounds (472, layout::presetsY, 76, 26);
+    deletePresetButton.setBounds (554, layout::presetsY, 70, 26);
+    importButton.setBounds (630, layout::presetsY, 106, 26);
 
-    presetBox.setBounds (16, 482, 190, 26);
-    presetNameEditor.setBounds (214, 482, 180, 26);
-    savePresetButton.setBounds (402, 482, 64, 26);
-    renamePresetButton.setBounds (472, 482, 76, 26);
-    deletePresetButton.setBounds (554, 482, 70, 26);
-    importButton.setBounds (630, 482, 106, 26);
+    arrangementBar.setBounds (layout::margin, layout::arrangementBarY, layout::width,
+                              layout::arrangementBarHeight);
+    addPassButton.setBounds (layout::margin, layout::arrangementButtonY, 80, 26);
+    moreRepeatsButton.setBounds (104, layout::arrangementButtonY, 80, 26);
+    fewerRepeatsButton.setBounds (188, layout::arrangementButtonY, 80, 26);
+    removePassButton.setBounds (272, layout::arrangementButtonY, 80, 26);
+    saveSongButton.setBounds (410, layout::arrangementButtonY, 120, 26);
+}
+
+juce::Rectangle<int> TrackDraftAudioProcessorEditor::SectionBar::boundsFor (int index) const
+{
+    const int gap = 6;
+    const int total = juce::jmax (1, (int) owner.working.sections.size());
+    const int width = juce::jmax (24, (getWidth() - gap * (total - 1)) / total);
+    return { index * (width + gap), 0, width, getHeight() };
+}
+
+int TrackDraftAudioProcessorEditor::SectionBar::indexAt (juce::Point<int> position) const
+{
+    for (int i = 0; i < (int) owner.working.sections.size(); ++i)
+        if (boundsFor (i).contains (position))
+            return i;
+
+    return -1;
+}
+
+void TrackDraftAudioProcessorEditor::SectionBar::paint (juce::Graphics& g)
+{
+    const auto soundingSection = owner.plugin.playingSection.load();
+
+    for (int i = 0; i < (int) owner.working.sections.size(); ++i)
+    {
+        const auto area = boundsFor (i).toFloat().reduced (1.0f);
+        const auto& section = owner.working.sections[(std::size_t) i];
+
+        g.setColour (well);
+        g.fillRoundedRectangle (area, 5.0f);
+
+        if (i == soundingSection)
+        {
+            g.setColour (accent.withAlpha (0.28f));
+            g.fillRoundedRectangle (area, 5.0f);
+        }
+
+        const bool selected = (std::size_t) i == owner.selectedSection;
+        g.setColour (selected ? accent : panel);
+        g.drawRoundedRectangle (area, 5.0f, selected ? 2.0f : 1.0f);
+
+        auto text = area.reduced (5.0f, 3.0f);
+        auto countArea = text.removeFromBottom (12.0f);
+
+        g.setColour (ink);
+        g.setFont (juce::Font (juce::FontOptions (12.0f)));
+        g.drawText (section.name, text, juce::Justification::centred, true);
+
+        g.setColour (inkMuted);
+        g.setFont (juce::Font (juce::FontOptions (10.0f)));
+        g.drawText (juce::String ((int) section.progression.count) + " chords", countArea,
+                    juce::Justification::centred, true);
+    }
+}
+
+void TrackDraftAudioProcessorEditor::SectionBar::mouseDown (const juce::MouseEvent& event)
+{
+    const int index = indexAt (event.getPosition());
+    if (index < 0)
+        return;
+
+    // A name typed but not committed belongs to the section that is still
+    // selected, so it is written before the selection moves.
+    owner.renameSelectedSection();
+
+    owner.selectedSection = (std::size_t) index;
+    owner.selectedSlot = 0;
+    owner.rebuildFromProcessor();
+}
+
+juce::Rectangle<int> TrackDraftAudioProcessorEditor::ArrangementBar::boundsFor (int index) const
+{
+    const int gap = 4;
+    const int total = juce::jmax (1, (int) owner.working.arrangement.size());
+    const int width = juce::jmax (10, (getWidth() - gap * (total - 1)) / total);
+    return { index * (width + gap), 0, width, getHeight() };
+}
+
+int TrackDraftAudioProcessorEditor::ArrangementBar::indexAt (juce::Point<int> position) const
+{
+    for (int i = 0; i < (int) owner.working.arrangement.size(); ++i)
+        if (boundsFor (i).contains (position))
+            return i;
+
+    return -1;
+}
+
+void TrackDraftAudioProcessorEditor::ArrangementBar::paint (juce::Graphics& g)
+{
+    const auto playingPass = owner.plugin.playingPass.load();
+
+    for (int i = 0; i < (int) owner.working.arrangement.size(); ++i)
+    {
+        const auto& pass = owner.working.arrangement[(std::size_t) i];
+        const auto sectionIndex = owner.working.indexOf (pass.sectionId);
+        if (sectionIndex == Song::npos)
+            continue;
+
+        const auto area = boundsFor (i).toFloat().reduced (1.0f);
+        g.setColour (well);
+        g.fillRoundedRectangle (area, 4.0f);
+
+        if (i == playingPass)
+        {
+            g.setColour (accent.withAlpha (0.32f));
+            g.fillRoundedRectangle (area, 4.0f);
+        }
+
+        const bool selected = (std::size_t) i == owner.selectedPass;
+        g.setColour (selected ? accent : panel);
+        g.drawRoundedRectangle (area, 4.0f, selected ? 2.0f : 1.0f);
+
+        juce::String label = owner.working.sections[sectionIndex].name;
+        if (pass.repeats > 1)
+            label << " x" << pass.repeats;
+
+        g.setColour (ink);
+        g.setFont (juce::Font (juce::FontOptions (11.0f)));
+        g.drawText (label, area.reduced (4.0f, 2.0f), juce::Justification::centred, true);
+    }
+}
+
+void TrackDraftAudioProcessorEditor::ArrangementBar::mouseDown (const juce::MouseEvent& event)
+{
+    const int index = indexAt (event.getPosition());
+    if (index < 0 || (std::size_t) index >= owner.working.arrangement.size())
+        return;
+
+    owner.renameSelectedSection();
+    owner.selectedPass = (std::size_t) index;
+
+    // Choosing a pass also chooses the section it plays, so the chord editor
+    // follows the arrangement instead of fighting it.
+    const auto sectionIndex = owner.working.indexOf (owner.working.arrangement[(std::size_t) index].sectionId);
+    if (sectionIndex != Song::npos)
+    {
+        owner.selectedSection = sectionIndex;
+        owner.selectedSlot = juce::jlimit (0, juce::jmax (0, (int) owner.selectedProgression().count - 1),
+                                           owner.selectedSlot);
+    }
+
+    owner.rebuildFromProcessor();
 }
 
 juce::Rectangle<int> TrackDraftAudioProcessorEditor::SlotStrip::boundsFor (int index) const
 {
     const int gap = 8;
-    const int total = juce::jmax (1, (int) owner.working.count);
+    const int total = juce::jmax (1, (int) owner.selectedProgression().count);
     const int width = (getWidth() - gap * (total - 1)) / total;
     return { index * (width + gap), 0, width, getHeight() };
 }
 
 void TrackDraftAudioProcessorEditor::SlotStrip::paint (juce::Graphics& g)
 {
-    const auto sounding = owner.plugin.playingSlot.load();
+    // A slot only pulses when the section it belongs to is the one on screen.
+    const auto soundingSection = owner.plugin.playingSection.load();
+    const auto sounding = soundingSection == (int) owner.selectedSection
+                              ? owner.plugin.playingSlot.load()
+                              : -1;
     static const char* performanceLabels[] = { "", "strum", "pulse", "arp" };
 
-    for (int i = 0; i < (int) owner.working.count; ++i)
+    for (int i = 0; i < (int) owner.selectedProgression().count; ++i)
     {
         const auto area = boundsFor (i).toFloat().reduced (1.0f);
-        const auto& slot = owner.working.slots[(std::size_t) i];
+        const auto& slot = owner.selectedProgression().slots[(std::size_t) i];
 
         g.setColour (juce::Colour (0xff232323));
         g.fillRoundedRectangle (area, 6.0f);
@@ -649,7 +1111,7 @@ void TrackDraftAudioProcessorEditor::SlotStrip::paint (juce::Graphics& g)
 
 int TrackDraftAudioProcessorEditor::SlotStrip::indexAt (juce::Point<int> position) const
 {
-    for (int i = 0; i < (int) owner.working.count; ++i)
+    for (int i = 0; i < (int) owner.selectedProgression().count; ++i)
         if (boundsFor (i).contains (position))
             return i;
 
@@ -677,11 +1139,11 @@ void TrackDraftAudioProcessorEditor::SlotStrip::mouseDrag (const juce::MouseEven
     // dragged one will land, and the strip shows it before the drop.
     const int over = indexAt (event.getPosition());
     const int target = over >= 0 ? over : (event.getPosition().x < 0 ? 0
-                                              : (int) owner.working.count - 1);
+                                              : (int) owner.selectedProgression().count - 1);
 
     if (target != dragTo)
     {
-        dragTo = juce::jlimit (0, (int) owner.working.count - 1, target);
+        dragTo = juce::jlimit (0, (int) owner.selectedProgression().count - 1, target);
         repaint();
     }
 }
@@ -699,7 +1161,7 @@ void TrackDraftAudioProcessorEditor::SlotStrip::mouseUp (const juce::MouseEvent&
         return;
     }
 
-    owner.working.moveSlot ((std::size_t) from, (std::size_t) to);
+    owner.selectedProgression().moveSlot ((std::size_t) from, (std::size_t) to);
     owner.selectedSlot = to;
     owner.commit();
     owner.rebuildFromProcessor();

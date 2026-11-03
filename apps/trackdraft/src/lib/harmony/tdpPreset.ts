@@ -25,7 +25,8 @@
 
 import { CHORD_INTERVALS, noteName, pitchClass } from "@music-theory/core";
 import type { ChordQuality, NoteName } from "@music-theory/core";
-import type { Chord, ChordPerformanceEffect } from "../../types/blueprint";
+import { resolveArrangement } from "../../types/blueprint";
+import type { BlueprintSong, Chord, ChordPerformanceEffect } from "../../types/blueprint";
 import { uuid } from "../uuid";
 
 export interface TdpPreset {
@@ -125,25 +126,71 @@ export function sanitisePresetName(name: string): string {
   return trimmed === "" ? "Untitled" : trimmed;
 }
 
+/** One `<slot/>` line, exactly as the plug-in writes it. */
+function slotLine(chord: Chord, indent: string): string {
+  const { performance, param, direction } = performanceOf(chord);
+  const attributes = [
+    `root="${pitchClass(chord.root)}"`,
+    `quality="${escapeAttribute(chord.quality)}"`,
+    `beats="${chord.beats}"`,
+    `performance="${performance}"`,
+    `param="${param}"`,
+    `direction="${direction}"`,
+  ];
+  return `${indent}<slot ${attributes.join(" ")}/>`;
+}
+
+function xmlDocument(lines: readonly string[]): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>\n\n${lines.join("\n")}\n`;
+}
+
 /** Serialises a strip of chords as a plug-in preset. */
 export function toTdpPresetXml(chords: readonly Chord[], tagName = "TrackDraftPreset"): string {
   const lines = [`<${tagName} version="1" count="${chords.length}">`];
+  for (const chord of chords) lines.push(slotLine(chord, "  "));
+  lines.push(`</${tagName}>`);
+  return xmlDocument(lines);
+}
 
-  for (const chord of chords) {
-    const { performance, param, direction } = performanceOf(chord);
-    const attributes = [
-      `root="${pitchClass(chord.root)}"`,
-      `quality="${escapeAttribute(chord.quality)}"`,
-      `beats="${chord.beats}"`,
-      `performance="${performance}"`,
-      `param="${param}"`,
-      `direction="${direction}"`,
-    ];
-    lines.push(`  <slot ${attributes.join(" ")}/>`);
+/**
+ * A whole song, for the plug-in's song player.
+ *
+ * The plug-in plays one section at a time, so the app has to say which sections
+ * exist, in which order, and how often each one comes round — which is exactly
+ * `sections` plus `resolveArrangement`. Sections with no chords are left out:
+ * the plug-in has nothing to play for them, and the arrangement is expressed in
+ * section positions, so dropping one cannot shift the rest.
+ *
+ * Written with the same slot lines as a preset, so the two files cannot disagree
+ * about how a chord is spelled.
+ */
+export function toTdpSongXml(song: BlueprintSong): string {
+  const playable = song.sections.filter((section) => section.chords.length > 0);
+  const positionOf = new Map(playable.map((section, index) => [section.id, index]));
+
+  const passes = resolveArrangement(song)
+    .map((entry) => ({
+      section: positionOf.get(entry.sectionId) ?? -1,
+      repeats: Math.max(1, Math.round(entry.repeats || 1)),
+    }))
+    .filter((pass) => pass.section >= 0);
+
+  const lines = [`<TrackDraftSong version="2" count="${playable.length}">`];
+  for (const section of playable) {
+    lines.push(`  <section name="${escapeAttribute(section.name)}">`);
+    lines.push(`    <progression version="1" count="${section.chords.length}">`);
+    for (const chord of section.chords) lines.push(slotLine(chord, "      "));
+    lines.push("    </progression>");
+    lines.push("  </section>");
   }
 
-  lines.push(`</${tagName}>`);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n\n${lines.join("\n")}\n`;
+  lines.push("  <arrangement>");
+  for (const pass of passes)
+    lines.push(`    <pass section="${pass.section}" repeats="${pass.repeats}"/>`);
+  lines.push("  </arrangement>");
+  lines.push("</TrackDraftSong>");
+
+  return xmlDocument(lines);
 }
 
 function readAttributes(element: string): Record<string, string> {

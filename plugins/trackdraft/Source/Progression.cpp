@@ -22,6 +22,11 @@ double Progression::startBeatOf (std::size_t index) const noexcept
     return start;
 }
 
+const ChordSlot& Progression::slotAt (std::size_t index) const noexcept
+{
+    return slots[std::min (index, maxSlots - 1)];
+}
+
 std::size_t Progression::slotAtBeat (double beat) const noexcept
 {
     if (count == 0)

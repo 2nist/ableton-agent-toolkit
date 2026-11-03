@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ChordScheduler.h"
-#include "Progression.h"
+#include "Song.h"
 #include "Theory/ChordRecognition.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -55,13 +55,13 @@ public:
     //==== Editor-facing surface ============================================
     juce::AudioProcessorValueTreeState& parameters() noexcept { return apvts; }
 
-    /** Snapshot of the live progression, for the editor's first paint. */
-    Progression getProgression() const;
-    /** Replace the progression (the editor edits a local copy and commits). */
-    void setProgression (const Progression& next);
+    /** Snapshot of the live song, for the editor's first paint. */
+    Song getSong() const;
+    /** Replace the song (the editor edits a local copy and commits). */
+    void setSong (const Song& next);
 
-    /** The chord sounding at a beat position, for the editor's readout. */
-    ChordSlot slotAtBeat (double beat) const;
+    /** Where a song position falls, for the editor's readout. */
+    Song::Position positionAtBeat (double beat) const;
 
     juce::ChangeBroadcaster& progressionChanged() noexcept { return progressionBroadcaster; }
 
@@ -73,15 +73,18 @@ public:
     /** The chord under the player's fingers, as last recognised. */
     RecognizedChord getHeardChord() const;
 
-    /** Writes the currently heard chord into `slot`; false when nothing is heard. */
-    bool writeHeardChordToSlot (std::size_t slot);
+    /** Writes the currently heard chord into a slot of a section; false when
+        nothing is heard. */
+    bool writeHeardChordToSlot (std::size_t section, std::size_t slot);
 
     /** Plays one slot now, for the "hear this chord" button. */
-    void auditionSlot (std::size_t slot);
+    void auditionSlot (std::size_t section, std::size_t slot);
     void auditionChord (int rootPc, theory::Quality quality);
 
     /** Called by the editor to repaint when the transport moves the chord on. */
+    std::atomic<int> playingSection { -1 };
     std::atomic<int> playingSlot { -1 };
+    std::atomic<int> playingPass { -1 };
 
     std::atomic<bool> detectionArmed { false };
     /** -1 = nothing queued; otherwise the pitch class to audition. */
@@ -95,7 +98,9 @@ private:
     juce::ChangeBroadcaster progressionBroadcaster;
 
     mutable juce::CriticalSection progressionLock;
-    Progression progression;
+    Song song;
+    /** The song flattened for the audio thread; rebuilt when the song changes. */
+    SongCycle cycle;
 
     ChordScheduler scheduler;
     juce::MidiBuffer passThrough;

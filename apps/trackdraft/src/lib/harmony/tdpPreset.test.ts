@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseTdpPresetXml, sanitisePresetName, toTdpPresetXml } from "./tdpPreset";
-import type { Chord } from "../../types/blueprint";
+import { parseTdpPresetXml, sanitisePresetName, toTdpPresetXml, toTdpSongXml } from "./tdpPreset";
+import type { BlueprintSong, Chord } from "../../types/blueprint";
 
 /**
  * The plug-in's own output, verbatim.
@@ -169,5 +169,101 @@ describe("sanitisePresetName", () => {
   it("truncates by character so a surrogate pair is never split", () => {
     expect(sanitisePresetName("A".repeat(100))).toBe("A".repeat(64));
     expect(sanitisePresetName("🔥".repeat(70))).toBe("🔥".repeat(64));
+  });
+});
+
+/**
+ * The whole song, as the plug-in's song player wants it.
+ *
+ * This literal is also parsed by `plugins/trackdraft/Tests/PluginTests.cpp`
+ * (`testSongXml`), so "the app writes it" and "the plug-in reads it" are checked
+ * against one string rather than against each other's assumptions.
+ */
+const APP_SONG_XML = `<?xml version="1.0" encoding="UTF-8"?>
+
+<TrackDraftSong version="2" count="2">
+  <section name="Verse">
+    <progression version="1" count="2">
+      <slot root="9" quality="min" beats="4" performance="1" param="150" direction="2"/>
+      <slot root="2" quality="maj" beats="4" performance="0" param="0" direction="2"/>
+    </progression>
+  </section>
+  <section name="Chorus">
+    <progression version="1" count="2">
+      <slot root="5" quality="maj" beats="4" performance="0" param="0" direction="2"/>
+      <slot root="7" quality="7" beats="4" performance="3" param="8" direction="1"/>
+    </progression>
+  </section>
+  <arrangement>
+    <pass section="0" repeats="1"/>
+    <pass section="1" repeats="2"/>
+  </arrangement>
+</TrackDraftSong>
+`;
+
+function song(): BlueprintSong {
+  const section = (id: string, name: string, chords: Chord[]) => ({
+    id,
+    name,
+    role: "verse" as const,
+    bars: 2,
+    chords,
+    beatsPerChord: 4,
+    velocity: "mf" as const,
+    timeSignatureNumerator: 4,
+    timeSignatureDenPower: 2,
+  });
+
+  return {
+    id: "song-1",
+    title: "Test Song",
+    key: "C",
+    scale: "ionian",
+    bpm: 120,
+    timeSignatureNumerator: 4,
+    timeSignatureDenPower: 2,
+    sections: [
+      section("s1", "Verse", [
+        chord({ root: "A", quality: "min", beats: 4, performance: { style: "strum", params: { strumMs: 150 } } }),
+        chord({ root: "D", quality: "maj", beats: 4 }),
+      ]),
+      section("s2", "Chorus", [
+        chord({ root: "F", quality: "maj", beats: 4 }),
+        chord({ root: "G", quality: "7", beats: 4, performance: { style: "arp", params: { subdivision: 8, direction: 1 } } }),
+      ]),
+    ],
+    arrangement: [
+      { sectionId: "s1", repeats: 1 },
+      { sectionId: "s2", repeats: 2 },
+    ],
+  } as unknown as BlueprintSong;
+}
+
+describe("toTdpSongXml", () => {
+  it("writes the bytes the plug-in is tested against", () => {
+    expect(toTdpSongXml(song())).toBe(APP_SONG_XML);
+  });
+
+  it("leaves out a section with no chords without shifting the arrangement", () => {
+    const withEmpty = song();
+    withEmpty.sections.splice(1, 0, {
+      ...withEmpty.sections[0],
+      id: "empty",
+      name: "Empty",
+      chords: [],
+    });
+
+    const xml = toTdpSongXml(withEmpty);
+
+    expect(xml).toContain('count="2"');
+    expect(xml).not.toContain('name="Empty"');
+    expect(xml).toContain('<pass section="1" repeats="2"/>');
+  });
+
+  it("escapes a section name so the attribute cannot break the document", () => {
+    const named = song();
+    named.sections[0].name = 'Verse "loud" & <fast>';
+    const xml = toTdpSongXml(named);
+    expect(xml).toContain('name="Verse &quot;loud&quot; &amp; &lt;fast&gt;"');
   });
 });

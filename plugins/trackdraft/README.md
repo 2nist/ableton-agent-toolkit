@@ -91,6 +91,11 @@ notes without a boundary, and disabling emission releases what is sounding.
 
 | Control | What it does |
 |---|---|
+| **Section bar** | The song's sections, one box each. Click to choose one; it lights while the transport is inside it. A section holds up to 8 chords |
+| **Section name / + / Dup / Del / < / >** | Rename the selected section, add an empty one, copy it (chords and all), delete it, or reorder the list. A song keeps at least one section |
+| **Arrangement bar** | The order the song plays in — one box per pass, `Chorus x2` when a pass repeats. Click a pass to select it, and the section it plays with it |
+| **+ pass / ± rep / del pass** | Append a pass of the selected section, change how many times the selected pass repeats (1-8), or remove it |
+| **Save song** | Writes every section and the arrangement to the preset folder under the name in the Presets row |
 | Key / Scale | Seeds nothing by itself; they are the context for seeding, the walk, and the vocabulary detection prefers |
 | **Seed from key** | Fills the slots with the mode's diatonic chords (I, ii, iii… with sevenths where the mode has them) |
 | Slot strip | Click a slot to select it; it shows the chord and the beat count, and the slot currently sounding is lit |
@@ -101,8 +106,8 @@ notes without a boundary, and disabling emission releases what is sounding.
 | **Articulation** (Block / Strum / Pulse / Arp) | Per slot. Strum uses the app's millisecond spread, Pulse re-strikes on a subdivision with a triangle accent, Arp walks the tones up, down or up-down |
 | **Preview** | Plays the selected slot immediately, transport or not, so you can hear the voicing before committing to it |
 | **Drag a slot** | Click-drag reorders the progression; the drop target shows while dragging |
-| **Apply articulation to all** | Copies the selected slot's articulation onto every slot — one strum setting for the whole progression |
-| **Presets** | Save / Rename / Delete the progression under a name (one `.tdp.xml` per preset in `~/Library/Application Support/TrackDraft/Presets`), pick one to load it. Names are sanitised to a filename and never allowed to define a path. Factory entries (one per mode, plus `bVI–bVII–I` and `i–iv–bVI–V`) are code, not files, and cannot be renamed or deleted |
+| **Apply articulation to section** | Copies the selected slot's articulation onto every slot of the selected section |
+| **Presets** | Save / Rename / Delete the selected *section* under a name (one `.tdp.xml` per preset in `~/Library/Application Support/TrackDraft/Presets`), pick one to load it. A file written as a whole song loads as a song instead, because the list is one folder and the file says which it is. Names are sanitised to a filename and never allowed to define a path. Factory entries (one per mode, plus `bVI–bVII–I` and `i–iv–bVI–V`) are code, not files, and cannot be renamed or deleted |
 | **Import…** | Load a progression from a `.mid`, `.midi`, `.jams` or `.json` annotation file — see below |
 | **Detect MIDI / Use heard** | Arm listening to the notes the host sends in, then write the recognised chord into the selected slot. The readout names both what you played and what the slot says, so the difference is the decision |
 
@@ -144,15 +149,21 @@ Presets use the same XML the TrackDraft app reads and writes
 (`apps/trackdraft/src/lib/harmony/tdpPreset.ts`), so a progression moves between
 the two without a translation step:
 
-- **app → plug-in**: *Save for plug-in* in the app's preset panel downloads a
-  `<section>.tdp.xml`; drop it into `~/Library/Application Support/TrackDraft/Presets`
-  and it appears in the plug-in's preset list.
+- **app → plug-in (one section)**: *Save for plug-in* in the app's preset panel
+  writes a `<section>.tdp.xml` into `~/Library/Application Support/TrackDraft/Presets`;
+  it appears in the plug-in's preset list.
+- **app → plug-in (a whole song)**: *Export ▸ Save song for the plug-in* writes
+  every section and the arrangement as a `<TrackDraftSong>`. It lands in the same
+  folder and the same list, and picking it replaces the plug-in's whole song —
+  the plug-in then follows the app's form as the transport plays.
 - **plug-in → app**: *Load plug-in preset…* opens any `.tdp.xml` and applies its
   chords to the section.
 
-Both sides are tested against the same bytes: `TrackDraftTests --dump-xml` prints
-the plug-in's output, and `tdpPreset.test.ts` parses that exact string. A golden
-each side generated for itself would only prove it agrees with itself.
+Both sides are tested against the same bytes: `TrackDraftTests --dump-xml` and
+`--dump-song-xml` print the plug-in's output, `tdpPreset.test.ts` parses that
+exact string, and `testSongXml` parses the app's `toTdpSongXml` output pasted
+from that test — so the format is checked in both directions against one string
+rather than against each side's assumptions.
 
 ## How it plays
 
@@ -161,9 +172,19 @@ each side generated for itself would only prove it agrees with itself.
   cancelled when the chord changes.
 - Audition (`Preview`) runs on its own sample clock, so it works with the
   transport stopped and never leaves a note ringing.
-- Chords start on their slot boundary, sample-accurate within the block, and the
-  progression loops on its own length (4 slots × 4 beats = one bar of 4/4 per
-  slot, so a 16-beat cycle repeats at bar 5 without the host looping).
+- Chords start on their slot boundary, sample-accurate within the block.
+- The **song** is a flat beat timeline: every pass of every section, in
+  arrangement order, with repeats expanded. The transport's song position decides
+  which pass and which chord, so a section change is just another boundary — the
+  scheduler has one timing rule, not one per model.
+- The whole form loops on its own length: a 16-beat song starts again at bar 5
+  without the host having to loop, and a DAW loop over a shorter range simply
+  restarts the form earlier.
+- Sections are named by a stable id, not by their position, so reordering or
+  deleting one cannot silently point the arrangement at a different section.
+- Songs are written and read as `<TrackDraftSong>`: `<section>` elements in
+  authoring order plus an `<arrangement>` list of passes. A session from before
+  songs existed — one bare progression — loads as a one-section song.
 - Every note switched on is switched off — on a slot change, at the gate, on
   transport stop, and on a backwards playhead jump.
 - The key/scale/octave/velocity/gate controls are APVTS parameters, so they
@@ -177,8 +198,9 @@ Source/Theory/ChordTheory.*    the app's chord + scale tables, ported
 Source/Theory/ChordWalk.*      hex neighbours / the walk, ported
 Source/Theory/ChordRecognition.*  notes -> chord name, ported
 Source/Performance.*           strum / pulse / arp, ported
-Source/ProgressionXml.*        the one XML writer/reader for a progression
-Source/PresetStore.*           named progressions on disk, plus factory entries
+Source/Song.*                  sections, arrangement, song position, flattened cycle
+Source/ProgressionXml.*        the one XML writer/reader for a progression or a song
+Source/PresetStore.*           named progressions and songs on disk, plus factory entries
 Source/Import/ChordImport.*    MIDI and JAMS/JSON chord import
 Source/Progression.*           slots, cycle length, diatonic seeding
 Source/ChordScheduler.*        transport → MIDI events (the testable core)

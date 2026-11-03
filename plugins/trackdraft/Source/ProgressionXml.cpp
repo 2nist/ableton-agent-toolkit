@@ -1,5 +1,7 @@
 #include "ProgressionXml.h"
 
+#include <algorithm>
+
 namespace td
 {
 juce::XmlElement toXml (const Progression& progression, const juce::String& tagName)
@@ -72,6 +74,126 @@ bool fromXml (const juce::XmlElement& xml, Progression& target)
         return false;
 
     target = loaded;
+    return true;
+}
+juce::XmlElement toXml (const Song& song, const juce::String& tagName)
+{
+    juce::XmlElement xml (tagName);
+    xml.setAttribute ("version", 2);
+    xml.setAttribute ("count", (int) song.sections.size());
+
+    // Sections are written in authoring order; the arrangement names them by
+    // that position, which is enough for a file that is read back as one piece.
+    for (const auto& section : song.sections)
+    {
+        auto* element = xml.createNewChildElement ("section");
+        element->setAttribute ("name", section.name);
+        element->addChildElement (
+            new juce::XmlElement (toXml (section.progression, "progression")));
+    }
+
+    auto* arrangement = xml.createNewChildElement ("arrangement");
+    for (const auto& pass : song.arrangement)
+    {
+        const auto index = song.indexOf (pass.sectionId);
+        if (index == Song::npos)
+            continue;
+
+        auto* element = arrangement->createNewChildElement ("pass");
+        element->setAttribute ("section", (int) index);
+        element->setAttribute ("repeats", juce::jmax (1, pass.repeats));
+    }
+
+    return xml;
+}
+
+bool fromXml (const juce::XmlElement& xml, Song& target)
+{
+    const auto* sections = xml.getChildByName ("sections");
+
+    // A single progression is a legitimate song: presets are written that way,
+    // and so were sessions before songs existed.
+    if (sections == nullptr && xml.getChildByName ("section") == nullptr)
+    {
+        Progression only;
+        if (! fromXml (xml, only))
+            return false;
+
+        Song song;
+        Song::Section section;
+        section.id = 1;
+        section.name = xml.getStringAttribute ("name", "Section");
+        section.progression = only;
+        song.sections.push_back (section);
+        song.syncArrangement();
+
+        target = std::move (song);
+        return true;
+    }
+
+    const juce::XmlElement* list = sections != nullptr ? sections : &xml;
+
+    struct Loaded
+    {
+        juce::String name;
+        Progression progression;
+    };
+
+    std::vector<Loaded> loaded;
+    for (auto* element : list->getChildIterator())
+    {
+        if (! element->hasTagName ("section"))
+            continue;
+        if (loaded.size() >= Song::maxSections)
+            break;
+
+        Loaded entry;
+        entry.name = element->getStringAttribute (
+            "name", juce::String ("Section ") + juce::String ((int) loaded.size() + 1));
+        // A section whose chords will not parse keeps its place with the default
+        // progression: dropping it would silently renumber every later section
+        // and misalign the arrangement that refers to them.
+        fromXml (*element, entry.progression);
+        loaded.push_back (std::move (entry));
+    }
+
+    if (loaded.empty())
+        return false;
+
+    Song song;
+    for (auto& entry : loaded)
+    {
+        Song::Section section;
+        section.id = (int) song.sections.size() + 1;
+        section.name = entry.name;
+        section.progression = entry.progression;
+        song.sections.push_back (section);
+    }
+
+    // The arrangement points at section positions; anything out of range or
+    // unreadable is dropped rather than guessed at.
+    const auto* arrangement = xml.getChildByName ("arrangement");
+    const auto* passes = arrangement != nullptr ? arrangement : xml.getChildByName ("passes");
+
+    if (passes != nullptr)
+    {
+        for (auto* element : passes->getChildIterator())
+        {
+            if (! element->hasTagName ("pass"))
+                continue;
+
+            const int index = element->getIntAttribute ("section", -1);
+            if (index < 0 || (std::size_t) index >= song.sections.size())
+                continue;
+
+            song.arrangement.push_back (
+                { song.sections[(std::size_t) index].id,
+                  juce::jlimit (1, Song::maxRepeats, element->getIntAttribute ("repeats", 1)) });
+        }
+    }
+
+    song.syncArrangement();
+    target = std::move (song);
     return true;
 }
 } // namespace td

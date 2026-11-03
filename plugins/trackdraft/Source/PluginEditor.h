@@ -1,7 +1,7 @@
 #pragma once
 
 #include "PresetStore.h"
-#include "Progression.h"
+#include "Song.h"
 #include "Theory/ChordWalk.h"
 
 #include <array>
@@ -14,7 +14,8 @@ namespace td
 class TrackDraftAudioProcessor;
 
 /**
-    Native editor: key/scale, the progression strip, the walk, and articulation.
+    Native editor: the song's sections and arrangement, then the selected
+    section's chords, the walk, and articulation.
 
     Every knob is a real JUCE control bound to the APVTS, so host automation and
     undo see the same parameters the UI does. The progression itself is plugin
@@ -40,16 +41,26 @@ private:
     void rebuildNeighbours();
     void rebuildBorrowed();
     void rebuildPresets();
+    void rebuildSections();
+    void rebuildArrangement();
+    void renameSelectedSection();
     void refreshHeardLabel();
     void commit();
-    void commitWith (const Progression& next);
+    void commitWith (const Song& next);
+    /** Replaces the selected section's chords — what a preset or import gives us. */
+    void commitSection (const Progression& next);
+    Progression& selectedProgression();
+    const Progression& selectedProgression() const;
     theory::Scale workingScale() const;
     int workingDegree() const;
 
     TrackDraftAudioProcessor& plugin;
     PresetStore presets;
-    Progression working;
+    Song working;
+    std::size_t selectedSection = 0;
     int selectedSlot = 0;
+    /** Which arrangement pass the arrangement strip shows as current. */
+    std::size_t selectedPass = 0;
 
     juce::ComboBox keyBox;
     juce::ComboBox scaleBox;
@@ -70,7 +81,19 @@ private:
     juce::TextButton deletePresetButton { "Delete" };
     juce::TextButton importButton { "Import..." };
     std::unique_ptr<juce::FileChooser> importChooser;
-    juce::TextButton applyAllButton { "Apply articulation to all" };
+    juce::TextButton applyAllButton { "Apply articulation to section" };
+
+    juce::TextEditor sectionNameEditor;
+    juce::TextButton addSectionButton { "+" };
+    juce::TextButton duplicateSectionButton { "Dup" };
+    juce::TextButton deleteSectionButton { "Del" };
+    juce::TextButton moveSectionLeftButton { "<" };
+    juce::TextButton moveSectionRightButton { ">" };
+    juce::TextButton addPassButton { "+ pass" };
+    juce::TextButton moreRepeatsButton { "+ rep" };
+    juce::TextButton fewerRepeatsButton { "- rep" };
+    juce::TextButton removePassButton { "del pass" };
+    juce::TextButton saveSongButton { "Save song" };
 
     juce::ComboBox performanceBox;
     juce::Slider paramSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
@@ -111,7 +134,39 @@ private:
         int dragTo = -1;
     };
 
+    /** The song's sections, drawn by hand so the list stays one row. */
+    class SectionBar final : public juce::Component
+    {
+    public:
+        explicit SectionBar (TrackDraftAudioProcessorEditor& ownerToUse) : owner (ownerToUse) {}
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override;
+
+        juce::Rectangle<int> boundsFor (int index) const;
+        int indexAt (juce::Point<int> position) const;
+
+    private:
+        TrackDraftAudioProcessorEditor& owner;
+    };
+
+    /** The arrangement, one box per pass, repeats expanded as "Verse x2". */
+    class ArrangementBar final : public juce::Component
+    {
+    public:
+        explicit ArrangementBar (TrackDraftAudioProcessorEditor& ownerToUse) : owner (ownerToUse) {}
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override;
+
+        juce::Rectangle<int> boundsFor (int index) const;
+        int indexAt (juce::Point<int> position) const;
+
+    private:
+        TrackDraftAudioProcessorEditor& owner;
+    };
+
     SlotStrip strip { *this };
+    SectionBar sectionBar { *this };
+    ArrangementBar arrangementBar { *this };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TrackDraftAudioProcessorEditor)
 };

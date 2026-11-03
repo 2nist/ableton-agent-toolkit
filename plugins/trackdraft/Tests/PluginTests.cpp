@@ -1,5 +1,6 @@
 #include "ChordScheduler.h"
 #include "Progression.h"
+#include "Song.h"
 #include "Theory/ChordRecognition.h"
 #include "Theory/ChordTheory.h"
 #include "Performance.h"
@@ -25,9 +26,12 @@
 namespace
 {
 int failures = 0;
+int checks = 0;
 
 void check (bool condition, const juce::String& what)
 {
+    ++checks;
+
     if (! condition)
     {
         ++failures;
@@ -875,6 +879,332 @@ void testScheduler()
         checkEqual (countNotes (out, false), 3, "disabling releases the chord");
     }
 }
+/** A two-section song: verse (two 4-beat chords) and chorus (one 8-beat chord). */
+td::Song makeSong()
+{
+    td::Song song;
+    const auto verse = song.addSection ("Verse");
+    song.sections[verse].progression.count = 2;
+    song.sections[verse].progression.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    song.sections[verse].progression.slots[1] = { 5, td::theory::Quality::maj, 4.0 };
+
+    const auto chorus = song.addSection ("Chorus");
+    song.sections[chorus].progression.count = 1;
+    song.sections[chorus].progression.slots[0] = { 7, td::theory::Quality::seven, 8.0 };
+
+    return song;
+}
+
+void testSongStructure()
+{
+    auto song = makeSong();
+
+    checkEqual ((int) song.sections.size(), 2, "two sections");
+    checkEqual ((int) song.arrangement.size(), 2, "the default arrangement covers both");
+    check (song.arrangement[0].sectionId == song.sections[0].id, "the first pass is the first section");
+    check (song.arrangement[1].sectionId == song.sections[1].id, "the second pass is the second section");
+
+    check (std::abs (song.totalBeats() - 16.0) < 1e-9, "16 beats: 8 of verse, 8 of chorus");
+
+    // Repeats multiply the whole section, not one chord.
+    song.setRepeats (1, 3);
+    check (std::abs (song.totalBeats() - 32.0) < 1e-9, "three choruses are 24 beats after 8");
+
+    // Position walks the arrangement: verse, verse again, then the chorus.
+    const auto inFirstVerse = song.positionAt (0.0);
+    checkEqual ((int) inFirstVerse.section, 0, "beat 0 is the verse");
+    check (std::abs (inFirstVerse.beatInSection) < 1e-9, "beat 0 is the top of the verse");
+
+    const auto late = song.positionAt (7.5);
+    checkEqual ((int) late.section, 0, "beat 7.5 is still the verse");
+    check (std::abs (late.beatInSection - 7.5) < 1e-9, "beat 7.5 is 7.5 into the verse");
+
+    const auto chorus = song.positionAt (9.0);
+    checkEqual ((int) chorus.section, 1, "beat 9 is the chorus");
+    check (std::abs (chorus.beatInSection - 1.0) < 1e-9, "beat 9 is 1 beat into the chorus");
+
+    // Past the end the form repeats, which is what a DAW loop does anyway.
+    const auto wrapped = song.positionAt (32.0 + 2.0);
+    checkEqual ((int) wrapped.section, 0, "the form wraps to the verse");
+    check (std::abs (wrapped.beatInSection - 2.0) < 1e-9, "wrapped by exactly one song length");
+
+    // The chord at a beat is the section's chord, not the first section's.
+    const auto chorusChord = song.chordAt (9.0);
+    checkEqual (chorusChord.rootPc, 7, "the chorus chord is G");
+    check (chorusChord.quality == td::theory::Quality::seven, "and it is a G7");
+    const auto verseChord = song.chordAt (5.0);
+    checkEqual (verseChord.rootPc, 5, "the second verse chord is F");
+}
+
+void testSongEditing()
+{
+    auto song = makeSong();
+
+    // A new section joins the arrangement once, at the end.
+    const auto bridge = song.addSection ("Bridge");
+    checkEqual ((int) song.sections.size(), 3, "a third section is added");
+    checkEqual ((int) song.arrangement.size(), 3, "and joins the arrangement once");
+    check (song.arrangement.back().sectionId == song.sections[bridge].id,
+           "the new pass is the last one");
+
+    // Duplicating copies the chords and gets its own identity.
+    song.sections[bridge].progression.count = 3;
+    const auto copy = song.duplicateSection (bridge);
+    checkEqual ((int) song.sections.size(), 4, "the copy is a fourth section");
+    checkEqual ((int) song.sections[copy].progression.count, 3, "the copy keeps the chords");
+    check (song.sections[copy].id != song.sections[bridge].id, "the copy has its own id");
+
+    // Removing a section drops the passes that pointed at it and keeps order.
+    const int removedId = song.sections[1].id;
+    const int keeperId = song.sections[0].id;
+    song.removeSection (1);
+    checkEqual ((int) song.sections.size(), 3, "the section is gone");
+    for (const auto& pass : song.arrangement)
+        check (pass.sectionId != removedId, "no pass points at the removed section");
+    check (song.arrangement.front().sectionId == keeperId, "the remaining order is untouched");
+
+    // Reordering the list cannot change what plays: the arrangement names ids.
+    const auto before = song.arrangement;
+    song.moveSection (0, 2);
+    check (song.arrangement == before, "moving a section leaves the arrangement alone");
+
+    // Repeats are clamped, never zero or negative.
+    song.setRepeats (0, 0);
+    checkEqual (song.arrangement[0].repeats, 1, "repeats clamp to one");
+    song.setRepeats (0, 99);
+    checkEqual (song.arrangement[0].repeats, td::Song::maxRepeats, "and to the maximum");
+
+    // The same section twice is a real arrangement, not a repeat count.
+    const int passesBefore = (int) song.arrangement.size();
+    // Section 0 is not the first pass any more — the move above put it third —
+    // so this also checks that a pass names a section, not a position.
+    const int appendedId = song.sections[0].id;
+    song.appendPass (0);
+    checkEqual ((int) song.arrangement.size(), passesBefore + 1, "an extra pass is appended");
+    check (song.arrangement.back().sectionId == appendedId,
+           "and it points at the section that was asked for");
+
+    song.removePass (song.arrangement.size() - 1);
+    checkEqual ((int) song.arrangement.size(), passesBefore, "a pass can be removed again");
+
+    // The arrangement is drawn in one row, so it is bounded like everything else.
+    td::Song longSong = makeSong();
+    const int alreadyThere = (int) longSong.arrangement.size();
+    int accepted = 0;
+    for (int i = 0; i < 100; ++i)
+        if (longSong.appendPass (0))
+            ++accepted;
+
+    checkEqual (accepted, (int) td::Song::maxPasses - alreadyThere,
+                "passes are accepted up to the cap");
+    checkEqual ((int) longSong.arrangement.size(), (int) td::Song::maxPasses,
+                "and the arrangement stops growing there");
+    check (! longSong.appendPass (0), "one more is refused rather than dropped silently");
+
+    // The last pass stays: an arrangement with none is a song that plays nothing.
+    td::Song single = makeSong();
+    check (single.removePass (1), "a pass can be removed");
+    check (! single.removePass (0), "the last pass cannot");
+    checkEqual ((int) single.arrangement.size(), 1, "so one pass is left");
+}
+
+void testSongCycle()
+{
+    auto song = makeSong();
+    td::SongCycle cycle;
+    cycle.rebuild (song);
+
+    checkEqual ((int) cycle.slotCount(), 3, "three chords across the song");
+    check (std::abs (cycle.lengthInBeats() - 16.0) < 1e-9, "the cycle is the song's length");
+
+    check (std::abs (cycle.startBeatOf (0) - 0.0) < 1e-9, "slot 0 at beat 0");
+    check (std::abs (cycle.startBeatOf (1) - 4.0) < 1e-9, "slot 1 at beat 4");
+    check (std::abs (cycle.startBeatOf (2) - 8.0) < 1e-9, "slot 2 at beat 8 — the chorus");
+
+    checkEqual (cycle.slotAt (2).rootPc, 7, "the third cycle slot is the chorus chord");
+
+    const auto playing = cycle.playingAt (9.0);
+    checkEqual ((int) playing.section, 1, "beat 9 is in the chorus");
+    checkEqual ((int) playing.slot, 0, "at its first slot");
+    checkEqual ((int) playing.pass, 1, "on the second arrangement pass");
+
+    // Repeats are expanded in the cycle, not collapsed.
+    song.setRepeats (1, 2);
+    cycle.rebuild (song);
+    checkEqual ((int) cycle.slotCount(), 4, "a repeated chorus adds its chords again");
+    const auto second = cycle.playingAt (16.0 + 2.0);
+    checkEqual ((int) second.section, 1, "beat 18 is the repeated chorus");
+    checkEqual ((int) second.slot, 0, "at its first slot");
+
+    // An empty song is a zero-length cycle the scheduler can refuse to play.
+    td::Song empty;
+    cycle.rebuild (empty);
+    check (std::abs (cycle.lengthInBeats()) < 1e-9, "an empty song has no length");
+    checkEqual ((int) cycle.slotCount(), 0, "and no slots");
+}
+
+void testSongScheduler()
+{
+    auto song = makeSong();
+    td::SongCycle cycle;
+    cycle.rebuild (song);
+
+    td::VoiceSettings settings;
+    settings.octave = 4;
+    settings.velocity = 90;
+    settings.gate = 1.0;
+    settings.enabled = true;
+
+    // Bar 3 opens the chorus: G7, not another verse chord.
+    {
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 0.0, 1.0 }, cycle, settings, 512);
+        out.clear();
+        scheduler.process (out, { true, 7.9, 8.1 }, cycle, settings, 512);
+
+        std::vector<int> notes;
+        for (const auto metadata : out)
+            if (metadata.getMessage().isNoteOn())
+                notes.push_back (metadata.getMessage().getNoteNumber());
+        std::sort (notes.begin(), notes.end());
+
+        // G7 at octave 4: G B D F = 67 71 74 77.
+        check (notes == std::vector<int> { 67, 71, 74, 77 }, "the chorus arrives as a G7");
+    }
+
+    // The song loops on its own total length, so bar 5 starts the form again.
+    {
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 15.9, 16.1 }, cycle, settings, 512);
+
+        std::vector<int> notes;
+        for (const auto metadata : out)
+            if (metadata.getMessage().isNoteOn())
+                notes.push_back (metadata.getMessage().getNoteNumber());
+        std::sort (notes.begin(), notes.end());
+
+        check (notes == std::vector<int> { 60, 64, 67 }, "the form restarts on C major");
+    }
+}
+
+void testSongPresets()
+{
+    auto scratch = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                       .getChildFile ("trackdraft-song-presets");
+    scratch.deleteRecursively();
+
+    td::PresetStore store (scratch);
+    auto song = makeSong();
+    juce::String error;
+
+    check (store.saveSong ("My Song", song, error), "a song saves: " + error);
+    checkEqual ((int) store.names().size(), 1, "and appears in the list");
+    check (store.kindOf ("My Song") == td::PresetStore::Kind::song, "as a song");
+
+    td::Song loaded;
+    check (store.loadSong ("My Song", loaded, error), "a song loads: " + error);
+    checkEqual ((int) loaded.sections.size(), 2, "with its sections");
+    check (std::abs (loaded.totalBeats() - 16.0) < 1e-9, "and its length");
+
+    // One section is not a song, and a song is not one section: each loader
+    // says so instead of silently taking the first of the other.
+    td::Progression asSection;
+    check (! store.load ("My Song", asSection, error), "a song is refused as a section");
+    check (error.containsIgnoreCase ("whole song"), "and says why");
+
+    check (store.save ("Just A Section", song.sections[0].progression, error),
+           "a section preset saves: " + error);
+    check (store.kindOf ("Just A Section") == td::PresetStore::Kind::progression,
+           "and is listed as one section");
+
+    td::Song notASong;
+    check (! store.loadSong ("Just A Section", notASong, error),
+           "a section is refused as a song");
+    check (error.containsIgnoreCase ("one section"), "and says why");
+
+    // Deleting works the same for either shape.
+    check (store.remove ("My Song", error), "a song can be deleted: " + error);
+    check (store.kindOf ("My Song") == td::PresetStore::Kind::unusable,
+           "and is gone afterwards");
+
+    scratch.deleteRecursively();
+}
+
+void testSongXml()
+{
+    auto song = makeSong();
+    song.sections[0].name = "Verse A";
+    song.setRepeats (1, 2);
+
+    const auto xml = td::toXml (song, "TrackDraftSong");
+    checkEqual (xml.getStringAttribute ("version"), juce::String ("2"), "song xml is version 2");
+
+    td::Song loaded;
+    check (td::fromXml (xml, loaded), "the song reads back");
+    checkEqual ((int) loaded.sections.size(), 2, "both sections survive");
+    checkEqual (loaded.sections[0].name, juce::String ("Verse A"), "the section name survives");
+    checkEqual ((int) loaded.sections[1].progression.count, 1, "the chord counts survive");
+    checkEqual ((int) loaded.arrangement.size(), 2, "the arrangement survives");
+    checkEqual (loaded.arrangement[1].repeats, 2, "the repeats survive");
+    check (loaded.arrangement[1].sectionId == loaded.sections[1].id,
+           "and the pass still points at the chorus");
+    check (std::abs (loaded.totalBeats() - 24.0) < 1e-9, "the reloaded song is the same length");
+
+    // A session written before songs existed is a one-section song.
+    td::Progression old;
+    old.count = 2;
+    old.slots[0] = { 2, td::theory::Quality::min, 4.0 };
+    old.slots[1] = { 9, td::theory::Quality::maj, 4.0 };
+    const auto oldXml = td::toXml (old, "TrackDraftHarmony");
+
+    td::Song migrated;
+    check (td::fromXml (oldXml, migrated), "a bare progression loads as a song");
+    checkEqual ((int) migrated.sections.size(), 1, "with one section");
+    checkEqual ((int) migrated.sections[0].progression.count, 2, "and its chords");
+    checkEqual ((int) migrated.arrangement.size(), 1, "and one arrangement pass");
+    check (std::abs (migrated.totalBeats() - 8.0) < 1e-9, "8 beats long");
+
+    // The app's own bytes — copied from `toTdpSongXml`'s output in
+    // apps/trackdraft/src/lib/harmony/tdpPreset.test.ts, LF endings, beats
+    // written as whole numbers. This is the direction that has to work: the app
+    // authors the song and the plug-in plays it.
+    const auto appXml = juce::parseXML (juce::String (R"XML(<?xml version="1.0" encoding="UTF-8"?>
+
+<TrackDraftSong version="2" count="2">
+  <section name="Verse">
+    <progression version="1" count="2">
+      <slot root="9" quality="min" beats="4" performance="1" param="150" direction="2"/>
+      <slot root="2" quality="maj" beats="4" performance="0" param="0" direction="2"/>
+    </progression>
+  </section>
+  <section name="Chorus">
+    <progression version="1" count="2">
+      <slot root="5" quality="maj" beats="4" performance="0" param="0" direction="2"/>
+      <slot root="7" quality="7" beats="4" performance="3" param="8" direction="1"/>
+    </progression>
+  </section>
+  <arrangement>
+    <pass section="0" repeats="1"/>
+    <pass section="1" repeats="2"/>
+  </arrangement>
+</TrackDraftSong>
+)XML"));
+
+    td::Song fromApp;
+    check (appXml != nullptr && td::fromXml (*appXml, fromApp), "the app's song file parses");
+    checkEqual ((int) fromApp.sections.size(), 2, "the app's two sections arrive");
+    checkEqual (fromApp.sections[0].name, juce::String ("Verse"), "with their names");
+    checkEqual ((int) fromApp.sections[0].progression.count, 2, "and their chords");
+    checkEqual (fromApp.sections[0].progression.slots[0].rootPc, 9, "A minor is root 9");
+    check (fromApp.sections[0].progression.slots[0].performance == td::Performance::strum,
+           "the strum articulation survives");
+    checkEqual (fromApp.sections[0].progression.slots[0].param, 150, "with its spread");
+    checkEqual (fromApp.arrangement[1].repeats, 2, "the chorus repeats twice");
+    check (std::abs (fromApp.totalBeats() - 24.0) < 1e-9, "24 beats: 8 of verse, 16 of chorus");
+}
+
 } // namespace
 
 int main (int argc, char** argv)
@@ -891,6 +1221,29 @@ int main (int argc, char** argv)
         sample.slots[1] = { 5, td::theory::Quality::min, 2.0, td::Performance::strum, 150, 2 };
         sample.slots[2] = { 7, td::theory::Quality::seven, 8.0, td::Performance::arp, 8, 1 };
         std::cout << td::toXml (sample, "TrackDraftPreset").toString() << std::endl;
+        return 0;
+    }
+
+    // `--dump-song-xml` prints a whole song in the plug-in's on-disk shape, and
+    // the app's `tdpPreset` tests paste that exact output as a fixture.
+    if (argc > 1 && juce::String (argv[1]) == "--dump-song-xml")
+    {
+        td::Song song;
+
+        const auto verse = song.addSection ("Verse");
+        song.sections[verse].progression.count = 2;
+        song.sections[verse].progression.slots[0] = { 9, td::theory::Quality::min, 4.0,
+                                                      td::Performance::strum, 150, 2 };
+        song.sections[verse].progression.slots[1] = { 2, td::theory::Quality::maj, 4.0 };
+
+        const auto chorus = song.addSection ("Chorus");
+        song.sections[chorus].progression.count = 2;
+        song.sections[chorus].progression.slots[0] = { 5, td::theory::Quality::maj, 4.0 };
+        song.sections[chorus].progression.slots[1] = { 7, td::theory::Quality::seven, 4.0,
+                                                       td::Performance::arp, 8, 1 };
+
+        song.setRepeats (1, 2);
+        std::cout << td::toXml (song, "TrackDraftSong").toString() << std::endl;
         return 0;
     }
 
@@ -931,10 +1284,16 @@ int main (int argc, char** argv)
     testMidiImport();
     testProgressionCycle();
     testScheduler();
+    testSongStructure();
+    testSongEditing();
+    testSongCycle();
+    testSongScheduler();
+    testSongXml();
+    testSongPresets();
 
     if (failures == 0)
     {
-        std::cout << "TrackDraftTests: all checks passed" << std::endl;
+        std::cout << "TrackDraftTests: " << checks << " checks passed" << std::endl;
         return 0;
     }
 

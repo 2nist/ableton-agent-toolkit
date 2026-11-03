@@ -58,7 +58,9 @@ TrackDraftAudioProcessor::TrackDraftAudioProcessor()
                                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "trackdraft", makeLayout())
 {
-    progression.seedFromScale (0, theory::Scale::ionian, 4);
+    const auto first = song.addSection ("Section");
+    song.sections[first].progression.seedFromScale (0, theory::Scale::ionian, 4);
+    cycle.rebuild (song);
 }
 
 TrackDraftAudioProcessor::~TrackDraftAudioProcessor() = default;
@@ -122,13 +124,26 @@ void TrackDraftAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     settings.gate = (double) apvts.getRawParameterValue (gateParam)->load();
     settings.enabled = apvts.getRawParameterValue (enabledParam)->load() > 0.5f;
 
-    Progression current;
     {
+        // The cycle is read, not copied: it is only rewritten on the message
+        // thread, under this lock, when the song changes.
         const juce::ScopedLock lock (progressionLock);
-        current = progression;
-    }
+        scheduler.process (generated, transport, cycle, settings, buffer.getNumSamples());
 
-    scheduler.process (generated, transport, current, settings, buffer.getNumSamples());
+        if (transport.playing)
+        {
+            const auto playing = cycle.playingAt (juce::jmax (0.0, transport.ppqStart));
+            playingSection.store ((int) playing.section);
+            playingSlot.store ((int) playing.slot);
+            playingPass.store ((int) playing.pass);
+        }
+        else
+        {
+            playingSection.store (-1);
+            playingSlot.store (-1);
+            playingPass.store (-1);
+        }
+    }
 
     const int auditionRootPc = auditionRoot.exchange (-1);
     if (auditionRootPc >= 0)
@@ -142,42 +157,37 @@ void TrackDraftAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         scheduler.audition (generated, preview, settings, buffer.getNumSamples(), getSampleRate());
     }
 
-    if (transport.playing)
-        playingSlot.store ((int) current.slotAtBeat (std::fmod (juce::jmax (0.0, transport.ppqStart),
-                                                                juce::jmax (1e-6, current.lengthInBeats()))));
-    else
-        playingSlot.store (-1);
-
     midiMessages.swapWith (generated);
 }
 
-Progression TrackDraftAudioProcessor::getProgression() const
+Song TrackDraftAudioProcessor::getSong() const
 {
     const juce::ScopedLock lock (progressionLock);
-    return progression;
+    return song;
 }
 
-void TrackDraftAudioProcessor::setProgression (const Progression& next)
+void TrackDraftAudioProcessor::setSong (const Song& next)
 {
     {
         const juce::ScopedLock lock (progressionLock);
-        progression = next;
+        song = next;
+        cycle.rebuild (song);
     }
     progressionBroadcaster.sendChangeMessage();
 }
 
-ChordSlot TrackDraftAudioProcessor::slotAtBeat (double beat) const
+Song::Position TrackDraftAudioProcessor::positionAtBeat (double beat) const
 {
     const juce::ScopedLock lock (progressionLock);
-    return progression.slots[progression.slotAtBeat (beat)];
+    return song.positionAt (beat);
 }
 
 void TrackDraftAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    Progression current;
+    Song current;
     {
         const juce::ScopedLock lock (progressionLock);
-        current = progression;
+        current = song;
     }
 
     auto xml = toXml (current, "TrackDraftHarmony");
@@ -204,9 +214,11 @@ void TrackDraftAudioProcessor::setStateInformation (const void* data, int sizeIn
     if (state != nullptr)
         apvts.replaceState (juce::ValueTree::fromXml (*state));
 
-    Progression loaded = getProgression();
+    // Sessions written before songs existed hold a single progression; `fromXml`
+    // reads that as a one-section song, so an old session still opens.
+    Song loaded = getSong();
     if (fromXml (*xml, loaded))
-        setProgression (loaded);
+        setSong (loaded);
 }
 
 void TrackDraftAudioProcessor::setDetectionArmed (bool shouldListen)
@@ -291,29 +303,37 @@ RecognizedChord TrackDraftAudioProcessor::getHeardChord() const
     return heard;
 }
 
-bool TrackDraftAudioProcessor::writeHeardChordToSlot (std::size_t slot)
+bool TrackDraftAudioProcessor::writeHeardChordToSlot (std::size_t section, std::size_t slot)
 {
     const auto heard = getHeardChord();
     if (! heard.valid || slot >= Progression::maxSlots)
         return false;
 
-    Progression next = getProgression();
-    if (slot >= next.count)
-        next.count = slot + 1;
+    Song next = getSong();
+    if (section >= next.sections.size())
+        return false;
 
-    const double beats = next.slots[slot].beats;
-    next.slots[slot] = { heard.rootPc, heard.quality, beats > 0.0 ? beats : 4.0 };
-    setProgression (next);
+    auto& progression = next.sections[section].progression;
+    if (slot >= progression.count)
+        progression.count = slot + 1;
+
+    const double beats = progression.slots[slot].beats;
+    progression.slots[slot] = { heard.rootPc, heard.quality, beats > 0.0 ? beats : 4.0 };
+    setSong (next);
     return true;
 }
 
-void TrackDraftAudioProcessor::auditionSlot (std::size_t slot)
+void TrackDraftAudioProcessor::auditionSlot (std::size_t section, std::size_t slot)
 {
-    const auto current = getProgression();
-    if (slot >= current.count)
+    const auto current = getSong();
+    if (section >= current.sections.size())
         return;
 
-    auditionChord (current.slots[slot].rootPc, current.slots[slot].quality);
+    const auto& progression = current.sections[section].progression;
+    if (slot >= progression.count)
+        return;
+
+    auditionChord (progression.slots[slot].rootPc, progression.slots[slot].quality);
 }
 
 void TrackDraftAudioProcessor::auditionChord (int rootPc, theory::Quality quality)

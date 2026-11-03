@@ -4,6 +4,8 @@ import type { BlueprintSong } from "../../types/blueprint";
 import { downloadSongJson, pushSongToAbleton } from "../../lib/exportImport";
 import { downloadSongMidi } from "../../lib/midiExport";
 import { downloadSongRpp } from "../../lib/reaper/rppProject";
+import { sanitisePresetName, toTdpSongXml } from "../../lib/harmony/tdpPreset";
+import { getHost } from "../../lib/host";
 import { useDawTargetStore } from "../../store/dawTargetStore";
 
 /** Studio's export/send actions tucked under a single button — Export JSON,
@@ -49,6 +51,35 @@ export default function ExportMenu({ song }: { song: BlueprintSong }) {
     }
   }
 
+  /** The whole form — sections and arrangement — as the plug-in's song file. */
+  async function saveSongForPlugin(current: BlueprintSong): Promise<void> {
+    const xml = toTdpSongXml(current);
+    const name = sanitisePresetName(current.title || "Song");
+
+    const host = getHost();
+    if (!host) {
+      const blob = new Blob([xml], { type: "application/xml" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${name}.tdp.xml`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      alert(
+        `Downloaded ${name}.tdp.xml — drop it in the plug-in's preset folder ` +
+          `(~/Library/Application Support/TrackDraft/Presets) and pick it from the Presets box.`,
+      );
+      return;
+    }
+
+    const result = await host.presetSave(name, xml);
+    alert(
+      result.ok && result.path
+        ? `Saved the song to ${result.path} — it appears in the plug-in's Presets box.`
+        : result.error ?? "Could not save the song",
+    );
+  }
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -57,8 +88,8 @@ export default function ExportMenu({ song }: { song: BlueprintSong }) {
         aria-expanded={open}
         title={
           target === "live"
-            ? "Export this song — JSON blueprint, multi-track MIDI, a REAPER project, or straight to Ableton"
-            : "Export this song — JSON blueprint, a multi-track MIDI file, or a REAPER project"
+            ? "Export this song — JSON blueprint, multi-track MIDI, a REAPER project, the plug-in's song file, or straight to Ableton"
+            : "Export this song — JSON blueprint, a multi-track MIDI file, a REAPER project, or the plug-in's song file"
         }
         onClick={() => setOpen((o) => !o)}
       >
@@ -95,6 +126,16 @@ export default function ExportMenu({ song }: { song: BlueprintSong }) {
             }}
           >
             Export REAPER project
+          </button>
+          <button
+            className="w-full text-left text-xs px-3 py-1.5 text-ink hover:bg-panelAlt"
+            title="Write every section and the arrangement into the TrackDraft Harmony plug-in's preset folder, so the VST3 can play the whole song form"
+            onClick={() => {
+              setOpen(false);
+              void saveSongForPlugin(song);
+            }}
+          >
+            Save song for the plug-in
           </button>
           {target === "live" && (
             <button

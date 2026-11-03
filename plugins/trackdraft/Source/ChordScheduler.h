@@ -29,7 +29,7 @@ struct VoiceSettings
 };
 
 /**
-    Turns a progression plus the host's musical clock into MIDI note events.
+    Turns a chord cycle plus the host's musical clock into MIDI note events.
 
     Kept free of AudioProcessor and of the audio device so the timing rules can
     be tested by feeding it a made-up transport — which is what TrackDraftTests
@@ -42,8 +42,9 @@ struct VoiceSettings
       approximated per block, so a strum spread stays even at any tempo;
     - the gate shortens the chord without ever leaving a note hanging into the
       next slot;
-    - the progression loops on its own length, so a 4-chord, 16-beat cycle
-      repeats at bar 5 without the host having to loop.
+    - the cycle loops on its own length, so a 4-chord, 16-beat progression
+      repeats at bar 5 without the host having to loop, and a whole song
+      repeats its form once the last pass ends.
 
     Nothing here executes the target, reads files, or allocates per block beyond
     reused buffers.
@@ -59,13 +60,14 @@ public:
 
         @param out            buffer the host will send on (also used for pass-through by the caller)
         @param transport      block position from the playhead
-        @param progression    the chord cycle to play
+        @param cycle          the chord cycle to play — a section's progression, or a
+                              whole song flattened to absolute song positions
         @param settings       octave / velocity / gate / enabled
         @param numSamples     block length, used to turn ppq offsets into samples
     */
     void process (juce::MidiBuffer& out,
                   const TransportSlice& transport,
-                  const Progression& progression,
+                  const ChordCycle& cycle,
                   const VoiceSettings& settings,
                   int numSamples);
 

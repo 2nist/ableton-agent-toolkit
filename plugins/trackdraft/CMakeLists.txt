@@ -44,6 +44,7 @@ target_sources(TrackDraftHarmony PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/Progression.cpp
+    Source/Song.cpp
     Source/ChordScheduler.cpp
     Source/Theory/ChordTheory.cpp
     Source/Theory/ChordWalk.cpp
@@ -58,6 +59,7 @@ target_sources(TrackDraftHarmony PRIVATE
 # JUCE GUI dependency, which is what lets it be tested without a DAW.
 add_library(TrackDraftCore STATIC
     Source/Progression.cpp
+    Source/Song.cpp
     Source/ChordScheduler.cpp
     Source/Theory/ChordTheory.cpp
     Source/Theory/ChordWalk.cpp

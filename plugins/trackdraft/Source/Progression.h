@@ -38,14 +38,40 @@ struct ChordSlot
 };
 
 /**
-    The progression the plugin plays, as plain data.
+    What the scheduler needs from whatever it plays: a length to loop on, and a
+    flat list of slots with the beat each one starts at.
+
+    `Progression` is one section's worth of this. `SongCycle` flattens a whole
+    song — every pass of every section, in arrangement order — into the same
+    shape, so there is one set of timing rules rather than one per model. The
+    numbers are absolute within the cycle, which is what makes a section change
+    indistinguishable from a chord change to the scheduler.
+*/
+class ChordCycle
+{
+public:
+    ChordCycle() = default;
+    /** Copyable: a `Progression` is copied all over the place, and slicing one
+        into its base is never what anyone means. */
+    ChordCycle (const ChordCycle&) = default;
+    ChordCycle& operator= (const ChordCycle&) = default;
+    virtual ~ChordCycle() = default;
+
+    virtual double lengthInBeats() const = 0;
+    virtual std::size_t slotCount() const = 0;
+    virtual double startBeatOf (std::size_t index) const = 0;
+    virtual const ChordSlot& slotAt (std::size_t index) const = 0;
+};
+
+/**
+    One section's chords: the progression the plugin plays.
 
     Deliberately not a JUCE model object: the editor edits a copy, the processor
     owns the live one, and the state is written as XML. Length is fixed at
     `maxSlots` so a saved session always round-trips — a shorter progression is
     expressed by the sum of its `beats`, not by a shorter array.
 */
-struct Progression
+struct Progression : public ChordCycle
 {
     static constexpr std::size_t maxSlots = 8;
 
@@ -53,10 +79,15 @@ struct Progression
     std::size_t count = 4;
 
     /** Total beats in one pass of the progression. */
-    double lengthInBeats() const noexcept;
+    double lengthInBeats() const noexcept override;
 
     /** Beat offset at which slot `index` starts. */
-    double startBeatOf (std::size_t index) const noexcept;
+    double startBeatOf (std::size_t index) const noexcept override;
+
+    std::size_t slotCount() const noexcept override { return count; }
+
+    /** Slot `index`, clamped into the array so callers need no guard. */
+    const ChordSlot& slotAt (std::size_t index) const noexcept override;
 
     /** Slot sounding at `beat` (position inside the loop), or the last one. */
     std::size_t slotAtBeat (double beat) const noexcept;
