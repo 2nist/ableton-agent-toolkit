@@ -22,26 +22,21 @@ std::vector<PerformanceEvent> shapeChord (int rootMidi,
                                           theory::Quality quality,
                                           double slotBeats,
                                           int velocity,
-                                          const PerformanceSettings& settings)
+                                          const PerformanceSettings& settings,
+                                          const theory::Voicing& voicing)
 {
-    const auto& intervals = theory::intervalsOf (quality);
     const double beats = std::max (0.25, slotBeats);
     const int gateVelocity = std::clamp (velocity, 1, 127);
     std::vector<PerformanceEvent> events;
 
-    // Chord tones above the octave stay above it: a 9th keeps its colour.
-    std::vector<int> notes;
-    for (int interval : intervals)
-    {
-        const int note = rootMidi + interval;
-        if (note >= 0 && note <= 127)
-            notes.push_back (note);
-    }
-
-    if (notes.empty())
+    // The voicing decides the notes: which tone is in the bass (so an inversion
+    // is audible on its own) and whether the spread is close or open. Chord
+    // tones above the octave keep their colour — a 9th stays a 9th.
+    const auto shaped = theory::voicedNotes (rootMidi, quality, voicing);
+    if (shaped.empty())
         return events;
 
-    std::sort (notes.begin(), notes.end());
+    auto notes = shaped;
 
     switch (settings.kind)
     {

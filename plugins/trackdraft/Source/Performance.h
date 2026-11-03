@@ -52,5 +52,6 @@ std::vector<PerformanceEvent> shapeChord (int rootMidi,
                                           theory::Quality quality,
                                           double slotBeats,
                                           int velocity,
-                                          const PerformanceSettings& settings);
+                                          const PerformanceSettings& settings,
+                                          const theory::Voicing& voicing = {});
 } // namespace td

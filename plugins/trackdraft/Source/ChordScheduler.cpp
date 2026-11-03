@@ -59,11 +59,32 @@ void ChordScheduler::scheduleChord (double atPpq, const ChordSlot& slot,
     const int rootMidi = rootMidiFor (slot, settings);
     const int velocity = juce::jlimit (1, 127, settings.velocity);
     const auto events = shapeChord (rootMidi, slot.quality, slot.beats, velocity,
-                                    slot.articulation (settings.gate));
+                                    slot.articulation (settings.gate), slot.voicing);
 
     for (const auto& event : events)
         pending.push_back ({ atPpq + event.offsetBeats, event.note, event.velocity,
                              event.durationBeats });
+
+    scheduleBass (atPpq, slot, settings);
+}
+
+void ChordScheduler::scheduleBass (double atPpq, const ChordSlot& slot,
+                                   const VoiceSettings& settings)
+{
+    if (settings.bassOctave <= 0 || settings.bassOctave > 8)
+        return;
+
+    // The bass plays the tone the inversion put there, so C/E is an E in the
+    // low end; it holds for the whole slot rather than following the articulation,
+    // which is what an arpeggiated chord needs underneath it.
+    const int pitchClass = theory::bassPitchClass (slot.rootPc, slot.quality, slot.voicing);
+    // The app's bass numbering (see VoiceSettings::bassOctave): octave 3 is 36.
+    const int note = settings.bassOctave * 12 + pitchClass;
+    if (note < 0 || note > 127)
+        return;
+
+    const double duration = std::max (0.25, slot.beats) * std::clamp (settings.gate, 0.05, 1.0);
+    pending.push_back ({ atPpq, note, juce::jlimit (1, 127, settings.velocity), duration });
 }
 
 void ChordScheduler::emitPending (juce::MidiBuffer& out, double upToPpqInclusive,

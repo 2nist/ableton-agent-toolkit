@@ -104,6 +104,8 @@ notes without a boundary, and disabling emission releases what is sounding.
 | **Walk row** | The six hex neighbours of the selected chord. A click writes that chord into the next slot and moves the selection there |
 | **Borrowed chord…** | Chords the *other* modes on this tonic would give the key — bIII, iv, bVI, bVII in a major key — derived at the triad, written into the selected slot |
 | **Articulation** (Block / Strum / Pulse / Arp) | Per slot. Strum uses the app's millisecond spread, Pulse re-strikes on a subdivision with a triangle accent, Arp walks the tones up, down or up-down |
+| **Inversion / spread** | Which chord tone is in the bass (root, 1st, 2nd … — the list is the chord's own tones, so a 13th offers six) and whether the upper voices stack close or open. The slot strip names the result as a slash chord, `C/E` |
+| **Bass voice** | Off by default, or a register for a separate bass note. It plays the tone the inversion put in the bass, so `C/E` is an E in the low end, and holds for the whole slot rather than following the articulation |
 | **Preview** | Plays the selected slot immediately, transport or not, so you can hear the voicing before committing to it |
 | **Drag a slot** | Click-drag reorders the progression; the drop target shows while dragging |
 | **Apply articulation to section** | Copies the selected slot's articulation onto every slot of the selected section |
@@ -145,6 +147,10 @@ so an import keeps the first eight chord changes and says so when it truncates.
 
 ## Sharing progressions with the app
 
+A slot also carries `inversion` and `spread="open"` when the chord is voiced,
+omitted when it is in root position and close — so a file written before
+voicings existed is byte-identical to one written now.
+
 Presets use the same XML the TrackDraft app reads and writes
 (`apps/trackdraft/src/lib/harmony/tdpPreset.ts`), so a progression moves between
 the two without a translation step:
@@ -172,6 +178,17 @@ rather than against each side's assumptions.
   cancelled when the chord changes.
 - Audition (`Preview`) runs on its own sample clock, so it works with the
   transport stopped and never leaves a note ringing.
+- A chord sounds as voiced, not as a stack of root-position triads: the
+  inversion rotates the tones (`C/E` is E-G-C, so the inversion is audible with
+  no bass voice at all) and "open" drops the second-highest tone an octave.
+  `theory::voicedNotes` is a port of the app's `voiceChord`, rule for rule.
+- The bass voice is a separate note and is **off by default** — a plug-in that
+  started emitting notes nobody asked for would change every session saved
+  before it existed. It plays the inversion's tone, not the chord root, and it
+  takes its register from the app's bass numbering (`octave * 12`, so 3 is MIDI
+  36). That is deliberately *not* the chord register's `(octave + 1) * 12`, which
+  puts octave 4 at middle C: the two differ by an octave, and a bass written with
+  the chord formula would land where the chord already is.
 - Chords start on their slot boundary, sample-accurate within the block.
 - The **song** is a flat beat timeline: every pass of every section, in
   arrangement order, with repeats expanded. The transport's song position decides

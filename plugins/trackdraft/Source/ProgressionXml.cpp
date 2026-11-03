@@ -20,6 +20,13 @@ juce::XmlElement toXml (const Progression& progression, const juce::String& tagN
         element->setAttribute ("performance", (int) slot.performance);
         element->setAttribute ("param", slot.param);
         element->setAttribute ("direction", slot.direction);
+
+        // Root position, close, is the default and stays unspoken, so a file
+        // written before voicings existed is byte-identical to one written now.
+        if (slot.voicing.inversion != 0)
+            element->setAttribute ("inversion", slot.voicing.inversion);
+        if (slot.voicing.open)
+            element->setAttribute ("spread", "open");
     }
 
     return xml;
@@ -65,6 +72,10 @@ bool fromXml (const juce::XmlElement& xml, Progression& target)
         // so the file's bound has to admit the widest of those.
         slot.param = juce::jlimit (0, 2000, element->getIntAttribute ("param", 0));
         slot.direction = juce::jlimit (0, 2, element->getIntAttribute ("direction", 2));
+        // The inversion wraps to the chord's size, so the bound only has to keep
+        // the file honest; the spread is the app's "close"/"open" pair.
+        slot.voicing.inversion = juce::jlimit (0, 15, element->getIntAttribute ("inversion", 0));
+        slot.voicing.open = element->getStringAttribute ("spread", "close") == "open";
 
         loaded.slots[(std::size_t) index] = slot;
         ++index;

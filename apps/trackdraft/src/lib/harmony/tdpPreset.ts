@@ -42,6 +42,8 @@ interface SlotXml {
   performance: number;
   param: number;
   direction: number;
+  inversion: number;
+  open: boolean;
 }
 
 /** The plug-in's default articulation values; also what "block" means. */
@@ -137,6 +139,13 @@ function slotLine(chord: Chord, indent: string): string {
     `param="${param}"`,
     `direction="${direction}"`,
   ];
+
+  // Root position, close, is the default, so it stays unspoken: a chord with no
+  // voicing writes exactly the bytes it always did.
+  const inversion = Math.round(chord.voicing?.inversion ?? 0);
+  if (inversion !== 0) attributes.push(`inversion="${inversion}"`);
+  if (chord.voicing?.spread === "open") attributes.push('spread="open"');
+
   return `${indent}<slot ${attributes.join(" ")}/>`;
 }
 
@@ -241,6 +250,11 @@ export function parseTdpPresetXml(xml: string, keyName: NoteName = "C"): TdpPres
       warnings.push(`Unknown articulation ${attributes.performance} read as block`);
     }
 
+    const inversion = Math.round(Number(attributes.inversion ?? 0));
+    if (inversion < 0 || inversion > 15) {
+      warnings.push(`Unknown inversion ${attributes.inversion} read as root position`);
+    }
+
     slots.push({
       root,
       quality: quality as ChordQuality,
@@ -248,6 +262,8 @@ export function parseTdpPresetXml(xml: string, keyName: NoteName = "C"): TdpPres
       performance: performance >= 1 && performance <= 3 ? performance : 0,
       param: Number(attributes.param ?? 0) || 0,
       direction: Number(attributes.direction ?? DEFAULT_DIRECTION),
+      inversion: inversion > 0 && inversion <= 15 ? inversion : 0,
+      open: attributes.spread === "open",
     });
   }
 
@@ -268,6 +284,14 @@ export function parseTdpPresetXml(xml: string, keyName: NoteName = "C"): TdpPres
 
     const effect = performanceEffect(slot);
     if (effect) chord.performance = effect;
+
+    if (slot.inversion !== 0 || slot.open) {
+      chord.voicing = {
+        ...(slot.inversion !== 0 ? { inversion: slot.inversion } : {}),
+        ...(slot.open ? { spread: "open" as const } : {}),
+      };
+    }
+
     return chord;
   });
 

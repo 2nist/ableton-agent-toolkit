@@ -98,6 +98,89 @@ std::string chordName(int rootPc, Quality quality)
     return std::string(pitchClassName(rootPc)) + suffixOf(quality);
 }
 
+namespace
+{
+/** The app's `invertIntervals`. */
+std::vector<int> invertIntervals (const std::vector<int>& intervals, int inversion)
+{
+    const auto size = intervals.size();
+    if (size == 0)
+        return {};
+
+    int shift = inversion % (int) size;
+    if (shift < 0)
+        shift += (int) size;
+
+    if (shift == 0)
+        return intervals;
+
+    std::vector<int> rotated (intervals.begin() + shift, intervals.end());
+    for (int i = 0; i < shift; ++i)
+        rotated.push_back (intervals[(std::size_t) i] + 12);
+
+    return rotated;
+}
+
+/** The app's `openIntervals`: the second-highest tone drops an octave. */
+std::vector<int> openIntervals (std::vector<int> intervals)
+{
+    if (intervals.size() < 3)
+        return intervals;
+
+    intervals[intervals.size() - 2] -= 12;
+    std::sort (intervals.begin(), intervals.end());
+    return intervals;
+}
+} // namespace
+
+std::size_t inversionCount (Quality quality)
+{
+    return intervalsOf (quality).size();
+}
+
+std::vector<int> voicedNotes (int rootMidi, Quality quality, const Voicing& voicing)
+{
+    auto intervals = invertIntervals (intervalsOf (quality), voicing.inversion);
+    if (voicing.open)
+        intervals = openIntervals (std::move (intervals));
+
+    // `voiceChord` re-bases the shape on the tone now in the bass; for the notes
+    // themselves that cancels out, so each offset is simply added to the root.
+    std::vector<int> notes;
+    notes.reserve (intervals.size());
+    for (int interval : intervals)
+    {
+        const int note = rootMidi + interval;
+        if (note >= 0 && note <= 127)
+            notes.push_back (note);
+    }
+
+    std::sort (notes.begin(), notes.end());
+    return notes;
+}
+
+int bassPitchClass (int rootPc, Quality quality, const Voicing& voicing)
+{
+    const auto& intervals = intervalsOf (quality);
+    if (intervals.empty())
+        return ((rootPc % 12) + 12) % 12;
+
+    int shift = voicing.inversion % (int) intervals.size();
+    if (shift < 0)
+        shift += (int) intervals.size();
+
+    return ((rootPc + intervals[(std::size_t) shift]) % 12 + 12) % 12;
+}
+
+std::string chordNameWithBass (int rootPc, Quality quality, const Voicing& voicing)
+{
+    std::string name = chordName (rootPc, quality);
+    if (voicing.isDefault())
+        return name;
+
+    return name + "/" + pitchClassName (bassPitchClass (rootPc, quality, voicing));
+}
+
 const char* idOf(Scale scale)
 {
     switch (scale)

@@ -17,7 +17,7 @@ const PLUGIN_DUMP = `<?xml version="1.0" encoding="UTF-8"?>
   <slot root="0" quality="maj7" beats="4.0" performance="0" param="0"
         direction="2"/>
   <slot root="5" quality="min" beats="2.0" performance="1" param="150"
-        direction="2"/>
+        direction="2" inversion="1"/>
   <slot root="7" quality="7" beats="8.0" performance="3" param="8" direction="1"/>
 </TrackDraftPreset>
 `;
@@ -43,6 +43,14 @@ describe("parseTdpPresetXml", () => {
     expect(preset.chords[0]).toMatchObject({ root: "C", quality: "maj7", beats: 4 });
     expect(preset.chords[1]).toMatchObject({ root: "F", quality: "min", beats: 2 });
     expect(preset.chords[2]).toMatchObject({ root: "G", quality: "7", beats: 8 });
+  });
+
+  it("reads the inversion the plug-in wrote", () => {
+    const preset = parseTdpPresetXml(PLUGIN_DUMP, "C");
+
+    expect(preset.chords[0].voicing).toBeUndefined();
+    expect(preset.chords[1].voicing).toEqual({ inversion: 1 });
+    expect(preset.chords[2].voicing).toBeUndefined();
   });
 
   it("carries the articulation across, including arp direction", () => {
@@ -131,6 +139,34 @@ describe("toTdpPresetXml", () => {
     expect(xml).toContain('performance="2" param="4"');
   });
 
+  it("round-trips a voicing", () => {
+    const original = [
+      chord({ root: "C", quality: "maj", voicing: { inversion: 1 } }),
+      chord({ root: "G", quality: "min7", voicing: { inversion: 2, spread: "open" } }),
+      chord({ root: "A", quality: "min" }),
+    ];
+
+    const xml = toTdpPresetXml(original);
+
+    // Root position writes nothing, so a chord without a voicing is byte-for-byte
+    // what it was before voicings existed.
+    expect(xml).toContain('root="0" quality="maj" beats="4" performance="0" param="0" direction="2" inversion="1"/>');
+    expect(xml).toContain('root="7" quality="min7" beats="4" performance="0" param="0" direction="2" inversion="2" spread="open"/>');
+
+    const parsed = parseTdpPresetXml(xml, "C");
+    expect(parsed.chords[0].voicing).toEqual({ inversion: 1 });
+    expect(parsed.chords[1].voicing).toEqual({ inversion: 2, spread: "open" });
+    expect(parsed.chords[2].voicing).toBeUndefined();
+  });
+
+  it("warns about an impossible inversion instead of trusting it", () => {
+    const xml = `<TrackDraftPreset count="1"><slot root="0" quality="maj" beats="4" inversion="99"/></TrackDraftPreset>`;
+    const preset = parseTdpPresetXml(xml, "C");
+
+    expect(preset.chords[0].voicing).toBeUndefined();
+    expect(preset.warnings.join(" ")).toContain("99");
+  });
+
   it("escapes a quality id so the attribute cannot break the document", () => {
     const xml = toTdpPresetXml([chord({ quality: 'maj"><script>' as Chord["quality"] })]);
     expect(xml).toContain("&quot;&gt;&lt;script&gt;");
@@ -184,7 +220,7 @@ const APP_SONG_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <TrackDraftSong version="2" count="2">
   <section name="Verse">
     <progression version="1" count="2">
-      <slot root="9" quality="min" beats="4" performance="1" param="150" direction="2"/>
+      <slot root="9" quality="min" beats="4" performance="1" param="150" direction="2" inversion="1"/>
       <slot root="2" quality="maj" beats="4" performance="0" param="0" direction="2"/>
     </progression>
   </section>
@@ -224,7 +260,13 @@ function song(): BlueprintSong {
     timeSignatureDenPower: 2,
     sections: [
       section("s1", "Verse", [
-        chord({ root: "A", quality: "min", beats: 4, performance: { style: "strum", params: { strumMs: 150 } } }),
+        chord({
+          root: "A",
+          quality: "min",
+          beats: 4,
+          performance: { style: "strum", params: { strumMs: 150 } },
+          voicing: { inversion: 1 },
+        }),
         chord({ root: "D", quality: "maj", beats: 4 }),
       ]),
       section("s2", "Chorus", [
@@ -242,6 +284,12 @@ function song(): BlueprintSong {
 describe("toTdpSongXml", () => {
   it("writes the bytes the plug-in is tested against", () => {
     expect(toTdpSongXml(song())).toBe(APP_SONG_XML);
+  });
+
+  it("carries a voicing into the song file", () => {
+    expect(toTdpSongXml(song())).toContain(
+      '<slot root="9" quality="min" beats="4" performance="1" param="150" direction="2" inversion="1"/>',
+    );
   });
 
   it("leaves out a section with no chords without shifting the arrangement", () => {

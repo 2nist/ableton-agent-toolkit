@@ -21,12 +21,17 @@ struct ChordSlot
     int param = 0;
     /** Arp direction: 0 up, 1 down, 2 up-down. */
     int direction = 2;
+    /** Which chord tone is in the bass, and whether the upper voices are spread
+        open — the app's `ChordVoicing`. Default is root position, close. */
+    theory::Voicing voicing {};
 
     bool operator== (const ChordSlot& other) const noexcept
     {
         return rootPc == other.rootPc && quality == other.quality
                && performance == other.performance && param == other.param
                && direction == other.direction
+               && voicing.inversion == other.voicing.inversion
+               && voicing.open == other.voicing.open
                && std::abs (beats - other.beats) < 1e-9;
     }
 

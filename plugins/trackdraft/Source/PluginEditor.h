@@ -98,6 +98,9 @@ private:
     juce::ComboBox performanceBox;
     juce::Slider paramSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
     juce::ComboBox directionBox;
+    /** Which chord tone sits in the bass, and how the upper voices stack. */
+    juce::ComboBox inversionBox;
+    juce::ComboBox spreadBox;
 
     juce::TextButton detectButton { "Detect MIDI" };
     juce::TextButton useHeardButton { "Use heard" };
@@ -106,6 +109,7 @@ private:
     juce::Slider octaveSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
     juce::Slider velocitySlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
     juce::Slider gateSlider { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
+    juce::Slider bassOctaveSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
     juce::ToggleButton generateButton { "Emit notes from the host clock" };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> keyAttachment;
@@ -113,6 +117,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> octaveAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> velocityAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gateAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> bassOctaveAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> generateAttachment;
 
     /** The eight slot buttons, drawn by hand so the sounding chord can pulse. */

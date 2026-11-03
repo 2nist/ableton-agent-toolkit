@@ -82,6 +82,49 @@ const char* pitchClassName(int pitchClass);
 /** e.g. "Cmaj7" — the spelling the app's chordName() produces. */
 std::string chordName(int rootPc, Quality quality);
 
+/**
+    Which chord tone is in the bass, and how the upper voices are stacked —
+    the app's `ChordVoicing` (packages/music-theory/src/chords.ts).
+
+    A port, like the tables: `voicedNotes` follows `voiceChord` rule for rule,
+    including the "open" spread dropping the second-highest tone an octave, so
+    a chord the app voices and the same chord here sound the same.
+*/
+struct Voicing
+{
+    /** 0 = root position, 1 = first inversion, … wrapped to the chord's size. */
+    int inversion = 0;
+    /** "Open" drops the second-highest tone an octave. */
+    bool open = false;
+
+    bool isDefault() const noexcept { return inversion == 0 && ! open; }
+};
+
+/** How many inversions this quality has (one per chord tone). */
+std::size_t inversionCount (Quality quality);
+
+/**
+    The chord's notes in MIDI, voiced and ascending: the inversion rotates the
+    tones, then the spread may move one down an octave.
+
+    Takes the root as a MIDI note rather than (pitch class, octave) because the
+    caller has already decided the register; `(octave + 1) * 12 + rootPc` is the
+    app's convention (octave 4 puts the root at middle C, 60).
+*/
+std::vector<int> voicedNotes (int rootMidi, Quality quality, const Voicing& voicing);
+
+/**
+    The pitch class sitting in the bass.
+
+    Taken from the inversion, not from the lowest note of `voicedNotes`: an open
+    root-position voicing drops its third below the root, but the bass voice
+    should still play the root the songwriter asked for.
+*/
+int bassPitchClass (int rootPc, Quality quality, const Voicing& voicing);
+
+/** "C/E" for an inversion, "C" for root position. Display only. */
+std::string chordNameWithBass (int rootPc, Quality quality, const Voicing& voicing);
+
 /** The seven modes the app models. */
 enum class Scale
 {

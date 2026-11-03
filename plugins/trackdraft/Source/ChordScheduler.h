@@ -26,6 +26,19 @@ struct VoiceSettings
     int velocity = 100;  // 1-127
     double gate = 0.9;   // fraction of the slot a plain chord sounds for
     bool enabled = true;
+    /**
+        Register for the separate bass note, 0 = off.
+
+        Numbered the app's way for the bass voice — `octave * 12 + pitch class`,
+        so 3 is the standard register (MIDI 36 = C2) and agrees with
+        `planSectionBass`. Note this is NOT the chord register's numbering, which
+        is `(octave + 1) * 12` with 4 = middle C: the two differ by an octave, and
+        a bass written with the chord formula would sit where a chord already is.
+
+        Off by default: a plug-in that starts emitting notes nobody asked for
+        would change every session saved before it existed.
+    */
+    int bassOctave = 0;
 };
 
 /**
@@ -103,6 +116,8 @@ private:
     void stopGenerated (juce::MidiBuffer& out, int samplePosition);
     void stopAudition (juce::MidiBuffer& out, int samplePosition);
     void scheduleChord (double atPpq, const ChordSlot& slot, const VoiceSettings& settings);
+    /** The bass voice: one note for the whole slot, at the inversion's tone. */
+    void scheduleBass (double atPpq, const ChordSlot& slot, const VoiceSettings& settings);
     void emitPending (juce::MidiBuffer& out, double upToPpqInclusive, double ppqStart,
                       double ppqEnd, int numSamples);
     void retireVoices (juce::MidiBuffer& out, double upToPpqInclusive, double ppqStart,

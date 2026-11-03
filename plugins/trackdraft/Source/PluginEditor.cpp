@@ -94,10 +94,21 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
 
     performanceBox.addItemList (performanceNames(), 1);
     directionBox.addItemList ({ "Up", "Down", "Up-down" }, 1);
+    spreadBox.addItemList ({ "Close", "Open" }, 1);
     borrowedBox.setTextWhenNothingSelected ("Borrowed chord...");
     borrowedBox.setTextWhenNoChoicesAvailable ("None in this key");
 
     octaveSlider.setRange (0, 8, 1);
+    bassOctaveSlider.setRange (0, 4, 1);
+    bassOctaveSlider.setTooltip ("Off, or the bass note's register as an octave number "
+                                 "(3 = the standard bass octave, MIDI 36)");
+    // The value box names itself, so the row needs no label of its own.
+    bassOctaveSlider.textFromValueFunction = [] (double value)
+    {
+        return juce::String ("Bass ") + (value <= 0.0 ? juce::String ("off")
+                                                      : juce::String ((int) value));
+    };
+    bassOctaveSlider.updateText();
     velocitySlider.setRange (1, 127, 1);
     gateSlider.setRange (0.05, 1.0, 0.01);
     paramSlider.setRange (1, 32, 1);
@@ -111,6 +122,8 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
         state, "gate", gateSlider);
     generateAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         state, "enabled", generateButton);
+    bassOctaveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        state, "bassOctave", bassOctaveSlider);
 
     rootBox.onChange = [this] {
         if (selectedSlot < (int) selectedProgression().count)
@@ -157,6 +170,26 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
         {
             selectedProgression().slots[(std::size_t) selectedSlot].param = (int) paramSlider.getValue();
             commit();
+        }
+    };
+
+    inversionBox.onChange = [this] {
+        if (selectedSlot < (int) selectedProgression().count)
+        {
+            selectedProgression().slots[(std::size_t) selectedSlot].voicing.inversion =
+                juce::jmax (0, inversionBox.getSelectedId() - 1);
+            commit();
+            rebuildFromProcessor();
+        }
+    };
+
+    spreadBox.onChange = [this] {
+        if (selectedSlot < (int) selectedProgression().count)
+        {
+            selectedProgression().slots[(std::size_t) selectedSlot].voicing.open =
+                spreadBox.getSelectedId() == 2;
+            commit();
+            rebuildFromProcessor();
         }
     };
 
@@ -397,7 +430,8 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
              &keyBox, &scaleBox, &rootBox, &qualityBox, &beatsSlider, &seedButton,
              &previewButton, &borrowedBox, &performanceBox, &paramSlider, &directionBox,
              &detectButton, &useHeardButton, &heardLabel, &octaveSlider, &velocitySlider,
-             &gateSlider, &generateButton, &strip, &presetBox, &presetNameEditor,
+             &gateSlider, &generateButton, &bassOctaveSlider, &inversionBox, &spreadBox,
+             &strip, &presetBox, &presetNameEditor,
              &savePresetButton, &applyAllButton, &renamePresetButton, &deletePresetButton,
              &importButton, &sectionBar, &arrangementBar, &sectionNameEditor,
              &addSectionButton, &duplicateSectionButton, &deleteSectionButton,
@@ -550,11 +584,12 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     };
 
     for (auto* box : { &keyBox, &scaleBox, &rootBox, &qualityBox, &borrowedBox,
-                       &performanceBox, &directionBox })
+                       &performanceBox, &directionBox, &inversionBox, &spreadBox })
         box->setColour (juce::ComboBox::backgroundColourId, panel);
 
     generateButton.setColour (juce::ToggleButton::textColourId, ink);
-    for (auto* slider : { &octaveSlider, &velocitySlider, &gateSlider, &paramSlider, &beatsSlider })
+    for (auto* slider : { &octaveSlider, &velocitySlider, &gateSlider, &paramSlider, &beatsSlider,
+                          &bassOctaveSlider })
         slider->setColour (juce::Slider::textBoxTextColourId, ink);
     gateSlider.setColour (juce::Slider::trackColourId, accent);
     previewButton.setColour (juce::TextButton::textColourOnId, ink);
@@ -601,6 +636,22 @@ void TrackDraftAudioProcessorEditor::rebuildFromProcessor()
                 qualityBox.setSelectedId (i + 1, juce::dontSendNotification);
                 break;
             }
+
+        // The inversion list is this chord's own tones: "1st" means different
+        // notes for a triad and for a 13th, so it cannot be a fixed list.
+        inversionBox.clear (juce::dontSendNotification);
+        const auto inversionCount = (int) theory::inversionCount (slot.quality);
+        for (int i = 0; i < inversionCount; ++i)
+        {
+            const int bassPc = theory::bassPitchClass (
+                slot.rootPc, slot.quality, theory::Voicing { i, false });
+            inversionBox.addItem (juce::String (i == 0 ? "Root" : (i == 1 ? "1st" : (i == 2 ? "2nd" : juce::String (i) + "th")))
+                                      + " (" + theory::pitchClassName (bassPc) + ")",
+                                  i + 1);
+        }
+        inversionBox.setSelectedId (juce::jlimit (0, inversionCount - 1, slot.voicing.inversion) + 1,
+                                    juce::dontSendNotification);
+        spreadBox.setSelectedId (slot.voicing.open ? 2 : 1, juce::dontSendNotification);
 
         performanceBox.setSelectedId ((int) slot.performance + 1, juce::dontSendNotification);
         directionBox.setSelectedId (slot.direction + 1, juce::dontSendNotification);
@@ -837,6 +888,8 @@ void TrackDraftAudioProcessorEditor::paint (juce::Graphics& g)
                 420, 14, juce::Justification::centredLeft);
     g.drawText ("Articulation", layout::margin, layout::articulationLabelY, 120, 14,
                 juce::Justification::centredLeft);
+    g.drawText ("Inversion / spread", 356, layout::articulationLabelY, 210, 14,
+                juce::Justification::centredLeft);
     g.drawText ("Presets", layout::margin, layout::presetsLabelY, 120, 14,
                 juce::Justification::centredLeft);
     g.drawText ("Arrangement", layout::margin, layout::arrangementLabelY, 120, 14,
@@ -882,16 +935,19 @@ void TrackDraftAudioProcessorEditor::resized()
     useHeardButton.setBounds (440, layout::detectY, 100, 26);
     heardLabel.setBounds (layout::margin, layout::heardY, layout::width, 18);
 
-    performanceBox.setBounds (layout::margin, layout::articulationY, 110, 26);
-    paramSlider.setBounds (132, layout::articulationY, 70, 26);
-    directionBox.setBounds (208, layout::articulationY, 92, 26);
-    previewButton.setBounds (308, layout::articulationY, 90, 26);
-    applyAllButton.setBounds (404, layout::articulationY, 220, 26);
+    performanceBox.setBounds (layout::margin, layout::articulationY, 96, 26);
+    paramSlider.setBounds (116, layout::articulationY, 62, 26);
+    directionBox.setBounds (182, layout::articulationY, 84, 26);
+    previewButton.setBounds (270, layout::articulationY, 80, 26);
+    inversionBox.setBounds (356, layout::articulationY, 118, 26);
+    spreadBox.setBounds (478, layout::articulationY, 84, 26);
+    applyAllButton.setBounds (566, layout::articulationY, 142, 26);
 
-    octaveSlider.setBounds (layout::margin, layout::voiceY, 120, 26);
-    velocitySlider.setBounds (144, layout::voiceY, 130, 26);
-    gateSlider.setBounds (282, layout::voiceY, 200, 26);
-    generateButton.setBounds (492, layout::voiceY, 252, 26);
+    octaveSlider.setBounds (layout::margin, layout::voiceY, 112, 26);
+    velocitySlider.setBounds (132, layout::voiceY, 112, 26);
+    gateSlider.setBounds (248, layout::voiceY, 170, 26);
+    bassOctaveSlider.setBounds (422, layout::voiceY, 112, 26);
+    generateButton.setBounds (538, layout::voiceY, 206, 26);
 
     presetBox.setBounds (layout::margin, layout::presetsY, 190, 26);
     presetNameEditor.setBounds (214, layout::presetsY, 180, 26);
@@ -1094,8 +1150,8 @@ void TrackDraftAudioProcessorEditor::SlotStrip::paint (juce::Graphics& g)
 
         g.setColour (ink);
         g.setFont (juce::Font (juce::FontOptions (18.0f)).boldened());
-        g.drawText (theory::chordName (slot.rootPc, slot.quality), area.reduced (4.0f, 12.0f),
-                    juce::Justification::centred);
+        g.drawText (theory::chordNameWithBass (slot.rootPc, slot.quality, slot.voicing),
+                    area.reduced (4.0f, 12.0f), juce::Justification::centred);
 
         auto footer = area;
         auto beatsArea = footer.removeFromBottom (16.0f);

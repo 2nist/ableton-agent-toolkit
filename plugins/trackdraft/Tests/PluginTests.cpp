@@ -895,6 +895,159 @@ td::Song makeSong()
     return song;
 }
 
+/** Ascending MIDI notes for a voiced chord, for the parity checks. */
+juce::String noteRow (const std::vector<int>& notes)
+{
+    juce::StringArray parts;
+    for (int note : notes)
+        parts.add (juce::String (note));
+    return parts.joinIntoString (",");
+}
+
+void testVoicing()
+{
+    using namespace td::theory;
+
+    // The app's `voiceChord` rules, spot for spot.
+    const Voicing rootPos;
+    const Voicing first { 1, false };
+    const Voicing second { 2, false };
+    const Voicing openRoot { 0, true };
+
+    checkEqual (noteRow (voicedNotes (60, Quality::maj, rootPos)), "60,64,67", "C major, root position");
+    checkEqual (noteRow (voicedNotes (60, Quality::maj, first)), "64,67,72", "C major, first inversion");
+    checkEqual (noteRow (voicedNotes (60, Quality::maj, second)), "67,72,76", "C major, second inversion");
+
+    // A third inversion on a triad wraps back to root position: the tone in the
+    // bass is the root again.
+    checkEqual (noteRow (voicedNotes (60, Quality::maj, Voicing { 3, false })), "60,64,67",
+                "an inversion past the chord size wraps");
+
+    // "Open" drops the second-highest tone an octave: 4 becomes -8, so the third
+    // is the lowest note and the chord spans more than an octave.
+    checkEqual (noteRow (voicedNotes (60, Quality::maj, openRoot)), "52,60,67",
+                "C major, open spread");
+
+    // Sevenths have four tones, so they have four inversions.
+    checkEqual (noteRow (voicedNotes (60, Quality::maj7, first)), "64,67,71,72",
+                "Cmaj7, first inversion");
+    checkEqual ((int) inversionCount (Quality::maj), 3, "a triad has three inversions");
+    checkEqual ((int) inversionCount (Quality::maj7), 4, "a seventh has four");
+    checkEqual ((int) inversionCount (Quality::thirteen), 6, "a thirteenth has six");
+
+    // The bass is the inversion's tone, and is unaffected by the spread: an open
+    // root-position chord has its third lowest, but the songwriter asked for the
+    // root in the bass.
+    checkEqual (bassPitchClass (0, Quality::maj, rootPos), 0, "root position basses the root");
+    checkEqual (bassPitchClass (0, Quality::maj, first), 4, "first inversion basses the third");
+    checkEqual (bassPitchClass (0, Quality::maj, second), 7, "second inversion basses the fifth");
+    checkEqual (bassPitchClass (0, Quality::maj, openRoot), 0, "the spread does not move the bass");
+
+    checkEqual (juce::String (chordNameWithBass (0, Quality::maj, rootPos)), juce::String ("C"),
+                "root position is spelled without a slash");
+    checkEqual (juce::String (chordNameWithBass (0, Quality::maj, first)), juce::String ("C/E"),
+                "an inversion is spelled as a slash chord");
+}
+
+void testVoicingScheduler()
+{
+    td::VoiceSettings settings;
+    settings.octave = 4;
+    settings.velocity = 90;
+    settings.gate = 1.0;
+    settings.enabled = true;
+
+    auto collect = [] (const juce::MidiBuffer& buffer)
+    {
+        std::vector<int> notes;
+        for (const auto metadata : buffer)
+            if (metadata.getMessage().isNoteOn())
+                notes.push_back (metadata.getMessage().getNoteNumber());
+        std::sort (notes.begin(), notes.end());
+        return notes;
+    };
+
+    td::Progression progression;
+    progression.count = 1;
+    progression.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    progression.slots[0].voicing = { 1, false };
+
+    // A first inversion sounds as its own shape: no C below the E.
+    {
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 0.0, 1.0 }, progression, settings, 512);
+        check (collect (out) == std::vector<int> { 64, 67, 72 }, "the inversion is what sounds");
+    }
+
+    // The bass voice is off unless it is asked for.
+    {
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 0.0, 1.0 }, progression, settings, 512);
+        check (collect (out).front() == 64, "no bass note by default");
+    }
+
+    // Asked for, it plays the inversion's tone in the app's bass register:
+    // E at octave 3 is MIDI 40.
+    {
+        auto withBass = settings;
+        withBass.bassOctave = 3;
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 0.0, 1.0 }, progression, withBass, 512);
+        const auto notes = collect (out);
+        checkEqual ((int) notes.size(), 4, "the bass adds one note");
+        checkEqual (notes.front(), 40, "and it is E in the bass register");
+    }
+
+    // The bass follows the inversion, not the chord root: second inversion is G.
+    {
+        auto withBass = settings;
+        withBass.bassOctave = 2;
+        auto secondInversion = progression;
+        secondInversion.slots[0].voicing = { 2, false };
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 0.0, 1.0 }, secondInversion, withBass, 512);
+        checkEqual (collect (out).front(), 31, "second inversion basses G at octave 2");
+    }
+}
+
+void testVoicingXml()
+{
+    td::Progression progression;
+    progression.count = 2;
+    progression.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    progression.slots[0].voicing = { 1, false };
+    progression.slots[1] = { 7, td::theory::Quality::min7, 4.0 };
+    progression.slots[1].voicing = { 2, true };
+
+    const auto xml = td::toXml (progression, "TrackDraftPreset");
+    checkEqual (xml.getChildByName ("slot")->getIntAttribute ("inversion"), 1,
+                "an inversion is written");
+    checkEqual (xml.getChildElement (1)->getStringAttribute ("spread"), juce::String ("open"),
+                "an open spread is written");
+
+    td::Progression loaded;
+    check (td::fromXml (xml, loaded), "the progression reads back");
+    checkEqual (loaded.slots[0].voicing.inversion, 1, "the inversion survives");
+    check (! loaded.slots[0].voicing.open, "and the close spread does");
+    checkEqual (loaded.slots[1].voicing.inversion, 2, "the second slot's inversion survives");
+    check (loaded.slots[1].voicing.open, "and its open spread");
+
+    // A file from before voicings existed says nothing about them, and must not
+    // gain attributes when it is written back out.
+    td::Progression plain;
+    plain.count = 1;
+    plain.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    const auto plainXml = td::toXml (plain, "TrackDraftPreset");
+    check (! plainXml.getChildByName ("slot")->hasAttribute ("inversion"),
+           "root position writes no inversion attribute");
+    check (! plainXml.getChildByName ("slot")->hasAttribute ("spread"),
+           "and no spread attribute");
+}
+
 void testSongStructure()
 {
     auto song = makeSong();
@@ -1175,7 +1328,7 @@ void testSongXml()
 <TrackDraftSong version="2" count="2">
   <section name="Verse">
     <progression version="1" count="2">
-      <slot root="9" quality="min" beats="4" performance="1" param="150" direction="2"/>
+      <slot root="9" quality="min" beats="4" performance="1" param="150" direction="2" inversion="1"/>
       <slot root="2" quality="maj" beats="4" performance="0" param="0" direction="2"/>
     </progression>
   </section>
@@ -1201,6 +1354,8 @@ void testSongXml()
     check (fromApp.sections[0].progression.slots[0].performance == td::Performance::strum,
            "the strum articulation survives");
     checkEqual (fromApp.sections[0].progression.slots[0].param, 150, "with its spread");
+    checkEqual (fromApp.sections[0].progression.slots[0].voicing.inversion, 1,
+                "and the inversion the app wrote");
     checkEqual (fromApp.arrangement[1].repeats, 2, "the chorus repeats twice");
     check (std::abs (fromApp.totalBeats() - 24.0) < 1e-9, "24 beats: 8 of verse, 16 of chorus");
 }
@@ -1219,6 +1374,7 @@ int main (int argc, char** argv)
         sample.count = 3;
         sample.slots[0] = { 0, td::theory::Quality::maj7, 4.0, td::Performance::block, 0, 2 };
         sample.slots[1] = { 5, td::theory::Quality::min, 2.0, td::Performance::strum, 150, 2 };
+        sample.slots[1].voicing = { 1, false };
         sample.slots[2] = { 7, td::theory::Quality::seven, 8.0, td::Performance::arp, 8, 1 };
         std::cout << td::toXml (sample, "TrackDraftPreset").toString() << std::endl;
         return 0;
@@ -1284,6 +1440,9 @@ int main (int argc, char** argv)
     testMidiImport();
     testProgressionCycle();
     testScheduler();
+    testVoicing();
+    testVoicingScheduler();
+    testVoicingXml();
     testSongStructure();
     testSongEditing();
     testSongCycle();
