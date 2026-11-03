@@ -52,6 +52,11 @@ enum class Quality
     thirteen,
     maj13,
     min13,
+    // Appended after the 34 the app shipped with: the tie-break order is the
+    // table's order, so these are only reached when every earlier quality has
+    // failed to explain the notes.
+    dim11,
+    maj11,
 };
 
 struct QualityDef

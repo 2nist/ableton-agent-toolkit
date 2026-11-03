@@ -65,6 +65,12 @@ export const CHORD_INTERVALS: Record<ChordQuality, number[]> = {
   "13": [0, 4, 7, 10, 14, 21],
   maj13: [0, 4, 7, 11, 14, 21],
   min13: [0, 3, 7, 10, 14, 21],
+  // Appended after the 34 measured earlier: the tie-break order is the table's
+  // order, so a new quality is only chosen when the ones before it cannot
+  // explain the notes. These two are the canonical names a shipped competitor
+  // has that this table lacked *and* that a pitch-class reader can reach.
+  dim11: [0, 3, 6, 9, 14, 17],
+  maj11: [0, 4, 7, 11, 14, 17],
 };
 
 /**
@@ -197,6 +203,8 @@ export const CHORD_QUALITY_SUFFIX: Record<ChordQuality, string> = {
   "13": "13",
   maj13: "maj13",
   min13: "m13",
+  dim11: "dim11",
+  maj11: "maj11",
 };
 
 /** The picker's grouping of `CHORD_QUALITIES` — triads stay one tap away,
@@ -216,8 +224,15 @@ export const CHORD_QUALITY_GROUPS: { label: string; qualities: ChordQuality[] }[
     qualities: ["7b9", "7#9", "7#11", "7b13", "7b5", "7#5", "7sus4", "maj7#5"],
   },
   {
+    // The diminished family keeps its extensions together rather than in the
+    // extended group: they read as one colour, and nobody looks for a dim13
+    // among the ninths.
+    label: "Diminished",
+    qualities: ["dim11"],
+  },
+  {
     label: "Extended (9·11·13)",
-    qualities: ["9", "maj9", "min9", "11", "min11", "13", "maj13", "min13", "9sus4"],
+    qualities: ["9", "maj9", "min9", "11", "maj11", "min11", "13", "maj13", "min13", "9sus4"],
   },
 ];
 
@@ -229,6 +244,8 @@ const CHORD_QUALITY_SYMBOLS: Record<string, string> = {
   "o7": "dim7",
   "°": "dim",
   "°7": "dim7",
+  "°11": "dim11",
+  "o11": "dim11",
   "+": "aug",
   "Δ": "maj",
   "Δ7": "maj7",
@@ -265,6 +282,8 @@ const MAJOR_SUFFIX_QUALITY: Record<string, ChordQuality> = {
   dim: "dim",
   dim7: "dim7",
   aug: "aug",
+  dim11: "dim11",
+  maj11: "maj11",
 };
 
 /** Suffix → quality when the chord's third is MINOR (`min`/`m`/`-` peeled

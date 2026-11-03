@@ -50,7 +50,15 @@ export type ChordQuality =
   | "min11"
   | "13"
   | "maj13"
-  | "min13";
+  | "min13"
+  // The eleventh-inclusive major and the diminished eleventh: the only names
+  // Scaler 3's chord table has, that this one lacked, and that are reachable by
+  // pitch class. (Its `dim9` and `dim13` are not: a diminished ninth is spelled
+  // by the same pitch classes as a dominant 7b9 on another root, and its
+  // thirteenth is its own minor third an octave up, so both are voicings of a
+  // chord already here.)
+  | "dim11"
+  | "maj11";
 
 /** Harmonic function: Tonic, Pre-Dominant, Dominant, Borrowed */
 export type HarmonicFunction = "T" | "PD" | "D" | "B";

@@ -54,6 +54,10 @@ theory::Quality qualityFromToken (juce::String token)
     if (token == "7#9") return theory::Quality::sevenSharp9;
     if (token == "7#11") return theory::Quality::sevenSharp11;
     if (token == "7b13") return theory::Quality::sevenFlat13;
+    // The extensions a Harte file can spell that the vocabulary only gained
+    // later; "o11" is the glyph spelling of the same chord.
+    if (token == "dim11" || token == "o11") return theory::Quality::dim11;
+    if (token == "maj11") return theory::Quality::maj11;
     if (token == "11") return theory::Quality::eleven;
     if (token == "min11" || token == "m11") return theory::Quality::min11;
     if (token == "13") return theory::Quality::thirteen;

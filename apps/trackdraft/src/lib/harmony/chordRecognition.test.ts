@@ -27,6 +27,28 @@ describe("recognizeChord", () => {
     expect(recognizeChord([0, 3, 7, 10])).toMatchObject({ rootPc: 0, quality: "min7" });
   });
 
+  it("names a diminished eleventh without disturbing dim7", () => {
+    // C dim11 = 0,3,6,9,14,17. Before the vocabulary held it, the ninth and
+    // eleventh read as unexplained extras on top of a dim7.
+    expect(recognizeChord([0, 3, 6, 9, 14, 17])).toMatchObject({ rootPc: 0, quality: "dim11" });
+    // A plain dim7 must not be upgraded to a denser name it does not deserve.
+    expect(recognizeChord([0, 3, 6, 9])).toMatchObject({ rootPc: 0, quality: "dim7" });
+  });
+
+  it("reads a diminished ninth as the dominant 7b9 it also is", () => {
+    // C dim9 (0,3,6,9,14) and D 7b9 (2,6,9,0,3) are the same five pitch classes;
+    // there is no way to tell them apart from the notes alone, so the more
+    // common name wins. That is why `dim9` is not a quality — see the vocabulary
+    // comment in packages/music-theory/src/chords.ts.
+    expect(recognizeChord([0, 3, 6, 9, 14])).toMatchObject({ rootPc: 2, quality: "7b9" });
+  });
+
+  it("names an eleventh-inclusive major as maj11, not maj7 with an extra", () => {
+    expect(recognizeChord([0, 4, 7, 11, 14, 17])).toMatchObject({ rootPc: 0, quality: "maj11" });
+    // The practical major with a ninth is still maj9: no eleventh, no maj11.
+    expect(recognizeChord([0, 4, 7, 11, 14])).toMatchObject({ rootPc: 0, quality: "maj9" });
+  });
+
   it("calls a root-and-fifth a power chord rather than a half-played triad", () => {
     expect(recognizeChord([0, 7])).toMatchObject({ rootPc: 0, quality: "5" });
   });

@@ -75,8 +75,13 @@ void testTheoryParity()
 
     checkEqual (juce::String (suffixOf (Quality::m7b5)), juce::String ("m7\u266d5"), "m7b5 suffix");
     checkEqual (juce::String (idOf (Quality::sevenSharp9)), juce::String ("7#9"), "7#9 id");
+    checkEqual (intervalRow (Quality::dim11), "0,3,6,9,14,17", "dim11 intervals");
+    checkEqual (intervalRow (Quality::maj11), "0,4,7,11,14,17", "maj11 intervals");
+    checkEqual (juce::String (suffixOf (Quality::dim11)), juce::String ("dim11"), "dim11 suffix");
+    check (triadOf (Quality::dim11) == Quality::dim, "dim11 reduces to the diminished triad");
+    check (triadOf (Quality::maj11) == Quality::maj, "maj11 reduces to the major triad");
 
-    checkEqual (qualities().size(), (size_t) 34, "quality count");
+    checkEqual ((int) qualities().size(), 36, "quality count");
 
     // Naming, matching chordName() in the app.
     checkEqual (juce::String (chordName (0, Quality::maj7)), juce::String ("Cmaj7"), "C maj7 name");

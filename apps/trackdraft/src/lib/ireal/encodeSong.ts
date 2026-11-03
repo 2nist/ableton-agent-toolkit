@@ -46,6 +46,11 @@ const SUFFIX: Record<ChordQuality, string> = {
   "13": "13",
   maj13: "^13",
   min13: "-13",
+  // iReal has one diminished-seventh token and no eleventh-inclusive major, so
+  // these four fall back to the family's base spelling — the same approximation
+  // the header describes for `69` and `5`.
+  dim11: "o7",
+  maj11: "^7",
 };
 
 /** iReal writes accidentals as `b`/`#` after the letter, never as ♭/♯. */

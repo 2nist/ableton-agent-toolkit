@@ -48,6 +48,11 @@ const std::vector<QualityDef>& buildQualities()
         { Quality::thirteen, "13", "13", { 0, 4, 7, 10, 14, 21 }, { 2 } },
         { Quality::maj13, "maj13", "maj13", { 0, 4, 7, 11, 14, 21 }, { 2 } },
         { Quality::min13, "min13", "m13", { 0, 3, 7, 10, 14, 21 }, { 2 } },
+        // The optional indices follow the app's derived rule
+        // (`optionalTonesFor`): the perfect fifth when there is one, the ninth
+        // once an eleventh is present, the eleventh once a thirteenth is.
+        { Quality::dim11, "dim11", "dim11", { 0, 3, 6, 9, 14, 17 }, { 4 } },
+        { Quality::maj11, "maj11", "maj11", { 0, 4, 7, 11, 14, 17 }, { 2, 4 } },
     };
     return table;
 }
@@ -294,6 +299,7 @@ Quality triadOf(Quality quality)
         case Quality::m7b5:
         case Quality::dim:
         case Quality::dim7:
+        case Quality::dim11:
             return Quality::dim;
         case Quality::aug:
         case Quality::maj7Sharp5:

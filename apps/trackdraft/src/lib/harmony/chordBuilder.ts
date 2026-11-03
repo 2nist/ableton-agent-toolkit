@@ -176,6 +176,8 @@ const QUALITY_STEP: Record<ChordQuality, { minor: boolean; suffix: string }> = {
   "13": { minor: false, suffix: "13" },
   maj13: { minor: false, suffix: "maj13" },
   min13: { minor: true, suffix: "13" },
+  dim11: { minor: true, suffix: "°11" },
+  maj11: { minor: false, suffix: "maj11" },
 };
 
 function qualityToMinorAndSuffix(quality: ChordQuality): {
