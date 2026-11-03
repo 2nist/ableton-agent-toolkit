@@ -1,0 +1,139 @@
+import { describe, expect, it } from "vitest";
+import { parseTdpPresetXml, toTdpPresetXml } from "./tdpPreset";
+import type { Chord } from "../../types/blueprint";
+
+/**
+ * The plug-in's own output, verbatim.
+ *
+ * Produced by `plugins/trackdraft` via
+ * `TrackDraftTests --dump-xml`, which prints three slots: Cmaj7 blocked,
+ * F minor strummed at 150 ms, G7 arpeggiated at 8 subdivisions downward.
+ * Parsing these exact bytes is what proves the two implementations agree —
+ * a fixture this test wrote for itself would only prove it agrees with itself.
+ */
+const PLUGIN_DUMP = `<?xml version="1.0" encoding="UTF-8"?>
+
+<TrackDraftPreset version="1" count="3">
+  <slot root="0" quality="maj7" beats="4.0" performance="0" param="0"
+        direction="2"/>
+  <slot root="5" quality="min" beats="2.0" performance="1" param="150"
+        direction="2"/>
+  <slot root="7" quality="7" beats="8.0" performance="3" param="8" direction="1"/>
+</TrackDraftPreset>
+`;
+
+function chord(overrides: Partial<Chord>): Chord {
+  return {
+    id: "c1",
+    romanNumeral: "",
+    root: "C",
+    quality: "maj",
+    beats: 4,
+    ...overrides,
+  };
+}
+
+describe("parseTdpPresetXml", () => {
+  it("reads the plug-in's exact output", () => {
+    const preset = parseTdpPresetXml(PLUGIN_DUMP, "C");
+
+    expect(preset.warnings).toEqual([]);
+    expect(preset.chords).toHaveLength(3);
+
+    expect(preset.chords[0]).toMatchObject({ root: "C", quality: "maj7", beats: 4 });
+    expect(preset.chords[1]).toMatchObject({ root: "F", quality: "min", beats: 2 });
+    expect(preset.chords[2]).toMatchObject({ root: "G", quality: "7", beats: 8 });
+  });
+
+  it("carries the articulation across, including arp direction", () => {
+    const preset = parseTdpPresetXml(PLUGIN_DUMP, "C");
+
+    expect(preset.chords[0].performance).toBeUndefined();
+    expect(preset.chords[1].performance).toEqual({ style: "strum", params: { strumMs: 150 } });
+    expect(preset.chords[2].performance).toEqual({
+      style: "arp",
+      params: { subdivision: 8, direction: 1 },
+    });
+  });
+
+  it("spells the root in the reading key", () => {
+    const preset = parseTdpPresetXml(PLUGIN_DUMP, "Bb");
+    // Pitch class 5 is F natural either way; pitch class 0 is C, not B#.
+    expect(preset.chords[0].root).toBe("C");
+    expect(preset.chords[1].root).toBe("F");
+  });
+
+  it("leaves the Roman numeral for the analysis pass to derive", () => {
+    const preset = parseTdpPresetXml(PLUGIN_DUMP, "C");
+    expect(preset.chords.every((c) => c.romanNumeral === "")).toBe(true);
+  });
+
+  it("falls back to major for an unknown quality and says so", () => {
+    const xml = `<TrackDraftPreset count="1"><slot root="3" quality="not-a-quality" beats="4"/></TrackDraftPreset>`;
+    const preset = parseTdpPresetXml(xml, "C");
+
+    expect(preset.chords[0].quality).toBe("maj");
+    expect(preset.warnings[0]).toContain("not-a-quality");
+  });
+
+  it("drops an unreadable root rather than inventing one", () => {
+    const xml = `<TrackDraftPreset count="2"><slot root="oops" beats="4"/><slot root="7" quality="min7" beats="4"/></TrackDraftPreset>`;
+    const preset = parseTdpPresetXml(xml, "C");
+
+    expect(preset.chords).toHaveLength(1);
+    expect(preset.chords[0].root).toBe("G");
+    expect(preset.warnings).toHaveLength(1);
+  });
+
+  it("throws when there is nothing to read", () => {
+    expect(() => parseTdpPresetXml("<TrackDraftPreset count=\"0\"></TrackDraftPreset>")).toThrow(
+      /no readable slots/,
+    );
+  });
+});
+
+describe("toTdpPresetXml", () => {
+  it("writes a preset the plug-in's reader accepts", () => {
+    const xml = toTdpPresetXml([
+      chord({ root: "C", quality: "maj7", beats: 4 }),
+      chord({ root: "F", quality: "min", beats: 2, performance: { style: "strum", params: { strumMs: 150 } } }),
+      chord({ root: "G", quality: "7", beats: 8, performance: { style: "arp", params: { subdivision: 8, direction: 1 } } }),
+    ]);
+
+    expect(xml).toContain('<TrackDraftPreset version="1" count="3">');
+    expect(xml).toContain('<slot root="0" quality="maj7" beats="4" performance="0" param="0" direction="2"/>');
+    expect(xml).toContain('<slot root="5" quality="min" beats="2" performance="1" param="150" direction="2"/>');
+    expect(xml).toContain('<slot root="7" quality="7" beats="8" performance="3" param="8" direction="1"/>');
+  });
+
+  it("round-trips its own output", () => {
+    const original = [
+      chord({ root: "Bb", quality: "min9", beats: 3.5 }),
+      chord({ root: "E", quality: "m7b5", beats: 1, performance: { style: "pulse", params: { subdivision: 6 } } }),
+    ];
+
+    const parsed = parseTdpPresetXml(toTdpPresetXml(original), "Bb");
+
+    expect(parsed.chords).toHaveLength(2);
+    expect(parsed.chords[0]).toMatchObject({ root: "Bb", quality: "min9", beats: 3.5 });
+    expect(parsed.chords[0].performance).toBeUndefined();
+    expect(parsed.chords[1]).toMatchObject({ root: "E", quality: "m7b5", beats: 1 });
+    expect(parsed.chords[1].performance).toEqual({ style: "pulse", params: { subdivision: 6 } });
+  });
+
+  it("uses the plug-in's defaults when an articulation has no parameters", () => {
+    const xml = toTdpPresetXml([
+      chord({ performance: { style: "strum" } }),
+      chord({ performance: { style: "pulse" } }),
+    ]);
+
+    expect(xml).toContain('performance="1" param="150"');
+    expect(xml).toContain('performance="2" param="4"');
+  });
+
+  it("escapes a quality id so the attribute cannot break the document", () => {
+    const xml = toTdpPresetXml([chord({ quality: 'maj"><script>' as Chord["quality"] })]);
+    expect(xml).toContain("&quot;&gt;&lt;script&gt;");
+    expect(xml).not.toContain('maj"><script>');
+  });
+});

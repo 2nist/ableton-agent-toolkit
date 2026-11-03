@@ -4,6 +4,7 @@ import type { NoteName, ChordQuality } from "@music-theory/core";
 import type { Chord } from "../../types/blueprint";
 import { askConfirm } from "../../lib/confirm";
 import { STORAGE_KEYS } from "../../lib/persistence/keys";
+import { parseTdpPresetXml, toTdpPresetXml } from "../../lib/harmony/tdpPreset";
 
 interface PresetPickerProps {
   keyName: NoteName;
@@ -106,6 +107,7 @@ export default function PresetPicker({
   const [selected, setSelected] = useState(PRESET_ENTRIES[0][0]);
   const [customPresets, setCustomPresets] = useState<SavedPreset[]>(loadCustomPresets);
   const [saveName, setSaveName] = useState("");
+  const [pluginMessage, setPluginMessage] = useState<string | null>(null);
   const [showSave, setShowSave] = useState(false);
   const [, preset] = PRESET_ENTRIES.find(([k]) => k === selected)!;
 
@@ -158,6 +160,70 @@ export default function PresetPicker({
     setShowSave(false);
   }
 
+  /**
+   * The plug-in preset bridge.
+   *
+   * A `.tdp.xml` written by `plugins/trackdraft` opens here, and one written
+   * here saves into the plug-in's folder — both directions use the same bytes
+   * (`lib/harmony/tdpPreset`), so a progression moves between the app and the
+   * VST3 without a translation step.
+   */
+  const PLUGIN_PRESET_DIR = "~/Library/Application Support/TrackDraft/Presets";
+
+  function handleImportPluginPreset() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".xml,text/xml";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+
+      void file.text().then(async (text) => {
+        try {
+          const preset = parseTdpPresetXml(text, keyName);
+          if (
+            hasChords &&
+            !(await askConfirm({
+              title: "Replace progression",
+              message: `Replace ${sectionName}'s progression with ${preset.chords.length} chords from "${file.name}"?`,
+              confirmLabel: "Replace",
+              danger: true,
+            }))
+          ) {
+            return;
+          }
+
+          onApply(preset.chords);
+          setPluginMessage(
+            preset.warnings.length > 0
+              ? `Loaded ${file.name}: ${preset.warnings.join("; ")}`
+              : `Loaded ${preset.chords.length} chords from ${file.name}`,
+          );
+        } catch (error) {
+          setPluginMessage(error instanceof Error ? error.message : "Could not read that preset");
+        }
+      });
+    };
+    input.click();
+  }
+
+  function handleExportPluginPreset() {
+    if (!currentChords || currentChords.length === 0) {
+      setPluginMessage("Nothing to export — this section has no chords");
+      return;
+    }
+
+    const xml = toTdpPresetXml(currentChords);
+    const blob = new Blob([xml], { type: "application/xml" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${sectionName.replace(/[^\w-]+/g, "-").toLowerCase() || "progression"}.tdp.xml`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setPluginMessage(`Exported ${currentChords.length} chords — drop the file in ${PLUGIN_PRESET_DIR}`);
+  }
+
   function handleDeletePreset(id: string) {
     const updated = customPresets.filter((p) => p.id !== id);
     setCustomPresets(updated);
@@ -166,6 +232,33 @@ export default function PresetPicker({
 
   return (
     <div className="space-y-2">
+      <div className="flex items-center gap-1.5 text-[11px]">
+        <button
+          className="bg-panelAlt border border-edge rounded px-1.5 py-0.5 text-inkMuted hover:text-ink hover:border-accent/40"
+          title={`Open a preset written by the TrackDraft VST3 (.tdp.xml)`}
+          onClick={handleImportPluginPreset}
+        >
+          Load plug-in preset…
+        </button>
+        <button
+          className="bg-panelAlt border border-edge rounded px-1.5 py-0.5 text-inkMuted hover:text-ink hover:border-accent/40"
+          title={`Save this progression for the TrackDraft VST3 (${PLUGIN_PRESET_DIR})`}
+          onClick={handleExportPluginPreset}
+          disabled={!currentChords || currentChords.length === 0}
+        >
+          Save for plug-in
+        </button>
+      </div>
+
+      {pluginMessage && (
+        <p className="text-[10px] text-inkMuted leading-snug" title={pluginMessage}>
+          {pluginMessage}
+          <button className="ml-1 text-inkMuted hover:text-ink" onClick={() => setPluginMessage(null)}>
+            ✕
+          </button>
+        </p>
+      )}
+
       <div className="flex items-center gap-1.5 text-xs">
         <select
           className="bg-panelAlt border border-edge rounded px-1.5 py-1 text-ink"

@@ -875,8 +875,23 @@ void testScheduler()
 }
 } // namespace
 
-int main()
+int main (int argc, char** argv)
 {
+    // `--dump-xml` prints one progression in the plug-in's on-disk shape. The
+    // app's `tdpPreset` tests paste that exact output as a fixture, so the two
+    // sides of the format are checked against the same bytes rather than
+    // against each other's assumptions.
+    if (argc > 1 && juce::String (argv[1]) == "--dump-xml")
+    {
+        td::Progression sample;
+        sample.count = 3;
+        sample.slots[0] = { 0, td::theory::Quality::maj7, 4.0, td::Performance::block, 0, 2 };
+        sample.slots[1] = { 5, td::theory::Quality::min, 2.0, td::Performance::strum, 150, 2 };
+        sample.slots[2] = { 7, td::theory::Quality::seven, 8.0, td::Performance::arp, 8, 1 };
+        std::cout << td::toXml (sample, "TrackDraftPreset").toString() << std::endl;
+        return 0;
+    }
+
     testTheoryParity();
     testDiatonicVocabulary();
     testWalk();

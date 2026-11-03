@@ -138,6 +138,22 @@ tensions (`maj(9)`), slash bass (`maj/3`), `N` — and the count of what was kep
 and simplified is reported in the editor's message line. A progression is a loop,
 so an import keeps the first eight chord changes and says so when it truncates.
 
+## Sharing progressions with the app
+
+Presets use the same XML the TrackDraft app reads and writes
+(`apps/trackdraft/src/lib/harmony/tdpPreset.ts`), so a progression moves between
+the two without a translation step:
+
+- **app → plug-in**: *Save for plug-in* in the app's preset panel downloads a
+  `<section>.tdp.xml`; drop it into `~/Library/Application Support/TrackDraft/Presets`
+  and it appears in the plug-in's preset list.
+- **plug-in → app**: *Load plug-in preset…* opens any `.tdp.xml` and applies its
+  chords to the section.
+
+Both sides are tested against the same bytes: `TrackDraftTests --dump-xml` prints
+the plug-in's output, and `tdpPreset.test.ts` parses that exact string. A golden
+each side generated for itself would only prove it agrees with itself.
+
 ## How it plays
 
 - Articulation is scheduled on the musical clock, not approximated per block: a
