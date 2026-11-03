@@ -1,6 +1,8 @@
 #include "Progression.h"
 
 #include <algorithm>
+#include <set>
+#include <utility>
 
 namespace td
 {
@@ -46,5 +48,48 @@ void Progression::seedFromScale (int keyPc, theory::Scale scale, std::size_t slo
         const auto chord = theory::diatonicChordAt (scale, (int) i);
         slots[i] = { ((keyPc + chord.rootOffset) % 12 + 12) % 12, chord.quality, 4.0 };
     }
+}
+std::vector<Progression::Borrowed> Progression::borrowedChords (theory::Scale scale)
+{
+    // Borrowing is chord-level, and at the triad: what a songwriter reaches for
+    // is "the bIII", not "Ebmaj7 because Aeolian's third degree is a seventh".
+    // Filtering on quality alone would be wrong too — every mode uses the same
+    // handful of qualities, so "the quality is new" finds nothing.
+    const auto present = [scale] (int rootOffset, theory::Quality quality)
+    {
+        for (int degree = 0; degree < 7; ++degree)
+        {
+            const auto chord = theory::diatonicChordAt (scale, degree);
+            if (chord.rootOffset == rootOffset && theory::triadOf (chord.quality) == quality)
+                return true;
+        }
+        return false;
+    };
+
+    std::vector<Borrowed> found;
+    std::set<std::pair<int, int>> seen;
+
+    for (int mode = 0; mode <= (int) theory::Scale::locrian; ++mode)
+    {
+        const auto other = (theory::Scale) mode;
+        if (other == scale)
+            continue;
+
+        for (int degree = 0; degree < 7; ++degree)
+        {
+            const auto chord = theory::diatonicChordAt (other, degree);
+            const auto triad = theory::triadOf (chord.quality);
+            if (present (chord.rootOffset, triad))
+                continue;
+
+            // The same chord is reachable from several modes; keep the first.
+            if (! seen.insert ({ chord.rootOffset, (int) triad }).second)
+                continue;
+
+            found.push_back ({ chord.rootOffset, triad, theory::idOf (other) });
+        }
+    }
+
+    return found;
 }
 } // namespace td

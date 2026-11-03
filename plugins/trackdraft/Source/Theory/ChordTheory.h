@@ -115,6 +115,9 @@ struct DiatonicChord
 /** The chord on `degree` (0-based, may run past the end) of a mode. */
 DiatonicChord diatonicChordAt(Scale scale, int degree);
 
+/** The triad a quality reduces to: maj7 becomes maj, m7b5 becomes dim, and so on. */
+Quality triadOf (Quality quality);
+
 /** Roman numeral for a diatonic chord, cased by quality: "IV", "ii7", "vii°5". */
 std::string romanNumeral(int degree, Quality quality);
 } // namespace td::theory

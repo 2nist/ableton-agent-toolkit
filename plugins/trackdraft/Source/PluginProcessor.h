@@ -76,10 +76,17 @@ public:
     /** Writes the currently heard chord into `slot`; false when nothing is heard. */
     bool writeHeardChordToSlot (std::size_t slot);
 
+    /** Plays one slot now, for the "hear this chord" button. */
+    void auditionSlot (std::size_t slot);
+    void auditionChord (int rootPc, theory::Quality quality);
+
     /** Called by the editor to repaint when the transport moves the chord on. */
     std::atomic<int> playingSlot { -1 };
 
     std::atomic<bool> detectionArmed { false };
+    /** -1 = nothing queued; otherwise the pitch class to audition. */
+    std::atomic<int> auditionRoot { -1 };
+    std::atomic<int> auditionQuality { 0 };
 
 private:
     juce::AudioProcessorValueTreeState::ParameterLayout makeLayout();

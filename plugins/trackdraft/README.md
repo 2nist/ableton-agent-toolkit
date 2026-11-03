@@ -73,7 +73,9 @@ cmake --build build --target TrackDraftTests
 
 Covers: theory-table parity with `@music-theory/core`, diatonic vocabulary per
 mode, the walk's neighbour and cycle properties, chord recognition (including
-the vocabulary rules and the borrowed-chord fallback), the progression cycle, and
+the vocabulary rules and the borrowed-chord fallback), articulation (block,
+strum spread, pulse accents, arp direction), the borrowed-chord set (derived,
+deduplicated, never a chord already in the key), the progression cycle, and
 the scheduling rules — a stopped transport emits
 nothing, the downbeat sounds the first chord at MIDI 60, a boundary inside a block
 releases the previous chord first, a host loop restarts cleanly, the gate closes
@@ -89,7 +91,10 @@ notes without a boundary, and disabling emission releases what is sounding.
 | Root / Quality | Set the selected slot directly |
 | **Beats** | Length of the selected slot, 1-8. The cycle is the sum, so 4 × 4 beats is four bars of 4/4 |
 | **Walk row** | The six hex neighbours of the selected chord. A click writes that chord into the next slot and moves the selection there |
-| **Detect MIDI / Use heard** | Arm listening to the notes the host sends in, then write the recognised chord into the selected slot |
+| **Borrowed chord…** | Chords the *other* modes on this tonic would give the key — bIII, iv, bVI, bVII in a major key — derived at the triad, written into the selected slot |
+| **Articulation** (Block / Strum / Pulse / Arp) | Per slot. Strum uses the app's millisecond spread, Pulse re-strikes on a subdivision with a triangle accent, Arp walks the tones up, down or up-down |
+| **Preview** | Plays the selected slot immediately, transport or not, so you can hear the voicing before committing to it |
+| **Detect MIDI / Use heard** | Arm listening to the notes the host sends in, then write the recognised chord into the selected slot. The readout names both what you played and what the slot says, so the difference is the decision |
 
 The walk row is a port of the app's honeycomb arithmetic, not an invented
 "good next chord" list: with `degree = (3q + r) mod 7`, the six axial neighbours
@@ -106,6 +111,11 @@ called.
 
 ## How it plays
 
+- Articulation is scheduled on the musical clock, not approximated per block: a
+  strum spread stays even at any tempo, and an arp's remaining steps are
+  cancelled when the chord changes.
+- Audition (`Preview`) runs on its own sample clock, so it works with the
+  transport stopped and never leaves a note ringing.
 - Chords start on their slot boundary, sample-accurate within the block, and the
   progression loops on its own length (4 slots × 4 beats = one bar of 4/4 per
   slot, so a 16-beat cycle repeats at bar 5 without the host looping).
@@ -121,6 +131,7 @@ called.
 Source/Theory/ChordTheory.*    the app's chord + scale tables, ported
 Source/Theory/ChordWalk.*      hex neighbours / the walk, ported
 Source/Theory/ChordRecognition.*  notes -> chord name, ported
+Source/Performance.*           strum / pulse / arp, ported
 Source/Progression.*           slots, cycle length, diatonic seeding
 Source/ChordScheduler.*        transport → MIDI events (the testable core)
 Source/PluginProcessor.*       APVTS, state, bus/format declarations

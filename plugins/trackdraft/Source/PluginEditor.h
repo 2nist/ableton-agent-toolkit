@@ -13,13 +13,13 @@ namespace td
 class TrackDraftAudioProcessor;
 
 /**
-    Native editor: key/scale, the progression grid, and the emit settings.
+    Native editor: key/scale, the progression strip, the walk, and articulation.
 
-    Every control is a real JUCE widget bound to the APVTS, so host automation
-    and undo see the same parameters the UI does. The progression itself is
-    plugin state rather than an automatable parameter — a chord change is an
-    edit, not a knob — and is written back through `setProgression` on every
-    change so it survives a save.
+    Every knob is a real JUCE control bound to the APVTS, so host automation and
+    undo see the same parameters the UI does. The progression itself is plugin
+    state rather than an automatable parameter — a chord change is an edit, not
+    a knob — and is written back through `setProgression` on every change so it
+    survives a save.
 */
 class TrackDraftAudioProcessorEditor final : public juce::AudioProcessorEditor,
                                              private juce::ChangeListener,
@@ -37,32 +37,40 @@ private:
     void timerCallback() override;
     void rebuildFromProcessor();
     void rebuildNeighbours();
+    void rebuildBorrowed();
     void refreshHeardLabel();
+    void commit();
     theory::Scale workingScale() const;
     int workingDegree() const;
-    void commit();
-    void refreshGrid();
 
     TrackDraftAudioProcessor& plugin;
-    td::Progression working;
+    Progression working;
     int selectedSlot = 0;
 
     juce::ComboBox keyBox;
     juce::ComboBox scaleBox;
     juce::ComboBox rootBox;
     juce::ComboBox qualityBox;
-    juce::Slider octaveSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
-    juce::Slider velocitySlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
-    juce::Slider gateSlider { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
     juce::Slider beatsSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
-    juce::ToggleButton generateButton { "Emit notes from the host clock" };
     juce::TextButton seedButton { "Seed from key" };
+    juce::TextButton previewButton { "Preview" };
 
     /** The six hex neighbours of the selected slot — the walk, one click away. */
     std::array<juce::TextButton, 6> neighbourButtons;
+    juce::ComboBox borrowedBox;
+
+    juce::ComboBox performanceBox;
+    juce::Slider paramSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
+    juce::ComboBox directionBox;
+
     juce::TextButton detectButton { "Detect MIDI" };
     juce::TextButton useHeardButton { "Use heard" };
     juce::Label heardLabel;
+
+    juce::Slider octaveSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
+    juce::Slider velocitySlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
+    juce::Slider gateSlider { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
+    juce::ToggleButton generateButton { "Emit notes from the host clock" };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> keyAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> scaleAttachment;

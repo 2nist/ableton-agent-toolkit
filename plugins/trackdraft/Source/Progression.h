@@ -1,10 +1,12 @@
 #pragma once
 
+#include "Performance.h"
 #include "Theory/ChordTheory.h"
 
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <vector>
 
 namespace td
 {
@@ -14,11 +16,24 @@ struct ChordSlot
     int rootPc = 0;
     theory::Quality quality = theory::Quality::maj;
     double beats = 4.0;
+    Performance performance = Performance::block;
+    /** Strum spread in ms, or pulse/arp subdivision. 0 = the default. */
+    int param = 0;
+    /** Arp direction: 0 up, 1 down, 2 up-down. */
+    int direction = 2;
 
     bool operator== (const ChordSlot& other) const noexcept
     {
         return rootPc == other.rootPc && quality == other.quality
+               && performance == other.performance && param == other.param
+               && direction == other.direction
                && std::abs (beats - other.beats) < 1e-9;
+    }
+
+    /** Everything the articulation needs, from the slot's own fields. */
+    PerformanceSettings articulation (double gate) const noexcept
+    {
+        return { performance, param, direction, gate };
     }
 };
 
@@ -48,5 +63,24 @@ struct Progression
 
     /** Fills `count` slots with the diatonic chords of `scale` in `keyPc`. */
     void seedFromScale (int keyPc, theory::Scale scale, std::size_t slotCount = 4);
+
+    /** One borrowed chord the current key does not contain. */
+    struct Borrowed
+    {
+        int rootPc = 0;
+        theory::Quality quality = theory::Quality::maj;
+        /** The mode it was borrowed from, e.g. "aeolian". */
+        const char* from = "";
+    };
+
+    /**
+        Chords other modes on the same tonic would give this key.
+
+        Derived, not listed: every mode's diatonic chords are built against the
+        same tonic, and anything the current mode does not already contain is a
+        borrowing — bIII, iv, bVI and bVII in a major key, and so on. Duplicates
+        (the same chord reachable from two modes) appear once.
+    */
+    static std::vector<Borrowed> borrowedChords (theory::Scale scale);
 };
 } // namespace td

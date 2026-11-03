@@ -129,6 +129,18 @@ void TrackDraftAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     scheduler.process (generated, transport, current, settings, buffer.getNumSamples());
 
+    const int auditionRootPc = auditionRoot.exchange (-1);
+    if (auditionRootPc >= 0)
+    {
+        auditionRootPc;  // consumed above; the value is read from the exchange
+        ChordSlot preview;
+        preview.rootPc = auditionRootPc;
+        preview.quality = (theory::Quality) auditionQuality.load();
+        preview.beats = 1.0;
+        preview.performance = Performance::block;
+        scheduler.audition (generated, preview, settings, buffer.getNumSamples(), getSampleRate());
+    }
+
     if (transport.playing)
         playingSlot.store ((int) current.slotAtBeat (std::fmod (juce::jmax (0.0, transport.ppqStart),
                                                                 juce::jmax (1e-6, current.lengthInBeats()))));
@@ -181,6 +193,9 @@ void TrackDraftAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         slot->setAttribute ("root", current.slots[i].rootPc);
         slot->setAttribute ("quality", theory::idOf (current.slots[i].quality));
         slot->setAttribute ("beats", current.slots[i].beats);
+        slot->setAttribute ("performance", (int) current.slots[i].performance);
+        slot->setAttribute ("param", current.slots[i].param);
+        slot->setAttribute ("direction", current.slots[i].direction);
     }
 
     copyXmlToBinary (xml, destData);
@@ -213,11 +228,15 @@ void TrackDraftAudioProcessor::setStateInformation (const void* data, int sizeIn
                 if (qualityId == candidate.id)
                     quality = candidate.quality;
 
-            loaded.slots[(std::size_t) index] = {
-                juce::jlimit (0, 11, slot->getIntAttribute ("root", 0)),
-                quality,
-                juce::jmax (0.25, slot->getDoubleAttribute ("beats", 4.0)),
-            };
+            ChordSlot loadedSlot;
+            loadedSlot.rootPc = juce::jlimit (0, 11, slot->getIntAttribute ("root", 0));
+            loadedSlot.quality = quality;
+            loadedSlot.beats = juce::jmax (0.25, slot->getDoubleAttribute ("beats", 4.0));
+            loadedSlot.performance = (Performance) juce::jlimit (
+                0, 3, slot->getIntAttribute ("performance", 0));
+            loadedSlot.param = juce::jlimit (0, 32, slot->getIntAttribute ("param", 0));
+            loadedSlot.direction = juce::jlimit (0, 2, slot->getIntAttribute ("direction", 2));
+            loaded.slots[(std::size_t) index] = loadedSlot;
             ++index;
         }
     }
@@ -326,6 +345,26 @@ bool TrackDraftAudioProcessor::writeHeardChordToSlot (std::size_t slot)
     next.slots[slot] = { heard.rootPc, heard.quality, beats > 0.0 ? beats : 4.0 };
     setProgression (next);
     return true;
+}
+
+void TrackDraftAudioProcessor::auditionSlot (std::size_t slot)
+{
+    Progression current;
+    {
+        const juce::ScopedLock lock (progressionLock);
+        current = progression;
+    }
+
+    if (slot >= current.count)
+        return;
+
+    auditionChord (current.slots[slot].rootPc, current.slots[slot].quality);
+}
+
+void TrackDraftAudioProcessor::auditionChord (int rootPc, theory::Quality quality)
+{
+    auditionQuality.store ((int) quality);
+    auditionRoot.store (rootPc);
 }
 
 juce::AudioProcessorEditor* TrackDraftAudioProcessor::createEditor()

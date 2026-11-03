@@ -196,6 +196,30 @@ DiatonicChord diatonicChordAt(Scale scale, int degree)
     return { rootOffset, quality };
 }
 
+Quality triadOf(Quality quality)
+{
+    switch (quality)
+    {
+        case Quality::min:
+        case Quality::min7:
+        case Quality::min9:
+        case Quality::min11:
+        case Quality::min13:
+        case Quality::min6:
+        case Quality::mMaj7:
+            return Quality::min;
+        case Quality::m7b5:
+        case Quality::dim:
+        case Quality::dim7:
+            return Quality::dim;
+        case Quality::aug:
+        case Quality::maj7Sharp5:
+            return Quality::aug;
+        default:
+            return Quality::maj;
+    }
+}
+
 std::string romanNumeral(int degree, Quality quality)
 {
     static const char* upper[] = { "I", "II", "III", "IV", "V", "VI", "VII" };

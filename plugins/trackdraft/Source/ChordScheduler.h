@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Performance.h"
 #include "Progression.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -18,12 +19,12 @@ struct TransportSlice
     double ppqEnd = 0.0;
 };
 
-/** The knobs the scheduler needs; mirrors the automatable parameters. */
+/** The automatable knobs the scheduler needs. */
 struct VoiceSettings
 {
-    int octave = 4;          // octave of the chord root, where 4 starts at middle C (60)
-    int velocity = 100;      // 1-127
-    double gate = 0.9;       // fraction of the slot a chord sounds for
+    int octave = 4;      // octave of the chord root, where 4 starts at middle C (60)
+    int velocity = 100;  // 1-127
+    double gate = 0.9;   // fraction of the slot a plain chord sounds for
     bool enabled = true;
 };
 
@@ -37,13 +38,15 @@ struct VoiceSettings
     - every note that is switched on is switched off, even when the transport
       stops, loops, or the block ends mid-chord;
     - a chord starts exactly on its boundary, sample-accurate within the block;
+    - articulation (strum, pulse, arp) is scheduled on the same clock rather than
+      approximated per block, so a strum spread stays even at any tempo;
     - the gate shortens the chord without ever leaving a note hanging into the
       next slot;
     - the progression loops on its own length, so a 4-chord, 16-beat cycle
       repeats at bar 5 without the host having to loop.
 
     Nothing here executes the target, reads files, or allocates per block beyond
-    a small, reused buffer.
+    reused buffers.
 */
 class ChordScheduler
 {
@@ -66,6 +69,16 @@ public:
                   const VoiceSettings& settings,
                   int numSamples);
 
+    /**
+        Plays one slot immediately, regardless of the transport: the "hear what
+        this chord is" button. Notes stop on their own after ~0.6 s.
+    */
+    void audition (juce::MidiBuffer& out,
+                   const ChordSlot& slot,
+                   const VoiceSettings& settings,
+                   int numSamples,
+                   double sampleRate);
+
     /** Note numbers currently held by the generator (not pass-through notes). */
     std::vector<int> activeNotes() const;
 
@@ -77,11 +90,30 @@ private:
         double endPpq = 0.0;
     };
 
-    void stopAll (juce::MidiBuffer& out, int samplePosition);
-    void startChord (juce::MidiBuffer& out, int samplePosition, int rootMidi,
-                     theory::Quality quality, int velocity, double endPpq);
+    struct Pending
+    {
+        double ppq = 0.0;
+        int note = 0;
+        int velocity = 100;
+        double durationBeats = 0.0;
+    };
+
+    void stopGenerated (juce::MidiBuffer& out, int samplePosition);
+    void stopAudition (juce::MidiBuffer& out, int samplePosition);
+    void scheduleChord (double atPpq, const ChordSlot& slot, const VoiceSettings& settings);
+    void emitPending (juce::MidiBuffer& out, double upToPpqInclusive, double ppqStart,
+                      double ppqEnd, int numSamples);
+    void retireVoices (juce::MidiBuffer& out, double upToPpqInclusive, double ppqStart,
+                       double ppqEnd, int numSamples);
 
     std::vector<Voice> voices;
+    std::vector<Pending> pending;
+
+    // Audition is sample-counted rather than ppq-counted, so it works with a
+    // stopped transport too.
+    std::vector<std::pair<int, int>> auditionVoices;  // (channel, note)
+    int auditionSamplesLeft = 0;
+
     bool wasPlaying = false;
     double lastPpq = 0.0;
 };

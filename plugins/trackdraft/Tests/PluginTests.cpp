@@ -2,6 +2,7 @@
 #include "Progression.h"
 #include "Theory/ChordRecognition.h"
 #include "Theory/ChordTheory.h"
+#include "Performance.h"
 #include "Theory/ChordWalk.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -247,6 +248,104 @@ int countNotes (const juce::MidiBuffer& buffer, bool noteOn)
     return total;
 }
 
+void testArticulation()
+{
+    using namespace td::theory;
+
+    // Block: every tone at the same instant, all sounding for the gate.
+    td::PerformanceSettings block;
+    const auto blockEvents = td::shapeChord (60, Quality::maj, 4.0, 100, block);
+    checkEqual ((int) blockEvents.size(), 3, "a blocked triad is three events");
+    for (const auto& event : blockEvents)
+        check (std::abs (event.offsetBeats) < 1e-9, "blocked notes start together");
+
+    // Strum: the app's 150 ms default is a 0.3-beat spread, split across gaps.
+    td::PerformanceSettings strum;
+    strum.kind = td::Performance::strum;
+    const auto strumEvents = td::shapeChord (60, Quality::maj, 4.0, 100, strum);
+    checkEqual ((int) strumEvents.size(), 3, "a strummed triad is three events");
+    check (strumEvents[0].offsetBeats < strumEvents[1].offsetBeats
+               && strumEvents[1].offsetBeats < strumEvents[2].offsetBeats,
+           "strummed notes are staggered low to high");
+    check (std::abs (strumEvents.back().offsetBeats - 0.3) < 0.05,
+           "the last note lands on the documented 0.3-beat stagger");
+    check (strumEvents.back().durationBeats > 0.0, "a strummed note still has duration");
+
+    // Pulse: subdivision hits, and the velocity breathes instead of being flat.
+    td::PerformanceSettings pulse;
+    pulse.kind = td::Performance::pulse;
+    pulse.param = 4;
+    const auto pulseEvents = td::shapeChord (60, Quality::maj, 4.0, 100, pulse);
+    checkEqual ((int) pulseEvents.size(), 12, "4 subdivisions x 3 tones");
+    check (std::abs (pulseEvents[3].offsetBeats - 1.0) < 1e-9, "second pulse is a beat later");
+    bool velocitiesDiffer = false;
+    for (const auto& event : pulseEvents)
+        velocitiesDiffer = velocitiesDiffer || event.velocity != pulseEvents[0].velocity;
+    check (velocitiesDiffer, "pulse accents vary");
+
+    // Arp: one tone at a time, up by default, down when asked.
+    td::PerformanceSettings arp;
+    arp.kind = td::Performance::arp;
+    arp.param = 6;
+    arp.direction = 0;
+    const auto upEvents = td::shapeChord (60, Quality::maj, 4.0, 100, arp);
+    checkEqual ((int) upEvents.size(), 6, "6 arp steps");
+    check (upEvents[0].note < upEvents[1].note && upEvents[1].note < upEvents[2].note,
+           "an up arp rises");
+
+    auto down = arp;
+    down.direction = 1;
+    const auto downEvents = td::shapeChord (60, Quality::maj, 4.0, 100, down);
+    check (downEvents[0].note > downEvents[1].note, "a down arp falls");
+
+    // A slot carries its articulation through to the scheduler's settings.
+    td::ChordSlot slot;
+    slot.performance = td::Performance::arp;
+    slot.param = 8;
+    slot.direction = 1;
+    const auto settings = slot.articulation (0.9);
+    checkEqual ((int) settings.kind, (int) td::Performance::arp, "slot articulation kind");
+    checkEqual (settings.param, 8, "slot articulation param");
+}
+
+void testBorrowedChords()
+{
+    using namespace td::theory;
+
+    const auto borrowed = td::Progression::borrowedChords (Scale::ionian);
+    check (! borrowed.empty(), "a major key can borrow");
+
+    const auto has = [&borrowed] (int rootOffset, Quality quality)
+    {
+        return std::any_of (borrowed.begin(), borrowed.end(),
+                            [rootOffset, quality] (const td::Progression::Borrowed& chord)
+                            { return chord.rootPc == rootOffset && chord.quality == quality; });
+    };
+
+    // The ones a songwriter reaches for: bIII, iv, bVI, bVII from the parallel
+    // minor, and the major IV of dorian is already diatonic so it must not
+    // appear twice.
+    check (has (3, Quality::maj), "bIII is offered");
+    check (has (5, Quality::min), "minor iv is offered");
+    check (has (8, Quality::maj), "bVI is offered");
+    check (has (10, Quality::maj), "bVII is offered");
+
+    // Nothing already in the key, and no duplicates.
+    std::set<std::pair<int, int>> seen;
+    for (const auto& chord : borrowed)
+    {
+        const bool duplicatesEntry = ! seen.insert ({ chord.rootPc, (int) chord.quality }).second;
+        check (! duplicatesEntry, "no duplicate borrowed chord");
+
+        for (int degree = 0; degree < 7; ++degree)
+        {
+            const auto diatonic = diatonicChordAt (Scale::ionian, degree);
+            check (! (diatonic.rootOffset == chord.rootPc && diatonic.quality == chord.quality),
+                   "a borrowed chord is not already diatonic");
+        }
+    }
+}
+
 void testScheduler()
 {
     td::Progression progression;
@@ -339,6 +438,51 @@ void testScheduler()
         check (countNotes (out, false) >= 3, "gate closes the chord without a boundary");
     }
 
+    // Articulation is scheduled on the same clock: a strum spreads inside the
+    // block instead of landing all at once.
+    {
+        td::Progression strummed = progression;
+        strummed.slots[0].performance = td::Performance::strum;
+        strummed.slots[0].param = 150;
+
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 0.0, 1.0 }, strummed, settings, 512);
+
+        std::vector<int> positions;
+        for (const auto metadata : out)
+            if (metadata.getMessage().isNoteOn())
+                positions.push_back (metadata.samplePosition);
+
+        std::sort (positions.begin(), positions.end());
+        checkEqual ((int) positions.size(), 3, "the strummed chord sounds all three tones");
+        check (positions[0] < positions[1] && positions[1] < positions[2],
+               "the strum spreads across samples");
+    }
+
+    // Audition plays a chord with the transport stopped and releases it on its
+    // own clock rather than on the transport's.
+    {
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        td::ChordSlot preview;
+        preview.rootPc = 0;
+        preview.quality = td::theory::Quality::maj;
+        preview.beats = 1.0;
+
+        scheduler.audition (out, preview, settings, 512, 48000.0);
+        checkEqual (countNotes (out, true), 3, "audition sounds the chord");
+
+        out.clear();
+        scheduler.process (out, { false, 0.0, 0.0 }, progression, settings, 512);
+        checkEqual (countNotes (out, false), 0, "a stopped transport does not cut the audition short");
+
+        out.clear();
+        for (int i = 0; i < 80; ++i)
+            scheduler.process (out, { false, 0.0, 0.0 }, progression, settings, 512);
+        check (countNotes (out, false) >= 3, "the audition releases itself after its own window");
+    }
+
     // Disabling emission mid-cycle stops the notes.
     {
         td::VoiceSettings disabled = settings;
@@ -360,6 +504,8 @@ int main()
     testDiatonicVocabulary();
     testWalk();
     testRecognition();
+    testArticulation();
+    testBorrowedChords();
     testProgressionCycle();
     testScheduler();
 
