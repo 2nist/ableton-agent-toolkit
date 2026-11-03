@@ -212,7 +212,9 @@ rather than against each side's assumptions.
   {0, 3, 5}, where Bjorklund gives {0, 3, 6}). Ported as it is, because a grid
   seeded from the drum engine should agree with it rather than be right on its
   own. An eight-step loop lands on the eighths, a sixteen-step one on the
-  sixteenths.
+  sixteenths. The seed table is authored in `@drum/library` (`RHYTHM_SEEDS`);
+  this repository's copy is the port, and `TrackDraftTests` pins all seven
+  seeds' digits against the values that package produces.
 - Levels are velocities relative to the Velocity knob: accent = the knob, normal
   = 80%, ghost = 55%. A grid with no hits is silence; no grid at all means the
   articulation plays the chord across the whole slot, which is what every slot

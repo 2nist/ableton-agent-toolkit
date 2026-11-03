@@ -7,7 +7,12 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { applyPerformanceEffect, planChordNotes } from "../src/performance";
+import {
+  applyPerformanceEffect,
+  isRhythmGrid,
+  parseRhythmGrid,
+  planChordNotes,
+} from "../src/performance";
 
 const MAJ = [0, 4, 7]; // C major triad, semitone offsets
 
@@ -61,5 +66,59 @@ describe("planChordNotes", () => {
   it("honors the velocity argument on the block", () => {
     const notes = planChordNotes(60, MAJ, 0, 4, 100);
     for (const n of notes) expect(n.velocity).toBe(100);
+  });
+
+  it("plays a rhythm grid on its own sixteenths, tiled and trimmed", () => {
+    const grid = "3001200030002000";
+
+    const onsets = (notes: { startTime: number }[]) =>
+      [...new Set(notes.map((n) => n.startTime))].sort((a, b) => a - b);
+
+    // Steps 0, 3, 4, 8 and 12 of a sixteenth grid.
+    expect(onsets(planChordNotes(60, MAJ, 0, 4, 100, undefined, grid))).toEqual([
+      0, 0.75, 1, 2, 3,
+    ]);
+
+    // Levels are velocities under the chord's: accent is the chord's own.
+    const levels = new Set(planChordNotes(60, MAJ, 0, 4, 100, undefined, grid).map((n) => n.velocity));
+    expect([...levels].sort((a, b) => a - b)).toEqual([55, 80, 100]);
+
+    // A grid is one bar and tiles over a longer chord...
+    expect(onsets(planChordNotes(60, MAJ, 0, 8, 100, undefined, grid))).toEqual([
+      0, 0.75, 1, 2, 3, 4, 4.75, 5, 6, 7,
+    ]);
+
+    // ...and a shorter chord uses only the steps that fit inside it.
+    expect(onsets(planChordNotes(60, MAJ, 0, 2, 100, undefined, grid))).toEqual([0, 0.75, 1]);
+  });
+
+  it("applies the effect to each hit rather than to the whole chord", () => {
+    const grid = "3001200030002000";
+    const hits = [0, 0.75, 1, 2, 3];
+    const notes = planChordNotes(60, MAJ, 0, 4, 100, { style: "arp" }, grid);
+
+    // Every arpeggiated note belongs to one of the grid's sixteenths: the
+    // effect runs inside the hit, not across the chord.
+    for (const note of notes) {
+      const hit = hits.find((start) => note.startTime >= start && note.startTime < start + 0.25);
+      expect(hit, `${note.startTime} is inside a hit`).toBeDefined();
+    }
+
+    // And it really did subdivide: more onsets than the block would have had.
+    const block = planChordNotes(60, MAJ, 0, 4, 100, undefined, grid);
+    expect(new Set(notes.map((n) => n.startTime)).size).toBeGreaterThan(
+      new Set(block.map((n) => n.startTime)).size,
+    );
+  });
+
+  it("refuses anything that is not sixteen digits of 0-3", () => {
+    expect(parseRhythmGrid("3001200030002000")).toHaveLength(16);
+    expect(parseRhythmGrid("3001")).toBeNull();
+    expect(parseRhythmGrid("3001200030002004")).toBeNull();
+    expect(parseRhythmGrid(undefined)).toBeNull();
+    expect(isRhythmGrid("3001200030002000")).toBe(true);
+
+    // A bad grid is not a grid: the chord plays as one block, not silence.
+    expect(planChordNotes(60, MAJ, 0, 4, 100, undefined, "3001")).toHaveLength(3);
   });
 });

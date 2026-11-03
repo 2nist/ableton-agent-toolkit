@@ -254,6 +254,9 @@ export function planChordStem(
         chordVelocity,
         // Bend Articulation layer (an authored performance wins).
         occ.chord.performance ?? styleArticulation(profile.articulation ?? 0.5),
+        // The chord's own rhythm grid, when it has one: the export plays the
+        // same groove the plug-in does.
+        occ.chord.rhythm,
       ).map((n) => ({
         pitch: n.pitch,
         startTime: n.startTime + span.startBeat,

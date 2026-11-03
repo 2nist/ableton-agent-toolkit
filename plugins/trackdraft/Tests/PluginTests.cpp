@@ -1097,6 +1097,47 @@ void testRhythmSeeds()
 
         check (hits >= 2, juce::String ("seed ") + seed.name + " has at least two hits");
     }
+
+    // The table and its digits, pasted from `RHYTHM_SEEDS` and `seedRhythmGrid`
+    // in packages/drum-library/src/section.ts. That is where the seeds are
+    // authored; this is the port, and a drift shows up here.
+    struct Expected
+    {
+        const char* name;
+        int k;
+        int n;
+        int rotation;
+        const char* digits;
+    };
+
+    static const Expected expected[] {
+        { "Eighths", 8, 16, 0, "3020202030202020" },
+        { "On the beat", 4, 16, 0, "3000200030002000" },
+        { "Three over the bar", 3, 16, 0, "3000020000020000" },
+        { "Pushed three", 3, 16, 2, "0020000200000200" },
+        { "Five over the bar", 5, 16, 0, "3002002000200200" },
+        { "Six over the bar", 6, 16, 0, "3002020030020200" },
+        { "Seven over the bar", 7, 16, 0, "3020020202020020" },
+    };
+
+    checkEqual ((int) td::rhythmSeeds().size(), (int) (sizeof (expected) / sizeof (expected[0])),
+                "the seed table is the size the app's is");
+
+    for (std::size_t i = 0; i < td::rhythmSeeds().size(); ++i)
+    {
+        const auto& seed = td::rhythmSeeds()[i];
+        const auto& want = expected[i];
+
+        checkEqual (juce::String (seed.name), juce::String (want.name), "seed name");
+        checkEqual (seed.k, want.k, juce::String (want.name) + " k");
+        checkEqual (seed.n, want.n, juce::String (want.name) + " n");
+        checkEqual (seed.rotation, want.rotation, juce::String (want.name) + " rotation");
+
+        td::RhythmPattern pattern;
+        td::seedPattern (pattern, seed.k, seed.n, seed.rotation);
+        checkEqual (juce::String (pattern.toDigits()), juce::String (want.digits),
+                    juce::String (want.name) + " digits");
+    }
 }
 
 void testRhythmScheduler()

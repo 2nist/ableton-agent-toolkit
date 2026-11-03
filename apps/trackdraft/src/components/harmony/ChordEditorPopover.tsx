@@ -5,6 +5,7 @@ import type { Chord } from "../../types/blueprint";
 import { getSubstitutionMenu } from "../../lib/harmony/substitutions";
 import { chordDisplayName, chordFunctionLabel, qualityLabel } from "../../lib/harmony/chordBuilder";
 import { CHORD_QUALITY_GROUPS } from "@music-theory/core";
+import RhythmGridEditor from "./RhythmGridEditor";
 
 // Chromatic subs (tritone/secondary-dominant) aren't diatonic, so there's no
 // scale degree to label them with — derive a key-relative roman numeral from
@@ -245,6 +246,18 @@ export default function ChordEditorPopover({
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="shrink-0 border-t border-edge pt-2">
+        <RhythmGridEditor
+          rhythm={chord.rhythm}
+          onChange={(rhythm) => {
+            const next = { ...chord };
+            if (rhythm) next.rhythm = rhythm;
+            else delete next.rhythm;
+            onChange(next);
+          }}
+        />
       </div>
     </div>
   );

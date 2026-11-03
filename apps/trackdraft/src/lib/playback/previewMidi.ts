@@ -85,6 +85,8 @@ export interface PreviewChord {
   performance?: ChordPerformanceEffect;
   /** Inversion/spread — auditioned exactly as the export voices it. */
   voicing?: ChordVoicing;
+  /** The chord's rhythm grid, when it has one. */
+  rhythm?: string;
 }
 
 /** Plan a chord's effect-applied notes in beat-space (startBeat-relative),
@@ -107,6 +109,7 @@ function planPreviewChord(
     durationBeats,
     PREVIEW_VELOCITY,
     chord.performance,
+    chord.rhythm,
   );
 }
 

@@ -24,7 +24,7 @@
  */
 
 import { DEFAULT_BASS_PROFILE } from "@drum/library";
-import { CHORD_INTERVALS, noteName, pitchClass } from "@music-theory/core";
+import { CHORD_INTERVALS, isRhythmGrid, noteName, pitchClass } from "@music-theory/core";
 import type { ChordQuality, NoteName } from "@music-theory/core";
 import { resolveArrangement } from "../../types/blueprint";
 import type {
@@ -133,11 +133,6 @@ export function sanitisePresetName(name: string): string {
   const shortened = Array.from(cleaned).slice(0, 64).join("");
   const trimmed = shortened.replace(/^\.+/, "").replace(/\.+$/, "");
   return trimmed === "" ? "Untitled" : trimmed;
-}
-
-/** Sixteen digits of 0-3, or nothing: the plug-in's rhythm grid. */
-function isRhythmGrid(value: string | undefined): value is string {
-  return typeof value === "string" && /^[0-3]{16}$/.test(value);
 }
 
 /** One `<slot/>` line, exactly as the plug-in writes it. */

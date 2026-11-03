@@ -105,6 +105,57 @@ export function euclidOnsetSteps(pat: EuclidLike): number[] {
   }
   return steps.sort((a, b) => a - b);
 }
+/** A named Euclidean rhythm a chord grid can be seeded from. */
+export interface RhythmSeed {
+  name: string;
+  k: number;
+  n: number;
+  rotation: number;
+}
+
+/**
+ * The seeds the Harmony panel offers, shortest cycle first: the two straight
+ * ones, the three-, five-, six- and seven-note cycles that read as groove
+ * rather than as a metronome, and one pushed variant of the three.
+ *
+ * The plug-in's `Source/Rhythm.cpp` mirrors this table; its console tests pin
+ * each seed's digits against the values this function produces, so the two
+ * cannot drift apart silently.
+ */
+export const RHYTHM_SEEDS: RhythmSeed[] = [
+  { name: "Eighths", k: 8, n: 16, rotation: 0 },
+  { name: "On the beat", k: 4, n: 16, rotation: 0 },
+  { name: "Three over the bar", k: 3, n: 16, rotation: 0 },
+  { name: "Pushed three", k: 3, n: 16, rotation: 2 },
+  { name: "Five over the bar", k: 5, n: 16, rotation: 0 },
+  { name: "Six over the bar", k: 6, n: 16, rotation: 0 },
+  { name: "Seven over the bar", k: 7, n: 16, rotation: 0 },
+];
+
+/** Sixteenths in a rhythm grid — one bar of 4/4, matching the note planner. */
+export const RHYTHM_GRID_STEPS = 16;
+
+/**
+ * The grid a seed fills: its onsets mapped onto the bar proportionally (an
+ * eight-step loop lands on the eighths), hits at "normal", with the downbeat
+ * and half-bar accented when the loop hits them. Returns the sixteen digits the
+ * preset and the plug-in both use.
+ */
+export function seedRhythmGrid(seed: RhythmSeed, steps = RHYTHM_GRID_STEPS): string {
+  const levels = new Array<number>(steps).fill(0);
+
+  for (const step of euclidOnsetSteps(seed)) {
+    const placed = Math.round((step * steps) / Math.max(1, seed.n));
+    if (placed >= 0 && placed < steps) levels[placed] = 2;
+  }
+
+  for (const anchor of [0, Math.floor(steps / 2)]) {
+    if (levels[anchor] !== 0) levels[anchor] = 3;
+  }
+
+  return levels.join("");
+}
+
 
 /**
  * One canonical GM pitch per `KitVoice` — all 13 voices, not just the subset

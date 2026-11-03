@@ -279,9 +279,9 @@ export interface Chord {
   /** The slot's rhythm, as the plug-in writes it: sixteen digits, one per
    *  sixteenth, where 0 is silent and 1-3 are ghost, normal and accent. Absent
    *  means the chord's articulation plays it, which is the historic behaviour.
-   *  Authored in the plug-in; carried here so a progression can round-trip
-   *  through the app without losing its part. Nothing in the app's own export
-   *  reads it — the `.mid` writer still lays the chord on its beats. */
+   *  Every planner reads it through `planChordNotes` — `.mid` export, the
+   *  in-app preview and the Ableton bridge — so a grid authored here sounds the
+   *  same in the DAW as it does in the plug-in. */
   rhythm?: string;
   /** Optional voicing — which chord tone sits in the bass (`inversion`) and
    *  whether the upper voices are stacked close or spread open. Absent means

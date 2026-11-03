@@ -248,6 +248,41 @@ export function applyPerformanceEffect<T extends ChordPerformanceNote>(
 // Whole-chord note planning (block → effect)
 // ---------------------------------------------------------------------------
 
+/** Sixteenths in a rhythm grid: one bar of 4/4, matching the plug-in. */
+export const RHYTHM_GRID_STEPS = 16;
+/** Sixteenths in a beat, which is what makes the grid a bar of 4/4. */
+export const RHYTHM_STEPS_PER_BEAT = 4;
+
+/** Level of each grid step: 0 silent, 1 ghost, 2 normal, 3 accent. */
+export type RhythmLevel = 0 | 1 | 2 | 3;
+
+/**
+ * A rhythm grid as levels, or null when the value is not one.
+ *
+ * The grid is the plug-in's wire format — sixteen digits, one per sixteenth —
+ * because that is what it writes into a preset. Validated in one place so the
+ * file reader and the note planner cannot disagree about what a grid is.
+ */
+export function parseRhythmGrid(value: string | undefined | null): RhythmLevel[] | null {
+  if (typeof value !== "string" || !/^[0-3]{16}$/.test(value)) return null;
+  return Array.from(value, (digit) => Number(digit) as RhythmLevel);
+}
+
+/** Whether a value is a rhythm grid, for callers that only need the test. */
+export function isRhythmGrid(value: string | undefined | null): value is string {
+  return parseRhythmGrid(value) !== null;
+}
+
+/**
+ * A step's velocity relative to the chord's: an accent *is* the chord's
+ * velocity, and the softer levels sit under it. Same ratios as the plug-in, so
+ * a groove exported from the app sounds like the same groove in the DAW.
+ */
+function gridVelocity(velocity: number, level: RhythmLevel): number {
+  const scale = level === 3 ? 1 : level === 1 ? 0.55 : 0.8;
+  return Math.max(1, Math.min(127, Math.round(velocity * scale)));
+}
+
 /** A resolved, effect-applied note for one chord — the single shape every
  *  consumer (MIDI export, Ableton clip planner, in-app preview) maps onto
  *  its own timeline/units. */
@@ -278,12 +313,50 @@ export function planChordNotes(
   durationBeats: number,
   velocity = 96,
   performance?: ChordPerformanceEffect,
+  rhythm?: string,
 ): PlannedChordNote[] {
-  const block: PlannedChordNote[] = intervals.map((i) => ({
-    pitch: rootMidi + i,
-    startTime: startBeat,
-    duration: durationBeats,
-    velocity,
-  }));
-  return applyPerformanceEffect(block, performance);
+  const grid = parseRhythmGrid(rhythm);
+
+  // No grid: the chord is one block across its span, which is what every chord
+  // written before the grid existed does.
+  if (!grid) {
+    const block: PlannedChordNote[] = intervals.map((i) => ({
+      pitch: rootMidi + i,
+      startTime: startBeat,
+      duration: durationBeats,
+      velocity,
+    }));
+    return applyPerformanceEffect(block, performance);
+  }
+
+  // A grid says *when* and the performance says *how*: each hit is a short
+  // block of its own, with the effect applied across it. One bar long, tiled
+  // over a longer chord, and trimmed so the last hit never runs into the next.
+  const stepBeats = 1 / RHYTHM_STEPS_PER_BEAT;
+  const barBeats = RHYTHM_GRID_STEPS * stepBeats;
+  const notes: PlannedChordNote[] = [];
+
+  for (let bar = 0; bar < durationBeats - 1e-9; bar += barBeats) {
+    for (let step = 0; step < RHYTHM_GRID_STEPS; step++) {
+      const offset = bar + step * stepBeats;
+      if (offset >= durationBeats - 1e-9) break;
+
+      const level = grid[step];
+      if (level === 0) continue;
+
+      const span = Math.min(stepBeats, durationBeats - offset);
+      if (span <= 0) continue;
+
+      const block: PlannedChordNote[] = intervals.map((i) => ({
+        pitch: rootMidi + i,
+        startTime: startBeat + offset,
+        duration: span,
+        velocity: gridVelocity(velocity, level),
+      }));
+
+      notes.push(...applyPerformanceEffect(block, performance));
+    }
+  }
+
+  return notes;
 }
