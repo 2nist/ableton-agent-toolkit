@@ -260,6 +260,10 @@ export function materialCables(
   graph: MaterialGraph,
   lanes: LaneRects,
   gutterX: number,
+  /** World-unit gap between consecutive cables. Without it every cable runs
+   *  down the same gutter line, so chords→bass and chords→colour are drawn on
+   *  top of each other and only the last one can be hit (§P2.3). */
+  spacing = 0,
 ): MaterialCable[] {
   const cables: MaterialCable[] = [];
   for (const edge of wireEdges(graph)) {
@@ -273,7 +277,7 @@ export function materialCables(
       from: edge.from,
       to: edge.to,
       kind: edge.kind,
-      x: gutterX,
+      x: gutterX + cables.length * spacing,
       y1: a.y + a.h / 2,
       y2: b.y + b.h / 2,
       reason: edge.reason,

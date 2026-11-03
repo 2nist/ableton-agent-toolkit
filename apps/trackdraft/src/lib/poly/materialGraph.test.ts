@@ -274,3 +274,26 @@ describe("materialCables — the geometry the canvas draws", () => {
     expect(materialCables(graph, lanes, 0)).toEqual([]);
   });
 });
+
+describe("materialCables — fanning out", () => {
+  const lanes = new Map([
+    ["bass", { y: 110, h: 100 }],
+    ["chords", { y: 330, h: 100 }],
+    ["color", { y: 440, h: 100 }],
+  ]);
+
+  it("gives every cable its own gutter line when asked", () => {
+    // Two cables down one line means the first is unreachable: the last one
+    // painted takes every hover and every click.
+    const graph = sectionMaterial(section(), { hasDrums: false });
+    const cables = materialCables(graph, lanes, 40, 3);
+    expect(cables.map((cable) => cable.x)).toEqual([40, 43]);
+  });
+
+  it("stacks them on one line when no spacing is given", () => {
+    const graph = sectionMaterial(section(), { hasDrums: false });
+    expect(materialCables(graph, lanes, 40).map((cable) => cable.x)).toEqual([
+      40, 40,
+    ]);
+  });
+});

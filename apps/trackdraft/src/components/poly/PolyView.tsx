@@ -53,7 +53,9 @@ import { moveChord, retypeChord } from "../../lib/poly/chords";
 import { DRUM_LANE_LABEL } from "../../lib/poly/drums";
 import { polyDrumPattern } from "../../lib/poly/content";
 import {
+  MATERIAL_LANE,
   materialCables,
+  materialLabel,
   type MaterialCable,
   sectionMaterial,
 } from "../../lib/poly/materialGraph";
@@ -866,8 +868,11 @@ export default function PolyView() {
     const hasDrums =
       polyDrumPattern(section, songSlice, node.occurrenceIndex ?? 0).length > 0;
     const graph = sectionMaterial(section, { hasDrums });
-    const gutter = node.x + Math.max(3, 4 / Math.max(0.2, camera.zoom));
-    return materialCables(graph, geometry, gutter);
+    const scale = Math.max(0.2, camera.zoom);
+    const gutter = node.x + Math.max(3, 4 / scale);
+    // One line per cable: two cables on one gutter means the first is
+    // unreachable — the later one takes every hover and every click (§P2.3).
+    return materialCables(graph, geometry, gutter, 5 / scale);
   }, [showWires, focusedId, layout.nodes, song, songSlice, camera.zoom]);
 
   /**
@@ -903,6 +908,44 @@ export default function PolyView() {
     }
     return out;
   }, [showWires, focusedId, focusedPass, song, layout.nodes, camera.zoom]);
+
+  /**
+   * The focused section's graph as rows (§P2.3).
+   *
+   * Every edge, including the clock's — the panel is the only place those can be
+   * read, since the clock has no lane to draw a cable to.
+   */
+  const wiringPanel = useMemo(() => {
+    if (!showWires || !focusedId || !song) return null;
+    const node = layout.nodes.find((entry) => entry.sectionId === focusedId);
+    const section = song.sections.find((entry) => entry.id === focusedId);
+    if (!node || !section) return null;
+    const hasDrums =
+      polyDrumPattern(section, songSlice, node.occurrenceIndex ?? 0).length > 0;
+    const graph = sectionMaterial(section, { hasDrums });
+    const spans = sectionSpans(song);
+    const index = spans.findIndex(
+      (span) =>
+        span.sectionId === focusedId && span.occurrenceIndex === focusedPass,
+    );
+    return {
+      title: `${section.name || "section"} · what feeds it`,
+      rows: graph.edges.map((edge) => ({
+        key: `${edge.from}-${edge.to}-${edge.kind}`,
+        from: materialLabel(edge.from),
+        to: materialLabel(edge.to),
+        kind: edge.kind,
+        reason: edge.reason,
+        lane: MATERIAL_LANE[edge.from] ?? null,
+      })),
+      seams:
+        index >= 0
+          ? seamsAround(spans, index, song).flatMap(
+              (boundary) => boundary.facts,
+            )
+          : [],
+    };
+  }, [showWires, focusedId, focusedPass, song, songSlice, layout.nodes]);
 
   const markMoved = useCallback(() => {
     userMoved.current = true;
@@ -3002,11 +3045,11 @@ export default function PolyView() {
                 // an influence from another material, not a derivation, and the
                 // shape should say so before the label does.
                 const bow = glued ? 14 * inverseZoom : 0;
+                const d = `M ${x} ${y1} C ${x - bow} ${mid}, ${x - bow} ${mid}, ${x} ${y2}`;
                 return (
                   <g key={`${cable.from}-${cable.to}-${cable.kind}`}>
-                    <title>{`${cable.from} → ${cable.to} · ${cable.kind} — ${cable.reason}`}</title>
                     <path
-                      d={`M ${x} ${y1} C ${x - bow} ${mid}, ${x - bow} ${mid}, ${x} ${y2}`}
+                      d={d}
                       fill="none"
                       stroke="rgb(var(--c-ink))"
                       strokeWidth={1.2 * inverseZoom}
@@ -3017,6 +3060,7 @@ export default function PolyView() {
                           : undefined
                       }
                       strokeLinecap="round"
+                      style={{ pointerEvents: "none" }}
                     />
                   </g>
                 );
@@ -3574,6 +3618,57 @@ export default function PolyView() {
               );
             })()
           : null}
+
+        {/* The wiring panel (§P2.3): the same graph the cables draw, as text you
+            can click and a screen reader can read. The cables alone were a
+            picture — hover found a lane glyph or the resize handle first, and an
+            SVG `<title>` is invisible to anyone not using a pointer. */}
+        {showWires && wiringPanel ? (
+          <div
+            className="absolute z-20 flex max-h-[45%] w-64 flex-col overflow-auto rounded border border-edge bg-panel/95 font-mono text-[10px] leading-snug text-ink shadow-lg backdrop-blur-sm"
+            style={{
+              left: 8,
+              bottom: shelfItems.length > 0 ? POLY_SHELF_H + 10 : 12,
+            }}
+          >
+            <div className="border-b border-edge/70 px-2 py-1 text-inkMuted">
+              {wiringPanel.title}
+            </div>
+            {wiringPanel.rows.length === 0 && wiringPanel.seams.length === 0 ? (
+              <div className="px-2 py-1 text-inkMuted">
+                nothing feeds anything here yet
+              </div>
+            ) : null}
+            {wiringPanel.rows.map((row) => (
+              <button
+                key={row.key}
+                type="button"
+                title={row.reason}
+                onClick={() => {
+                  const node = layout.nodes.find(
+                    (entry) => entry.sectionId === focusedId,
+                  );
+                  if (node && row.lane) pickLane(node, row.lane);
+                }}
+                className="border-b border-edge/40 px-2 py-1 text-left enabled:hover:bg-panelAlt/70"
+              >
+                <div>
+                  {row.from} → {row.to}
+                  <span className="text-inkMuted"> · {row.kind}</span>
+                </div>
+                <div className="text-inkMuted">{row.reason}</div>
+              </button>
+            ))}
+            {wiringPanel.seams.length > 0 ? (
+              <div className="px-2 py-1 text-inkMuted">
+                across the seam
+                {wiringPanel.seams.map((seam) => (
+                  <div key={seam.kind}>{seam.reason}</div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {chordMenu
           ? (() => {
