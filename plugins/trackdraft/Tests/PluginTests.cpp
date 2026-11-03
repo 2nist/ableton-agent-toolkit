@@ -470,6 +470,8 @@ void testPresets()
     const auto sanitised = td::PresetStore::sanitiseName ("../../etc/passwd");
     check (! sanitised.contains ("/") && ! sanitised.contains (".."),
            "path traversal is stripped from a preset name");
+    checkEqual (td::PresetStore::sanitiseName (juce::String::repeatedString ("A", 100)).length(),
+                64, "a very long preset name is truncated");
 
     td::PresetStore guarded (scratch);
     check (guarded.save ("../../escaped", progression, error), "an unsafe name still saves");
@@ -889,6 +891,27 @@ int main (int argc, char** argv)
         sample.slots[1] = { 5, td::theory::Quality::min, 2.0, td::Performance::strum, 150, 2 };
         sample.slots[2] = { 7, td::theory::Quality::seven, 8.0, td::Performance::arp, 8, 1 };
         std::cout << td::toXml (sample, "TrackDraftPreset").toString() << std::endl;
+        return 0;
+    }
+
+    // `--dump-names` prints the filename rule over a fixed list of awkward
+    // names. The app asserts the same output, so the three copies of the rule
+    // (plug-in, renderer, main process) cannot drift apart unnoticed.
+    if (argc > 1 && juce::String (argv[1]) == "--dump-names")
+    {
+        const juce::StringArray samples {
+            "Late Night",
+            juce::String::fromUTF8 ("Caf\xc3\xa9 Minor"),
+            "Chaos/../../etc/passwd",
+            "  ..hidden  ",
+            "",
+            juce::String::fromUTF8 ("\xf0\x9f\x94\xa5\xf0\x9f\x94\xa5\xf0\x9f\x94\xa5"),
+            "Song: Part 2 (draft)",
+        };
+
+        for (const auto& sample : samples)
+            std::cout << sample << "\t" << td::PresetStore::sanitiseName (sample) << std::endl;
+
         return 0;
     }
 

@@ -54,6 +54,13 @@ export interface TrackDraftHost {
   /** `.als` only: the Live Set XML, already gunzipped by the main process. */
   readAlsXml(path: string): Promise<string>;
   listDirectory(path: string): Promise<HostFile[]>;
+  /** The VST3's preset folder (the app/plug-in exchange point). */
+  presetDir(): Promise<string>;
+  presetList(): Promise<{ dir: string; presets: { name: string; path: string }[] }>;
+  /** Reads one of those presets by name — again, never by path. */
+  presetLoad(name: string): Promise<{ ok: boolean; xml?: string; error?: string }>;
+  /** Writes a `.tdp.xml` there; the filename is sanitised on the main side. */
+  presetSave(name: string, xml: string): Promise<{ ok: boolean; path?: string; error?: string }>;
   libraryLoad(): Promise<HostLibrary>;
   libraryWrite(song: unknown): Promise<{ ok: boolean }>;
   libraryDelete(songId: string): Promise<{ ok: boolean }>;

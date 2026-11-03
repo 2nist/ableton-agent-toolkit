@@ -66,6 +66,10 @@ function installHost(reads: string[] = []): void {
       }
     },
     listDirectory: async () => [],
+    presetDir: async () => path.join(dir, "Presets"),
+    presetList: async () => ({ dir: path.join(dir, "Presets"), presets: [] }),
+    presetLoad: async () => ({ ok: false, error: "not exercised here" }),
+    presetSave: async () => ({ ok: false, error: "not exercised here" }),
     libraryLoad: async () => ({ songs: [], seeded: 0, unreadable: 0, dir: "", distribution: "none" }),
     libraryWrite: async () => ({ ok: true }),
     libraryDelete: async () => ({ ok: true }),

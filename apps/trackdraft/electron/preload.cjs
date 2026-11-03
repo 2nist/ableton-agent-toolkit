@@ -44,6 +44,10 @@ contextBridge.exposeInMainWorld("trackdraft", {
 
   /** @param {string} dirPath @returns {Promise<HostFile[]>} */
   listDirectory: (dirPath) => ipcRenderer.invoke("host:list-directory", dirPath),
+  presetDir: () => ipcRenderer.invoke("host:preset-dir"),
+  presetList: () => ipcRenderer.invoke("host:preset-list"),
+  presetLoad: (name) => ipcRenderer.invoke("host:preset-load", name),
+  presetSave: (name, xml) => ipcRenderer.invoke("host:preset-save", name, xml),
 
   /* The song library lives on disk in the desktop build — localStorage's ~5 MB
    * cannot hold the catalogue. Main seeds it from the bundled pack on first run. */

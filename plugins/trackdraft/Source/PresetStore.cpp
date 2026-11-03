@@ -14,22 +14,47 @@ juce::File PresetStore::defaultDirectory()
         .getChildFile ("Presets");
 }
 
+namespace
+{
+/** Characters a file name cannot safely carry: separators, the set Windows
+    reserves, and control characters. Everything else is left alone so a name
+    stays recognisable — "Café Minor" must not become "Caf Minor".
+*/
+bool isUnsafeInFileName (juce::juce_wchar character) noexcept
+{
+    return character < 0x20 || character == 0x7f
+        || juce::String ("/\\:*?\"<>|").containsChar (character);
+}
+} // namespace
+
 juce::String PresetStore::sanitiseName (const juce::String& name)
 {
-    // A preset name is typed by a person, so it may contain anything. Keep the
-    // readable characters, drop path separators and control characters, and
-    // never let a name define where the file goes.
+    // A preset name is typed by a person, so it may contain anything. Never let
+    // it define where the file goes.
+    //
+    // This is deliberately not a "letters and digits" allow-list: JUCE's Unicode
+    // letter test goes through `iswalnum`, which follows the C locale, and a host
+    // may or may not have called `setlocale`. The same name would then sanitise
+    // differently in different DAWs, and two files would exist for one name.
     juce::String cleaned;
+
     for (auto character : name.trim())
-    {
-        if (juce::CharacterFunctions::isLetterOrDigit (character)
-            || character == ' ' || character == '-' || character == '_'
-            || character == '.' || character == '(' || character == ')'
-            || character == '\'' || character == '&')
+        if (! isUnsafeInFileName (character))
             cleaned << juce::String::charToString (character);
+
+    // Truncate by character, not by code unit, so a surrogate pair is never cut
+    // in half. The renderer and the main process mirror this rule; keep it simple.
+    cleaned = cleaned.trim();
+    juce::String shortened;
+    int count = 0;
+    for (auto character : cleaned)
+    {
+        if (count++ == 64)
+            break;
+        shortened << juce::String::charToString (character);
     }
 
-    cleaned = cleaned.trim().substring (0, 64);
+    cleaned = shortened;
     while (cleaned.startsWithChar ('.'))
         cleaned = cleaned.substring (1);
     while (cleaned.endsWithChar ('.'))

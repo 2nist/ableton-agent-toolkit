@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTdpPresetXml, toTdpPresetXml } from "./tdpPreset";
+import { parseTdpPresetXml, sanitisePresetName, toTdpPresetXml } from "./tdpPreset";
 import type { Chord } from "../../types/blueprint";
 
 /**
@@ -135,5 +135,39 @@ describe("toTdpPresetXml", () => {
     const xml = toTdpPresetXml([chord({ quality: 'maj"><script>' as Chord["quality"] })]);
     expect(xml).toContain("&quot;&gt;&lt;script&gt;");
     expect(xml).not.toContain('maj"><script>');
+  });
+});
+
+/**
+ * The plug-in's filename rule over awkward names, verbatim.
+ *
+ * Produced by `TrackDraftTests --dump-names`; each line is `input <TAB> output`.
+ * The same rule lives in `PresetStore::sanitiseName` (C++), `sanitisePresetName`
+ * here, and `sanitisePresetName` in `electron/main.cjs` — a fixture written on
+ * one side is the only way to notice the three drifting apart.
+ */
+const PLUGIN_NAME_DUMP = [
+  "Late Night\tLate Night",
+  "Café Minor\tCafé Minor",
+  "Chaos/../../etc/passwd\tChaos....etcpasswd",
+  "  ..hidden  \thidden",
+  "\tUntitled",
+  "🔥🔥🔥\t🔥🔥🔥",
+  "Song: Part 2 (draft)\tSong Part 2 (draft)",
+].join("\n");
+
+describe("sanitisePresetName", () => {
+  it.each(
+    PLUGIN_NAME_DUMP.split("\n").map((line) => {
+      const [input, output] = line.split("\t");
+      return [input, output] as const;
+    }),
+  )("matches the plug-in for %j", (input, output) => {
+    expect(sanitisePresetName(input)).toBe(output);
+  });
+
+  it("truncates by character so a surrogate pair is never split", () => {
+    expect(sanitisePresetName("A".repeat(100))).toBe("A".repeat(64));
+    expect(sanitisePresetName("🔥".repeat(70))).toBe("🔥".repeat(64));
   });
 });

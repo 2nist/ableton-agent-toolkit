@@ -5,6 +5,7 @@ import type { Chord } from "../../types/blueprint";
 import { askConfirm } from "../../lib/confirm";
 import { STORAGE_KEYS } from "../../lib/persistence/keys";
 import { parseTdpPresetXml, toTdpPresetXml } from "../../lib/harmony/tdpPreset";
+import { getHost } from "../../lib/host";
 
 interface PresetPickerProps {
   keyName: NoteName;
@@ -108,6 +109,8 @@ export default function PresetPicker({
   const [customPresets, setCustomPresets] = useState<SavedPreset[]>(loadCustomPresets);
   const [saveName, setSaveName] = useState("");
   const [pluginMessage, setPluginMessage] = useState<string | null>(null);
+  /** Presets found in the plug-in's folder, or null while the list is closed. */
+  const [hostedPresets, setHostedPresets] = useState<{ name: string; path: string }[] | null>(null);
   const [showSave, setShowSave] = useState(false);
   const [, preset] = PRESET_ENTRIES.find(([k]) => k === selected)!;
 
@@ -169,42 +172,85 @@ export default function PresetPicker({
    * VST3 without a translation step.
    */
   const PLUGIN_PRESET_DIR = "~/Library/Application Support/TrackDraft/Presets";
+  const isElectron = getHost() !== null;
 
-  function handleImportPluginPreset() {
+  /** Applies preset text that came from either the file dialog or the folder. */
+  async function applyPresetText(text: string, label: string): Promise<void> {
+    try {
+      const preset = parseTdpPresetXml(text, keyName);
+      if (
+        hasChords &&
+        !(await askConfirm({
+          title: "Replace progression",
+          message: `Replace ${sectionName}'s progression with ${preset.chords.length} chords from "${label}"?`,
+          confirmLabel: "Replace",
+          danger: true,
+        }))
+      ) {
+        return;
+      }
+
+      onApply(preset.chords);
+      setPluginMessage(
+        preset.warnings.length > 0
+          ? `Loaded ${label}: ${preset.warnings.join("; ")}`
+          : `Loaded ${preset.chords.length} chords from ${label}`,
+      );
+    } catch (error) {
+      setPluginMessage(error instanceof Error ? error.message : "Could not read that preset");
+    }
+  }
+
+  function openPresetFile(): void {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".xml,text/xml";
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) return;
-
-      void file.text().then(async (text) => {
-        try {
-          const preset = parseTdpPresetXml(text, keyName);
-          if (
-            hasChords &&
-            !(await askConfirm({
-              title: "Replace progression",
-              message: `Replace ${sectionName}'s progression with ${preset.chords.length} chords from "${file.name}"?`,
-              confirmLabel: "Replace",
-              danger: true,
-            }))
-          ) {
-            return;
-          }
-
-          onApply(preset.chords);
-          setPluginMessage(
-            preset.warnings.length > 0
-              ? `Loaded ${file.name}: ${preset.warnings.join("; ")}`
-              : `Loaded ${preset.chords.length} chords from ${file.name}`,
-          );
-        } catch (error) {
-          setPluginMessage(error instanceof Error ? error.message : "Could not read that preset");
-        }
-      });
+      void file.text().then((text) => applyPresetText(text, file.name));
     };
     input.click();
+  }
+
+  /**
+   * On the desktop the presets are in a folder the app can list, so there is no
+   * reason to hunt through a file dialog; in a browser the browser's own picker
+   * is all there is.
+   */
+  function handleLoadPluginPreset(): void {
+    const host = getHost();
+    if (!host) {
+      openPresetFile();
+      return;
+    }
+
+    if (hostedPresets) {
+      setHostedPresets(null);
+      return;
+    }
+
+    void host.presetList().then((list) => {
+      if (list.presets.length === 0) {
+        setPluginMessage(`No presets in ${list.dir} yet`);
+        return;
+      }
+      setHostedPresets(list.presets);
+    });
+  }
+
+  function handleLoadHostedPreset(name: string): void {
+    const host = getHost();
+    if (!host) return;
+
+    void host.presetLoad(name).then((result) => {
+      if (!result.ok || !result.xml) {
+        setPluginMessage(result.error ?? "Could not read that preset");
+        return;
+      }
+      setHostedPresets(null);
+      void applyPresetText(result.xml, name);
+    });
   }
 
   function handleExportPluginPreset() {
@@ -214,6 +260,23 @@ export default function PresetPicker({
     }
 
     const xml = toTdpPresetXml(currentChords);
+
+    // On the desktop the preset goes straight into the folder the plug-in
+    // scans; in a browser the same bytes are downloaded for the user to place.
+    const host = getHost();
+    if (host) {
+      void host
+        .presetSave(`${sectionName} - ${currentChords.length} chords`, xml)
+        .then((result) => {
+          setPluginMessage(
+            result.ok && result.path
+              ? `Saved to ${result.path}`
+              : result.error ?? "Could not save the preset",
+          );
+        });
+      return;
+    }
+
     const blob = new Blob([xml], { type: "application/xml" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -235,20 +298,40 @@ export default function PresetPicker({
       <div className="flex items-center gap-1.5 text-[11px]">
         <button
           className="bg-panelAlt border border-edge rounded px-1.5 py-0.5 text-inkMuted hover:text-ink hover:border-accent/40"
-          title={`Open a preset written by the TrackDraft VST3 (.tdp.xml)`}
-          onClick={handleImportPluginPreset}
+          title={
+            isElectron
+              ? "Pick a preset from the plug-in's preset folder"
+              : "Open a preset written by the TrackDraft VST3 (.tdp.xml)"
+          }
+          onClick={handleLoadPluginPreset}
         >
           Load plug-in preset…
         </button>
         <button
           className="bg-panelAlt border border-edge rounded px-1.5 py-0.5 text-inkMuted hover:text-ink hover:border-accent/40"
-          title={`Save this progression for the TrackDraft VST3 (${PLUGIN_PRESET_DIR})`}
+          title={`Save this progression for the TrackDraft VST3 (${
+            isElectron ? "the plug-in's preset folder" : PLUGIN_PRESET_DIR
+          })`}
           onClick={handleExportPluginPreset}
           disabled={!currentChords || currentChords.length === 0}
         >
-          Save for plug-in
+          {isElectron ? "Save to plug-in folder" : "Save for plug-in"}
         </button>
       </div>
+
+      {hostedPresets && (
+        <div className="flex flex-wrap gap-1">
+          {hostedPresets.map((presetEntry) => (
+            <button
+              key={presetEntry.path}
+              className="bg-panelAlt border border-edge rounded px-1.5 py-0.5 text-[10px] text-inkMuted hover:text-ink hover:border-accent/40"
+              onClick={() => handleLoadHostedPreset(presetEntry.name)}
+            >
+              {presetEntry.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {pluginMessage && (
         <p className="text-[10px] text-inkMuted leading-snug" title={pluginMessage}>

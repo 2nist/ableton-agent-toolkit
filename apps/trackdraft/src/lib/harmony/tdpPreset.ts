@@ -103,6 +103,28 @@ function performanceEffect(slot: SlotXml): ChordPerformanceEffect | undefined {
   };
 }
 
+/**
+ * The filename a preset gets, mirroring `PresetStore::sanitiseName` in the
+ * plug-in. Duplicated on purpose (the main process sanitises again): the same
+ * name has to reach the same file on every path, or one progression would end
+ * up saved twice under slightly different names.
+ *
+ * The rule is "drop only what a filename cannot hold", not "keep letters and
+ * digits": the plug-in used to test letters with `iswalnum`, which follows the C
+ * locale, so "Café Minor" became "Caf Minor" in some hosts and not others.
+ */
+const UNSAFE_IN_FILE_NAME = /[/\\:*?"<>|\u0000-\u001f\u007f]/;
+
+export function sanitisePresetName(name: string): string {
+  const cleaned = Array.from(name.trim())
+    .filter((character) => !UNSAFE_IN_FILE_NAME.test(character))
+    .join("")
+    .trim();
+  const shortened = Array.from(cleaned).slice(0, 64).join("");
+  const trimmed = shortened.replace(/^\.+/, "").replace(/\.+$/, "");
+  return trimmed === "" ? "Untitled" : trimmed;
+}
+
 /** Serialises a strip of chords as a plug-in preset. */
 export function toTdpPresetXml(chords: readonly Chord[], tagName = "TrackDraftPreset"): string {
   const lines = [`<${tagName} version="1" count="${chords.length}">`];

@@ -297,6 +297,27 @@ function bundledCatalogDir() {
   return path.join(__dirname, "..", "dist", "catalog");
 }
 
+/** The VST3's preset folder — `~/Library/Application Support/TrackDraft/Presets`. */
+function pluginPresetDir() {
+  return path.join(app.getPath("appData"), "TrackDraft", "Presets");
+}
+
+/**
+ * Mirrors `PresetStore::sanitiseName` in the plug-in, and `sanitisePresetName`
+ * in `src/lib/harmony/tdpPreset.ts`. Duplicated deliberately: the renderer must
+ * not be trusted to choose a filename, and the three copies have to agree so one
+ * name reaches one file. Keep the rule "drop only what a filename cannot hold".
+ */
+function sanitisePresetName(name) {
+  const cleaned = String(name ?? "")
+    .trim()
+    .replace(/[/\\:*?"<>|\u0000-\u001f\u007f]/g, "")
+    .trim();
+  const shortened = Array.from(cleaned).slice(0, 64).join("");
+  const trimmed = shortened.replace(/^\.+/, "").replace(/\.+$/, "");
+  return trimmed === "" ? "Untitled" : trimmed;
+}
+
 function ensureLibraryDir() {
   const dir = libraryDir();
   fs.mkdirSync(dir, { recursive: true });
@@ -636,6 +657,70 @@ function runLibraryMigrations() {
       // Progress is advisory — a closed window must not turn into a crash.
       if (!event.sender.isDestroyed()) event.sender.send("media:progress", { id, step, message });
     });
+  });
+
+  /**
+   * The plug-in's preset folder: the one place the app and the VST3 exchange
+   * progressions. Nothing here accepts a path from the renderer — the directory
+   * is derived from the OS app-data path on this side, so a compromised renderer
+   * cannot aim a write somewhere else.
+   */
+  ipcMain.handle("host:preset-dir", () => pluginPresetDir());
+
+  ipcMain.handle("host:preset-list", async () => {
+    const dir = pluginPresetDir();
+    if (!fs.existsSync(dir)) return { dir, presets: [] };
+    const presets = fs
+      .readdirSync(dir)
+      .filter((name) => name.endsWith(".tdp.xml"))
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => {
+        const full = path.join(dir, name);
+        return { name: name.slice(0, -".tdp.xml".length), path: full };
+      });
+    return { dir, presets };
+  });
+
+  ipcMain.handle("host:preset-load", async (_event, name) => {
+    const dir = pluginPresetDir();
+    const file = path.join(dir, `${sanitisePresetName(name)}.tdp.xml`);
+    if (path.dirname(path.resolve(file)) !== path.resolve(dir)) {
+      return { ok: false, error: "Refusing to read outside the preset folder" };
+    }
+
+    try {
+      return { ok: true, xml: fs.readFileSync(file, "utf8") };
+    } catch (error) {
+      if (error && error.code === "ENOENT") {
+        return { ok: false, error: `No plug-in preset named ${name}` };
+      }
+      return { ok: false, error: String(error && error.message ? error.message : error) };
+    }
+  });
+
+  ipcMain.handle("host:preset-save", async (_event, name, xml) => {
+    if (typeof xml !== "string" || xml.length === 0 || xml.length > 1024 * 256) {
+      return { ok: false, error: "Preset content is empty or too large" };
+    }
+    if (!xml.includes("<slot") || !xml.includes("TrackDraft")) {
+      return { ok: false, error: "That is not a TrackDraft preset" };
+    }
+
+    const dir = pluginPresetDir();
+    const file = path.join(dir, `${sanitisePresetName(name)}.tdp.xml`);
+    // Belt and braces: the sanitised name cannot contain a separator, but a
+    // resolved path outside the preset folder would still be a bug worth refusing.
+    if (path.dirname(path.resolve(file)) !== path.resolve(dir)) {
+      return { ok: false, error: "Refusing to write outside the preset folder" };
+    }
+
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(file, xml, "utf8");
+      return { ok: true, path: file };
+    } catch (error) {
+      return { ok: false, error: String(error && error.message ? error.message : error) };
+    }
   });
 
   ipcMain.handle("host:list-directory", async (_event, dirPath) => {
