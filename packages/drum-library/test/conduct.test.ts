@@ -1,9 +1,25 @@
 import { describe, expect, it } from "vitest";
+import type { TimeDomain } from "@music-theory/song-blueprint";
 import { conductSection } from "../src/conduct.js";
 import { resolveChordOccurrences } from "../src/chordCycle.js";
+import type { MeterOutline } from "../src/meter.js";
+
+/** The shape these tests exercise. Written out rather than inferred from the
+ *  literal below, so an override is checked against the real fields instead of
+ *  quietly widening to `Record<string, unknown>`. */
+interface TestSection {
+  id: string;
+  bars: number;
+  chords: { id: string; beats: number; restAfter?: number }[];
+  timeDomain: TimeDomain | null;
+  /** The authored grid the harmony can advance on instead of chord `beats`. */
+  harmonyMeterOutline: MeterOutline | null;
+  melody: { notes: { startTime: number; duration: number; pitch: number }[] };
+  bassNotes: { startTime: number; duration: number; pitch: number }[];
+}
 
 /** A four-chord, four-beat-a-piece progression in a 32-beat (8-bar) section. */
-function section(overrides: Record<string, unknown> = {}) {
+function section(overrides: Partial<TestSection> = {}): TestSection {
   return {
     id: "s",
     bars: 8,
@@ -13,6 +29,10 @@ function section(overrides: Record<string, unknown> = {}) {
       { id: "c3", beats: 4 },
       { id: "c4", beats: 4 },
     ],
+    timeDomain: null,
+    harmonyMeterOutline: null,
+    melody: { notes: [] },
+    bassNotes: [],
     ...overrides,
   };
 }
