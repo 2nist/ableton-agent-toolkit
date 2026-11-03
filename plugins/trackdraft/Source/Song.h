@@ -141,6 +141,8 @@ public:
         std::size_t section = 0;
         std::size_t slot = 0;
         std::size_t pass = 0;
+        /** Beat position inside that slot, for a UI cursor. */
+        double beatInSlot = 0.0;
     };
 
     Playing playingAt (double beat) const;

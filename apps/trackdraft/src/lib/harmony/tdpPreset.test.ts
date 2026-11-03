@@ -18,7 +18,8 @@ const PLUGIN_DUMP = `<?xml version="1.0" encoding="UTF-8"?>
         direction="2"/>
   <slot root="5" quality="min" beats="2.0" performance="1" param="150"
         direction="2" inversion="1"/>
-  <slot root="7" quality="7" beats="8.0" performance="3" param="8" direction="1"/>
+  <slot root="7" quality="7" beats="8.0" performance="3" param="8" direction="1"
+        rhythm="3001200030002000"/>
 </TrackDraftPreset>
 `;
 
@@ -51,6 +52,13 @@ describe("parseTdpPresetXml", () => {
     expect(preset.chords[0].voicing).toBeUndefined();
     expect(preset.chords[1].voicing).toEqual({ inversion: 1 });
     expect(preset.chords[2].voicing).toBeUndefined();
+  });
+
+  it("reads the rhythm grid the plug-in wrote", () => {
+    const preset = parseTdpPresetXml(PLUGIN_DUMP, "C");
+
+    expect(preset.chords[0].rhythm).toBeUndefined();
+    expect(preset.chords[2].rhythm).toBe("3001200030002000");
   });
 
   it("carries the articulation across, including arp direction", () => {
@@ -159,6 +167,25 @@ describe("toTdpPresetXml", () => {
     expect(parsed.chords[2].voicing).toBeUndefined();
   });
 
+  it("passes the plug-in's rhythm grid through both ways", () => {
+    const grid = "3001200030002000";
+    const xml = toTdpPresetXml([chord({ rhythm: grid })]);
+
+    expect(xml).toContain(`rhythm="${grid}"`);
+    expect(parseTdpPresetXml(xml, "C").chords[0].rhythm).toBe(grid);
+
+    // A slot with no grid writes no attribute, so an older file is unchanged.
+    expect(toTdpPresetXml([chord({})])).not.toContain("rhythm=");
+  });
+
+  it("drops an unreadable grid and says so", () => {
+    const xml = `<TrackDraftPreset count="1"><slot root="0" quality="maj" beats="4" rhythm="3002"/></TrackDraftPreset>`;
+    const preset = parseTdpPresetXml(xml, "C");
+
+    expect(preset.chords[0].rhythm).toBeUndefined();
+    expect(preset.warnings.join(" ")).toContain("3002");
+  });
+
   it("warns about an impossible inversion instead of trusting it", () => {
     const xml = `<TrackDraftPreset count="1"><slot root="0" quality="maj" beats="4" inversion="99"/></TrackDraftPreset>`;
     const preset = parseTdpPresetXml(xml, "C");
@@ -228,7 +255,7 @@ const APP_SONG_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <section name="Chorus">
     <progression version="1" count="2">
       <slot root="5" quality="maj" beats="4" performance="0" param="0" direction="2"/>
-      <slot root="7" quality="7" beats="4" performance="3" param="8" direction="1"/>
+      <slot root="7" quality="7" beats="4" performance="3" param="8" direction="1" rhythm="3001200030002000"/>
       <bass octave="2" motion="walking" rhythm="eighth" velocity="88"/>
     </progression>
   </section>
@@ -274,7 +301,13 @@ function song(): BlueprintSong {
       ]),
       section("s2", "Chorus", [
         chord({ root: "F", quality: "maj", beats: 4 }),
-        chord({ root: "G", quality: "7", beats: 4, performance: { style: "arp", params: { subdivision: 8, direction: 1 } } }),
+        chord({
+          root: "G",
+          quality: "7",
+          beats: 4,
+          performance: { style: "arp", params: { subdivision: 8, direction: 1 } },
+          rhythm: "3001200030002000",
+        }),
       ], { octave: 2, motion: "walking", rhythm: "eighth", velocity: 88 }),
     ],
     arrangement: [

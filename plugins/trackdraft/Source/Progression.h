@@ -3,6 +3,9 @@
 #include "Performance.h"
 #include "Theory/ChordTheory.h"
 
+#include <cstdint>
+#include <string>
+
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -10,6 +13,59 @@
 
 namespace td
 {
+/**
+    A slot's own rhythm: sixteen steps on a sixteenth-note grid, each one silent
+    or a hit at one of three levels.
+
+    This is the "when" of a chord part, where `Performance` is the "how" of each
+    hit: the grid decides which sixteenths sound, and the articulation decides
+    whether a hit is a block, a strum or an arpeggio. The grid is one bar long
+    (16 sixteenths = 4 beats) and tiles over a longer slot; a shorter slot simply
+    uses its first steps.
+
+    `enabled` with every level at zero is silence, which is a real choice for a
+    slot; no pattern at all (`enabled` false) means "play the articulation as
+    before", which is what every slot written before this did.
+*/
+struct RhythmPattern
+{
+    static constexpr std::size_t steps = 16;
+    /** Sixteenths in a beat, which is what makes the grid a bar of 4/4. */
+    static constexpr int stepsPerBeat = 4;
+
+    /** 0 silent, 1 ghost, 2 normal, 3 accent. */
+    enum Level : std::uint8_t
+    {
+        off = 0,
+        ghost = 1,
+        normal = 2,
+        accent = 3,
+    };
+
+    bool enabled = false;
+    std::array<std::uint8_t, steps> level {};
+
+    bool anyHit() const noexcept
+    {
+        for (auto value : level)
+            if (value != off)
+                return true;
+
+        return false;
+    }
+
+    /** The 16 digits the file holds, e.g. "3002000030020000". */
+    std::string toDigits() const;
+
+    /** Reads exactly 16 digits of 0-3; false leaves `target` untouched. */
+    static bool fromDigits (const std::string& digits, RhythmPattern& target);
+
+    bool operator== (const RhythmPattern& other) const noexcept
+    {
+        return enabled == other.enabled && level == other.level;
+    }
+};
+
 /** One slot of the progression: what to play, and for how many beats. */
 struct ChordSlot
 {
@@ -24,6 +80,9 @@ struct ChordSlot
     /** Which chord tone is in the bass, and whether the upper voices are spread
         open — the app's `ChordVoicing`. Default is root position, close. */
     theory::Voicing voicing {};
+
+    /** The slot's own rhythm; no pattern means "the articulation, as before". */
+    RhythmPattern rhythm {};
 
     bool operator== (const ChordSlot& other) const noexcept
     {
@@ -179,6 +238,7 @@ struct Progression : public ChordCycle
     void moveSlot (std::size_t from, std::size_t to);
 
     /** Copies `source`'s articulation onto every slot (the "apply to all" button). */
-    void applyArticulationToAll (std::size_t source);
+    /** Copies a slot's feel — articulation and rhythm — onto every slot. */
+    void applyFeelToAll (std::size_t source);
 };
 } // namespace td

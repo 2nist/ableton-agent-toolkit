@@ -42,7 +42,7 @@ namespace layout
 {
 constexpr int margin = 16;
 constexpr int width = 728;
-constexpr int height = 692;
+constexpr int height = 756;
 
 constexpr int songLabelY = 58;
 constexpr int sectionBarY = 74;
@@ -52,21 +52,24 @@ constexpr int keysLabelY = 148;
 constexpr int keysY = 164;
 constexpr int stripY = 200;
 constexpr int stripHeight = 88;
-constexpr int walkLabelY = 300;
-constexpr int walkY = 318;
-constexpr int detectY = 356;
-constexpr int heardY = 386;
-constexpr int articulationLabelY = 412;
-constexpr int articulationY = 428;
-constexpr int voiceY = 460;
-constexpr int presetsLabelY = 496;
-constexpr int presetsY = 512;
-constexpr int arrangementLabelY = 546;
-constexpr int arrangementBarY = 562;
+constexpr int rhythmLabelY = 300;
+constexpr int rhythmY = 316;
+constexpr int rhythmHeight = 30;
+constexpr int walkLabelY = 364;
+constexpr int walkY = 382;
+constexpr int detectY = 420;
+constexpr int heardY = 450;
+constexpr int articulationLabelY = 476;
+constexpr int articulationY = 492;
+constexpr int voiceY = 524;
+constexpr int presetsLabelY = 560;
+constexpr int presetsY = 576;
+constexpr int arrangementLabelY = 610;
+constexpr int arrangementBarY = 626;
 constexpr int arrangementBarHeight = 28;
-constexpr int arrangementButtonY = 598;
-constexpr int bassLabelY = 640;
-constexpr int bassY = 656;
+constexpr int arrangementButtonY = 662;
+constexpr int bassLabelY = 698;
+constexpr int bassY = 714;
 } // namespace layout
 } // namespace
 
@@ -438,7 +441,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     };
 
     applyAllButton.onClick = [this] {
-        selectedProgression().applyArticulationToAll ((std::size_t) selectedSlot);
+        selectedProgression().applyFeelToAll ((std::size_t) selectedSlot);
         commit();
         rebuildFromProcessor();
     };
@@ -456,6 +459,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
              &detectButton, &useHeardButton, &heardLabel, &octaveSlider, &velocitySlider,
              &gateSlider, &generateButton, &bassButton, &bassOctaveBox, &bassMotionBox,
              &bassRhythmBox, &bassVelocitySlider, &inversionBox, &spreadBox,
+             &rhythmGrid, &clearRhythmButton,
              &strip, &presetBox, &presetNameEditor,
              &savePresetButton, &applyAllButton, &renamePresetButton, &deletePresetButton,
              &importButton, &sectionBar, &arrangementBar, &sectionNameEditor,
@@ -478,7 +482,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     for (auto* button : { &addSectionButton, &duplicateSectionButton, &deleteSectionButton,
                           &moveSectionLeftButton, &moveSectionRightButton, &addPassButton,
                           &moreRepeatsButton, &fewerRepeatsButton, &removePassButton,
-                          &saveSongButton })
+                          &saveSongButton, &clearRhythmButton })
     {
         button->setColour (juce::TextButton::buttonColourId, panel);
         button->setColour (juce::TextButton::textColourOffId, ink);
@@ -608,6 +612,15 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
         rebuildFromProcessor();
     };
 
+    clearRhythmButton.setColour (juce::TextButton::buttonColourId, panel);
+    clearRhythmButton.setColour (juce::TextButton::textColourOffId, ink);
+    clearRhythmButton.setTooltip ("Give this slot back to its articulation");
+    clearRhythmButton.onClick = [this] {
+        selectedProgression().slots[(std::size_t) selectedSlot].rhythm = {};
+        commit();
+        rebuildFromProcessor();
+    };
+
     for (auto* box : { &keyBox, &scaleBox, &rootBox, &qualityBox, &borrowedBox,
                        &performanceBox, &directionBox, &inversionBox, &spreadBox,
                        &bassOctaveBox, &bassMotionBox, &bassRhythmBox })
@@ -711,6 +724,11 @@ void TrackDraftAudioProcessorEditor::rebuildFromProcessor()
     rebuildBorrowed();
     refreshHeardLabel();
     strip.repaint();
+
+    // The grid follows the transport while the section it belongs to is the one
+    // on screen; elsewhere the cursor is meaningless.
+    const auto playingSection = plugin.playingSection.load();
+    rhythmGrid.setCursor (playingSection == (int) selectedSection ? plugin.playingStep.load() : -1);
 }
 
 theory::Scale TrackDraftAudioProcessorEditor::workingScale() const
@@ -897,6 +915,11 @@ void TrackDraftAudioProcessorEditor::timerCallback()
 {
     refreshHeardLabel();
     strip.repaint();
+
+    // The grid follows the transport while the section it belongs to is the one
+    // on screen; elsewhere the cursor is meaningless.
+    const auto playingSection = plugin.playingSection.load();
+    rhythmGrid.setCursor (playingSection == (int) selectedSection ? plugin.playingStep.load() : -1);
     // The bars show which section and pass the transport is in.
     sectionBar.repaint();
     arrangementBar.repaint();
@@ -923,6 +946,9 @@ void TrackDraftAudioProcessorEditor::paint (juce::Graphics& g)
 
     g.drawText ("Sections  (" + juce::String ((int) working.sections.size()) + ")",
                 layout::margin, layout::songLabelY, 420, 14, juce::Justification::centredLeft);
+    g.drawText ("Rhythm - click a step: off, normal, accent, ghost. "
+                "The articulation plays each hit.",
+                layout::margin, layout::rhythmLabelY, 600, 14, juce::Justification::centredLeft);
     g.drawText ("Walk from the selected chord (hex neighbours)", layout::margin, layout::walkLabelY,
                 420, 14, juce::Justification::centredLeft);
     g.drawText ("Articulation", layout::margin, layout::articulationLabelY, 120, 14,
@@ -965,6 +991,9 @@ void TrackDraftAudioProcessorEditor::resized()
     beatsSlider.setBounds (694, layout::keysY, 50, 26);
 
     strip.setBounds (layout::margin, layout::stripY, layout::width, layout::stripHeight);
+    rhythmGrid.setBounds (layout::margin, layout::rhythmY, layout::width - 110,
+                          layout::rhythmHeight);
+    clearRhythmButton.setBounds (layout::margin + layout::width - 104, layout::rhythmY, 104, 30);
 
     const int neighbourWidth = (layout::width - 5 * 6) / 6;
     for (int i = 0; i < 6; ++i)
@@ -1009,6 +1038,115 @@ void TrackDraftAudioProcessorEditor::resized()
     fewerRepeatsButton.setBounds (188, layout::arrangementButtonY, 80, 26);
     removePassButton.setBounds (272, layout::arrangementButtonY, 80, 26);
     saveSongButton.setBounds (410, layout::arrangementButtonY, 120, 26);
+}
+
+juce::Rectangle<int> TrackDraftAudioProcessorEditor::RhythmGrid::boundsFor (int step) const
+{
+    const int gap = 3;
+    const int total = (int) RhythmPattern::steps;
+    const int width = juce::jmax (8, (getWidth() - gap * (total - 1)) / total);
+
+    // Every fourth cell is a beat, so the gaps there are visible.
+    const int beatsBefore = step / RhythmPattern::stepsPerBeat;
+    return { step * (width + gap) + beatsBefore * 4, 0, width, getHeight() };
+}
+
+int TrackDraftAudioProcessorEditor::RhythmGrid::stepAt (juce::Point<int> position) const
+{
+    for (int step = 0; step < (int) RhythmPattern::steps; ++step)
+        if (boundsFor (step).contains (position))
+            return step;
+
+    return -1;
+}
+
+void TrackDraftAudioProcessorEditor::RhythmGrid::setCursor (int step)
+{
+    if (step == cursorStep)
+        return;
+
+    cursorStep = step;
+    repaint();
+}
+
+void TrackDraftAudioProcessorEditor::RhythmGrid::paint (juce::Graphics& g)
+{
+    const auto& slot = owner.selectedProgression().slots[(std::size_t) owner.selectedSlot];
+    const bool hasPattern = slot.rhythm.enabled;
+
+    for (int step = 0; step < (int) RhythmPattern::steps; ++step)
+    {
+        const auto area = boundsFor (step).toFloat().reduced (0.5f);
+        const int level = (int) slot.rhythm.level[(std::size_t) step];
+
+        // Height carries the level, so the shape of the groove is readable at a
+        // glance; a slot with no pattern shows the grid empty and dimmed, which
+        // is what "the articulation plays it" looks like.
+        const float fill = level == RhythmPattern::accent ? 1.0f
+                           : level == RhythmPattern::normal ? 0.66f
+                           : level == RhythmPattern::ghost ? 0.36f
+                                                           : 0.0f;
+
+        g.setColour (well);
+        g.fillRoundedRectangle (area, 3.0f);
+
+        if (fill > 0.0f)
+        {
+            auto bar = area;
+            bar = bar.withHeight (area.getHeight() * fill).withY (area.getBottom() - area.getHeight() * fill);
+            g.setColour ((level == RhythmPattern::accent ? accent : ink).withAlpha (hasPattern ? 1.0f : 0.4f));
+            g.fillRoundedRectangle (bar, 3.0f);
+        }
+        else if (! hasPattern)
+        {
+            g.setColour (inkMuted.withAlpha (0.25f));
+            g.fillRect (area.withHeight (2.0f).withY (area.getBottom() - 3.0f));
+        }
+
+        if (step == cursorStep)
+        {
+            g.setColour (accent.withAlpha (0.85f));
+            g.drawRoundedRectangle (area, 3.0f, 1.5f);
+        }
+
+        // The beat columns get a brighter edge, so "1 · 2 · 3 · 4" is visible.
+        if (step % RhythmPattern::stepsPerBeat == 0)
+        {
+            g.setColour (panel);
+            g.drawLine (area.getX(), area.getY(), area.getX(), area.getBottom(), 1.0f);
+        }
+    }
+}
+
+void TrackDraftAudioProcessorEditor::RhythmGrid::mouseDown (const juce::MouseEvent& event)
+{
+    const int step = stepAt (event.getPosition());
+    if (step < 0)
+        return;
+
+    auto& slot = owner.selectedProgression().slots[(std::size_t) owner.selectedSlot];
+    auto& pattern = slot.rhythm;
+
+    // A first click turns the grid on at "normal", so one click already makes a
+    // rhythm; after that it cycles off → normal → accent → ghost.
+    if (! pattern.enabled)
+    {
+        pattern = {};
+        pattern.enabled = true;
+        pattern.level[(std::size_t) step] = RhythmPattern::normal;
+    }
+    else
+    {
+        auto& level = pattern.level[(std::size_t) step];
+        level = level == RhythmPattern::off ? RhythmPattern::normal
+                : level == RhythmPattern::normal ? RhythmPattern::accent
+                : level == RhythmPattern::accent ? RhythmPattern::ghost
+                                                 : RhythmPattern::off;
+    }
+
+    owner.commit();
+    owner.rebuildFromProcessor();
+    repaint();
 }
 
 juce::Rectangle<int> TrackDraftAudioProcessorEditor::SectionBar::boundsFor (int index) const

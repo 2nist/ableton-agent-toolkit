@@ -81,7 +81,8 @@ private:
     juce::TextButton deletePresetButton { "Delete" };
     juce::TextButton importButton { "Import..." };
     std::unique_ptr<juce::FileChooser> importChooser;
-    juce::TextButton applyAllButton { "Apply articulation to section" };
+    juce::TextButton applyAllButton { "Apply feel to section" };
+    juce::TextButton clearRhythmButton { "Clear rhythm" };
 
     juce::TextEditor sectionNameEditor;
     juce::TextButton addSectionButton { "+" };
@@ -172,7 +173,28 @@ private:
         TrackDraftAudioProcessorEditor& owner;
     };
 
+    /** The slot's rhythm: sixteen sixteenths, clicked to a level. */
+    class RhythmGrid final : public juce::Component
+    {
+    public:
+        explicit RhythmGrid (TrackDraftAudioProcessorEditor& ownerToUse) : owner (ownerToUse) {}
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override;
+
+        juce::Rectangle<int> boundsFor (int step) const;
+        int stepAt (juce::Point<int> position) const;
+
+        /** The step the transport is sounding, or -1. Drawn, not stored. */
+        void setCursor (int step);
+        int cursor() const noexcept { return cursorStep; }
+
+    private:
+        TrackDraftAudioProcessorEditor& owner;
+        int cursorStep = -1;
+    };
+
     SlotStrip strip { *this };
+    RhythmGrid rhythmGrid { *this };
     SectionBar sectionBar { *this };
     ArrangementBar arrangementBar { *this };
 

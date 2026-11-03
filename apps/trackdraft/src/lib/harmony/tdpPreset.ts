@@ -50,6 +50,7 @@ interface SlotXml {
   direction: number;
   inversion: number;
   open: boolean;
+  rhythm?: string;
 }
 
 /** The plug-in's default articulation values; also what "block" means. */
@@ -134,6 +135,11 @@ export function sanitisePresetName(name: string): string {
   return trimmed === "" ? "Untitled" : trimmed;
 }
 
+/** Sixteen digits of 0-3, or nothing: the plug-in's rhythm grid. */
+function isRhythmGrid(value: string | undefined): value is string {
+  return typeof value === "string" && /^[0-3]{16}$/.test(value);
+}
+
 /** One `<slot/>` line, exactly as the plug-in writes it. */
 function slotLine(chord: Chord, indent: string): string {
   const { performance, param, direction } = performanceOf(chord);
@@ -151,6 +157,10 @@ function slotLine(chord: Chord, indent: string): string {
   const inversion = Math.round(chord.voicing?.inversion ?? 0);
   if (inversion !== 0) attributes.push(`inversion="${inversion}"`);
   if (chord.voicing?.spread === "open") attributes.push('spread="open"');
+
+  // The plug-in's own grid, passed through untouched: the app has no editor for
+  // it, and rewriting it would only invent a second spelling of the same thing.
+  if (isRhythmGrid(chord.rhythm)) attributes.push(`rhythm="${chord.rhythm}"`);
 
   return `${indent}<slot ${attributes.join(" ")}/>`;
 }
@@ -274,6 +284,10 @@ export function parseTdpPresetXml(xml: string, keyName: NoteName = "C"): TdpPres
       warnings.push(`Unknown articulation ${attributes.performance} read as block`);
     }
 
+    if (attributes.rhythm !== undefined && !isRhythmGrid(attributes.rhythm)) {
+      warnings.push(`Dropped an unreadable rhythm grid "${attributes.rhythm}"`);
+    }
+
     const inversion = Math.round(Number(attributes.inversion ?? 0));
     if (inversion < 0 || inversion > 15) {
       warnings.push(`Unknown inversion ${attributes.inversion} read as root position`);
@@ -288,6 +302,7 @@ export function parseTdpPresetXml(xml: string, keyName: NoteName = "C"): TdpPres
       direction: Number(attributes.direction ?? DEFAULT_DIRECTION),
       inversion: inversion > 0 && inversion <= 15 ? inversion : 0,
       open: attributes.spread === "open",
+      rhythm: isRhythmGrid(attributes.rhythm) ? attributes.rhythm : undefined,
     });
   }
 
@@ -308,6 +323,8 @@ export function parseTdpPresetXml(xml: string, keyName: NoteName = "C"): TdpPres
 
     const effect = performanceEffect(slot);
     if (effect) chord.performance = effect;
+
+    if (slot.rhythm) chord.rhythm = slot.rhythm;
 
     if (slot.inversion !== 0 || slot.open) {
       chord.voicing = {

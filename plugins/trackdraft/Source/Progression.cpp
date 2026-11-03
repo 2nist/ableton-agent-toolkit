@@ -6,6 +6,36 @@
 
 namespace td
 {
+std::string RhythmPattern::toDigits() const
+{
+    std::string digits;
+    digits.reserve (steps);
+
+    for (auto value : level)
+        digits.push_back ((char) ('0' + (value > accent ? accent : value)));
+
+    return digits;
+}
+
+bool RhythmPattern::fromDigits (const std::string& digits, RhythmPattern& target)
+{
+    if (digits.size() != steps)
+        return false;
+
+    RhythmPattern pattern;
+    for (std::size_t i = 0; i < steps; ++i)
+    {
+        if (digits[i] < '0' || digits[i] > '3')
+            return false;
+
+        pattern.level[i] = (std::uint8_t) (digits[i] - '0');
+    }
+
+    pattern.enabled = true;
+    target = pattern;
+    return true;
+}
+
 double Progression::lengthInBeats() const noexcept
 {
     double total = 0.0;
@@ -128,17 +158,18 @@ void Progression::moveSlot (std::size_t from, std::size_t to)
     slots[to] = moved;
 }
 
-void Progression::applyArticulationToAll (std::size_t source)
+void Progression::applyFeelToAll (std::size_t source)
 {
     if (source >= count)
         return;
 
-    const auto articulation = slots[source];
+    const auto from = slots[source];
     for (std::size_t i = 0; i < count; ++i)
     {
-        slots[i].performance = articulation.performance;
-        slots[i].param = articulation.param;
-        slots[i].direction = articulation.direction;
+        slots[i].performance = from.performance;
+        slots[i].param = from.param;
+        slots[i].direction = from.direction;
+        slots[i].rhythm = from.rhythm;
     }
 }
 theory::Scale Progression::parallelModeOf (theory::Scale scale)

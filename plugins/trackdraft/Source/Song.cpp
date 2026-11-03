@@ -268,6 +268,7 @@ SongCycle::Playing SongCycle::playingAt (double beat) const
             playing.section = entries[i].section;
             playing.slot = entries[i].slotInSection;
             playing.pass = entries[i].pass;
+            playing.beatInSlot = position - entries[i].startBeat;
             return playing;
         }
     }

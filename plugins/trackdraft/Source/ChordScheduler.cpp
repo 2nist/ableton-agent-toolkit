@@ -20,6 +20,18 @@ int offsetForPpq (double ppq, double ppqStart, double ppqEnd, int numSamples)
     return juce::jlimit (0, juce::jmax (0, numSamples - 1), sample);
 }
 
+/** A pattern step's velocity: the accent is the knob's velocity, everything
+    else sits under it, so the grid reads as a groove rather than a machine. */
+int levelVelocity (int velocity, int level)
+{
+    switch (level)
+    {
+        case RhythmPattern::accent: return juce::jlimit (1, 127, velocity);
+        case RhythmPattern::ghost: return juce::jlimit (1, 127, (int) std::lround (velocity * 0.55));
+        default: return juce::jlimit (1, 127, (int) std::lround (velocity * 0.8));
+    }
+}
+
 int rootMidiFor (const ChordSlot& slot, const VoiceSettings& settings)
 {
     // Octave 4 is the octave that starts at middle C (MIDI 60), which is the
@@ -59,12 +71,53 @@ void ChordScheduler::scheduleChord (double atPpq, const ChordSlot& slot,
 {
     const int rootMidi = rootMidiFor (slot, settings);
     const int velocity = juce::jlimit (1, 127, settings.velocity);
-    const auto events = shapeChord (rootMidi, slot.quality, slot.beats, velocity,
-                                    slot.articulation (settings.gate), slot.voicing);
 
-    for (const auto& event : events)
-        pending.push_back ({ atPpq + event.offsetBeats, event.note, event.velocity,
-                             event.durationBeats });
+    // No pattern: the articulation plays the chord across the whole slot, which
+    // is what every slot written before patterns existed does.
+    if (! slot.rhythm.enabled)
+    {
+        const auto events = shapeChord (rootMidi, slot.quality, slot.beats, velocity,
+                                        slot.articulation (settings.gate), slot.voicing);
+
+        for (const auto& event : events)
+            pending.push_back ({ atPpq + event.offsetBeats, event.note, event.velocity,
+                                 event.durationBeats });
+
+        return;
+    }
+
+    // A pattern: the grid decides *when*, the slot's articulation decides *how*
+    // each hit is played, so a strummed grid and an arpeggiated grid stay one
+    // idea rather than two features.
+    const double stepBeats = 1.0 / (double) RhythmPattern::stepsPerBeat;
+    const double patternBeats = (double) RhythmPattern::steps * stepBeats;
+
+    for (double base = 0.0; base < slot.beats - 1e-9; base += patternBeats)
+    {
+        for (std::size_t step = 0; step < RhythmPattern::steps; ++step)
+        {
+            const double offset = base + (double) step * stepBeats;
+            if (offset >= slot.beats - 1e-9)
+                break;
+
+            const int level = (int) slot.rhythm.level[step];
+            if (level == RhythmPattern::off)
+                continue;
+
+            // The last hit must not overhang the slot into the next chord.
+            const double span = std::min (stepBeats, slot.beats - offset);
+            if (span <= 0.0)
+                continue;
+
+            const auto events = shapeChord (rootMidi, slot.quality, span,
+                                            levelVelocity (velocity, level),
+                                            slot.articulation (settings.gate), slot.voicing);
+
+            for (const auto& event : events)
+                pending.push_back ({ atPpq + offset + event.offsetBeats, event.note,
+                                     event.velocity, event.durationBeats });
+        }
+    }
 }
 
 void ChordScheduler::scheduleBass (double atPpq, const ChordCycle& cycle,

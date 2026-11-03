@@ -69,6 +69,11 @@ juce::XmlElement toXml (const Progression& progression, const juce::String& tagN
             element->setAttribute ("inversion", slot.voicing.inversion);
         if (slot.voicing.open)
             element->setAttribute ("spread", "open");
+
+        // Sixteen digits, one per sixteenth: 0 silent, 1 ghost, 2 normal,
+        // 3 accent. Absent means the slot has no pattern of its own.
+        if (slot.rhythm.enabled)
+            element->setAttribute ("rhythm", juce::String (slot.rhythm.toDigits()));
     }
 
     // A section with no bass voice writes nothing, so a progression from before
@@ -129,6 +134,16 @@ bool fromXml (const juce::XmlElement& xml, Progression& target)
         // the file honest; the spread is the app's "close"/"open" pair.
         slot.voicing.inversion = juce::jlimit (0, 15, element->getIntAttribute ("inversion", 0));
         slot.voicing.open = element->getStringAttribute ("spread", "close") == "open";
+
+        // A malformed grid leaves the slot with no pattern rather than a
+        // half-read one: sixteen digits of 0-3, or nothing.
+        if (element->hasAttribute ("rhythm"))
+        {
+            RhythmPattern pattern;
+            if (RhythmPattern::fromDigits (element->getStringAttribute ("rhythm").toStdString(),
+                                           pattern))
+                slot.rhythm = pattern;
+        }
 
         loaded.slots[(std::size_t) index] = slot;
         ++index;

@@ -136,12 +136,17 @@ void TrackDraftAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             playingSection.store ((int) playing.section);
             playingSlot.store ((int) playing.slot);
             playingPass.store ((int) playing.pass);
+
+            const double stepBeats = 1.0 / (double) RhythmPattern::stepsPerBeat;
+            const int step = (int) std::floor (std::fmod (playing.beatInSlot, 4.0) / stepBeats);
+            playingStep.store (juce::jlimit (0, (int) RhythmPattern::steps - 1, step));
         }
         else
         {
             playingSection.store (-1);
             playingSlot.store (-1);
             playingPass.store (-1);
+            playingStep.store (-1);
         }
     }
 

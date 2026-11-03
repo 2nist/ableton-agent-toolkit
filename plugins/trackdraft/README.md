@@ -103,12 +103,14 @@ notes without a boundary, and disabling emission releases what is sounding.
 | **Beats** | Length of the selected slot, 1-8. The cycle is the sum, so 4 × 4 beats is four bars of 4/4 |
 | **Walk row** | The six hex neighbours of the selected chord. A click writes that chord into the next slot and moves the selection there |
 | **Borrowed chord…** | Chords the *other* modes on this tonic would give the key — bIII, iv, bVI, bVII in a major key — derived at the triad, written into the selected slot |
+| **Rhythm grid** | Sixteen sixteenths for the selected slot: click a step to cycle off → normal → accent → ghost. The grid is *when* and the articulation is *how*, so a strummed grid and an arpeggiated grid are one idea. One bar long, tiled over a longer slot; a grid with no hits is silence, which is different from having no pattern. The cursor follows the transport |
+| **Clear rhythm** | Gives the slot back to its articulation |
 | **Articulation** (Block / Strum / Pulse / Arp) | Per slot. Strum uses the app's millisecond spread, Pulse re-strikes on a subdivision with a triangle accent, Arp walks the tones up, down or up-down |
 | **Inversion / spread** | Which chord tone is in the bass (root, 1st, 2nd … — the list is the chord's own tones, so a 13th offers six) and whether the upper voices stack close or open. The slot strip names the result as a slash chord, `C/E` |
 | **Bass line** (off / octave / motion / rhythm / velocity) | The section's own bass voice. Off unless it is asked for. `Root` holds the chord's bass tone, `Root-fifth` alternates with the fifth, `Walking` ends each chord on a leading tone into the next one; `Locked` sounds once per chord, `Half` twice, `Eighth` four times. It plays the tone the inversion put in the bass, so `C/E` is an E in the low end |
 | **Preview** | Plays the selected slot immediately, transport or not, so you can hear the voicing before committing to it |
 | **Drag a slot** | Click-drag reorders the progression; the drop target shows while dragging |
-| **Apply articulation to section** | Copies the selected slot's articulation onto every slot of the selected section |
+| **Apply feel to section** | Copies the selected slot's articulation *and* rhythm onto every slot of the selected section — the "feel" of a part is both |
 | **Presets** | Save / Rename / Delete the selected *section* under a name (one `.tdp.xml` per preset in `~/Library/Application Support/TrackDraft/Presets`), pick one to load it. A file written as a whole song loads as a song instead, because the list is one folder and the file says which it is. Names are sanitised to a filename and never allowed to define a path. Factory entries (one per mode, plus `bVI–bVII–I` and `i–iv–bVI–V`) are code, not files, and cannot be renamed or deleted |
 | **Import…** | Load a progression from a `.mid`, `.midi`, `.jams` or `.json` annotation file — see below |
 | **Detect MIDI / Use heard** | Arm listening to the notes the host sends in, then write the recognised chord into the selected slot. The readout names both what you played and what the slot says, so the difference is the decision |
@@ -151,7 +153,8 @@ A slot also carries `inversion` and `spread="open"` when the chord is voiced,
 omitted when it is in root position and close — so a file written before
 voicings existed is byte-identical to one written now. A section carries its
 bass voice as `<bass octave motion rhythm velocity/>`, written only when the
-voice is on; a song exported from the app always has one, because the app's
+voice is on, and its rhythm as `rhythm="3001200030002000"` — sixteen digits, one
+per sixteenth, written only when the slot has a grid of its own; a song exported from the app always has one, because the app's
 `.mid` export always has, and a *preset* never does — a preset is a chord set,
 and the section it lands in keeps its own bass.
 
@@ -198,6 +201,15 @@ rather than against each side's assumptions.
   deliberately *not* the chord register's `(octave + 1) * 12`, which puts octave 4
   at middle C. The two differ by an octave, and a bass written with the chord
   formula would land where the chord already is.
+- A slot's **rhythm grid** decides which sixteenths sound and how hard; the
+  slot's articulation decides what each hit is (a block, a strum, an arpeggio
+  across that sixteenth). A grid is one bar of 4/4 and tiles over a longer slot,
+  a shorter slot uses the steps that fit, and the last hit is trimmed so it never
+  hangs into the next chord.
+- Levels are velocities relative to the Velocity knob: accent = the knob, normal
+  = 80%, ghost = 55%. A grid with no hits is silence; no grid at all means the
+  articulation plays the chord across the whole slot, which is what every slot
+  written before the grid existed does.
 - Chords start on their slot boundary, sample-accurate within the block.
 - The **song** is a flat beat timeline: every pass of every section, in
   arrangement order, with repeats expanded. The transport's song position decides

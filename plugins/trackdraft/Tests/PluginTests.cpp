@@ -389,7 +389,7 @@ void testReorderAndApplyAll()
     progression.slots[1].param = 6;
     progression.slots[1].direction = 1;
     progression.slots[0].performance = td::Performance::block;
-    progression.applyArticulationToAll (1);
+    progression.applyFeelToAll (1);
 
     for (std::size_t i = 0; i < progression.count; ++i)
     {
@@ -1009,6 +1009,185 @@ void testVoicingScheduler()
     }
 }
 
+/** Builds a grid from 16 characters, "3" accent, "2" normal, "1" ghost, "0" off. */
+td::RhythmPattern grid (const char* digits)
+{
+    td::RhythmPattern pattern;
+    check (td::RhythmPattern::fromDigits (digits, pattern), juce::String ("grid ") + digits);
+    return pattern;
+}
+
+void testRhythmPattern()
+{
+    // The digits are the file format, so they round-trip exactly.
+    auto pattern = grid ("3002000030020000");
+    checkEqual (juce::String (pattern.toDigits()), juce::String ("3002000030020000"),
+                "a grid round-trips through its digits");
+    check (pattern.enabled, "reading a grid enables it");
+    check (pattern.anyHit(), "and it has hits");
+
+    // Malformed input is refused rather than half-read.
+    td::RhythmPattern untouched;
+    check (! td::RhythmPattern::fromDigits ("3002", untouched), "a short grid is refused");
+    check (! td::RhythmPattern::fromDigits ("3002000030020004", untouched), "a digit out of range is refused");
+    check (! untouched.enabled, "and nothing was stored");
+
+    // Sixteen sixteenths are one bar of 4/4.
+    checkEqual ((int) td::RhythmPattern::steps, 16, "sixteen steps");
+    checkEqual (td::RhythmPattern::stepsPerBeat, 4, "four to the beat");
+}
+
+void testRhythmScheduler()
+{
+    td::VoiceSettings settings;
+    settings.octave = 4;
+    settings.velocity = 100;
+    settings.gate = 0.9;
+    settings.enabled = true;
+
+    auto onsets = [] (const juce::MidiBuffer& buffer)
+    {
+        std::vector<int> samples;
+        for (const auto metadata : buffer)
+            if (metadata.getMessage().isNoteOn())
+                samples.push_back (metadata.samplePosition);
+
+        std::sort (samples.begin(), samples.end());
+        samples.erase (std::unique (samples.begin(), samples.end()), samples.end());
+        return samples;
+    };
+
+    auto velocities = [] (const juce::MidiBuffer& buffer)
+    {
+        std::vector<int> found;
+        for (const auto metadata : buffer)
+            if (metadata.getMessage().isNoteOn())
+                found.push_back (metadata.getMessage().getVelocity());
+        std::sort (found.begin(), found.end());
+        return found;
+    };
+
+    // One bar of 4 beats in a single block of 2048 samples: 4 hits, at the
+    // grid's own sixteenths.
+    td::Progression progression;
+    progression.count = 1;
+    progression.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    progression.slots[0].rhythm = grid ("3000200030002000");
+
+    {
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 0.0, 4.0 }, progression, settings, 2048);
+
+        const auto starts = onsets (out);
+        checkEqual ((int) starts.size(), 4, "four hits in the bar");
+        checkEqual (starts[0], 0, "the first is on the downbeat");
+        // A 2048-sample bar of 4/4 is 128 samples per sixteenth, and the grid
+        // "3000200030002000" hits steps 0, 4, 8 and 12.
+        checkEqual (starts[1], 512, "the second lands on step 4");
+        checkEqual (starts[2], 1024, "the third on step 8");
+        checkEqual (starts[3], 1536, "the fourth on step 12");
+    }
+
+    // Accents are the knob's velocity; the levels sit under it.
+    {
+        auto mixed = progression;
+        mixed.slots[0].rhythm = grid ("3001200030002000");
+
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 0.0, 4.0 }, mixed, settings, 2048);
+
+        const auto found = velocities (out);
+        check (std::find (found.begin(), found.end(), 100) != found.end(), "an accent uses the velocity");
+        check (std::find (found.begin(), found.end(), 80) != found.end(), "a normal hit sits at 80%");
+        check (std::find (found.begin(), found.end(), 55) != found.end(), "a ghost sits at 55%");
+    }
+
+    // A pattern with no hits is silence — a real choice for a slot, and
+    // different from having no pattern at all.
+    {
+        auto silent = progression;
+        silent.slots[0].rhythm = grid ("0000000000000000");
+
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 0.0, 4.0 }, silent, settings, 2048);
+        checkEqual (out.getNumEvents(), 0, "an empty grid plays nothing");
+    }
+
+    // Without a pattern the slot plays its articulation across the whole span,
+    // exactly as it did before patterns existed.
+    {
+        auto plain = progression;
+        plain.slots[0].rhythm = {};
+
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 0.0, 4.0 }, plain, settings, 2048);
+        checkEqual ((int) onsets (out).size(), 1, "no pattern is one chord onset");
+        checkEqual ((int) velocities (out).size(), 3, "of its three notes");
+    }
+
+    // A grid tiles over a slot longer than a bar...
+    {
+        auto longer = progression;
+        longer.slots[0].beats = 8.0;
+
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 0.0, 8.0 }, longer, settings, 4096);
+        checkEqual ((int) onsets (out).size(), 8, "and repeats once over eight beats");
+    }
+
+    // ...and a shorter slot uses only the steps that fit, with no note left
+    // hanging over the next chord.
+    {
+        auto shorter = progression;
+        shorter.slots[0].beats = 2.0;
+
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        scheduler.process (out, { true, 0.0, 2.0 }, shorter, settings, 2048);
+        const auto starts = onsets (out);
+        checkEqual ((int) starts.size(), 2, "a two-beat slot uses two of the four hits");
+        check (starts.back() < 2048, "and nothing is scheduled past the slot");
+    }
+}
+
+void testRhythmXml()
+{
+    td::Progression progression;
+    progression.count = 1;
+    progression.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    progression.slots[0].rhythm = grid ("3002000030020000");
+
+    const auto xml = td::toXml (progression, "TrackDraftPreset");
+    checkEqual (xml.getChildByName ("slot")->getStringAttribute ("rhythm"),
+                juce::String ("3002000030020000"), "the grid is written");
+
+    td::Progression loaded;
+    check (td::fromXml (xml, loaded), "the progression reads back");
+    check (loaded.slots[0].rhythm.enabled, "the grid survives");
+    checkEqual (juce::String (loaded.slots[0].rhythm.toDigits()),
+                juce::String ("3002000030020000"), "digit for digit");
+
+    // No pattern, no attribute: a file from before patterns round-trips unchanged.
+    td::Progression plain;
+    plain.count = 1;
+    plain.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    check (! td::toXml (plain, "TrackDraftPreset").getChildByName ("slot")->hasAttribute ("rhythm"),
+           "no pattern writes no attribute");
+
+    // A malformed grid is ignored rather than failing the whole file.
+    const auto odd = juce::parseXML (juce::String (
+        "<TrackDraftPreset count=\"1\"><slot root=\"0\" quality=\"maj\" beats=\"4\" "
+        "rhythm=\"nonsense\"/></TrackDraftPreset>"));
+    td::Progression fallback;
+    check (odd != nullptr && td::fromXml (*odd, fallback), "a bad grid still loads the chord");
+    check (! fallback.slots[0].rhythm.enabled, "with no pattern");
+}
+
 void testBassPlanning()
 {
     td::BassLine line;
@@ -1461,7 +1640,7 @@ void testSongXml()
   <section name="Chorus">
     <progression version="1" count="2">
       <slot root="5" quality="maj" beats="4" performance="0" param="0" direction="2"/>
-      <slot root="7" quality="7" beats="4" performance="3" param="8" direction="1"/>
+      <slot root="7" quality="7" beats="4" performance="3" param="8" direction="1" rhythm="3001200030002000"/>
       <bass octave="2" motion="walking" rhythm="eighth" velocity="88"/>
     </progression>
   </section>
@@ -1494,6 +1673,9 @@ void testSongXml()
            "in eighths");
     checkEqual (fromApp.sections[1].progression.bass.octave, 2, "an octave down");
     checkEqual (fromApp.sections[1].progression.bass.velocity, 88, "and softer");
+    check (fromApp.sections[1].progression.slots[1].rhythm.enabled, "the app's rhythm grid arrives");
+    checkEqual (juce::String (fromApp.sections[1].progression.slots[1].rhythm.toDigits()),
+                juce::String ("3001200030002000"), "digit for digit");
 }
 
 } // namespace
@@ -1512,6 +1694,7 @@ int main (int argc, char** argv)
         sample.slots[1] = { 5, td::theory::Quality::min, 2.0, td::Performance::strum, 150, 2 };
         sample.slots[1].voicing = { 1, false };
         sample.slots[2] = { 7, td::theory::Quality::seven, 8.0, td::Performance::arp, 8, 1 };
+        td::RhythmPattern::fromDigits ("3001200030002000", sample.slots[2].rhythm);
         std::cout << td::toXml (sample, "TrackDraftPreset").toString() << std::endl;
         return 0;
     }
@@ -1578,6 +1761,9 @@ int main (int argc, char** argv)
     testScheduler();
     testVoicing();
     testVoicingScheduler();
+    testRhythmPattern();
+    testRhythmScheduler();
+    testRhythmXml();
     testBassPlanning();
     testBassXml();
     testVoicingXml();

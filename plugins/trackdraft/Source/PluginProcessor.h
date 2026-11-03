@@ -85,6 +85,8 @@ public:
     std::atomic<int> playingSection { -1 };
     std::atomic<int> playingSlot { -1 };
     std::atomic<int> playingPass { -1 };
+    /** Sixteenth within the slot's rhythm grid, or -1 when nothing plays. */
+    std::atomic<int> playingStep { -1 };
 
     std::atomic<bool> detectionArmed { false };
     /** -1 = nothing queued; otherwise the pitch class to audition. */
