@@ -12,6 +12,7 @@ import MidiSetupPanel from "./MidiSetupPanel";
 import MidiReceivingGuide from "./MidiReceivingGuide";
 import ExportMenu from "./ExportMenu";
 import StorageSection from "./StorageSection";
+import PolyCanvasSettings from "./PolyCanvasSettings";
 import DirSetupModal from "../dashboard/DirSetupModal";
 import TapeLabel from "../common/TapeLabel";
 import { openLyricChordPopout } from "../../lib/popout";
@@ -24,6 +25,9 @@ import { openLyricChordPopout } from "../../lib/popout";
  *   MIDI & sync      — the playback clock, the live MIDI-out setup
  *                      (embedded, no longer only a modal), and the Live
  *                      template guide
+ *   Canvas           — the Poly canvas's reading preferences: lane order and
+ *                      whether chords read as numerals or names. Device-wide
+ *                      on purpose: how you read a chart is a habit, not a song.
  *   Export & windows — the song outputs (JSON · MIDI · Ableton) and the
  *                      lyrics/chords popout window
  *   Files            — local directories (the same store the dashboard's
@@ -92,6 +96,20 @@ export default function SettingsView() {
           <MidiSetupPanel inline onClose={() => {}} />
         </div>
       </section>
+
+      {/* Canvas — dev-only, like the surface it configures: a packaged build has
+          no Poly route, so a section for it would be a dead setting. */}
+      {import.meta.env.DEV ? (
+        <section className="border border-edge rounded-lg bg-panel overflow-hidden">
+          <header className="flex items-center gap-2 px-3 py-2 border-b border-edge/70">
+            <TapeLabel size="md" className="text-3xs font-mono uppercase tracking-widest text-inkMuted">Canvas</TapeLabel>
+            <span className="text-[9px] font-mono text-inkMuted/40 truncate flex-1" title="Reading preferences for the Poly canvas — remembered on this device, never written into the song">
+              remembered on this device
+            </span>
+          </header>
+          <PolyCanvasSettings />
+        </section>
+      ) : null}
 
       {/* Export & windows */}
       <section className="border border-edge rounded-lg bg-panel overflow-hidden">

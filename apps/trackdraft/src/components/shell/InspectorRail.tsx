@@ -37,6 +37,8 @@ const FACETS: { id: InspectorTab; icon: IconName; label: string }[] = [
  *  never hidden. */
 const VIEW_FACETS: Record<string, InspectorTab[]> = {
   workbench: ["structure", "drums", "harmony", "lyrics", "mix", "song", "sync"],
+  // The poly canvas selects sections, so every element facet is meaningful.
+  poly: ["structure", "drums", "harmony", "lyrics", "mix", "song", "sync"],
   structure: ["structure", "song", "sync"],
   harmony: ["harmony", "structure", "song", "sync"],
   drums: ["drums", "structure", "song", "sync"],

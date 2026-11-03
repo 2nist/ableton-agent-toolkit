@@ -26,6 +26,14 @@ import ErrorBoundary from "./components/common/ErrorBoundary";
 const LivePreviewSandbox = import.meta.env.DEV
   ? lazy(() => import("./pages/LivePreviewSandbox"))
   : null;
+/** The infinite-canvas experiment (session plan §0.5). Dev-only: it renders
+ *  `sectionSpans()` and writes nothing, so it cannot reach a packaged build
+ *  until it earns the right. */
+const PolyView = import.meta.env.DEV ? lazy(() => import("./components/poly/PolyView")) : null;
+/** Spike S3: the canvas at 64 sections, measured. Dev-only, writes nothing. */
+const PolyPerfLab = import.meta.env.DEV
+  ? lazy(() => import("./components/poly/PolyPerfLab"))
+  : null;
 const GenreWorkbench = lazy(() => import("./pages/GenreWorkbench"));
 const DesignLab = lazy(() => import("./pages/DesignLab"));
 const StudioLogLab = lazy(() => import("./pages/studio-log/StudioLogLab"));
@@ -90,6 +98,9 @@ function App() {
                 <Route path="melody" element={<MelodyView />} />
                 <Route path="study" element={<StudyRedirect />} />
                 <Route path="workbench" element={<WorkbenchView />} />
+                {import.meta.env.DEV && PolyView ? (
+                  <Route path="poly" element={<PolyView />} />
+                ) : null}
                 <Route path="library" element={<LibraryView />} />
                 <Route path="settings" element={<SettingsView />} />
               </Route>
@@ -99,6 +110,9 @@ function App() {
               <Route path="/song/:songId/popout" element={<LyricChordPopout />} />
               {import.meta.env.DEV && LivePreviewSandbox ? (
                 <Route path="/sandbox" element={<LivePreviewSandbox />} />
+              ) : null}
+              {import.meta.env.DEV && PolyPerfLab ? (
+                <Route path="/perf" element={<PolyPerfLab />} />
               ) : null}
               <Route path="/canvas" element={<RenderCanvasLayout />} />
               <Route path="/genre-workbench" element={<GenreWorkbench />} />

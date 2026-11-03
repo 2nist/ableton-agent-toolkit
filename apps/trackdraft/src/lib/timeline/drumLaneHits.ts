@@ -42,6 +42,9 @@ export interface LaneHit {
   beat: number;
   velocity: number;
   voice: KitVoice;
+  /** How long the hit holds, in beats, when the planner knows — the gate the
+   *  canvas draws. Absent on the paths that carry pitch only. */
+  durBeats?: number;
   /** True when the hit falls between the view's dot positions (a
    *  decoupled / odd-meter / 16th onset) — rendered as a ◇ diamond. */
   offGrid: boolean;
@@ -58,7 +61,12 @@ export type LaneHits = Map<DrumLaneId, LaneHit[]>;
  *  lanes are dropped by the SAME rule the planner uses (`audibleLanes`), so
  *  the canvas shows exactly what will play. */
 export function laneHitsFromNotes(
-  notes: readonly { beat: number; pitch: number; velocity: number }[],
+  notes: readonly {
+    beat: number;
+    pitch: number;
+    velocity: number;
+    duration?: number;
+  }[],
   section: Pick<BlueprintSection, "drumLaneMute" | "drumLaneSolo">,
 ): LaneHits {
   const out: LaneHits = new Map();
@@ -73,6 +81,10 @@ export function laneHitsFromNotes(
       beat: n.beat,
       velocity: n.velocity,
       voice,
+      // The resolved note's own length: a painted step's `durBeats`, or the
+      // 0.25 the block grid gives a generated hit. The canvas draws this, so a
+      // hit that holds looks different from a tick.
+      ...(n.duration !== undefined ? { durBeats: n.duration } : {}),
       offGrid: Math.abs(n.beat - Math.round(n.beat)) > 1e-3,
     });
     out.set(lane, arr);

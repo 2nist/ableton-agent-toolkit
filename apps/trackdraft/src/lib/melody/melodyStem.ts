@@ -11,7 +11,11 @@
  * Ableton. A section with no `melody` simply contributes nothing.
  */
 
-import { resolveEffectiveStyle, styleMelodyLine } from "@drum/library";
+import {
+  conductSection,
+  resolveEffectiveStyle,
+  styleMelodyLine,
+} from "@drum/library";
 import type { SectionSpan } from "../arrangement";
 import type { MidiNote } from "../midiExport";
 import type { BlueprintSong } from "../../types/blueprint";
@@ -25,16 +29,23 @@ export const DEFAULT_MELODY_VELOCITY = 96;
 export function planMelodyStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
-    const melody = span.section.melody;
-    if (!melody || melody.notes.length === 0) continue;
+    const section = span.section;
+    if (!section.melody || section.melody.notes.length === 0) continue;
     // Bend Melody layer: the Contour axis applies to a captured line here.
     // Generated lines already applied it (and set `contourApplied`), so they
     // are passed through untouched — no double shaping.
-    const profile = resolveEffectiveStyle(span.section, song);
-    const shaped = melody.contourApplied
-      ? melody.notes
-      : styleMelodyLine(melody.notes, profile.melodyContour);
-    for (const n of shaped) {
+    const profile = resolveEffectiveStyle(section, song);
+    const shaped = section.melody.contourApplied
+      ? section.melody.notes
+      : styleMelodyLine(section.melody.notes, profile.melodyContour);
+    // The section's own clock (§P3.6): one conduction at the boundary, so the
+    // captured line lands where the chords it was written against do. Contour
+    // shaping happens first — it reads local pitches, not local beats.
+    const placed = conductSection(
+      { ...section, melody: { ...section.melody, notes: shaped } },
+      span.durationBeats,
+    ).melody!.notes;
+    for (const n of placed) {
       notes.push({
         pitch: Math.max(0, Math.min(127, Math.round(n.pitch))),
         startTime: span.startBeat + n.startTime,

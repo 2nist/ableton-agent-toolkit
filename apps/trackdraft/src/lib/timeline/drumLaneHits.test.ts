@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { DRUM_LANE_VOICES, voiceOf } from "@drum/library";
-import { laneHitsFromNotes, resolvePlayedLaneHits, resolveSectionLaneHits } from "./drumLaneHits";
+import {
+  laneHitsFromNotes,
+  resolvePlayedLaneHits,
+  resolveSectionLaneHits,
+} from "./drumLaneHits";
+import { polyDrums } from "../poly/content";
 import { planDrumSections, planDrumStem } from "../midiExport";
 import { stepIndexOf } from "../drums/stepMath";
 import type { BlueprintSection } from "../../types/blueprint";
@@ -11,7 +16,9 @@ for (const [lane, voices] of Object.entries(DRUM_LANE_VOICES)) {
   for (const voice of voices as string[]) LANE_OF_VOICE.set(voice, lane);
 }
 
-function makeSection(blocks?: BlueprintSection["drumBlocks"]): BlueprintSection {
+function makeSection(
+  blocks?: BlueprintSection["drumBlocks"],
+): BlueprintSection {
   return {
     id: "sec-1",
     name: "Verse",
@@ -47,7 +54,9 @@ describe("resolveSectionLaneHits — the dotted lanes' data source", () => {
     // opens up on its last eighth.
     const sec = { ...makeSection(), bars: 8 };
     const hits = resolveSectionLaneHits(sec, undefined, 0);
-    const openHats = (hits.get("hat") ?? []).filter((h) => h.voice === "openHat").map((h) => h.beat);
+    const openHats = (hits.get("hat") ?? [])
+      .filter((h) => h.voice === "openHat")
+      .map((h) => h.beat);
     expect(openHats.length, "no open hat in the cycle").toBeGreaterThan(0);
     // 4 + 3.5 = bar 2's last eighth.
     expect(openHats.some((beat) => Math.abs(beat - 7.5) < 0.06)).toBe(true);
@@ -59,11 +68,23 @@ describe("resolveSectionLaneHits — the dotted lanes' data source", () => {
 
   it("compiles an euclid block over the lane's range only", () => {
     const sec = makeSection([
-      { id: "b1", lane: "kick", startBeat: 8, endBeat: 12, mode: "euclid", euclid: { k: 2, n: 4, rotation: 0 } },
+      {
+        id: "b1",
+        lane: "kick",
+        startBeat: 8,
+        endBeat: 12,
+        mode: "euclid",
+        euclid: { k: 2, n: 4, rotation: 0 },
+      },
     ]);
     const hits = resolveSectionLaneHits(sec, undefined, 0);
     const kick = hits.get("kick")!;
-    expect(kick.filter((h) => h.beat >= 8 && h.beat < 12).map((h) => h.beat).sort((a, b) => a - b)).toEqual([8, 10]);
+    expect(
+      kick
+        .filter((h) => h.beat >= 8 && h.beat < 12)
+        .map((h) => h.beat)
+        .sort((a, b) => a - b),
+    ).toEqual([8, 10]);
     // Base groove outside the block range is untouched.
     expect(kick.some((h) => h.beat < 8)).toBe(true);
     expect(kick.some((h) => h.beat >= 12)).toBe(true);
@@ -72,7 +93,11 @@ describe("resolveSectionLaneHits — the dotted lanes' data source", () => {
   it("compiles a steps block as a lane-range replacement (toggle semantics)", () => {
     const sec = makeSection([
       {
-        id: "s1", lane: "hat", startBeat: 0, endBeat: 2, mode: "steps",
+        id: "s1",
+        lane: "hat",
+        startBeat: 0,
+        endBeat: 2,
+        mode: "steps",
         notes: [{ beat: 0.5, voice: "closedHat", velocity: 90 }],
       },
     ]);
@@ -87,13 +112,41 @@ describe("resolveSectionLaneHits — the dotted lanes' data source", () => {
 
   it("spreads a cluster across lanes by priority (interleave)", () => {
     const sec = makeSection([
-      { id: "c1", lane: "snare", groupId: "g", interleave: true, startBeat: 0, endBeat: 4, mode: "euclid", euclid: { k: 3, n: 4, rotation: 0 } },
-      { id: "c2", lane: "tom", groupId: "g", interleave: true, startBeat: 0, endBeat: 4, mode: "euclid", euclid: { k: 3, n: 4, rotation: 0 } },
+      {
+        id: "c1",
+        lane: "snare",
+        groupId: "g",
+        interleave: true,
+        startBeat: 0,
+        endBeat: 4,
+        mode: "euclid",
+        euclid: { k: 3, n: 4, rotation: 0 },
+      },
+      {
+        id: "c2",
+        lane: "tom",
+        groupId: "g",
+        interleave: true,
+        startBeat: 0,
+        endBeat: 4,
+        mode: "euclid",
+        euclid: { k: 3, n: 4, rotation: 0 },
+      },
     ]);
     const hits = resolveSectionLaneHits(sec, undefined, 0);
     // Onsets 0,1,3 → snare, tom, snare.
-    expect(hits.get("snare")!.filter((h) => h.beat < 4).map((h) => h.beat)).toEqual([0, 3]);
-    expect(hits.get("tom")!.filter((h) => h.beat < 4).map((h) => h.beat)).toEqual([1]);
+    expect(
+      hits
+        .get("snare")!
+        .filter((h) => h.beat < 4)
+        .map((h) => h.beat),
+    ).toEqual([0, 3]);
+    expect(
+      hits
+        .get("tom")!
+        .filter((h) => h.beat < 4)
+        .map((h) => h.beat),
+    ).toEqual([1]);
   });
 });
 
@@ -106,7 +159,8 @@ describe("resolveSectionLaneHits — the dotted lanes' data source", () => {
  */
 describe("precedence — authored blocks over the preset", () => {
   it("plays the authored note, not the preset's, inside the block's range", () => {
-    const base = resolveSectionLaneHits(makeSection(), undefined, 0).get("kick") ?? [];
+    const base =
+      resolveSectionLaneHits(makeSection(), undefined, 0).get("kick") ?? [];
     // A kick on an off-beat the `standard` preset does not play.
     const authored = makeSection([
       {
@@ -118,9 +172,12 @@ describe("precedence — authored blocks over the preset", () => {
         notes: [{ beat: 1.5, voice: "kick", velocity: 120 }],
       },
     ]);
-    const withBlock = resolveSectionLaneHits(authored, undefined, 0).get("kick") ?? [];
+    const withBlock =
+      resolveSectionLaneHits(authored, undefined, 0).get("kick") ?? [];
     expect(withBlock.some((h) => Math.abs(h.beat - 1.5) < 1e-6)).toBe(true);
-    expect(withBlock.some((h) => h.beat < 2 && Math.abs(h.beat - 1.5) > 1e-6)).toBe(false);
+    expect(
+      withBlock.some((h) => h.beat < 2 && Math.abs(h.beat - 1.5) > 1e-6),
+    ).toBe(false);
     // Outside the block, the preset is untouched.
     expect(withBlock.some((h) => h.beat >= 2)).toBe(true);
     expect(base.length).toBeGreaterThan(0);
@@ -130,17 +187,23 @@ describe("precedence — authored blocks over the preset", () => {
     // `half_time` has no snare near beats 1 or 3; the export's backbeat
     // inserter adds them when the Bend asks for it, so the grid must too.
     const halfTime = { ...makeSection(), drumPattern: "half_time" as const };
-    const plain = resolveSectionLaneHits(halfTime, undefined, 0).get("snare") ?? [];
-    const bent = resolveSectionLaneHits(
-      { ...halfTime, bend: { backbeat: 1 } },
-      undefined,
-      0,
-    ).get("snare") ?? [];
+    const plain =
+      resolveSectionLaneHits(halfTime, undefined, 0).get("snare") ?? [];
+    const bent =
+      resolveSectionLaneHits(
+        { ...halfTime, bend: { backbeat: 1 } },
+        undefined,
+        0,
+      ).get("snare") ?? [];
     expect(plain.some((h) => Math.abs(h.beat - 3) <= 0.25)).toBe(false);
     expect(bent.some((h) => Math.abs(h.beat - 3) < 1e-6)).toBe(true);
     // Nothing the plain groove played is dropped by strengthening.
     for (const hit of plain) {
-      expect(bent.some((h) => Math.abs(h.beat - hit.beat) < 1e-6 && h.voice === hit.voice)).toBe(true);
+      expect(
+        bent.some(
+          (h) => Math.abs(h.beat - hit.beat) < 1e-6 && h.voice === hit.voice,
+        ),
+      ).toBe(true);
     }
   });
 
@@ -177,11 +240,16 @@ describe("precedence — authored blocks over the preset", () => {
 
   it("lets the meter outline beat the preset", () => {
     const outlined = makeSection();
-    outlined.drumMeterOutline = { cellBeats: 0.5, cells: [2, 2, 2, 2] as (2 | 3)[], label: "4/4" };
+    outlined.drumMeterOutline = {
+      cellBeats: 0.5,
+      cells: [2, 2, 2, 2] as (2 | 3)[],
+      label: "4/4",
+    };
     const presetOnly = makeSection();
     const a = resolveSectionLaneHits(outlined, undefined, 0);
     const b = resolveSectionLaneHits(presetOnly, undefined, 0);
-    const total = (m: Map<string, { beat: number }[]>) => [...m.values()].reduce((n, l) => n + l.length, 0);
+    const total = (m: Map<string, { beat: number }[]>) =>
+      [...m.values()].reduce((n, l) => n + l.length, 0);
     expect(total(a)).toBeGreaterThan(0);
     expect(total(a)).not.toBe(total(b));
   });
@@ -208,9 +276,11 @@ describe("resolvePlayedLaneHits — what the lanes draw is what plays", () => {
     const played = resolvePlayedLaneHits(spans, undefined, 0);
     const plan = planDrumSections(spans, undefined)[0];
 
-    const drawn = [...played.entries()].flatMap(([lane, hits]) =>
-      hits.map((h) => `${lane}:${h.beat.toFixed(4)}:${h.velocity}`),
-    ).sort();
+    const drawn = [...played.entries()]
+      .flatMap(([lane, hits]) =>
+        hits.map((h) => `${lane}:${h.beat.toFixed(4)}:${h.velocity}`),
+      )
+      .sort();
     const planned = plan.notes
       .map((n) => {
         const voice = voiceOf(n.pitch as never);
@@ -223,15 +293,23 @@ describe("resolvePlayedLaneHits — what the lanes draw is what plays", () => {
 
   it("shows the mid-section detour instead of the pocket it replaces", () => {
     const section = makeSection();
-    section.drumVariationOutline = { cells: [3, 3, 3, 3], cellBeats: 2, label: "3" };
+    section.drumVariationOutline = {
+      cells: [3, 3, 3, 3],
+      cellBeats: 2,
+      label: "3",
+    };
     section.drumVariationBars = 1;
     section.drumVariationStartBeat = 8;
     const spans = [spanFor(section)];
 
-    const pocketInWindow = [...resolveSectionLaneHits(section, undefined, 0).values()]
+    const pocketInWindow = [
+      ...resolveSectionLaneHits(section, undefined, 0).values(),
+    ]
       .flat()
       .filter((h) => h.beat >= 8 && h.beat < 12).length;
-    const playedInWindow = [...resolvePlayedLaneHits(spans, undefined, 0).values()]
+    const playedInWindow = [
+      ...resolvePlayedLaneHits(spans, undefined, 0).values(),
+    ]
       .flat()
       .filter((h) => h.beat >= 8 && h.beat < 12).length;
 
@@ -250,7 +328,10 @@ describe("resolvePlayedLaneHits — what the lanes draw is what plays", () => {
   });
 
   it("bins notes by voice into their own lane family", () => {
-    const hits = laneHitsFromNotes([{ beat: 1, pitch: 36, velocity: 100 }], makeSection());
+    const hits = laneHitsFromNotes(
+      [{ beat: 1, pitch: 36, velocity: 100 }],
+      makeSection(),
+    );
     expect(hits.get("kick")).toEqual([
       { beat: 1, velocity: 100, voice: "kick", offGrid: false },
     ]);
@@ -264,13 +345,21 @@ describe("the lanes a transition rewrites", () => {
     section.drumTransitionBars = 1;
     const spans = [spanFor(section)];
 
-    const cells = (hits: ReturnType<typeof resolvePlayedLaneHits>, step: number) => {
+    const cells = (
+      hits: ReturnType<typeof resolvePlayedLaneHits>,
+      step: number,
+    ) => {
       const out = new Set<string>();
       const stepCount = Math.floor(16 / step);
       for (const [lane, list] of hits) {
         for (const h of list) {
           const idx = stepIndexOf(h.beat, step);
-          if (idx >= 0 && idx < stepCount && Math.abs(h.beat - idx * step) <= 0.02) out.add(`${lane}:${idx}`);
+          if (
+            idx >= 0 &&
+            idx < stepCount &&
+            Math.abs(h.beat - idx * step) <= 0.02
+          )
+            out.add(`${lane}:${idx}`);
         }
       }
       return out;
@@ -284,9 +373,121 @@ describe("the lanes a transition rewrites", () => {
     };
 
     // The build-up owns the last bar: the drawn cells there are the fill's.
-    const playedFinal = [...cells(played, 0.25)].filter((k) => inFinalBar(k, 0.25));
-    const pocketFinal = [...cells(pocket, 0.25)].filter((k) => inFinalBar(k, 0.25));
+    const playedFinal = [...cells(played, 0.25)].filter((k) =>
+      inFinalBar(k, 0.25),
+    );
+    const pocketFinal = [...cells(pocket, 0.25)].filter((k) =>
+      inFinalBar(k, 0.25),
+    );
     expect(playedFinal.length).toBeGreaterThan(0);
     expect(playedFinal).not.toEqual(pocketFinal);
+  });
+});
+
+describe("a section's own clock (timeDomain)", () => {
+  // A blocks-only section: no groove, no gestures, so both resolvers compile
+  // exactly the authored material and the comparison is about the clock alone.
+  const blocks = [
+    {
+      id: "clock-block",
+      lane: "kick",
+      startBeat: 0,
+      endBeat: 4,
+      mode: "euclid",
+      euclid: { k: 4, n: 4, rotation: 0 },
+    },
+  ];
+  const section = {
+    id: "clocked",
+    name: "Clocked",
+    role: "verse",
+    bars: 4,
+    chords: [],
+    beatsPerChord: 4,
+    velocity: "mf",
+    timeSignatureNumerator: 4,
+    timeSignatureDenPower: 2,
+    drumPattern: "none",
+    drumBlocks: blocks,
+  } as unknown as BlueprintSection;
+  const span = (withClock: boolean): SectionSpan =>
+    ({
+      sectionId: section.id,
+      section: withClock
+        ? ({ ...section, timeDomain: { rate: 2 } } as BlueprintSection)
+        : section,
+      occurrenceIndex: 0,
+      startBeat: 0,
+      durationBeats: 16,
+      startBar: 0,
+      bars: 4,
+    }) as SectionSpan;
+
+  it("moves the exported notes, not just the picture", () => {
+    const plain = planDrumSections([span(false)], undefined)[0].notes;
+    const clocked = planDrumSections([span(true)], undefined)[0].notes;
+    expect(plain.length).toBeGreaterThan(0);
+    // Double time halves every gap — and then repeats the section to fill it,
+    // because a kit that went quiet halfway through while the harmony kept
+    // playing would be worse than no clock at all.
+    expect(clocked[1].beat).toBeCloseTo(plain[1].beat / 2, 6);
+    expect(clocked.length).toBeGreaterThanOrEqual(plain.length);
+    expect(Math.max(...clocked.map((note) => note.beat))).toBeGreaterThan(
+      Math.max(...plain.map((note) => note.beat)) * 0.9,
+    );
+  });
+
+  it("moves a groove-led section too, not just an imported one", () => {
+    const grooved = {
+      ...section,
+      drumPattern: "standard",
+      drumBlocks: undefined,
+    } as BlueprintSection;
+    const plain = planDrumSections(
+      [{ ...span(false), section: grooved }] as SectionSpan[],
+      undefined,
+    )[0].notes;
+    const clocked = planDrumSections(
+      [
+        {
+          ...span(false),
+          section: { ...grooved, timeDomain: { rate: 2 } } as BlueprintSection,
+        },
+      ] as SectionSpan[],
+      undefined,
+    )[0].notes;
+    expect(plain.length).toBeGreaterThan(0);
+    expect(clocked.length).toBeGreaterThanOrEqual(plain.length);
+    expect(Math.max(...clocked.map((note) => note.beat))).toBeGreaterThan(
+      Math.max(...plain.map((note) => note.beat)) * 0.9,
+    );
+  });
+
+  const litCells = (sectionForDots: BlueprintSection): number[] => {
+    const rows = polyDrums(
+      sectionForDots,
+      { bpm: 120, title: "T" } as never,
+      0,
+    );
+    const kick = rows.find((row) => row.lane === "kick");
+    return (kick?.cells ?? [])
+      .map((on, index) => (on ? index : -1))
+      .filter((index) => index >= 0);
+  };
+
+  it("the dots move with the clock, and land where the export does", () => {
+    // Sixteen cells over sixteen beats: one cell per beat. The block's hits at
+    // 0/1/2/3 sit on those beats in song time.
+    expect(litCells(section)).toEqual([0, 1, 2, 3]);
+    // Half time stretches them to 0/2/4/6 — the same beats the export now
+    // writes, because both go through `applyTimeDomain`.
+    expect(litCells({ ...section, timeDomain: { rate: 0.5 } })).toEqual([
+      0, 2, 4, 6,
+    ]);
+    // Double time squeezes them into the first half, then repeats the section:
+    // cells 0/1 sound again at 8/9.
+    expect(litCells({ ...section, timeDomain: { rate: 2 } })).toEqual([
+      0, 1, 8, 9,
+    ]);
   });
 });

@@ -5,8 +5,10 @@ import {
   resolveFlavor,
 } from "@platform/progression-engine";
 import {
-  planSectionBass,
+  conductSection,
+  planSectionBassFor,
   resolveBassProfile,
+  type BassNote,
   resolveChordOccurrences,
   resolveEffectiveStyle,
   resolveNarrativeProfile,
@@ -40,7 +42,7 @@ import {
  * accurate (it IS the root) and is why the bars are drawn thinner and in
  * front rather than competing with the box.
  *
- * Both marks come from the SAME planners the exports use (`planSectionBass`,
+ * Both marks come from the SAME planners the exports use (`planSectionBassFor`,
  * `resolveFlavor`), so what is drawn cannot drift from what is heard.
  */
 
@@ -92,7 +94,7 @@ function stepOf(pc: number, tonic: number): number {
  *  occurrence math (and Bend spacing) the exports use. */
 function occurrences(
   section: BlueprintSection,
-  song: BlueprintSong | undefined,
+  song: BassSongSource | undefined,
 ) {
   const profile = resolveEffectiveStyle(section, song);
   const narrative = resolveNarrativeProfile(section, song);
@@ -108,6 +110,46 @@ function occurrences(
   }));
 }
 
+/**
+ * The section's bass line in MIDI terms: the authored notes when it has any,
+ * the generated `bassProfile` line otherwise.
+ *
+ * The ONE resolve. `bassVoiceMarks` (the ladder), `midiExport`'s bass stem and
+ * the bridge's `planBassLine` all go through this or through
+ * `planSectionBassFor` directly, which is what stops an authored line from
+ * sounding one way in the app and another in Live.
+ */
+/** What the bass resolve needs from the song: the style/narrative inputs, not
+ *  the whole song (§S1.6 — a canvas column holds only these). */
+export type BassSongSource = NonNullable<
+  Parameters<typeof resolveEffectiveStyle>[1]
+> & {
+  /** The song's key, when a call site wants the section to fall back to it. */
+  key?: string;
+};
+
+export function sectionBassLine(
+  section: BlueprintSection,
+  keyName: string,
+  song?: BassSongSource,
+): BassNote[] {
+  const profile = resolveEffectiveStyle(section, song);
+  const occ = occurrences(section, song);
+  // The chords above are already conducted (the resolver reads the clock), so an
+  // authored line has to be conducted too — otherwise the notes stay on the
+  // local grid while the changes move out from under them (§P3.6).
+  const conducted = conductSection(section, sectionDurationBeats(section));
+  return planSectionBassFor(
+    occ.map(({ rootPc, startTime, duration }) => ({
+      rootPc,
+      startTime,
+      duration,
+    })),
+    resolveBassProfile(section.bassProfile, profile),
+    conducted.bassNotes,
+  );
+}
+
 /** Every note of the generated Bass track, as bars on the ladder. */
 export function bassVoiceMarks(
   section: BlueprintSection,
@@ -115,16 +157,8 @@ export function bassVoiceMarks(
   song?: BlueprintSong,
 ): VoiceMark[] {
   const tonic = pitchClass(keyName);
-  const profile = resolveEffectiveStyle(section, song);
   const occ = occurrences(section, song);
-  const line = planSectionBass(
-    occ.map(({ rootPc, startTime, duration }) => ({
-      rootPc,
-      startTime,
-      duration,
-    })),
-    resolveBassProfile(section.bassProfile, profile),
-  );
+  const line = sectionBassLine(section, keyName, song);
   return line.map((note) => {
     // Spelled against the CHORD's written root, not the section's key: the
     // key only names a pitch class, and `noteName` can only choose sharps or

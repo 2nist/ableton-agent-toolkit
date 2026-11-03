@@ -9,6 +9,8 @@ import {
   type CellVoice,
 } from "./meter.js";
 import type { PackedNote, PackedVariant, PackedPreset } from "./presetData.js";
+import type { TimeDomain } from "@music-theory/song-blueprint";
+import { applyTimeDomain, normaliseTimeDomain } from "./timeDomain.js";
 import type { DrumPattern } from "./presets.js";
 import {
   planSectionHandoffFills,
@@ -370,6 +372,10 @@ export interface SectionDrumInput {
   outline?: OutlineWithVoices | null;
   /** Per-voice Euclidean overrides (`drumVoicePatterns`). */
   voiceOverrides?: Partial<Record<KitVoice, EuclidLike>>;
+  /** The section's own clock (`BlueprintSection.timeDomain`). Applied to the
+   *  finished plan, so every gesture block, fill and authored block moves with
+   *  the material rather than staying on the song's grid. */
+  timeDomain?: TimeDomain;
   /** Authored drum blocks (`BlueprintSection.drumBlocks`) — the range-scoped
    *  authoring layer applied last, after the detour/transition gestures, so
    *  authored material always wins within its lane+range. */
@@ -560,18 +566,23 @@ export function planSectionDrumNotes(
     // authored blocks over an empty tiled base, so the export must too:
     // compile here and nothing else — no fills, no auto transitions, no
     // crash — so imported material stays exactly what was authored.
+    const clock = normaliseTimeDomain(input.timeDomain);
     if (!variant) {
       if (!input.blocks || input.blocks.length === 0) return { notes: [] };
       return {
-        notes: filterMutedLanes(
-          applyDrumBlocks([], input.blocks, {
-            durationBeats: input.durationBeats,
-            beatsPerBar: input.beatsPerBar ?? 4,
-            velocityTarget: input.velocityTarget,
-            gridBeats: input.gridBeats,
-            seed: occurrenceSeed(input.sectionId, input.occurrenceIndex),
-          }),
-          input,
+        notes: applyTimeDomain<TiledNote>(
+          filterMutedLanes(
+            applyDrumBlocks([], input.blocks, {
+              durationBeats: input.durationBeats,
+              beatsPerBar: input.beatsPerBar ?? 4,
+              velocityTarget: input.velocityTarget,
+              gridBeats: input.gridBeats,
+              seed: occurrenceSeed(input.sectionId, input.occurrenceIndex),
+            }),
+            input,
+          ),
+          clock,
+          input.durationBeats,
         ),
       };
     }
@@ -685,6 +696,15 @@ export function planSectionDrumNotes(
     }
 
     tiled.sort((a, b) => a.beat - b.beat || a.pitch - b.pitch);
-    return { notes: filterMutedLanes(tiled, input) };
+    // The section's own clock is applied to the finished plan: every layer
+    // above (groove, fill, transition, authored blocks) moves together, which
+    // is what "this section runs at half time" has to mean.
+    return {
+      notes: applyTimeDomain<TiledNote>(
+        filterMutedLanes(tiled, input),
+        clock,
+        input.durationBeats,
+      ),
+    };
   });
 }

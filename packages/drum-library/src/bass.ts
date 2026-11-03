@@ -95,6 +95,51 @@ export function planSectionBass(occurrences: BassOccurrence[], profile: BassProf
   return notes;
 }
 
+/** The shape an authored bass note has on its way in — the schema's
+ *  `MelodyNote` (pitch / startTime / duration / optional velocity), kept
+ *  structural so this package does not have to depend on the song schema. */
+export interface AuthoredBassNote {
+  pitch: number;
+  startTime: number;
+  duration: number;
+  velocity?: number;
+}
+
+/**
+ * The section's bass line: the authored notes when there are any, the
+ * generated line otherwise.
+ *
+ * This is the seam every bass planner must go through (the app's `.mid` and
+ * live out, and the Ableton bridge's `planBassLine`). An authored line that
+ * only one of them honoured would put a different bass in Live than in the
+ * export — the exact drift the shared schema exists to prevent.
+ *
+ * Authored notes are returned as written (a pickup can start early, a note can
+ * outlast its chord), except that velocity falls back to the profile's, so a
+ * note written by a gesture that does not care about dynamics still sounds.
+ *
+ * **The bass takes no clock of its own.** Its line is derived from the chord
+ * stream, and `resolveChordOccurrences` conducts that stream for the section
+ * (`conductSection`), so a half-time section arrives here as a half-time
+ * progression with its authored notes already mapped. A clock parameter on this
+ * function would map a second time — the parameter's absence is the invariant.
+ */
+export function planSectionBassFor(
+  occurrences: BassOccurrence[],
+  profile: BassProfile = {},
+  authored?: readonly AuthoredBassNote[] | null,
+): BassNote[] {
+  const velocity = profile.velocity ?? DEFAULT_BASS_PROFILE.velocity;
+  return !authored || authored.length === 0
+    ? planSectionBass(occurrences, profile)
+    : authored.map((note) => ({
+        pitch: note.pitch,
+        startTime: note.startTime,
+        duration: note.duration,
+        velocity: note.velocity ?? velocity,
+      }));
+}
+
 // ---------------------------------------------------------------------------
 // Bend → bass profile (the Bass layer of the Mix/Bend station)
 // ---------------------------------------------------------------------------

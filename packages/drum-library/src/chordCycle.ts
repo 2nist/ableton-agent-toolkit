@@ -17,6 +17,8 @@
  */
 
 import { chordOnsetsForOutline, type MeterOutline } from "./meter.js";
+import { conductChords } from "./conduct.js";
+import { normaliseTimeDomain } from "./timeDomain.js";
 
 /** The chord fields the cycle math reads. Structural (not the blueprint
  *  type) so this package stays decoupled from the schema. */
@@ -63,6 +65,9 @@ export interface ChordResolutionSource<C extends CycledChord> {
   drumMeterOutline?: MeterOutline | null;
   syncopationOffset?: number;
   chords?: C[] | null;
+  /** The section's own clock, if it has one. Read structurally so this module
+   *  keeps its distance from the schema. */
+  timeDomain?: Parameters<typeof normaliseTimeDomain>[0];
 }
 
 /**
@@ -134,12 +139,26 @@ export function resolveChordOccurrences<C extends CycledChord>(
   const outline =
     section.harmonyMeterOutline ??
     (section.harmonyFollowsDrums === false ? null : (section.drumMeterOutline ?? null));
-  const chords = section.chords ?? [];
+  // The section's own clock, applied HERE rather than at each of the thirty-odd
+  // readers of this function: a chord change is structural, so half time makes
+  // each chord twice as long and `loopChordsToFill` then repeats the
+  // progression to fill the section. Chords, bass, colour and numerals all
+  // resolve through this one call, so they cannot disagree about where the
+  // harmony is (§P3.5 — the bass used to move while the chords stood still).
+  const domain = normaliseTimeDomain(section.timeDomain);
+  const rawChords = section.chords ?? [];
+  const chords = domain ? conductChords(rawChords, domain) : rawChords;
+  // An authored Euclidean grid conducts by its CELL length, not by chord
+  // `beats` (which the outline ignores): a clock retimes the grid itself, so a
+  // warp keeps its syncopation at a different speed instead of standing still
+  // — which is what "the outline wins" used to mean, silently.
+  const grid =
+    outline && domain ? { ...outline, cellBeats: outline.cellBeats / domain.rate } : outline;
   // `spacing` (the Bend density nudge) only re-times the PLAIN per-chord
   // case — an authored Euclidean outline (harmony or drums) is a grid and
   // is never stretched. Default 1 = exactly the historical behavior.
-  const occurrences = outline
-    ? loopChordsOnOutline(chords, outline, durationBeats)
+  const occurrences = grid
+    ? loopChordsOnOutline(chords, grid, durationBeats)
     : loopChordsToFill(chords, durationBeats, spacing);
   return applySyncopation(occurrences, section.syncopationOffset);
 }

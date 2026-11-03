@@ -1,6 +1,7 @@
 import { pitchClass } from "@music-theory/core";
 import {
-  planSectionBass,
+  conductSection,
+  planSectionBassFor,
   resolveBassProfile,
   resolveChordOccurrences,
   resolveEffectiveStyle,
@@ -35,7 +36,7 @@ export const DEFAULT_OCTAVE = 3;
  * jumps, walking lines, or rhythmic variation, the historical v1. A
  * section's `bassProfile` (register/motion/rhythm/velocity) shapes the
  * line when present. Uses the SAME generator the app's `planBassStem`
- * calls (`@drum/library`'s `planSectionBass`), so the bass Live writes
+ * calls (`@drum/library`'s `planSectionBassFor`), so the bass Live writes
  * matches the app's .mid/live-out note for note.
  */
 export function planBassLine(song: BlueprintSong, octave: number = DEFAULT_OCTAVE): BassLinePlan[] {
@@ -56,9 +57,10 @@ export function planBassLine(song: BlueprintSong, octave: number = DEFAULT_OCTAV
     // Bend Bass layer: the octave param is the call-site default; the
     // section's explicit profile sits under the bend axes — resolved by
     // the SAME shared function the app's planBassStem uses (parity).
-    const notes: NoteDescription[] = planSectionBass(
+    const notes: NoteDescription[] = planSectionBassFor(
       occurrences,
       resolveBassProfile({ octave, ...section.bassProfile }, profile),
+      conductSection(section, durationBeats).bassNotes,
     ).map((n) => ({ pitch: n.pitch, startTime: n.startTime, duration: n.duration, velocity: n.velocity }));
     return {
       name: section.name,

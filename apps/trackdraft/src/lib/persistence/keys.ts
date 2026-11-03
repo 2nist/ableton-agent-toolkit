@@ -51,6 +51,17 @@ export const STORAGE_KEYS = {
 
   // ---- ui preferences ---------------------------------------------------
   timeViewport: { key: "trackdraft-time-viewport", scope: "ui", owner: "store/timeViewportStore" },
+  /** The poly canvas's camera, per song. `ui` on purpose: the experiment
+   *  persists nothing it authored — losing the camera costs a pan. */
+  polyCamera: { key: "trackdraft-poly-camera", scope: "ui", owner: "store/polyStore" },
+  /** Where sections have been lifted to on the poly canvas — the Stage plane's
+   *  first authored field. `ui` on purpose: it is a view arrangement, not the
+   *  song, and losing it costs a re-drag, never a bar of music. */
+  polyStage: { key: "trackdraft-poly-stage", scope: "ui", owner: "store/polyStore" },
+  /** The poly canvas's reading preferences — lane order and chord labels.
+   *  Deliberately NOT per song: how you like to read a chart is a habit, and it
+   *  is not part of the music (see plan.md §0.14). */
+  polyPrefs: { key: "trackdraft-poly-prefs", scope: "ui", owner: "store/polyStore" },
   harmonyWorkspace: { key: "trackdraft-harmony-workspace", scope: "ui", owner: "store/harmonyWorkspaceStore" },
   harmonyBarsView: { key: "trackdraft-harmony-bars-view", scope: "ui", owner: "components/harmony/workspace/ProgressionFloor" },
   harmonyFootTab: { key: "trackdraft-harmony-foot-tab", scope: "ui", owner: "components/harmony/workspace/ProgressionFloor" },

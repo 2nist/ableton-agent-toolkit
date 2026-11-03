@@ -64,7 +64,21 @@ const TINTS: Record<ThemeId, Tints> = { dark: DARK, logsheet: PAPER };
 
 export function roleStyles(theme: ThemeId): (role: SectionRole) => RoleStyle {
   const tints = TINTS[theme];
-  return (role) => ({ ...(tints[role] ?? tints.custom), label: LABEL[role] ?? LABEL.custom });
+  // One object per role per theme, cached (§S1.5). This used to build a fresh
+  // object on every call, which quietly defeated `React.memo` on every consumer
+  // of this hook — every canvas column re-rendered on every camera frame, so
+  // panning cost a full re-render of the song instead of a transform.
+  const cache = new Map<SectionRole, RoleStyle>();
+  return (role) => {
+    const hit = cache.get(role);
+    if (hit) return hit;
+    const style: RoleStyle = {
+      ...(tints[role] ?? tints.custom),
+      label: LABEL[role] ?? LABEL.custom,
+    };
+    cache.set(role, style);
+    return style;
+  };
 }
 
 /** Section tinting for the current theme. */

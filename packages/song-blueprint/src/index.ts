@@ -486,6 +486,17 @@ export interface BlueprintSection {
    *  export / Send to Ableton / real-time MIDI out). Absent → a single
    *  sustained root per chord at octave 3 (the historical behavior). */
   bassProfile?: BassProfile;
+  /** Authored bass notes for this section — replaces the generated line
+   *  (`planSectionBass`) note for note when present, so a small fix does not
+   *  have to move the chord it came from. Parallel to `drumVoicePatterns` and
+   *  `melody`: the same beats-relative timebase, the same note shape.
+   *
+   *  Absent → the section plays its `bassProfile` line, byte for byte as
+   *  before, so every existing song is untouched by this field. Every bass
+   *  planner (the app's .mid and live out, and the Ableton bridge) resolves
+   *  through `planSectionBassFor`, which reads this — that is what keeps an
+   *  authored line from drifting between them. */
+  bassNotes?: MelodyNote[];
   /** Per-section "Bend" override — a `Partial<StyleProfile>` (any subset
    *  of the seven macro axes) that tints THIS section on top of the song
    *  master. Absent → the section follows the song master, which itself
@@ -644,6 +655,44 @@ export interface BlueprintSection {
    *  section's *opening* meter (what the editor shows and what a new chord
    *  defaults to); the map decides how long each bar actually is. */
   meterMap?: MeterChange[];
+
+  /** This section's own clock, when it does not run with the song. Absent
+   *  means "the song's beats" — every section written before this field
+   *  existed still means that. */
+  timeDomain?: TimeDomain;
+}
+
+/**
+ * A local clock for one section's material.
+ *
+ * The section still occupies the same span of the arrangement; what changes is
+ * how its own beats map onto that span. `rate` is global beats per local beat
+ * (2 = play it twice as fast, 0.5 = half time), `phase` slides the whole thing
+ * later, `swing` delays every second eighth, and `quantizeTo` snaps the result
+ * to a grid — which is what keeps a folded pattern editable.
+ *
+ * **What it governs: the whole section.** Chord changes, melody, an authored
+ * bass line and the kit all move together, because the harmony is conducted at
+ * the boundary (`conductSection`) rather than by each reader of the chord
+ * stream. Drums and melody keep their micro-timing; chord changes take the rate
+ * and the loop only, because nudging a change is a different feature.
+ *
+ * Everything that does map goes through the same function, so a local clock
+ * cannot make the picture and the audio disagree.
+ */
+export interface TimeDomain {
+  /** Global beats per local beat. 1 (or absent) = no change. */
+  rate: number;
+  /** Global beats added to every mapped hit. Default 0. */
+  phase?: number;
+  /** 0…1: how far the second eighth of each pair is pushed. Default 0. */
+  swing?: number;
+  /** Snap mapped beats to this grid, in beats. Default 0 (no snapping). */
+  quantizeTo?: number;
+  /** Loop the section's first `cycle` local beats for the whole span. Absent
+   *  (or 0) means the material plays once, which is what every section written
+   *  before this field existed means. */
+  cycle?: number;
 }
 
 /** A meter change at a 0-based bar inside a section. `denominator` is the
@@ -689,13 +738,39 @@ export interface TonicRegion {
  *  an entry here is treated by `sectionSpans` as an implicit
  *  `{sectionId, repeats: 1}` in `sections` list order — today's behavior,
  *  unchanged. Every existing song stays valid with zero migration. */
+/** What one pass of a section may change without becoming a different section.
+ *  Narrow on purpose: every field here is one a pass can plausibly differ in
+ *  while the rest of it stays the same object. */
+export type SectionOverride = Partial<
+  Pick<
+    BlueprintSection,
+    | "bars"
+    | "velocity"
+    | "chords"
+    | "lyrics"
+    | "lyricsTimeline"
+    | "bend"
+    | "narrative"
+    | "drumTransitionModel"
+    | "drumMeterOutline"
+    | "drumPattern"
+    | "drumVariantIndex"
+    | "timeDomain"
+  >
+>;
+
 export interface ArrangementRepeat {
   sectionId: string;
   /** 1 = plays once, the default/current-equivalent behavior. */
   repeats: number;
   /** Display label for a specific pass, e.g. "Chorus (final)". */
   variation?: string;
-  overrides?: Partial<Pick<BlueprintSection, "bars" | "velocity" | "chords" | "lyrics" | "lyricsTimeline" | "bend" | "narrative" | "drumTransitionModel" | "drumMeterOutline">>;
+  overrides?: SectionOverride;
+  /** Per-PASS overrides, keyed by 0-based pass index (JSON keys are strings).
+   *  `overrides` applies to every pass of this entry; this applies to one, on
+   *  top of it — "the last chorus is half time" without authoring a second
+   *  section that would then drift from the first. */
+  occurrenceOverrides?: Record<string, SectionOverride>;
 }
 
 /**

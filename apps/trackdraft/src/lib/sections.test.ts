@@ -12,8 +12,17 @@ import {
   mergeWithNext,
   foldSectionSplits,
   splitSectionAtBar,
+  duplicateSection,
+  copySectionTo,
+  insertSection,
+  clearPassOverride,
+  passOverrideFor,
+  removePass,
+  repeatPassLike,
+  setPassOverride,
 } from "./sections";
 import type { BlueprintSong, BlueprintSection } from "../types/blueprint";
+import { sectionSpans } from "./arrangement";
 import type { SongMap } from "../data/songMaps";
 import { getGenreMap } from "../data/genre-catalog";
 import { STYLE_RECIPES } from "./style/bend";
@@ -693,5 +702,340 @@ describe("structural edits move the section's timed data", () => {
     ]);
     // The second section's 7/8 bar is now the merged block's bar 7.
     expect(merged.meterMap).toEqual([{ bar: 6, numerator: 7, denominator: 8 }]);
+  });
+});
+
+describe("duplicateSection", () => {
+  const song = () =>
+    makeSong([
+      { id: "a", name: "Verse 1", role: "verse" },
+      { id: "b", name: "Chorus", role: "chorus" },
+    ]);
+
+  it("puts the copy directly after its source and hands back its id", () => {
+    const result = duplicateSection(song(), "a");
+    expect(result).not.toBeNull();
+    expect(result!.song.sections.map((s) => s.name)).toEqual([
+      "Verse 1",
+      "Verse 2",
+      "Chorus",
+    ]);
+    expect(result!.song.sections[1].id).toBe(result!.sectionId);
+  });
+
+  it("owns its material — editing the copy must not move the original", () => {
+    const source = makeSong([
+      {
+        id: "a",
+        name: "Verse 1",
+        role: "verse",
+        chords: [
+          { id: "c1", root: "C", quality: "maj", beats: 4, romanNumeral: "I" },
+        ],
+        bassNotes: [{ pitch: 36, startTime: 0, duration: 4 }],
+      },
+    ]);
+    const copy = duplicateSection(source, "a")!.song.sections[1];
+    expect(copy.chords).not.toBe(source.sections[0].chords);
+    expect(copy.bassNotes).not.toBe(source.sections[0].bassNotes);
+  });
+
+  it("returns null for a section that is gone", () => {
+    expect(duplicateSection(song(), "nope")).toBeNull();
+  });
+
+  it("keeps the arrangement covering the sections", () => {
+    expect(duplicateSection(song(), "b")!.song.arrangement).toHaveLength(3);
+  });
+
+  it("leaves the source where it was", () => {
+    const out = duplicateSection(song(), "a")!.song;
+    expect(out.sections[0].id).toBe("a");
+    expect(out.sections[0].name).toBe("Verse 1");
+    expect(out.sections[2].id).toBe("b");
+  });
+});
+
+describe("copySectionTo", () => {
+  const song = () =>
+    makeSong([
+      { id: "a", name: "Verse 1", role: "verse" },
+      { id: "b", name: "Chorus", role: "chorus" },
+      { id: "c", name: "Bridge", role: "bridge" },
+    ]);
+
+  it("puts the copy where the drop was, before what was there", () => {
+    const out = copySectionTo(song(), "a", 2);
+    expect(out.sections.map((s) => s.name)).toEqual([
+      "Verse 1",
+      "Chorus",
+      "Verse 2",
+      "Bridge",
+    ]);
+  });
+
+  it("can copy the same section twice, in two places", () => {
+    const once = copySectionTo(song(), "b", 0);
+    const twice = copySectionTo(once, "b", 3);
+    const names = twice.sections.map((s) => s.name);
+    expect(names).toHaveLength(5);
+    expect(new Set(names).size).toBe(5);
+    // The copies are where the drops were; the originals are untouched.
+    expect(names[2]).toBe("Chorus");
+    expect(twice.sections[0].id).not.toBe("b");
+    expect(twice.sections[3].id).not.toBe("b");
+  });
+
+  it("owns its material, like any other copy", () => {
+    const source = makeSong([
+      {
+        id: "a",
+        name: "Verse 1",
+        role: "verse",
+        chords: [
+          { id: "c1", root: "C", quality: "maj", beats: 4, romanNumeral: "I" },
+        ],
+        bassNotes: [{ pitch: 36, startTime: 0, duration: 4 }],
+      },
+    ]);
+    const out = copySectionTo(source, "a", 1);
+    expect(out.sections[1].chords).not.toBe(source.sections[0].chords);
+    expect(out.sections[1].bassNotes).not.toBe(source.sections[0].bassNotes);
+  });
+
+  it("clamps a drop past the end, and ignores a section that is gone", () => {
+    expect(copySectionTo(song(), "a", 99).sections).toHaveLength(4);
+    expect(copySectionTo(song(), "nope", 0).sections).toHaveLength(3);
+  });
+
+  it("keeps the arrangement covering the sections", () => {
+    expect(copySectionTo(song(), "a", 3).arrangement).toHaveLength(4);
+  });
+});
+
+describe("insertSection", () => {
+  const song = () =>
+    makeSong([
+      { id: "a", name: "Verse 1", role: "verse" },
+      { id: "b", name: "Chorus", role: "chorus" },
+    ]);
+
+  it("puts a blank section between two others", () => {
+    const result = insertSection(song(), 1);
+    expect(result).not.toBeNull();
+    expect(result!.song.sections.map((s) => s.name)).toEqual([
+      "Verse 1",
+      "Verse 2",
+      "Chorus",
+    ]);
+    expect(result!.song.sections[1].id).toBe(result!.sectionId);
+    expect(result!.song.sections[1].chords).toEqual([]);
+  });
+
+  it("can insert at the very front and the very back", () => {
+    const front = insertSection(song(), 0)!;
+    expect(front.song.sections[0].id).toBe(front.sectionId);
+    const back = insertSection(song(), 2)!;
+    expect(back.song.sections[2].id).toBe(back.sectionId);
+  });
+
+  it("clamps a position outside the song", () => {
+    const past = insertSection(song(), 99)!;
+    expect(past.song.sections).toHaveLength(3);
+    expect(past.song.sections[2].id).toBe(past.sectionId);
+
+    const before = insertSection(song(), -5)!;
+    expect(before.song.sections).toHaveLength(3);
+    expect(before.song.sections[0].id).toBe(before.sectionId);
+  });
+
+  it("names the new section against the roles already there", () => {
+    const withTwo = makeSong([
+      { id: "a", name: "Verse 1", role: "verse" },
+      { id: "b", name: "Verse 2", role: "verse" },
+    ]);
+    expect(insertSection(withTwo, 2)!.song.sections[2].name).toBe("Verse 3");
+    expect(insertSection(withTwo, 2, "chorus")!.song.sections[2].name).toBe(
+      "Chorus 1",
+    );
+  });
+
+  it("keeps the arrangement covering the sections", () => {
+    const result = insertSection(song(), 1)!;
+    expect(result.song.arrangement).toHaveLength(3);
+  });
+});
+
+describe("per-pass overrides (§P4.1)", () => {
+  const song = () =>
+    makeSong([{ id: "a" }, { id: "b" }], [
+      { sectionId: "a", repeats: 3 },
+      { sectionId: "b", repeats: 1 },
+    ]);
+
+  it("writes a value for one pass only", () => {
+    const withClock = setPassOverride(song(), "a", 2, { timeDomain: { rate: 0.5 } });
+    expect(passOverrideFor(withClock, "a", 2)).toEqual({ timeDomain: { rate: 0.5 } });
+    expect(passOverrideFor(withClock, "a", 1)).toBeNull();
+    // The authored section is untouched: this is an instance, not a copy.
+    expect(withClock.sections.find((s) => s.id === "a")?.timeDomain).toBeUndefined();
+  });
+
+  it("merges a second field instead of replacing the first", () => {
+    const both = setPassOverride(
+      setPassOverride(song(), "a", 1, { timeDomain: { rate: 2 } }),
+      "a",
+      1,
+      { velocity: "ff" },
+    );
+    expect(passOverrideFor(both, "a", 1)).toEqual({
+      timeDomain: { rate: 2 },
+      velocity: "ff",
+    });
+  });
+
+  it("clears a field by writing undefined, and drops the pass when nothing is left", () => {
+    const set = setPassOverride(song(), "a", 1, { timeDomain: { rate: 2 } });
+    const cleared = setPassOverride(set, "a", 1, { timeDomain: undefined });
+    expect(passOverrideFor(cleared, "a", 1)).toBeNull();
+    // Nothing left behind: no empty record, no `occurrenceOverrides: {}`.
+    expect(cleared.arrangement.find((e) => e.sectionId === "a")?.occurrenceOverrides).toBeUndefined();
+  });
+
+  it("clears a whole pass, and is a no-op when there was nothing to clear", () => {
+    const set = setPassOverride(song(), "a", 1, { timeDomain: { rate: 2 }, velocity: "ff" });
+    expect(passOverrideFor(clearPassOverride(set, "a", 1), "a", 1)).toBeNull();
+    const untouched = clearPassOverride(song(), "a", 1);
+    expect(passOverrideFor(untouched, "a", 1)).toBeNull();
+  });
+
+  it("self-normalizes: works on a song whose arrangement is incomplete", () => {
+    const loose = { ...song(), arrangement: [{ sectionId: "a", repeats: 2 }] };
+    const withClock = setPassOverride(loose, "b", 0, { timeDomain: { rate: 0.5 } });
+    expect(passOverrideFor(withClock, "b", 0)).toEqual({ timeDomain: { rate: 0.5 } });
+  });
+
+  it("leaves the other sections' entries exactly as they were", () => {
+    const withClock = setPassOverride(song(), "a", 0, { timeDomain: { rate: 2 } });
+    expect(withClock.arrangement.find((e) => e.sectionId === "b")).toEqual(
+      song().arrangement.find((e) => e.sectionId === "b"),
+    );
+  });
+});
+
+describe("removePass (§P4.2)", () => {
+  const song = () =>
+    makeSong([{ id: "a" }, { id: "b" }], [
+      { sectionId: "a", repeats: 3 },
+      { sectionId: "b", repeats: 1 },
+    ]);
+
+  it("takes one pass away and leaves the section", () => {
+    const after = removePass(song(), "a", 1);
+    expect(repeatsFor(after, "a")).toBe(2);
+    expect(after.sections.map((s) => s.id)).toEqual(["a", "b"]);
+  });
+
+  it("shifts the later passes' overrides down", () => {
+    // Passes 0..2, the third one half time. Remove the middle one and it is the
+    // SECOND pass that is now the half-time one.
+    const withClock = setPassOverride(song(), "a", 2, { timeDomain: { rate: 0.5 } });
+    const after = removePass(withClock, "a", 1);
+    expect(repeatsFor(after, "a")).toBe(2);
+    expect(passOverrideFor(after, "a", 1)).toEqual({ timeDomain: { rate: 0.5 } });
+    expect(passOverrideFor(after, "a", 2)).toBeNull();
+  });
+
+  it("drops the override that belonged to the pass it removed", () => {
+    const withClock = setPassOverride(song(), "a", 1, { timeDomain: { rate: 2 } });
+    const after = removePass(withClock, "a", 1);
+    expect(passOverrideFor(after, "a", 1)).toBeNull();
+    expect(after.arrangement.find((e) => e.sectionId === "a")?.occurrenceOverrides).toBeUndefined();
+  });
+
+  it("deletes the section when the last pass goes", () => {
+    const single = removePass(song(), "b", 0);
+    expect(single.sections.map((s) => s.id)).toEqual(["a"]);
+  });
+
+  it("never drops a section below one pass by accident", () => {
+    // A pass index past the end still leaves the section playing.
+    const after = removePass(song(), "a", 9);
+    expect(repeatsFor(after, "a")).toBe(2);
+  });
+
+  it("leaves other sections' entries alone", () => {
+    const after = removePass(song(), "a", 0);
+    expect(after.arrangement.find((e) => e.sectionId === "b")).toEqual(
+      song().arrangement.find((e) => e.sectionId === "b"),
+    );
+  });
+});
+
+describe("per-pass fields beyond the clock (§P4.3)", () => {
+  const song = () =>
+    makeSong([{ id: "a" }], [{ sectionId: "a", repeats: 3 }]);
+
+  it("gives one pass a dynamic and a kit", () => {
+    const loud = setPassOverride(song(), "a", 2, {
+      velocity: "ff",
+      drumPattern: "half_time",
+      drumVariantIndex: 1,
+    });
+    expect(passOverrideFor(loud, "a", 2)).toEqual({
+      velocity: "ff",
+      drumPattern: "half_time",
+      drumVariantIndex: 1,
+    });
+    // The section itself is untouched: this is a pass, not a copy.
+    expect(loud.sections[0].velocity).toBe("mf");
+    expect(loud.sections[0].drumPattern).toBeUndefined();
+  });
+
+  it("reads back through sectionSpans, so the export sees it", () => {
+    const loud = setPassOverride(song(), "a", 1, { velocity: "pp" });
+    const spans = sectionSpans(loud);
+    expect(spans.map((span) => span.section.velocity)).toEqual(["mf", "pp", "mf"]);
+  });
+
+  it("clears one field without disturbing the others on that pass", () => {
+    const both = setPassOverride(song(), "a", 0, { velocity: "ff", drumPattern: "standard" });
+    const cleared = setPassOverride(both, "a", 0, { velocity: undefined });
+    expect(passOverrideFor(cleared, "a", 0)).toEqual({ drumPattern: "standard" });
+  });
+});
+
+describe("repeatPassLike (§P4.4)", () => {
+  const song = () =>
+    makeSong([{ id: "a" }], [{ sectionId: "a", repeats: 2 }]);
+
+  it("adds a pass and gives it this pass's overrides", () => {
+    const loud = setPassOverride(song(), "a", 1, { velocity: "ff", timeDomain: { rate: 2 } });
+    const more = repeatPassLike(loud, "a", 1);
+    expect(repeatsFor(more, "a")).toBe(3);
+    expect(passOverrideFor(more, "a", 2)).toEqual({ velocity: "ff", timeDomain: { rate: 2 } });
+    // The pass it copied still has its own.
+    expect(passOverrideFor(more, "a", 1)).toEqual({ velocity: "ff", timeDomain: { rate: 2 } });
+  });
+
+  it("copies the VALUES, not the object", () => {
+    const loud = setPassOverride(song(), "a", 0, { velocity: "ff" });
+    const more = repeatPassLike(loud, "a", 0);
+    const first = passOverrideFor(more, "a", 0)!;
+    const copied = passOverrideFor(more, "a", 2)!;
+    expect(copied).not.toBe(first);
+    expect(copied).toEqual(first);
+  });
+
+  it("just adds a pass when this one has nothing to copy", () => {
+    const more = repeatPassLike(song(), "a", 0);
+    expect(repeatsFor(more, "a")).toBe(3);
+    expect(passOverrideFor(more, "a", 2)).toBeNull();
+  });
+
+  it("works from a section that plays once — it plays twice after", () => {
+    const single = makeSong([{ id: "a" }], [{ sectionId: "a", repeats: 1 }]);
+    const more = repeatPassLike(single, "a", 0);
+    expect(repeatsFor(more, "a")).toBe(2);
   });
 });

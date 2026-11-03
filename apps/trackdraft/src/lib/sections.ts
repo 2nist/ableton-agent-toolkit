@@ -9,6 +9,7 @@ import {
   type LyricsTimelineEntry,
   type MelodyTrack,
   type MeterChange,
+  type SectionOverride,
   type TonicRegion,
 } from "../types/blueprint";
 import { buildEuclideanOutline, twoThreeCellCounts } from "@drum/library";
@@ -43,8 +44,119 @@ function newSection(name: string, role: BlueprintSection["role"]): BlueprintSect
  *  list's shape or order, so there's nothing to re-sync. */
 
 export function addSection(song: BlueprintSong, role: BlueprintSection["role"] = "verse"): BlueprintSong {
+  return syncArrangementToSections({ ...song, sections: [...song.sections, blankSection(song, role)] });
+}
+
+/** An empty section, named against what the song already has ("Verse 3"). */
+function blankSection(
+  song: BlueprintSong,
+  role: BlueprintSection["role"],
+): BlueprintSection {
   const name = `${role.charAt(0).toUpperCase()}${role.slice(1)} ${song.sections.filter((s) => s.role === role).length + 1}`;
-  return syncArrangementToSections({ ...song, sections: [...song.sections, newSection(name, role)] });
+  return newSection(name, role);
+}
+
+/**
+ * Put an empty section **between** two others, and hand back its id so the
+ * caller can select it.
+ *
+ * `addSection` only appends, and `copySectionTo` only copies — so "I need a
+ * chorus in here" had no verb at all: you either built the song backwards from
+ * the end or duplicated something and cleaned it up. Inserting a blank section
+ * is the third, missing case.
+ */
+export function insertSection(
+  song: BlueprintSong,
+  atIndex: number,
+  role: BlueprintSection["role"] = "verse",
+): { song: BlueprintSong; sectionId: string } | null {
+  const sections = [...song.sections];
+  const at = Math.max(0, Math.min(sections.length, Math.round(atIndex)));
+  const created = blankSection(song, role);
+  sections.splice(at, 0, created);
+  return {
+    song: syncArrangementToSections({ ...song, sections }),
+    sectionId: created.id,
+  };
+}
+
+/**
+ * Copy a section, insert the copy directly after it, and hand back both the
+ * song and the new id so the caller can select it.
+ *
+ * A long song is made of repeated material, and until now the only way to add
+ * a section was `addSection`, which produces an empty verse — so building
+ * "verse 1, verse 2, chorus, verse 2 again" meant retyping the chords. The
+ * copy owns its own chord objects: two sections sharing one array would mean
+ * editing the copy silently rewrote the original.
+ */
+export function duplicateSection(
+  song: BlueprintSong,
+  sectionId: string,
+): { song: BlueprintSong; sectionId: string } | null {
+  const index = song.sections.findIndex((section) => section.id === sectionId);
+  if (index < 0) return null;
+  const copy = copyOfSection(song.sections, song.sections[index]);
+  const sections = [...song.sections];
+  sections.splice(index + 1, 0, copy);
+  return {
+    song: syncArrangementToSections({ ...song, sections }),
+    sectionId: copy.id,
+  };
+}
+
+/** A deep-enough copy of one section: the arrays a later edit would otherwise
+ *  share with the original (a dragged note must not move in two places). */
+function copyOfSection(
+  sections: readonly BlueprintSection[],
+  source: BlueprintSection,
+): BlueprintSection {
+  return {
+    ...source,
+    id: crypto.randomUUID(),
+    name: nextCopyName(sections, source.name),
+    chords: source.chords.map((chord) => ({ ...chord })),
+    ...(source.melody
+      ? { melody: { ...source.melody, notes: [...source.melody.notes] } }
+      : {}),
+    ...(source.drumBlocks
+      ? { drumBlocks: source.drumBlocks.map((block) => ({ ...block })) }
+      : {}),
+    ...(source.bassNotes ? { bassNotes: [...source.bassNotes] } : {}),
+  };
+}
+
+/**
+ * Copy a section **into** a position: the "and again, here" the canvas drag
+ * offers with ⌥. Unlike duplicate-then-reorder there is no index arithmetic —
+ * the copy is spliced at `toIndex` of the list as it stands, so it lands before
+ * whatever is currently there, exactly where the drop indicator sits.
+ */
+export function copySectionTo(
+  song: BlueprintSong,
+  sectionId: string,
+  toIndex: number,
+): BlueprintSong {
+  const source = song.sections.find((section) => section.id === sectionId);
+  if (!source) return song;
+  const sections = [...song.sections];
+  const at = Math.max(0, Math.min(sections.length, Math.round(toIndex)));
+  sections.splice(at, 0, copyOfSection(song.sections, source));
+  return syncArrangementToSections({ ...song, sections });
+}
+
+/** "Chorus" → "Chorus 2" → "Chorus 3", never a second "Chorus". */
+function nextCopyName(
+  sections: readonly BlueprintSection[],
+  name: string,
+): string {
+  const base = name.replace(/\s+\d+$/, "");
+  const taken = new Set(sections.map((section) => section.name));
+  for (let n = 2; n < 1000; n += 1) {
+    const candidate = `${base} ${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${base} copy`;
 }
 
 export function removeSection(song: BlueprintSong, sectionId: string): BlueprintSong {
@@ -482,6 +594,137 @@ export function updateRepeats(song: BlueprintSong, sectionId: string, repeats: n
       entry.sectionId === sectionId ? { ...entry, repeats: clamped } : entry,
     ),
   };
+}
+
+/**
+ * Give ONE pass of a section its own value for a field (§P4.1).
+ *
+ * `overrides` on the arrangement entry covers every pass; this covers pass
+ * `passIndex` only, on top of it. `undefined` in the patch CLEARS that field
+ * for the pass — the pass falls back to the entry, then to the section — so a
+ * patch never leaves `{ timeDomain: undefined }` behind and "the same as
+ * before" stays byte-identical.
+ */
+export function setPassOverride(
+  song: BlueprintSong,
+  sectionId: string,
+  passIndex: number,
+  patch: SectionOverride,
+): BlueprintSong {
+  const synced = syncArrangementToSections(song);
+  const key = String(Math.max(0, Math.floor(passIndex)));
+  return {
+    ...synced,
+    arrangement: synced.arrangement.map((entry) => {
+      if (entry.sectionId !== sectionId) return entry;
+      const forPass = { ...(entry.occurrenceOverrides?.[key] ?? {}), ...patch };
+      for (const [field, value] of Object.entries(forPass)) {
+        if (value === undefined) delete forPass[field as keyof SectionOverride];
+      }
+      const occurrenceOverrides = { ...entry.occurrenceOverrides };
+      if (Object.keys(forPass).length === 0) delete occurrenceOverrides[key];
+      else occurrenceOverrides[key] = forPass;
+      const next = { ...entry };
+      if (Object.keys(occurrenceOverrides).length === 0) delete next.occurrenceOverrides;
+      else next.occurrenceOverrides = occurrenceOverrides;
+      return next;
+    }),
+  };
+}
+
+/** Drop a pass's own overrides, so it plays like the rest of the section.
+ *  Not `setPassOverride(song, id, pass, {})` — an empty patch merges nothing
+ *  and would leave the old fields in place. */
+export function clearPassOverride(
+  song: BlueprintSong,
+  sectionId: string,
+  passIndex: number,
+): BlueprintSong {
+  const entry = song.arrangement.find((candidate) => candidate.sectionId === sectionId);
+  const key = String(Math.max(0, Math.floor(passIndex)));
+  if (!entry?.occurrenceOverrides || !(key in entry.occurrenceOverrides)) return song;
+  const occurrenceOverrides = { ...entry.occurrenceOverrides };
+  delete occurrenceOverrides[key];
+  const next = { ...entry };
+  if (Object.keys(occurrenceOverrides).length === 0) delete next.occurrenceOverrides;
+  else next.occurrenceOverrides = occurrenceOverrides;
+  return {
+    ...song,
+    arrangement: song.arrangement.map((candidate) =>
+      candidate.sectionId === sectionId ? next : candidate,
+    ),
+  };
+}
+
+/** What pass `passIndex` of a section overrides, if anything. */
+export function passOverrideFor(
+  song: BlueprintSong,
+  sectionId: string,
+  passIndex: number,
+): SectionOverride | null {
+  const entry = song.arrangement.find((candidate) => candidate.sectionId === sectionId);
+  return entry?.occurrenceOverrides?.[String(Math.max(0, Math.floor(passIndex)))] ?? null;
+}
+
+/**
+ * Remove ONE pass of a section (§P4.2).
+ *
+ * Deleting a section that plays three times should not have to mean deleting all
+ * three, so `⌫` on a pass takes that pass away: `repeats` drops by one and every
+ * later pass's overrides move down an index (the pass you removed is gone, so
+ * "pass 3 is half time" becomes "pass 2 is half time"). The last remaining pass
+ * is the section, so that case falls through to `removeSection`.
+ */
+export function removePass(
+  song: BlueprintSong,
+  sectionId: string,
+  passIndex: number,
+): BlueprintSong {
+  const pass = Math.max(0, Math.floor(passIndex) || 0);
+  if (repeatsFor(song, sectionId) <= 1) return removeSection(song, sectionId);
+  const entry = song.arrangement.find((candidate) => candidate.sectionId === sectionId);
+  const shifted: Record<string, SectionOverride> = {};
+  for (const [key, value] of Object.entries(entry?.occurrenceOverrides ?? {})) {
+    const index = Number(key);
+    if (index === pass) continue;
+    shifted[String(index > pass ? index - 1 : index)] = value;
+  }
+  return {
+    ...song,
+    arrangement: song.arrangement.map((candidate) => {
+      if (candidate.sectionId !== sectionId) return candidate;
+      const next = {
+        ...candidate,
+        repeats: Math.max(1, Math.floor(candidate.repeats) - 1),
+      };
+      if (Object.keys(shifted).length === 0) delete next.occurrenceOverrides;
+      else next.occurrenceOverrides = shifted;
+      return next;
+    }),
+  };
+}
+
+/**
+ * One more pass, behaving like the one you are on (§P4.4).
+ *
+ * "Chorus ×3" is easy (`updateRepeats`); "the last two choruses are both half
+ * time and loud" meant setting the same two overrides twice. This appends a pass
+ * and copies this pass's overrides onto it, so authoring once means authoring
+ * once.
+ */
+export function repeatPassLike(
+  song: BlueprintSong,
+  sectionId: string,
+  passIndex: number,
+): BlueprintSong {
+  const repeats = repeatsFor(song, sectionId);
+  const key = String(Math.max(0, Math.floor(passIndex) || 0));
+  const next = updateRepeats(song, sectionId, repeats + 1);
+  const entry = next.arrangement.find((candidate) => candidate.sectionId === sectionId);
+  const like = entry?.occurrenceOverrides?.[key];
+  if (!like) return next;
+  // The new pass is the last one; give it the same overrides, not the same object.
+  return setPassOverride(next, sectionId, repeats, { ...like });
 }
 
 /** Reads a section's current repeat count for display — 1 when the song

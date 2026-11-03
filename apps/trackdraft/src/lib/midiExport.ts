@@ -15,16 +15,57 @@
  * the web app has no dependency on).
  */
 
-import { getChordIntervals, pitchClass, planChordNotes, voiceChord, type ChordQuality } from "@music-theory/core";
+import {
+  getChordIntervals,
+  pitchClass,
+  planChordNotes,
+  voiceChord,
+  type ChordQuality,
+} from "@music-theory/core";
 import type { NoteName } from "@music-theory/core";
 import { sectionSpans, type SectionSpan } from "./arrangement";
 import { velocityNumber } from "./playback/drumPreview";
-import { planSectionDrumNotes, planSectionBass, resolveBassProfile, FILL_DATA, exportSectionVariant, sectionDrumInput, resolveChordOccurrences, pocketSummary, resolveEffectiveStyle, resolveNarrativeProfile, narrativeHarmonySection, narrativeTransitionModel, styleArticulation, styleQualityFor, styleSpacing, styleVelocityTarget, drumPocket, glueToPocket, planLaneCc, type GrooveMap, type SectionDrumInput } from "@drum/library";
+import {
+  conductSection,
+  planSectionDrumNotes,
+  planSectionBassFor,
+  resolveBassProfile,
+  FILL_DATA,
+  exportSectionVariant,
+  sectionDrumInput,
+  resolveChordOccurrences,
+  pocketSummary,
+  resolveEffectiveStyle,
+  resolveNarrativeProfile,
+  narrativeHarmonySection,
+  narrativeTransitionModel,
+  styleArticulation,
+  styleQualityFor,
+  styleSpacing,
+  styleVelocityTarget,
+  drumPocket,
+  glueToPocket,
+  planLaneCc,
+  type GrooveMap,
+  type SectionDrumInput,
+} from "@drum/library";
 import { planColorStem } from "./colorStem";
 import { planMelodyStem } from "./melody/melodyStem";
-import { GM_ROUTING, STEM_LABELS, clampChannel, clampProgram, type StemId, type StemRoutingMap } from "./stems";
+import {
+  GM_ROUTING,
+  STEM_LABELS,
+  clampChannel,
+  clampProgram,
+  type StemId,
+  type StemRoutingMap,
+} from "./stems";
 import { clampChannelIndex, pitchToWire, velocityToWire } from "./midi/wire";
-import { barLengths, beatsPerBar, meterForLength, type BlueprintSong } from "../types/blueprint";
+import {
+  barLengths,
+  beatsPerBar,
+  meterForLength,
+  type BlueprintSong,
+} from "../types/blueprint";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,7 +102,9 @@ const CHORD_OCTAVE = 5;
  *  voices a per-voice override or a detour can author (pedalHat 44,
  *  tomLow 41, rideBell 53). Filtering by this keeps stray/unmapped pitches
  *  out of the .mid while letting every authored voice through. */
-const GM_DRUM_PITCHES = new Set([36, 37, 38, 39, 41, 42, 44, 45, 46, 47, 49, 51, 53]);
+const GM_DRUM_PITCHES = new Set([
+  36, 37, 38, 39, 41, 42, 44, 45, 46, 47, 49, 51, 53,
+]);
 
 // ---------------------------------------------------------------------------
 // Chord cycle — @drum/library's chordCycle.ts is the single source of truth
@@ -83,12 +126,22 @@ export function chordGluePreview(
   song: BlueprintSong,
   sectionId: string,
   starts: readonly number[],
-): { offsets: number[]; strength: number; meanMs: number; slots: number } | null {
-  const span = sectionSpans(song).find((entry) => entry.section.id === sectionId);
+): {
+  offsets: number[];
+  strength: number;
+  meanMs: number;
+  slots: number;
+} | null {
+  const span = sectionSpans(song).find(
+    (entry) => entry.section.id === sectionId,
+  );
   if (!span || !span.section.grooveGlue?.chords) return null;
   const pocket = sectionPocket(span, song);
   if (!pocket) return null;
-  const strength = Math.max(0, Math.min(1, span.section.grooveGlue.strength ?? 1));
+  const strength = Math.max(
+    0,
+    Math.min(1, span.section.grooveGlue.strength ?? 1),
+  );
   const glued = glueToPocket(
     starts.map((startTime) => ({ startTime, duration: 1, velocity: 100 })),
     pocket,
@@ -96,7 +149,10 @@ export function chordGluePreview(
   );
   const summary = pocketSummary(pocket);
   return {
-    offsets: glued.map((note, index) => Math.round((note.startTime - starts[index]) * 1000) / 1000),
+    offsets: glued.map(
+      (note, index) =>
+        Math.round((note.startTime - starts[index]) * 1000) / 1000,
+    ),
     strength,
     meanMs: summary.meanOffsetMs,
     slots: summary.slots,
@@ -112,12 +168,18 @@ export function chordGluePreview(
  * the pattern the section nominally chose. Null when nothing is glued, which
  * keeps every un-glued song byte-identical to before.
  */
-function sectionPocket(span: SectionSpan, song?: BlueprintSong): GrooveMap | null {
+function sectionPocket(
+  span: SectionSpan,
+  song?: BlueprintSong,
+): GrooveMap | null {
   if (!span.section.grooveGlue) return null;
   const drums = planDrumStem([span], song);
   if (drums.length === 0) return null;
   return drumPocket(
-    drums.map((n) => ({ beat: n.startTime - span.startBeat, velocity: n.velocity })),
+    drums.map((n) => ({
+      beat: n.startTime - span.startBeat,
+      velocity: n.velocity,
+    })),
     beatsPerBar(span.section),
   );
 }
@@ -134,14 +196,22 @@ function glueSpanNotes(
   if (!glue || !glue[target]) return notes;
   const pocket = sectionPocket(span, song);
   if (!pocket) return notes;
-  const relative = notes.map((n) => ({ ...n, startTime: n.startTime - span.startBeat }));
-  return glueToPocket(relative, pocket, { strength: glue.strength ?? 1 }).map((n) => ({
+  const relative = notes.map((n) => ({
     ...n,
-    startTime: n.startTime + span.startBeat,
+    startTime: n.startTime - span.startBeat,
   }));
+  return glueToPocket(relative, pocket, { strength: glue.strength ?? 1 }).map(
+    (n) => ({
+      ...n,
+      startTime: n.startTime + span.startBeat,
+    }),
+  );
 }
 
-export function planChordStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
+export function planChordStem(
+  spans: SectionSpan[],
+  song?: BlueprintSong,
+): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
     const spanNotes: MidiNote[] = [];
@@ -151,12 +221,20 @@ export function planChordStem(spans: SectionSpan[], song?: BlueprintSong): MidiN
     // velocity follows the energy axis — must match the bridge's chordClips.ts.
     const harmonySection = narrativeHarmonySection(span.section, narrative);
     const chordVelocity = styleVelocityTarget(CHORD_VELOCITY, profile);
-    const occurrences = resolveChordOccurrences(harmonySection, span.durationBeats, styleSpacing(profile.density));
+    const occurrences = resolveChordOccurrences(
+      harmonySection,
+      span.durationBeats,
+      styleSpacing(profile.density),
+    );
     for (const occ of occurrences) {
       const rootPc = pitchClass(occ.chord.root);
       // Bend Harmony layer: Color (extensions) then Tension (dissonance
       // lean); an authored extendedSuffix always wins untouched.
-      const quality = styleQualityFor(occ.chord, profile.harmony, profile.tension ?? 0.5);
+      const quality = styleQualityFor(
+        occ.chord,
+        profile.harmony,
+        profile.tension ?? 0.5,
+      );
       // Voicing (inversion + spread) re-expresses the chord as root +
       // intervals, so the shared planner below stays the single note builder.
       const voiced = voiceChord(
@@ -191,22 +269,33 @@ export function planChordStem(spans: SectionSpan[], song?: BlueprintSong): MidiN
 /** Bass notes — one sustained root per chord by default; a per-section
  *  `bassProfile` (register/motion/rhythm/velocity) shapes the line. Uses
  *  the SAME generator the Ableton extension's `planBassLine` calls
- *  (`@drum/library`'s `planSectionBass`), so the exported .mid and live
+ *  (`@drum/library`'s `planSectionBassFor`), so the exported .mid and live
  *  MIDI out match "Send to Ableton" note for note. */
-export function planBassStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
+export function planBassStem(
+  spans: SectionSpan[],
+  song?: BlueprintSong,
+): MidiNote[] {
   const notes: MidiNote[] = [];
   for (const span of spans) {
     const profile = resolveEffectiveStyle(span.section, song);
     const narrative = resolveNarrativeProfile(span.section, song);
     const harmonySection = narrativeHarmonySection(span.section, narrative);
-    const occurrences = resolveChordOccurrences(harmonySection, span.durationBeats, styleSpacing(profile.density)).map((occ) => ({
+    const occurrences = resolveChordOccurrences(
+      harmonySection,
+      span.durationBeats,
+      styleSpacing(profile.density),
+    ).map((occ) => ({
       rootPc: pitchClass(occ.chord.root),
       startTime: span.startBeat + occ.startTime,
       duration: occ.duration,
     }));
     // Bend Bass layer: register/motion/rhythm/velocity tint the line (the
     // section's explicit bassProfile underneath, defaults below that).
-    const line = planSectionBass(occurrences, resolveBassProfile(span.section.bassProfile, profile));
+    const line = planSectionBassFor(
+      occurrences,
+      resolveBassProfile(span.section.bassProfile, profile),
+      conductSection(span.section, span.durationBeats).bassNotes,
+    );
     notes.push(...glueSpanNotes(line, span, song, "bass"));
   }
   return notes;
@@ -236,7 +325,10 @@ export interface MidiCc {
  * live MIDI out send identical messages. (The Ableton bridge can't carry
  * these: the Extensions SDK has no clip-envelope API — see the schema field.)
  */
-export function planDrumCcStem(spans: SectionSpan[], _song?: BlueprintSong): MidiCc[] {
+export function planDrumCcStem(
+  spans: SectionSpan[],
+  _song?: BlueprintSong,
+): MidiCc[] {
   const out: MidiCc[] = [];
   for (const span of spans) {
     const section = span.section;
@@ -247,7 +339,8 @@ export function planDrumCcStem(spans: SectionSpan[], _song?: BlueprintSong): Mid
       mute: section.drumLaneMute,
       solo: section.drumLaneSolo,
     });
-    for (const e of events) out.push({ beat: span.startBeat + e.beat, cc: e.cc, value: e.value });
+    for (const e of events)
+      out.push({ beat: span.startBeat + e.beat, cc: e.cc, value: e.value });
   }
   return out.sort((a, b) => a.beat - b.beat);
 }
@@ -269,7 +362,10 @@ export interface SectionDrumPlan {
  * depend on the neighbouring sections, which is why this takes every span and
  * returns them in order rather than planning one section alone.
  */
-export function planDrumSections(spans: SectionSpan[], song?: BlueprintSong): SectionDrumPlan[] {
+export function planDrumSections(
+  spans: SectionSpan[],
+  song?: BlueprintSong,
+): SectionDrumPlan[] {
   const inputs: SectionDrumInput[] = spans.map((span) => {
     const section = span.section;
     const profile = resolveEffectiveStyle(section, song);
@@ -292,7 +388,10 @@ export function planDrumSections(spans: SectionSpan[], song?: BlueprintSong): Se
       distinctBars.length > 1
         ? Object.fromEntries(
             distinctBars.flatMap((length) => {
-              const styled = exportSectionVariant({ ...request, beatsPerBar: length }, profile);
+              const styled = exportSectionVariant(
+                { ...request, beatsPerBar: length },
+                profile,
+              );
               return styled ? [[String(length), styled] as const] : [];
             }),
           )
@@ -304,8 +403,13 @@ export function planDrumSections(spans: SectionSpan[], song?: BlueprintSong): Se
       durationBeats: span.durationBeats,
       beatsPerBar: beatsPerBar(section),
       variant,
-      velocityTarget: styleVelocityTarget(velocityNumber(section.velocity), profile),
-      transitionModel: section.drumTransitionModel ?? narrativeTransitionModel(narrative.transition_delta),
+      velocityTarget: styleVelocityTarget(
+        velocityNumber(section.velocity),
+        profile,
+      ),
+      transitionModel:
+        section.drumTransitionModel ??
+        narrativeTransitionModel(narrative.transition_delta),
       barBeats,
       meterVariants,
     });
@@ -318,20 +422,40 @@ export function planDrumSections(spans: SectionSpan[], song?: BlueprintSong): Se
     occurrenceIndex: span.occurrenceIndex,
     notes: plans[i].notes
       .filter((n) => GM_DRUM_PITCHES.has(n.pitch))
-      .map((n) => ({ beat: n.beat, pitch: n.pitch, velocity: n.velocity, duration: n.duration })),
+      .map((n) => ({
+        beat: n.beat,
+        pitch: n.pitch,
+        velocity: n.velocity,
+        duration: n.duration,
+      })),
   }));
 }
 
-export function planDrumStem(spans: SectionSpan[], song?: BlueprintSong): MidiNote[] {
+export function planDrumStem(
+  spans: SectionSpan[],
+  song?: BlueprintSong,
+): MidiNote[] {
   const notes: MidiNote[] = [];
   const plans = planDrumSections(spans, song);
   for (let i = 0; i < spans.length; i++) {
     const span = spans[i];
     for (const n of plans[i].notes) {
+      const startTime = span.startBeat + n.beat;
+      // A hit is a fixed gate unless a Drum Block authored one — and either way
+      // it may not ring past the section. The mapping clips notes it can see the
+      // length of, but a kit note's length is this caller's default, so the cut
+      // has to happen here (§P3.6/S2: a closed hat on the last 16th was ringing
+      // 0.05 beats into the next section).
+      const room = span.startBeat + span.durationBeats - startTime;
+      if (room <= 1e-6) {
+        // Exactly on the boundary: that hit belongs to the next section, which
+        // plans its own downbeat. A floored duration here rang 0.01 beat into it.
+        continue;
+      }
       notes.push({
         pitch: n.pitch,
-        startTime: span.startBeat + n.beat,
-        duration: n.duration ?? DRUM_HIT_DURATION,
+        startTime,
+        duration: Math.min(n.duration ?? DRUM_HIT_DURATION, room),
         velocity: n.velocity,
       });
     }
@@ -387,7 +511,10 @@ interface RawMidiEvent {
  *  there, the *instrument* — a separate meta event (0xFF 0x04) from the
  *  track name (0xFF 0x03), because DAWs surface them in different places:
  *  track name is the lane label, instrument name is the sound. */
-function buildTrackChunk(events: RawMidiEvent[], meta: { name?: string; instrument?: string } = {}): number[] {
+function buildTrackChunk(
+  events: RawMidiEvent[],
+  meta: { name?: string; instrument?: string } = {},
+): number[] {
   const bytes: number[] = [];
 
   // Track name meta event (at tick 0)
@@ -401,7 +528,9 @@ function buildTrackChunk(events: RawMidiEvent[], meta: { name?: string; instrume
 
   // Instrument name meta event (at tick 0) — the "load this sound" hint.
   if (meta.instrument) {
-    const instrumentBytes = Array.from(new TextEncoder().encode(meta.instrument));
+    const instrumentBytes = Array.from(
+      new TextEncoder().encode(meta.instrument),
+    );
     bytes.push(0x00); // delta = 0
     bytes.push(0xff, 0x04); // meta: instrument name
     bytes.push(...writeVarLen(instrumentBytes.length));
@@ -420,13 +549,19 @@ function buildTrackChunk(events: RawMidiEvent[], meta: { name?: string; instrume
   }
 
   // End of track meta event
-  const endDelta = Math.max(0, (sorted.length > 0 ? sorted[sorted.length - 1].tick : 0) - lastTick);
+  const endDelta = Math.max(
+    0,
+    (sorted.length > 0 ? sorted[sorted.length - 1].tick : 0) - lastTick,
+  );
   bytes.push(...writeVarLen(endDelta));
   bytes.push(0xff, 0x2f, 0x00);
 
   // MTrk header + length
   const header = [
-    0x4d, 0x54, 0x72, 0x6b, // "MTrk"
+    0x4d,
+    0x54,
+    0x72,
+    0x6b, // "MTrk"
     ...writeU32(bytes.length),
   ];
 
@@ -455,8 +590,14 @@ function notesToEvents(notes: MidiNote[], channel: number): RawMidiEvent[] {
 
   const prepared = notes
     .map((note) => {
-      const startTick = Math.max(0, Math.round(note.startTime * TICKS_PER_QUARTER));
-      const durationTicks = Math.max(1, Math.round(note.duration * TICKS_PER_QUARTER));
+      const startTick = Math.max(
+        0,
+        Math.round(note.startTime * TICKS_PER_QUARTER),
+      );
+      const durationTicks = Math.max(
+        1,
+        Math.round(note.duration * TICKS_PER_QUARTER),
+      );
       return {
         pitch: pitchToWire(note.pitch),
         velocity: velocityToWire(note.velocity),
@@ -507,11 +648,25 @@ function notesToEvents(notes: MidiNote[], channel: number): RawMidiEvent[] {
 /** Maps a (key, scale) pair to MIDI key-signature sharps/flats. */
 function keySignature(song: BlueprintSong): { sharps: number; major: boolean } {
   const circleOfFifths: Record<NoteName, number> = {
-    "C": 0, "G": 1, "D": 2, "A": 3, "E": 4, "B": 5, "F#": 6,
-    "F": -1, "Bb": -2, "Eb": -3, "Ab": -4, "Db": -5, "Gb": -6,
+    C: 0,
+    G: 1,
+    D: 2,
+    A: 3,
+    E: 4,
+    B: 5,
+    "F#": 6,
+    F: -1,
+    Bb: -2,
+    Eb: -3,
+    Ab: -4,
+    Db: -5,
+    Gb: -6,
   };
   const sharps = circleOfFifths[song.key] ?? 0;
-  const major = song.scale === "ionian" || song.scale === "lydian" || song.scale === "mixolydian";
+  const major =
+    song.scale === "ionian" ||
+    song.scale === "lydian" ||
+    song.scale === "mixolydian";
   return { sharps, major };
 }
 
@@ -523,10 +678,17 @@ function keySignature(song: BlueprintSong): { sharps: number; major: boolean } {
  *  (channel 10 is percussion, a program change there does nothing useful),
  *  or a stem with no program in either the song or the profile. The song's
  *  own choice wins over the profile's default. */
-function programFor(song: BlueprintSong, stem: StemId, routing: StemRoutingMap): number | null {
+function programFor(
+  song: BlueprintSong,
+  stem: StemId,
+  routing: StemRoutingMap,
+): number | null {
   if (stem === "drums") return null;
-  const program = song.instruments?.[stem]?.gmProgram ?? routing[stem].gmProgram;
-  return program === undefined || program === null ? null : clampProgram(program);
+  const program =
+    song.instruments?.[stem]?.gmProgram ?? routing[stem].gmProgram;
+  return program === undefined || program === null
+    ? null
+    : clampProgram(program);
 }
 
 /** One `0x06` marker meta event per section occurrence, named the way the
@@ -560,22 +722,44 @@ function markerEvents(spans: SectionSpan[]): RawMidiEvent[] {
  *  a mixed-meter medley and a `meterMap` all export the meter a DAW needs to
  *  draw the right bar lines — which is also what the section markers are
  *  aligned to. */
-function timeSignatureEvents(spans: SectionSpan[], song: BlueprintSong): RawMidiEvent[] {
+function timeSignatureEvents(
+  spans: SectionSpan[],
+  song: BlueprintSong,
+): RawMidiEvent[] {
   const events: RawMidiEvent[] = [];
   let last: { numerator: number; denominator: number } | null = null;
 
-  const push = (beat: number, meter: { numerator: number; denominator: number }): void => {
-    if (last && last.numerator === meter.numerator && last.denominator === meter.denominator) return;
+  const push = (
+    beat: number,
+    meter: { numerator: number; denominator: number },
+  ): void => {
+    if (
+      last &&
+      last.numerator === meter.numerator &&
+      last.denominator === meter.denominator
+    )
+      return;
     last = meter;
     events.push({
       tick: Math.max(0, Math.round(beat * TICKS_PER_QUARTER)),
-      data: [0xff, 0x58, 0x04, meter.numerator, Math.round(Math.log2(meter.denominator)), 24, 8],
+      data: [
+        0xff,
+        0x58,
+        0x04,
+        meter.numerator,
+        Math.round(Math.log2(meter.denominator)),
+        24,
+        8,
+      ],
     });
   };
 
   if (spans.length === 0) {
     // No sections yet: the header is all there is to say.
-    push(0, { numerator: song.timeSignatureNumerator, denominator: song.timeSignatureDenominator });
+    push(0, {
+      numerator: song.timeSignatureNumerator,
+      denominator: song.timeSignatureDenominator,
+    });
     return events;
   }
 
@@ -597,7 +781,11 @@ function timeSignatureEvents(spans: SectionSpan[], song: BlueprintSong): RawMidi
 
 /** The instrument label to write for `stem`: the song's own name for it
  *  when authored, otherwise the profile's default. */
-function instrumentNameFor(song: BlueprintSong, stem: StemId, routing: StemRoutingMap): string | undefined {
+function instrumentNameFor(
+  song: BlueprintSong,
+  stem: StemId,
+  routing: StemRoutingMap,
+): string | undefined {
   const authored = song.instruments?.[stem]?.name?.trim();
   return authored || routing[stem].instrumentName;
 }
@@ -625,7 +813,10 @@ function instrumentNameFor(song: BlueprintSong, stem: StemId, routing: StemRouti
  *  here: exporting them would make a GM-compatible DAW play the drum part
  *  on a piano.
  */
-export function songToMidi(song: BlueprintSong, routing: StemRoutingMap = GM_ROUTING.stems): Uint8Array {
+export function songToMidi(
+  song: BlueprintSong,
+  routing: StemRoutingMap = GM_ROUTING.stems,
+): Uint8Array {
   const spans = sectionSpans(song);
 
   // Generate stems
@@ -674,7 +865,9 @@ export function songToMidi(song: BlueprintSong, routing: StemRoutingMap = GM_ROU
   // conductor stays at tick 0 and notes clamp at 0; in-app playback and
   // live MIDI out intentionally do NOT apply this — the app's own grid is
   // what they play against.
-  const outputOffsetTicks = Math.round((song.outputOffsetBeats ?? 0) * TICKS_PER_QUARTER);
+  const outputOffsetTicks = Math.round(
+    (song.outputOffsetBeats ?? 0) * TICKS_PER_QUARTER,
+  );
   /** Note events for one stem, on the channel its routing names, with the
    *  song's render offset applied and (when the stem has a GM program) a
    *  program change ahead of them at tick 0. */
@@ -684,11 +877,16 @@ export function songToMidi(song: BlueprintSong, routing: StemRoutingMap = GM_ROU
     const shifted =
       outputOffsetTicks === 0
         ? noteEvents
-        : noteEvents.map((e) => ({ ...e, tick: Math.max(0, e.tick + outputOffsetTicks) }));
+        : noteEvents.map((e) => ({
+            ...e,
+            tick: Math.max(0, e.tick + outputOffsetTicks),
+          }));
     const program = programFor(song, stem, routing);
     // Inserted first so it precedes any note on the same tick:
     // buildTrackChunk's sort is stable, so equal ticks keep this order.
-    return program === null ? shifted : [{ tick: 0, data: [0xc0 | channel, program - 1] }, ...shifted];
+    return program === null
+      ? shifted
+      : [{ tick: 0, data: [0xc0 | channel, program - 1] }, ...shifted];
   };
   const track = (notes: MidiNote[], stem: StemId): number[] =>
     buildTrackChunk(stemEvents(notes, stem), {
@@ -701,7 +899,10 @@ export function songToMidi(song: BlueprintSong, routing: StemRoutingMap = GM_ROU
   const drumTrack = (() => {
     const channel = clampChannel(routing.drums.channel) - 1;
     const ccs = planDrumCcStem(spans, song).map((c): RawMidiEvent => ({
-      tick: Math.max(0, Math.round(c.beat * TICKS_PER_QUARTER) + outputOffsetTicks),
+      tick: Math.max(
+        0,
+        Math.round(c.beat * TICKS_PER_QUARTER) + outputOffsetTicks,
+      ),
       data: [0xb0 | channel, c.cc & 0x7f, c.value & 0x7f],
     }));
     return buildTrackChunk([...stemEvents(drumNotes, "drums"), ...ccs], {
@@ -715,10 +916,13 @@ export function songToMidi(song: BlueprintSong, routing: StemRoutingMap = GM_ROU
   // --- Assemble SMF ---
   const numTracks = 6;
   const header = [
-    0x4d, 0x54, 0x68, 0x64, // "MThd"
-    ...writeU32(6),          // header length
-    ...writeU16(1),          // format = 1 (multi-track)
-    ...writeU16(numTracks),  // number of tracks
+    0x4d,
+    0x54,
+    0x68,
+    0x64, // "MThd"
+    ...writeU32(6), // header length
+    ...writeU16(1), // format = 1 (multi-track)
+    ...writeU16(numTracks), // number of tracks
     ...writeU16(TICKS_PER_QUARTER),
   ];
 
@@ -735,7 +939,10 @@ export function songToMidi(song: BlueprintSong, routing: StemRoutingMap = GM_ROU
 }
 
 /** Triggers a browser download of a song as a .mid file. */
-export function downloadSongMidi(song: BlueprintSong, routing: StemRoutingMap = GM_ROUTING.stems): void {
+export function downloadSongMidi(
+  song: BlueprintSong,
+  routing: StemRoutingMap = GM_ROUTING.stems,
+): void {
   const bytes = songToMidi(song, routing);
   const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "audio/midi" });
   const url = URL.createObjectURL(blob);

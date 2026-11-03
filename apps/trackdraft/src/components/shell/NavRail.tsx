@@ -8,8 +8,11 @@ import Icon, { type IconName } from "../common/Icon";
  *  rail carries navigation and nothing else. Icons are the shared SVG set
  *  (components/common/Icon), matching the inspector's element icons where
  *  they mean the same thing. */
-const VIEWS: { to: string; label: string; icon: IconName; divider?: boolean }[] = [
+const VIEWS: { to: string; label: string; icon: IconName; divider?: boolean; dev?: boolean }[] = [
   { to: "workbench", label: "Workbench β", icon: "workbench" },
+  /** The infinite-canvas experiment (docs: session plan §0.5). Dev-only until
+   *  it earns writes — a packaged build must never ship a half-built door. */
+  { to: "poly", label: "Poly β", icon: "frame", dev: true },
   { to: "structure", label: "Structure", icon: "structure" },
   { to: "harmony", label: "Harmony", icon: "harmony" },
   { to: "drums", label: "Drums", icon: "drums" },
@@ -35,6 +38,9 @@ export default function NavRail() {
   // Minimized by default (user decision 2026-10-24): the canvas gets the
   // width, and the glyph strip still says exactly where you are.
   const [open, setOpen] = useState(false);
+  // Lab views exist in dev builds only; the shipped app never advertises a
+  // surface that is still a prototype.
+  const visibleViews = VIEWS.filter((v) => !v.dev || import.meta.env.DEV);
 
   return (
     <aside className={`shrink-0 border-r border-edge bg-panel flex flex-col min-h-0 ${open ? "w-32" : "w-9"}`} aria-label="Views">
@@ -50,7 +56,7 @@ export default function NavRail() {
       {open ? (
         <div className="flex-1 min-h-0 overflow-y-auto px-1.5 pb-2">
           <div className="space-y-0.5">
-            {VIEWS.map((v) => (
+            {visibleViews.map((v) => (
               <div key={v.to}>
                 {v.divider && <div className="my-1 border-t border-edge/60" />}
                 <NavLink
@@ -73,7 +79,7 @@ export default function NavRail() {
         </div>
       ) : (
         <div className="flex flex-col items-center">
-          {VIEWS.map((v) => (
+          {visibleViews.map((v) => (
             <div key={v.to}>
               {v.divider && <div className="w-6 my-1 border-t border-edge/60" />}
               <NavLink

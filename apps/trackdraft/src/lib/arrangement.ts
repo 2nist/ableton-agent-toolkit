@@ -38,11 +38,19 @@ export function sectionSpans(song: BlueprintSong): SectionSpan[] {
   for (const entry of resolveArrangement(song)) {
     const base = sectionsById.get(entry.sectionId);
     if (!base) continue; // stale reference (section since deleted) — skip rather than crash
-    const section: BlueprintSection = entry.overrides ? { ...base, ...entry.overrides } : base;
-    const durationBeats = sectionDurationBeats(section);
 
     const repeats = Math.max(0, Math.floor(entry.repeats));
     for (let occurrenceIndex = 0; occurrenceIndex < repeats; occurrenceIndex++) {
+      // The entry's overrides apply to every pass; a pass's own apply on top of
+      // them (§P4.1). A section with neither keeps its own object by REFERENCE —
+      // which is what lets memo comparisons and "absent stays byte identical"
+      // hold for every song that never asked for an instance.
+      const pass = entry.occurrenceOverrides?.[String(occurrenceIndex)];
+      const patched = pass ? { ...entry.overrides, ...pass } : entry.overrides;
+      const section: BlueprintSection = patched ? { ...base, ...patched } : base;
+      // Per pass, not per entry: a pass may override `bars`, and then it is a
+      // different length in the song.
+      const durationBeats = sectionDurationBeats(section);
       spans.push({
         sectionId: entry.sectionId,
         section,

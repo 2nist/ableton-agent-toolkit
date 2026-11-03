@@ -27,6 +27,7 @@ import type { PackedPreset, PackedVariant } from "./presetData.js";
 import type { DrumPattern } from "./presets.js";
 import { inferPatternForGenre } from "./grooves.js";
 import { songSignalsFor } from "./infer.js";
+import type { TimeDomain } from "@music-theory/song-blueprint";
 import type { InferSong } from "./infer.js";
 import { compatibleVariantIndices, hashSeed, occurrenceSeed, pickVariantIndexFor } from "./handoffs.js";
 import { applyStyleToVariant, hasBend, styleSeed } from "./style.js";
@@ -390,6 +391,8 @@ export interface DrumSectionFields {
   drumVariationStartBeat?: number;
   drumTransitionModel?: TransitionModel | null;
   drumTransitionBars?: number;
+  /** The section's own clock — see `timeDomain.ts`. */
+  timeDomain?: TimeDomain;
 }
 
 export interface SectionDrumAssembly {
@@ -441,6 +444,10 @@ export function sectionDrumInput(assembly: SectionDrumAssembly): SectionDrumInpu
     gridBeats: section.drumMeterOutline ? section.drumMeterOutline.cellBeats : 0.25,
     durationBeats: assembly.durationBeats,
     velocityTarget: assembly.velocityTarget,
+    // One line here covers BOTH export paths: the app's .mid export and the
+    // Ableton bridge both build their input through this function, so a local
+    // clock cannot reach one and miss the other.
+    timeDomain: section.timeDomain,
   };
 }
 

@@ -63,3 +63,5 @@ export type {
   EuclidParams,
   OnsetFn,
 } from "./drumImport/index.js";
+export * from "./timeDomain.js";
+export * from "./conduct.js";
