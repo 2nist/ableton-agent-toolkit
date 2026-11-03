@@ -14,7 +14,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { NoteName, ScaleType } from "@music-theory/core";
+import { diatonicChordQualities } from "@music-theory/core";
+import type { ChordQuality, NoteName, ScaleType } from "@music-theory/core";
 import {
   connectMidiInputs,
   midiInSupported,
@@ -81,7 +82,7 @@ export function useMidiChordInput(options: UseMidiChordInputOptions = {}): MidiC
   const heldRef = useRef(new Map<number, number>());
   const pendingStartRef = useRef<number | null>(null);
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastEmittedRef = useRef<{ rootPc: number; quality: string } | null>(null);
+  const lastEmittedRef = useRef<{ rootPc: number; quality: ChordQuality } | null>(null);
 
   // Callbacks and key context follow the latest render without re-opening
   // the MIDI connection (which would re-prompt and drop notes).
@@ -106,7 +107,15 @@ export function useMidiChordInput(options: UseMidiChordInputOptions = {}): MidiC
 
   const settle = useCallback(() => {
     const pitches = Array.from(heldRef.current.keys());
-    const recognized = recognizeChordFromNotes(pitches, keyRef.current);
+    // The chord already sounding is a weak prior: while the hand stays put,
+    // a colour tone arriving should refine the name, not flip the root.
+    const recognized = recognizeChordFromNotes(pitches, {
+      ...keyRef.current,
+      permitted: keyRef.current.scale
+        ? diatonicChordQualities(keyRef.current.scale)
+        : undefined,
+      previous: lastEmittedRef.current ?? undefined,
+    });
     setChord(recognized);
 
     if (!recognized) {

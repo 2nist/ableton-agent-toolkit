@@ -530,6 +530,7 @@ export function midiToBlueprintSong(midi: ParsedMidi, title: string): BlueprintS
       sectionBeats,
       midi.timeSigNum,
       midi.key,
+      { scale: midi.scale as BlueprintSong["scale"] },
     );
 
     // Frame matching needs chord tones to sound *together*. A full-score

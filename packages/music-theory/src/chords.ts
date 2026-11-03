@@ -1,6 +1,6 @@
 import type { ChordType, Chord, ChordQuality, ScaleType, NoteName } from "./types";
 import { pitchClass, noteName } from "./notes";
-import { MODE_DATA } from "./scales";
+import { MODE_DATA, SCALE_INTERVALS } from "./scales";
 
 /**
  * Chord type definitions with interval patterns
@@ -66,6 +66,100 @@ export const CHORD_INTERVALS: Record<ChordQuality, number[]> = {
   maj13: [0, 4, 7, 11, 14, 21],
   min13: [0, 3, 7, 10, 14, 21],
 };
+
+/**
+ * Chord tones a player may leave out without changing the name.
+ *
+ * Naming a played shape has to score "four of these five tones" differently
+ * for a tone that carries the quality and one that is routinely dropped. The
+ * fifth is the classic case: a pianist voicing maj7 plays root–3–7 constantly,
+ * and treating the absent fifth as evidence against maj7 pushes the reading
+ * toward a wrong, denser chord. These are indices into the quality's
+ * `CHORD_INTERVALS` row.
+ *
+ * The rule follows the vocabulary itself rather than a taste call: on any
+ * chord of four or more tones the perfect fifth is optional, the ninth is
+ * optional once an eleventh is present, and the eleventh once a thirteenth
+ * is. Three-tone chords keep every tone — a triad missing its fifth is a real
+ * ambiguity (a rootless reading), not an omission.
+ */
+function optionalTonesFor(intervals: readonly number[]): readonly number[] {
+  if (intervals.length < 4) return [];
+  const optional: number[] = [];
+  const fifth = intervals.indexOf(7);
+  if (fifth >= 0) optional.push(fifth);
+  const ninth = intervals.indexOf(14);
+  if (ninth >= 0 && intervals.includes(17)) optional.push(ninth);
+  const eleventh = intervals.indexOf(17);
+  if (eleventh >= 0 && intervals.includes(21)) optional.push(eleventh);
+  return optional;
+}
+
+/** Per-quality omittable tones, by index into `CHORD_INTERVALS[quality]`. */
+export const CHORD_OPTIONAL_TONES: Record<ChordQuality, readonly number[]> =
+  Object.fromEntries(
+    Object.entries(CHORD_INTERVALS).map(([quality, intervals]) => [
+      quality,
+      optionalTonesFor(intervals),
+    ]),
+  ) as Record<ChordQuality, readonly number[]>;
+
+/**
+ * Chord qualities that occur on the degrees of a mode.
+ *
+ * Derived from the scale itself — stack scale thirds on every degree and
+ * classify the result — rather than a hand-written table per mode, so all
+ * seven modes stay consistent and a new scale needs no second edit.
+ *
+ * This is the "permitted vocabulary" chord recognition can be handed: the
+ * qualities the current key actually offers. It is a preference, not a
+ * filter, so a borrowed bVI is still named when nothing in key explains it.
+ */
+export function diatonicChordQualities(scaleType: ScaleType): ChordQuality[] {
+  const scale = SCALE_INTERVALS[scaleType] ?? SCALE_INTERVALS.ionian;
+  const size = scale.length;
+  if (size === 0) return [];
+
+  // Scale step `degree` (may run past the end) as a pitch class.
+  const at = (degree: number): number => {
+    const octave = Math.floor(degree / size);
+    const step = ((degree % size) + size) % size;
+    return (((scale[step] + 12 * octave) % 12) + 12) % 12;
+  };
+
+  const found: ChordQuality[] = [];
+  const add = (quality: ChordQuality) => {
+    if (!found.includes(quality)) found.push(quality);
+  };
+
+  for (let degree = 0; degree < size; degree += 1) {
+    const root = at(degree);
+    const third = (at(degree + 2) - root + 12) % 12;
+    const fifth = (at(degree + 4) - root + 12) % 12;
+    const seventh = (at(degree + 6) - root + 12) % 12;
+
+    const triad: ChordQuality | null =
+      third === 4 && fifth === 7
+        ? "maj"
+        : third === 3 && fifth === 7
+          ? "min"
+          : third === 3 && fifth === 6
+            ? "dim"
+            : third === 4 && fifth === 8
+              ? "aug"
+              : null;
+    if (!triad) continue;
+    add(triad);
+    if (size < 7) continue;
+
+    if (triad === "maj") add(seventh === 11 ? "maj7" : seventh === 10 ? "7" : "maj");
+    else if (triad === "min") add(seventh === 10 ? "min7" : seventh === 11 ? "mMaj7" : "min");
+    else if (triad === "dim") add(seventh === 10 ? "m7b5" : seventh === 9 ? "dim7" : "dim");
+    else add("maj7#5");
+  }
+
+  return found;
+}
 
 /** Chord quality display suffix mapping */
 export const CHORD_QUALITY_SUFFIX: Record<ChordQuality, string> = {

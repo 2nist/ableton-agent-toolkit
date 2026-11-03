@@ -58,3 +58,86 @@ describe("recognizeChord", () => {
     expect(recognizedChordName(chord, "Bb")).toBe("Bb");
   });
 });
+
+describe("recognizeChord robustness", () => {
+  it("names an extended quality the old candidate list could not reach", () => {
+    // C E G Bb D A — a C13. The old list stopped at 7#11, so this shape could
+    // only ever come back as "9" with an unexplained A.
+    expect(recognizeChord([0, 4, 7, 10, 2, 9])).toMatchObject({ rootPc: 0, quality: "13" });
+  });
+
+  it("charges an omitted fifth far less than an omitted third", () => {
+    // Root-3-7 vs root-5-7: the first is a normal maj7 voicing.
+    const noFifth = recognizeChord([0, 4, 11]);
+    const noThird = recognizeChord([0, 7, 11]);
+    expect(noFifth).toMatchObject({ rootPc: 0, quality: "maj7" });
+    expect(noFifth!.score).toBeGreaterThan(noThird!.score);
+  });
+
+  it("reports the inversion when the bass is a chord tone", () => {
+    expect(recognizeChordFromNotes([52, 55, 60])).toMatchObject({ inversion: 1 });
+    // Root position reports 0; callers treat absent-or-0 as "no inversion".
+    expect(recognizeChordFromNotes([48, 52, 55])?.inversion).toBe(0);
+  });
+
+  it("stays on the previous chord when the frame alone is ambiguous", () => {
+    // Root-3-7 with no fifth: readable as maj7; the prior raises its score.
+    const plain = recognizeChord([0, 4, 11]);
+    const primed = recognizeChord([0, 4, 11], {
+      previous: { rootPc: 0, quality: "maj7" },
+    });
+    expect(primed!.score).toBeGreaterThan(plain!.score);
+    expect(primed).toMatchObject({ rootPc: 0, quality: "maj7" });
+  });
+
+  it("still changes chord when the notes actually change", () => {
+    const chord = recognizeChord([5, 9, 0], { previous: { rootPc: 0, quality: "maj7" } });
+    expect(chord).toMatchObject({ rootPc: 5, quality: "maj" });
+  });
+});
+
+describe("permitted vocabulary", () => {
+  // The qualities the key offers, as the app derives them.
+  const IONIAN = ["maj", "min", "dim", "maj7", "min7", "7", "m7b5"] as const;
+
+  it("lets the caller's vocabulary steer an ambiguous shape", () => {
+    // C E G A is both C6 and Am7. Whichever the context permits wins, and
+    // both readings explain every note, so the vocabulary — not the sort
+    // order — decides.
+    expect(recognizeChord([0, 4, 7, 9], { permitted: ["6"] })).toMatchObject({
+      rootPc: 0,
+      quality: "6",
+    });
+    expect(recognizeChord([0, 4, 7, 9], { permitted: ["min7"] })).toMatchObject({
+      rootPc: 9,
+      quality: "min7",
+    });
+  });
+
+  it("falls back to the full vocabulary when the key cannot explain the notes", () => {
+    // Root-3-7 only: no ionian quality accounts for it without a stray note,
+    // so recognition leaves the key and names the maj7 anyway.
+    expect(recognizeChord([0, 4, 11], { permitted: [...IONIAN] })).toMatchObject({
+      rootPc: 0,
+      quality: "maj7",
+    });
+  });
+
+  it("still names a borrowed chord the notes state outright", () => {
+    // Ab major in C has no in-key reading that accounts for all three notes.
+    const chord = recognizeChord([8, 0, 3], { permitted: [...IONIAN], keyName: "C", scale: "ionian" });
+    expect(chord).toMatchObject({ rootPc: 8, quality: "maj" });
+  });
+
+  it("still names an extension the key does not list", () => {
+    const chord = recognizeChord([0, 4, 7, 10, 2, 9], { permitted: [...IONIAN] });
+    expect(chord).toMatchObject({ rootPc: 0, quality: "13" });
+  });
+
+  it("is a no-op when nothing is permitted", () => {
+    const withList = recognizeChord([0, 4, 7], { permitted: [...IONIAN] });
+    const without = recognizeChord([0, 4, 7]);
+    expect(withList).toMatchObject({ rootPc: 0, quality: "maj" });
+    expect(without).toMatchObject({ rootPc: 0, quality: "maj" });
+  });
+});
