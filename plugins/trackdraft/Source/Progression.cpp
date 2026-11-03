@@ -62,6 +62,49 @@ const BassLine& Progression::bassAt (std::size_t) const noexcept
     return bass;
 }
 
+const TonicRegion* Progression::regionAtBeat (double beat) const noexcept
+{
+    // The regions are kept sorted, so the last one that starts at or before the
+    // beat wins — the app's `resolveTonicAt`, without the copy.
+    const TonicRegion* found = nullptr;
+    for (const auto& region : regions)
+    {
+        if (region.startBeat > beat + 1e-6)
+            break;
+
+        found = &region;
+    }
+
+    return found;
+}
+
+const TonicRegion* Progression::regionAtSlot (std::size_t index) const noexcept
+{
+    return regionAtBeat (startBeatOf (index));
+}
+
+bool Progression::hasKeyAt (std::size_t index) const noexcept
+{
+    return regionAtSlot (index) != nullptr;
+}
+
+int Progression::keyAt (std::size_t index) const noexcept
+{
+    const auto* region = regionAtSlot (index);
+    return region != nullptr ? region->keyPc : 0;
+}
+
+bool Progression::hasScaleAt (std::size_t index) const noexcept
+{
+    return regionAtSlot (index) != nullptr;
+}
+
+theory::Scale Progression::scaleAt (std::size_t index) const noexcept
+{
+    const auto* region = regionAtSlot (index);
+    return region != nullptr ? region->scale : theory::Scale::ionian;
+}
+
 std::size_t Progression::slotAtBeat (double beat) const noexcept
 {
     if (count == 0)

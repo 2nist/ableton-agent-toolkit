@@ -101,6 +101,28 @@ struct ChordSlot
     }
 };
 
+/**
+    A run of a section that shares one home key — a modulation *inside* a
+    section, the app's `TonicRegion`.
+
+    Section-relative beats, and the regions are sorted by `startBeat`: the one in
+    force at a beat is the last that starts at or before it, exactly as
+    `resolveTonicAt` decides it. A region is a whole home, not a half of one, so
+    unlike a section it carries both halves.
+*/
+struct TonicRegion
+{
+    double startBeat = 0.0;
+    int keyPc = 0;
+    theory::Scale scale = theory::Scale::ionian;
+
+    bool operator== (const TonicRegion& other) const noexcept
+    {
+        return std::abs (startBeat - other.startBeat) < 1e-9 && keyPc == other.keyPc
+               && scale == other.scale;
+    }
+};
+
 /** How a bass voice moves between the chords it plays under — the app's
     `BassMotion`. */
 enum class BassMotion
@@ -170,6 +192,14 @@ public:
     virtual const ChordSlot& slotAt (std::size_t index) const = 0;
     /** The bass voice that belongs to the section `index` falls in. */
     virtual const BassLine& bassAt (std::size_t index) const = 0;
+
+    /** The home key `index` plays under, if the song itself says: a section's
+        override or a region inside it. False means "the song's", which is the
+        plug-in's Key parameter — the cycle cannot know a parameter. */
+    virtual bool hasKeyAt (std::size_t index) const = 0;
+    virtual int keyAt (std::size_t index) const = 0;
+    virtual bool hasScaleAt (std::size_t index) const = 0;
+    virtual theory::Scale scaleAt (std::size_t index) const = 0;
 };
 
 /**
@@ -190,6 +220,15 @@ struct Progression : public ChordCycle
     /** This section's bass voice; off unless a song or preset turns it on. */
     BassLine bass;
 
+    /** Modulations inside this section, by section-relative beat. */
+    std::vector<TonicRegion> regions;
+
+    /** The region in force at `beat`, or nullptr when the section has one home. */
+    const TonicRegion* regionAtBeat (double beat) const noexcept;
+
+    /** The region in force when `index` starts (nullptr when there is none). */
+    const TonicRegion* regionAtSlot (std::size_t index) const noexcept;
+
     /** Total beats in one pass of the progression. */
     double lengthInBeats() const noexcept override;
 
@@ -203,6 +242,13 @@ struct Progression : public ChordCycle
 
     /** One section, so every slot is under the same bass voice. */
     const BassLine& bassAt (std::size_t index) const noexcept override;
+
+    /** A bare progression knows only its own regions — the section's own key
+        lives on the song, not here. */
+    bool hasKeyAt (std::size_t index) const noexcept override;
+    int keyAt (std::size_t index) const noexcept override;
+    bool hasScaleAt (std::size_t index) const noexcept override;
+    theory::Scale scaleAt (std::size_t index) const noexcept override;
 
     /** Slot sounding at `beat` (position inside the loop), or the last one. */
     std::size_t slotAtBeat (double beat) const noexcept;

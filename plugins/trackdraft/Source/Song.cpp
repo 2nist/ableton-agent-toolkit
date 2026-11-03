@@ -239,8 +239,36 @@ void SongCycle::rebuild (const Song& song)
                 if (beats <= 0.0)
                     continue;
 
-                entries.push_back ({ cursor, index, slot, passIndex,
-                                     progression.slots[slot], progression.bass });
+                // The home is resolved once, here: a region inside the section
+                // wins over the section's own key, which wins over the song's.
+                const auto* region = progression.regionAtBeat (
+                    progression.startBeatOf (slot));
+                const auto& owning = song.sections[index];
+
+                Entry entry;
+                entry.startBeat = cursor;
+                entry.section = index;
+                entry.slotInSection = slot;
+                entry.pass = passIndex;
+                entry.slot = progression.slots[slot];
+                entry.bass = progression.bass;
+
+                if (region != nullptr)
+                {
+                    entry.hasKey = true;
+                    entry.keyPc = region->keyPc;
+                    entry.hasScale = true;
+                    entry.scale = region->scale;
+                }
+                else
+                {
+                    entry.hasKey = owning.hasKey;
+                    entry.keyPc = owning.keyPc;
+                    entry.hasScale = owning.hasScale;
+                    entry.scale = owning.scale;
+                }
+
+                entries.push_back (std::move (entry));
                 cursor += beats;
             }
         }
@@ -258,6 +286,26 @@ const ChordSlot& SongCycle::slotAt (std::size_t index) const noexcept
 {
     static const ChordSlot empty;
     return index < entries.size() ? entries[index].slot : empty;
+}
+
+bool SongCycle::hasKeyAt (std::size_t index) const noexcept
+{
+    return index < entries.size() && entries[index].hasKey;
+}
+
+int SongCycle::keyAt (std::size_t index) const noexcept
+{
+    return index < entries.size() ? entries[index].keyPc : 0;
+}
+
+bool SongCycle::hasScaleAt (std::size_t index) const noexcept
+{
+    return index < entries.size() && entries[index].hasScale;
+}
+
+theory::Scale SongCycle::scaleAt (std::size_t index) const noexcept
+{
+    return index < entries.size() ? entries[index].scale : theory::Scale::ionian;
 }
 
 const BassLine& SongCycle::bassAt (std::size_t index) const noexcept

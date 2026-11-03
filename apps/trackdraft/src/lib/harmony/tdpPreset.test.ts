@@ -256,6 +256,8 @@ const APP_SONG_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <progression version="1" count="2">
       <slot root="5" quality="maj" beats="4" performance="0" param="0" direction="2"/>
       <slot root="7" quality="7" beats="4" performance="3" param="8" direction="1" rhythm="3001200030002000"/>
+      <region from="0" key="3" scale="aeolian"/>
+      <region from="4" key="8" scale="lydian"/>
       <bass octave="2" motion="walking" rhythm="eighth" velocity="88"/>
     </progression>
   </section>
@@ -274,6 +276,7 @@ function song(): BlueprintSong {
     bassProfile?: BlueprintSection["bassProfile"],
     key?: BlueprintSection["key"],
     scale?: BlueprintSection["scale"],
+    tonicRegions?: BlueprintSection["tonicRegions"],
   ) => ({
     id,
     name,
@@ -287,6 +290,7 @@ function song(): BlueprintSong {
     ...(bassProfile ? { bassProfile } : {}),
     ...(key ? { key } : {}),
     ...(scale ? { scale } : {}),
+    ...(tonicRegions ? { tonicRegions } : {}),
   });
 
   return {
@@ -317,7 +321,10 @@ function song(): BlueprintSong {
           performance: { style: "arp", params: { subdivision: 8, direction: 1 } },
           rhythm: "3001200030002000",
         }),
-      ], { octave: 2, motion: "walking", rhythm: "eighth", velocity: 88 }, "Eb", "aeolian"),
+      ], { octave: 2, motion: "walking", rhythm: "eighth", velocity: 88 }, "Eb", "aeolian", [
+        { startBeat: 0, key: "Eb", scale: "aeolian", source: "authored" },
+        { startBeat: 4, key: "Ab", scale: "lydian", source: "authored" },
+      ]),
     ],
     arrangement: [
       { sectionId: "s1", repeats: 1 },

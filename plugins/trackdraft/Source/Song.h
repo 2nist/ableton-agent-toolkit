@@ -156,6 +156,11 @@ public:
     const ChordSlot& slotAt (std::size_t index) const noexcept override;
     const BassLine& bassAt (std::size_t index) const noexcept override;
 
+    bool hasKeyAt (std::size_t index) const noexcept override;
+    int keyAt (std::size_t index) const noexcept override;
+    bool hasScaleAt (std::size_t index) const noexcept override;
+    theory::Scale scaleAt (std::size_t index) const noexcept override;
+
     /** What is playing at a song position (wraps): the section, the slot
         inside that section, and which arrangement pass it belongs to. */
     struct Playing
@@ -178,6 +183,11 @@ private:
         std::size_t pass = 0;
         ChordSlot slot;
         BassLine bass;
+        /** The home this slot plays under, resolved through section and region. */
+        bool hasKey = false;
+        int keyPc = 0;
+        bool hasScale = false;
+        theory::Scale scale = theory::Scale::ionian;
     };
 
     std::vector<Entry> entries;

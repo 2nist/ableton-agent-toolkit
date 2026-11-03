@@ -129,13 +129,15 @@ void TrackDraftAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         const juce::ScopedLock lock (progressionLock);
         scheduler.process (generated, transport, cycle, settings, buffer.getNumSamples());
 
-        // Detection names what the player plays in the key of the section the
-        // transport is in, not the song's — the vocabulary a modulating song
-        // needs. Stopped, there is no section, so the song's key stands.
+        // Detection names what the player plays in the key of the slot the
+        // transport is in — a region inside a section beats the section's own
+        // key, which beats the song's. Stopped, the song's key stands.
         const auto playing = transport.playing
                                  ? cycle.playingAt (juce::jmax (0.0, transport.ppqStart))
                                  : SongCycle::Playing {};
-        detectionScale = song.scaleAt (playing.section, scaleFromParameters());
+        detectionScale = cycle.hasScaleAt (playing.slot)
+                             ? cycle.scaleAt (playing.slot)
+                             : scaleFromParameters();
 
         if (transport.playing)
         {

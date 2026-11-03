@@ -191,6 +191,11 @@ rather than against each side's assumptions.
   cancelled when the chord changes.
 - Audition (`Preview`) runs on its own sample clock, so it works with the
   transport stopped and never leaves a note ringing.
+- A **region inside a section** (`<region from key scale/>`, section-relative
+  beats) beats the section's own key, which beats the song's. The editor asks the
+  *selected slot* for its home, so the walk, the borrowings and "Seed from key"
+  follow a modulation as the selection moves along the chords, and "Detect MIDI"
+  names what is played in the key in force at that slot.
 - A section's **own key** changes what the plug-in *calls* things, not what it
   *plays*: slots hold absolute pitch classes, so a modulating song already
   sounded right. What the key decides is the vocabulary "Detect MIDI" prefers

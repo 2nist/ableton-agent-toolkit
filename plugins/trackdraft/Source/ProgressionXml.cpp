@@ -76,6 +76,15 @@ juce::XmlElement toXml (const Progression& progression, const juce::String& tagN
             element->setAttribute ("rhythm", juce::String (slot.rhythm.toDigits()));
     }
 
+    // Modulations inside the section, in the order they take effect.
+    for (const auto& region : progression.regions)
+    {
+        auto* element = xml.createNewChildElement ("region");
+        element->setAttribute ("from", region.startBeat);
+        element->setAttribute ("key", region.keyPc);
+        element->setAttribute ("scale", theory::idOf (region.scale));
+    }
+
     // A section with no bass voice writes nothing, so a progression from before
     // the voice existed stays byte-identical to one written now.
     if (progression.bass.enabled)
@@ -151,6 +160,29 @@ bool fromXml (const juce::XmlElement& xml, Progression& target)
 
     if (index == 0)
         return false;
+
+    // Regions are read in file order and sorted, so a hand-edited file that
+    // lists them out of order still resolves the way the app does.
+    for (auto* element : slots->getChildIterator())
+    {
+        if (! element->hasTagName ("region"))
+            continue;
+
+        TonicRegion region;
+        region.startBeat = juce::jmax (0.0, element->getDoubleAttribute ("from", 0.0));
+        region.keyPc = ((element->getIntAttribute ("key", 0) % 12) + 12) % 12;
+
+        const auto id = element->getStringAttribute ("scale", "ionian");
+        for (int mode = 0; mode <= (int) theory::Scale::locrian; ++mode)
+            if (id == theory::idOf ((theory::Scale) mode))
+                region.scale = (theory::Scale) mode;
+
+        loaded.regions.push_back (region);
+    }
+
+    std::sort (loaded.regions.begin(), loaded.regions.end(),
+               [] (const TonicRegion& a, const TonicRegion& b)
+               { return a.startBeat < b.startBeat; });
 
     // The bass voice is a section setting that rides inside the progression, so
     // a preset carries it too.

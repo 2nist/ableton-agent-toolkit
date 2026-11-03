@@ -223,6 +223,16 @@ export function toTdpSongXml(song: BlueprintSong): string {
     lines.push(`  <section ${attributes.join(" ")}>`);
     lines.push(`    <progression version="1" count="${section.chords.length}">`);
     for (const chord of section.chords) lines.push(slotLine(chord, "      "));
+
+    // Modulations inside the section: section-relative beats, and a whole home
+    // (the app's `TonicRegion` carries both halves, unlike a section override).
+    for (const region of section.tonicRegions ?? []) {
+      lines.push(
+        `      <region from="${region.startBeat}" key="${pitchClass(region.key)}"` +
+          ` scale="${escapeAttribute(region.scale)}"/>`,
+      );
+    }
+
     lines.push(bassLine(section.bassProfile, "      "));
     lines.push("    </progression>");
     lines.push("  </section>");

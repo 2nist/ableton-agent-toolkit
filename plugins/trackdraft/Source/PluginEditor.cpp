@@ -746,8 +746,13 @@ void TrackDraftAudioProcessorEditor::rebuildFromProcessor()
     // A section that does not modulate shows the song's key, greyed, so the
     // boxes are a readout until "Own key" is ticked.
     ownKeyButton.setToggleState (section.modulates(), juce::dontSendNotification);
-    sectionKeyBox.setSelectedId (workingKeyPc() + 1, juce::dontSendNotification);
-    sectionScaleBox.setSelectedId ((int) workingScale() + 1, juce::dontSendNotification);
+    sectionKeyBox.setSelectedId (
+        section.hasKey ? section.keyPc + 1 : juce::jmax (0, keyBox.getSelectedId() - 1) + 1,
+        juce::dontSendNotification);
+    sectionScaleBox.setSelectedId (
+        section.hasScale ? (int) section.scale + 1
+                         : (int) globalScale() + 1,
+        juce::dontSendNotification);
     sectionKeyBox.setEnabled (section.modulates());
     sectionScaleBox.setEnabled (section.modulates());
 
@@ -826,12 +831,28 @@ theory::Scale TrackDraftAudioProcessorEditor::globalScale() const
 
 theory::Scale TrackDraftAudioProcessorEditor::workingScale() const
 {
-    // The selected section's mode when it modulates, the song's otherwise.
+    // A region inside the section beats the section's own mode, which beats the
+    // song's — so the walk and the borrowings follow the modulation as the
+    // selection moves along the chords.
+    if (selectedSection < working.sections.size())
+    {
+        const auto& progression = working.sections[selectedSection].progression;
+        if (const auto* region = progression.regionAtSlot ((std::size_t) selectedSlot))
+            return region->scale;
+    }
+
     return working.scaleAt (selectedSection, globalScale());
 }
 
 int TrackDraftAudioProcessorEditor::workingKeyPc() const
 {
+    if (selectedSection < working.sections.size())
+    {
+        const auto& progression = working.sections[selectedSection].progression;
+        if (const auto* region = progression.regionAtSlot ((std::size_t) selectedSlot))
+            return region->keyPc;
+    }
+
     return working.keyAt (selectedSection, juce::jmax (0, keyBox.getSelectedId() - 1));
 }
 

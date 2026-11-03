@@ -1360,6 +1360,92 @@ void testSectionKeyXml()
     check (! fallback.sections[0].hasScale, "with no mode override");
 }
 
+void testTonicRegions()
+{
+    // Two chords of four beats, then a region change at beat 8.
+    td::Progression progression;
+    progression.count = 3;
+    progression.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    progression.slots[1] = { 5, td::theory::Quality::maj, 4.0 };
+    progression.slots[2] = { 7, td::theory::Quality::seven, 4.0 };
+
+    check (progression.regionAtSlot (0) == nullptr, "no regions means one home");
+
+    progression.regions.push_back ({ 0.0, 0, td::theory::Scale::ionian });
+    progression.regions.push_back ({ 8.0, 7, td::theory::Scale::mixolydian });
+
+    // The region in force is the last that starts at or before the beat.
+    checkEqual (progression.regionAtSlot (0)->keyPc, 0, "the first chord is in C");
+    checkEqual (progression.regionAtSlot (1)->keyPc, 0, "the second is still in C");
+    checkEqual (progression.regionAtSlot (2)->keyPc, 7, "the third has moved to G");
+    check (progression.regionAtSlot (2)->scale == td::theory::Scale::mixolydian,
+           "and to mixolydian");
+
+    // A region starting mid-chord takes effect from that beat.
+    td::Progression split;
+    split.count = 1;
+    split.slots[0] = { 0, td::theory::Quality::maj, 8.0 };
+    split.regions.push_back ({ 0.0, 0, td::theory::Scale::ionian });
+    split.regions.push_back ({ 4.0, 2, td::theory::Scale::dorian });
+    checkEqual (split.regionAtBeat (3.9)->keyPc, 0, "before the change it is C");
+    checkEqual (split.regionAtBeat (4.0)->keyPc, 2, "from that beat it is D");
+    checkEqual (split.regionAtSlot (0)->keyPc, 0, "and the slot is judged at its start");
+
+    // Inside a song the cycle resolves region over section, section over song.
+    auto song = makeSong();
+    song.sections[1].hasKey = true;
+    song.sections[1].keyPc = 3;
+    song.sections[1].hasScale = true;
+    song.sections[1].scale = td::theory::Scale::aeolian;
+
+    // The cycle is indexed by slot across the song, so the chorus — two verse
+    // chords in — is slot 2.
+    td::SongCycle cycle;
+    cycle.rebuild (song);
+    check (! cycle.hasKeyAt (0), "the verse has no home of its own");
+    check (cycle.hasKeyAt (2), "the chorus does");
+    checkEqual (cycle.keyAt (2), 3, "in E flat");
+    check (cycle.scaleAt (2) == td::theory::Scale::aeolian, "in aeolian");
+
+    song.sections[1].progression.regions.push_back ({ 0.0, 10, td::theory::Scale::dorian });
+    cycle.rebuild (song);
+    checkEqual (cycle.keyAt (2), 10, "a region inside the section wins");
+    check (cycle.scaleAt (2) == td::theory::Scale::dorian, "with its mode");
+}
+
+void testTonicRegionXml()
+{
+    td::Progression progression;
+    progression.count = 2;
+    progression.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    progression.slots[1] = { 7, td::theory::Quality::seven, 4.0 };
+    progression.regions.push_back ({ 0.0, 0, td::theory::Scale::ionian });
+    progression.regions.push_back ({ 4.0, 7, td::theory::Scale::mixolydian });
+
+    const auto xml = td::toXml (progression, "TrackDraftPreset");
+    td::Progression loaded;
+    check (td::fromXml (xml, loaded), "the progression reads back");
+    checkEqual ((int) loaded.regions.size(), 2, "both regions survive");
+    check (loaded.regions == progression.regions, "beat for beat, key for key");
+
+    // Out of order in the file, sorted on read.
+    const auto shuffled = juce::parseXML (juce::String (
+        "<TrackDraftPreset count=\"1\"><slot root=\"0\" quality=\"maj\" beats=\"8\"/>"
+        "<region from=\"4\" key=\"7\" scale=\"mixolydian\"/>"
+        "<region from=\"0\" key=\"0\" scale=\"ionian\"/></TrackDraftPreset>"));
+    td::Progression sorted;
+    check (shuffled != nullptr && td::fromXml (*shuffled, sorted), "the shuffled file loads");
+    checkEqual ((int) sorted.regions.size(), 2, "both regions are there");
+    check (sorted.regions[0].startBeat < sorted.regions[1].startBeat, "and in order");
+
+    // No regions, no elements: a file from before them is byte-identical.
+    td::Progression plain;
+    plain.count = 1;
+    plain.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    check (td::toXml (plain, "TrackDraftPreset").getChildByName ("region") == nullptr,
+           "no regions writes nothing");
+}
+
 void testBassPlanning()
 {
     td::BassLine line;
@@ -1813,6 +1899,8 @@ void testSongXml()
     <progression version="1" count="2">
       <slot root="5" quality="maj" beats="4" performance="0" param="0" direction="2"/>
       <slot root="7" quality="7" beats="4" performance="3" param="8" direction="1" rhythm="3001200030002000"/>
+      <region from="0" key="3" scale="aeolian"/>
+      <region from="4" key="8" scale="lydian"/>
       <bass octave="2" motion="walking" rhythm="eighth" velocity="88"/>
     </progression>
   </section>
@@ -1849,6 +1937,12 @@ void testSongXml()
     check (fromApp.sections[1].hasKey, "the chorus modulates");
     checkEqual (fromApp.sections[1].keyPc, 3, "to E flat");
     check (fromApp.sections[1].scale == td::theory::Scale::aeolian, "and to aeolian");
+    checkEqual ((int) fromApp.sections[1].progression.regions.size(), 2,
+                "the app's regions arrive");
+    checkEqual (fromApp.sections[1].progression.regionAtSlot (0)->keyPc, 3,
+                "the chorus opens in E flat");
+    checkEqual (fromApp.sections[1].progression.regionAtSlot (1)->keyPc, 8,
+                "and moves to A flat for its second chord");
     check (fromApp.sections[1].progression.slots[1].rhythm.enabled, "the app's rhythm grid arrives");
     checkEqual (juce::String (fromApp.sections[1].progression.slots[1].rhythm.toDigits()),
                 juce::String ("3001200030002000"), "digit for digit");
@@ -1943,6 +2037,8 @@ int main (int argc, char** argv)
     testRhythmXml();
     testSectionKey();
     testSectionKeyXml();
+    testTonicRegions();
+    testTonicRegionXml();
     testBassPlanning();
     testBassXml();
     testVoicingXml();
