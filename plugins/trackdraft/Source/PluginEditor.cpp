@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "Import/ChordImport.h"
 #include "PluginProcessor.h"
 
 namespace td
@@ -218,9 +219,22 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
 
     presetBox.onChange = [this] {
         const auto name = presetBox.getText();
+        if (name.isEmpty())
+            return;
+
+        // Factory entries are code, not files: they live in the same list so a
+        // saved preset and a built-in one behave the same on click.
+        for (const auto& factory : PresetStore::factories())
+            if (factory.name == name)
+            {
+                presetNameEditor.clear();
+                commitWith (factory.progression);
+                return;
+            }
+
         Progression loaded = working;
         juce::String error;
-        if (name.isNotEmpty() && presets.load (name, loaded, error))
+        if (presets.load (name, loaded, error))
         {
             presetNameEditor.setText (name, juce::dontSendNotification);
             commitWith (loaded);
@@ -229,6 +243,68 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
         {
             heardLabel.setText (error, juce::dontSendNotification);
         }
+    };
+
+    renamePresetButton.onClick = [this] {
+        const auto from = presetBox.getText();
+        const auto to = presetNameEditor.getText();
+        if (from.isEmpty() || to.trim().isEmpty())
+            return;
+
+        juce::String error;
+        if (presets.rename (from, to, error))
+        {
+            rebuildPresets();
+            presetBox.setText (PresetStore::sanitiseName (to), juce::dontSendNotification);
+        }
+        else
+        {
+            heardLabel.setText (error, juce::dontSendNotification);
+        }
+    };
+
+    deletePresetButton.onClick = [this] {
+        const auto name = presetBox.getText();
+        if (name.isEmpty())
+            return;
+
+        juce::String error;
+        if (presets.remove (name, error))
+        {
+            rebuildPresets();
+            presetNameEditor.clear();
+        }
+        else
+        {
+            heardLabel.setText (error, juce::dontSendNotification);
+        }
+    };
+
+    importButton.onClick = [this] {
+        importChooser = std::make_unique<juce::FileChooser> (
+            "Import a chord annotation or MIDI file",
+            juce::File::getSpecialLocation (juce::File::userHomeDirectory), "*.mid;*.midi;*.json;*.jams");
+
+        // A native async chooser: the editor must not block the message thread.
+        importChooser->launchAsync (juce::FileBrowserComponent::openMode
+                                        | juce::FileBrowserComponent::canSelectFiles,
+                                    [this] (const juce::FileChooser& chooser) {
+                                        const auto file = chooser.getResult();
+                                        if (file == juce::File())
+                                            return;
+
+                                        const auto scale = workingScale();
+                                        const auto imported = importProgressionFromFile (
+                                            file, scale, keyBox.getSelectedId() - 1);
+
+                                        heardLabel.setText (imported.message, juce::dontSendNotification);
+                                        if (imported.ok)
+                                        {
+                                            presetNameEditor.setText (file.getFileNameWithoutExtension(),
+                                                                      juce::dontSendNotification);
+                                            commitWith (imported.progression);
+                                        }
+                                    });
     };
 
     savePresetButton.onClick = [this] {
@@ -257,13 +333,17 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     seedButton.setColour (juce::TextButton::buttonColourId, panel);
     savePresetButton.setColour (juce::TextButton::buttonColourId, panel);
     applyAllButton.setColour (juce::TextButton::buttonColourId, panel);
+    renamePresetButton.setColour (juce::TextButton::buttonColourId, panel);
+    deletePresetButton.setColour (juce::TextButton::buttonColourId, panel);
+    importButton.setColour (juce::TextButton::buttonColourId, panel);
 
     for (auto* component : std::initializer_list<juce::Component*> {
              &keyBox, &scaleBox, &rootBox, &qualityBox, &beatsSlider, &seedButton,
              &previewButton, &borrowedBox, &performanceBox, &paramSlider, &directionBox,
              &detectButton, &useHeardButton, &heardLabel, &octaveSlider, &velocitySlider,
              &gateSlider, &generateButton, &strip, &presetBox, &presetNameEditor,
-             &savePresetButton, &applyAllButton })
+             &savePresetButton, &applyAllButton, &renamePresetButton, &deletePresetButton,
+             &importButton })
         addAndMakeVisible (component);
 
     for (auto& button : neighbourButtons)
@@ -385,9 +465,13 @@ void TrackDraftAudioProcessorEditor::rebuildBorrowed()
 void TrackDraftAudioProcessorEditor::rebuildPresets()
 {
     presetBox.clear (juce::dontSendNotification);
-    const auto names = presets.names();
-    for (int i = 0; i < names.size(); ++i)
-        presetBox.addItem (names[i], i + 1);
+
+    int id = 1;
+    for (const auto& factory : PresetStore::factories())
+        presetBox.addItem (factory.name, id++);
+
+    for (const auto& name : presets.names())
+        presetBox.addItem (name, id++);
 }
 
 void TrackDraftAudioProcessorEditor::refreshHeardLabel()
@@ -501,9 +585,12 @@ void TrackDraftAudioProcessorEditor::resized()
     gateSlider.setBounds (282, 400, 200, 26);
     generateButton.setBounds (492, 400, 252, 26);
 
-    presetBox.setBounds (16, 482, 200, 26);
-    presetNameEditor.setBounds (224, 482, 220, 26);
-    savePresetButton.setBounds (452, 482, 90, 26);
+    presetBox.setBounds (16, 482, 190, 26);
+    presetNameEditor.setBounds (214, 482, 180, 26);
+    savePresetButton.setBounds (402, 482, 64, 26);
+    renamePresetButton.setBounds (472, 482, 76, 26);
+    deletePresetButton.setBounds (554, 482, 70, 26);
+    importButton.setBounds (630, 482, 106, 26);
 }
 
 juce::Rectangle<int> TrackDraftAudioProcessorEditor::SlotStrip::boundsFor (int index) const

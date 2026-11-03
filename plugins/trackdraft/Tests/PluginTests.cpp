@@ -3,6 +3,7 @@
 #include "Theory/ChordRecognition.h"
 #include "Theory/ChordTheory.h"
 #include "Performance.h"
+#include "Import/ChordImport.h"
 #include "PresetStore.h"
 #include "ProgressionXml.h"
 #include "Theory/ChordWalk.h"
@@ -487,6 +488,241 @@ void testPresets()
     scratch.deleteRecursively();
 }
 
+void testChordLabels()
+{
+    // Harte syntax, which is what every MIR chord corpus writes.
+    struct Case
+    {
+        const char* label;
+        int rootPc;
+        td::theory::Quality quality;
+    };
+    const Case cases[] = {
+        { "C:maj", 0, td::theory::Quality::maj },
+        { "A:min", 9, td::theory::Quality::min },
+        { "F#:min7", 6, td::theory::Quality::min7 },
+        { "Bb:maj7", 10, td::theory::Quality::maj7 },
+        { "G:7", 7, td::theory::Quality::seven },
+        { "B:hdim7", 11, td::theory::Quality::m7b5 },
+        { "Eb:dim7", 3, td::theory::Quality::dim7 },
+        { "D:sus4", 2, td::theory::Quality::sus4 },
+        { "C:maj/3", 0, td::theory::Quality::maj },   // slash bass dropped
+        { "C:maj(9)", 0, td::theory::Quality::maj },  // tension dropped
+        { "F", 5, td::theory::Quality::maj },         // root only
+    };
+
+    for (const auto& testCase : cases)
+    {
+        int rootPc = -1;
+        td::theory::Quality quality = td::theory::Quality::min;
+        const bool parsed = td::parseChordLabel (testCase.label, rootPc, quality);
+        check (parsed, juce::String ("parses ") + testCase.label);
+        checkEqual (rootPc, testCase.rootPc, juce::String ("root of ") + testCase.label);
+        checkEqual ((int) quality, (int) testCase.quality,
+                    juce::String ("quality of ") + testCase.label);
+    }
+
+    // "N" is a rest, not a chord.
+    int rootPc = 0;
+    td::theory::Quality quality = td::theory::Quality::maj;
+    check (! td::parseChordLabel ("N", rootPc, quality), "N is not a chord");
+    check (! td::parseChordLabel ("", rootPc, quality), "an empty label is not a chord");
+}
+
+void testJsonImport()
+{
+    auto scratch = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                       .getChildFile ("trackdraft-import-test-" + juce::String (juce::Random::getSystemRandom().nextInt (100000)));
+    scratch.createDirectory();
+
+    // JAMS: the container ChordMini and the McGill/Isophonics exports use.
+    const auto jams = scratch.getChildFile ("song.jams");
+    jams.replaceWithText (R"({
+      "annotations": [
+        { "namespace": "tempo", "data": [ { "time": 0.0, "value": 120.0 } ] },
+        { "namespace": "chord", "data": [
+            { "time": 0.0, "value": "C:maj" },
+            { "time": 2.0, "value": "A:min" },
+            { "time": 4.0, "value": "F:maj" },
+            { "time": 6.0, "value": "G:7" }
+        ] }
+      ]
+    })");
+
+    const auto jamsResult = td::importProgressionFromFile (jams, td::theory::Scale::ionian, 0);
+    check (jamsResult.ok, "JAMS imports: " + jamsResult.message);
+    checkEqual ((int) jamsResult.progression.count, 4, "JAMS gives four chords");
+    checkEqual (jamsResult.progression.slots[1].rootPc, 9, "JAMS second chord root");
+    checkEqual ((int) jamsResult.progression.slots[3].quality, (int) td::theory::Quality::seven,
+                "JAMS fourth chord quality");
+    // Two seconds at 120 bpm is four beats.
+    check (std::abs (jamsResult.progression.slots[0].beats - 4.0) < 1e-9, "JAMS timing becomes beats");
+
+    // A plain array of [time, label] pairs.
+    const auto plain = scratch.getChildFile ("plain.json");
+    plain.replaceWithText (R"([[0.0, "C:maj7"], [4.0, "D:min7"]])");
+    const auto plainResult = td::importProgressionFromFile (plain, td::theory::Scale::ionian, 0);
+    check (plainResult.ok, "plain JSON imports: " + plainResult.message);
+    checkEqual ((int) plainResult.progression.count, 2, "plain JSON gives two chords");
+    checkEqual ((int) plainResult.progression.slots[0].quality, (int) td::theory::Quality::maj7,
+                "plain JSON keeps the quality");
+
+    // Repeats collapse, and the cap is reported rather than silent.
+    const auto repeated = scratch.getChildFile ("repeats.json");
+    juce::StringArray entries;
+    for (int i = 0; i < 12; ++i)
+        entries.add ("[" + juce::String (i * 2.0) + ", \"C:maj\"]");
+    repeated.replaceWithText ("[" + entries.joinIntoString (",") + "]");
+    const auto repeatedResult = td::importProgressionFromFile (repeated, td::theory::Scale::ionian, 0);
+    check (repeatedResult.ok, "repeated chords import");
+    checkEqual ((int) repeatedResult.progression.count, 1, "identical repeats collapse to one chord");
+
+    // A file with no annotations fails cleanly.
+    const auto empty = scratch.getChildFile ("empty.json");
+    empty.replaceWithText ("{\"songs\": []}");
+    const auto emptyResult = td::importProgressionFromFile (empty, td::theory::Scale::ionian, 0);
+    check (! emptyResult.ok, "a JSON file without chords is refused");
+    check (emptyResult.message.isNotEmpty(), "and says why");
+
+    // Unsupported extensions are refused with the accepted list.
+    const auto text = scratch.getChildFile ("notes.txt");
+    text.replaceWithText ("hello");
+    check (! td::importProgressionFromFile (text, td::theory::Scale::ionian, 0).ok,
+           "an unsupported extension is refused");
+
+    scratch.deleteRecursively();
+}
+
+void testMidiImport()
+{
+    auto scratch = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                       .getChildFile ("trackdraft-midi-test-" + juce::String (juce::Random::getSystemRandom().nextInt (100000)));
+    scratch.createDirectory();
+
+    // Four bars: C major, A minor, F major, G7 — the progression the importer
+    // should read back. 480 ticks per quarter, 120 bpm: one bar = 1920 ticks.
+    juce::MidiFile midi;
+    midi.setTicksPerQuarterNote (480);
+
+    juce::MidiMessageSequence track;
+    track.addEvent (juce::MidiMessage::tempoMetaEvent (500000), 0);  // 120 bpm
+
+    const int chords[4][4] = {
+        { 60, 64, 67, -1 },
+        { 57, 60, 64, -1 },
+        { 53, 57, 60, -1 },
+        { 55, 59, 62, 65 },
+    };
+    for (int bar = 0; bar < 4; ++bar)
+    {
+        const int startTick = bar * 1920;
+        const int endTick = startTick + 1880;
+        for (int voice = 0; voice < 4; ++voice)
+        {
+            const int note = chords[bar][voice];
+            if (note < 0)
+                continue;
+            track.addEvent (juce::MidiMessage::noteOn (1, note, (juce::uint8) 90), startTick);
+            track.addEvent (juce::MidiMessage::noteOff (1, note), endTick);
+        }
+    }
+
+    track.updateMatchedPairs();
+    midi.addTrack (track);
+
+    const auto file = scratch.getChildFile ("progression.mid");
+    {
+        juce::FileOutputStream stream (file);
+        check (stream.openedOk(), "the test MIDI file opens for writing");
+        midi.writeTo (stream);
+    }
+
+    const auto result = td::importProgressionFromFile (file, td::theory::Scale::ionian, 0);
+    check (result.ok, "MIDI imports: " + result.message);
+    checkEqual ((int) result.progression.count, 4, "MIDI gives four bars of chords");
+    checkEqual (result.progression.slots[0].rootPc, 0, "bar 1 is C");
+    checkEqual (result.progression.slots[1].rootPc, 9, "bar 2 is A minor");
+    checkEqual ((int) result.progression.slots[1].quality, (int) td::theory::Quality::min,
+                "bar 2 is minor");
+    checkEqual (result.progression.slots[2].rootPc, 5, "bar 3 is F");
+    checkEqual ((int) result.progression.slots[3].quality, (int) td::theory::Quality::seven,
+                "bar 4 is a dominant seventh");
+
+    scratch.deleteRecursively();
+}
+
+void testPresetManagement()
+{
+    auto scratch = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                       .getChildFile ("trackdraft-preset-manage-" + juce::String (juce::Random::getSystemRandom().nextInt (100000)));
+    scratch.deleteRecursively();
+
+    td::PresetStore store (scratch);
+    td::Progression progression;
+    progression.count = 2;
+    progression.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    progression.slots[1] = { 7, td::theory::Quality::seven, 4.0 };
+
+    juce::String error;
+    check (store.save ("First", progression, error), "save before rename: " + error);
+    check (store.rename ("First", "Second", error), "rename succeeds: " + error);
+    checkEqual (store.names().size(), 1, "one preset after rename");
+    checkEqual (store.names()[0], juce::String ("Second"), "the new name is listed");
+
+    td::Progression loaded;
+    check (store.load ("Second", loaded, error), "the renamed preset loads");
+    check (loaded.slots[1] == progression.slots[1], "renaming preserves the contents");
+
+    // Renaming onto an existing name is refused rather than overwriting.
+    check (store.save ("Third", progression, error), "save a second preset");
+    check (! store.rename ("Third", "Second", error), "rename onto an existing name is refused");
+
+    check (store.remove ("Second", error), "delete succeeds: " + error);
+    checkEqual (store.names().size(), 1, "one preset after delete");
+    check (! store.remove ("Second", error), "deleting a missing preset fails");
+
+    // Factory presets are code, one per mode plus the mixture moves.
+    const auto factories = td::PresetStore::factories();
+    check (factories.size() >= 9, "factory presets exist");
+    for (const auto& factory : factories)
+        check (factory.progression.count > 0, "every factory preset has chords");
+
+    scratch.deleteRecursively();
+}
+
+void testBorrowedScope()
+{
+    using namespace td::theory;
+
+    // Mixture comes from the parallel mode: major borrows from minor and vice
+    // versa, so the classic set appears and the exotic ones do not.
+    const auto major = td::Progression::borrowedChords (Scale::ionian);
+    const auto everyMode = td::Progression::borrowedChords (Scale::ionian, true);
+
+    check (! major.empty(), "major has parallel borrowings");
+    check (everyMode.size() > major.size(), "every-mode browsing is wider than mixture");
+
+    const auto contains = [] (const std::vector<td::Progression::Borrowed>& list, int rootOffset,
+                              Quality quality)
+    {
+        return std::any_of (list.begin(), list.end(),
+                            [rootOffset, quality] (const td::Progression::Borrowed& chord)
+                            { return chord.rootPc == rootOffset && chord.quality == quality; });
+    };
+
+    check (contains (major, 8, Quality::maj), "bVI is a mixture chord");
+    check (contains (major, 10, Quality::maj), "bVII is a mixture chord");
+    check (contains (everyMode, 1, Quality::maj) || contains (everyMode, 6, Quality::dim),
+           "the wider set still reaches the exotic borrowings");
+
+    checkEqual ((int) td::Progression::parallelModeOf (Scale::ionian), (int) Scale::aeolian,
+                "major borrows from minor");
+    checkEqual ((int) td::Progression::parallelModeOf (Scale::mixolydian), (int) Scale::aeolian,
+                "mixolydian borrows from minor");
+    checkEqual ((int) td::Progression::parallelModeOf (Scale::aeolian), (int) Scale::ionian,
+                "minor borrows from major");
+}
+
 void testScheduler()
 {
     td::Progression progression;
@@ -650,6 +886,11 @@ int main()
     testReorderAndApplyAll();
     testProgressionXml();
     testPresets();
+    testPresetManagement();
+    testBorrowedScope();
+    testChordLabels();
+    testJsonImport();
+    testMidiImport();
     testProgressionCycle();
     testScheduler();
 

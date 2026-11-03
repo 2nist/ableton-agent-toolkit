@@ -51,6 +51,7 @@ target_sources(TrackDraftHarmony PRIVATE
     Source/Performance.cpp
     Source/ProgressionXml.cpp
     Source/PresetStore.cpp
+    Source/Import/ChordImport.cpp
 )
 
 # Shared by the plugin and the console tests: the theory and timing code has no
@@ -64,6 +65,7 @@ add_library(TrackDraftCore STATIC
     Source/Performance.cpp
     Source/ProgressionXml.cpp
     Source/PresetStore.cpp
+    Source/Import/ChordImport.cpp
 )
 target_include_directories(TrackDraftCore PUBLIC Source)
 target_link_libraries(TrackDraftCore PUBLIC juce::juce_audio_basics juce::juce_core)

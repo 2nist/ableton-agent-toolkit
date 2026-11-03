@@ -81,7 +81,12 @@ struct Progression
         borrowing — bIII, iv, bVI and bVII in a major key, and so on. Duplicates
         (the same chord reachable from two modes) appear once.
     */
-    static std::vector<Borrowed> borrowedChords (theory::Scale scale);
+    static std::vector<Borrowed> borrowedChords (theory::Scale scale,
+                                                 bool includeEveryMode = false);
+
+    /** The mode a songwriter borrows from: the parallel minor of a major-ish
+        mode, or the parallel major of a minor-ish one. */
+    static theory::Scale parallelModeOf (theory::Scale scale);
 
     /** Moves slot `from` so it sits at `to`, shifting the slots it passes. */
     void moveSlot (std::size_t from, std::size_t to);

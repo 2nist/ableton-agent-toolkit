@@ -66,6 +66,10 @@ private:
     juce::ComboBox presetBox;
     juce::TextEditor presetNameEditor;
     juce::TextButton savePresetButton { "Save" };
+    juce::TextButton renamePresetButton { "Rename" };
+    juce::TextButton deletePresetButton { "Delete" };
+    juce::TextButton importButton { "Import..." };
+    std::unique_ptr<juce::FileChooser> importChooser;
     juce::TextButton applyAllButton { "Apply articulation to all" };
 
     juce::ComboBox performanceBox;

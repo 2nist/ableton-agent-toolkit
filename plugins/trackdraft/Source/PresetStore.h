@@ -36,8 +36,24 @@ public:
     /** Reads `name`; leaves `target` alone and sets `error` when it cannot. */
     bool load (const juce::String& name, Progression& target, juce::String& error);
 
+    /** Renames a preset; false and a reason when either end is unusable. */
+    bool rename (const juce::String& from, const juce::String& to, juce::String& error);
+
+    /** Deletes a preset. Missing is reported rather than ignored. */
+    bool remove (const juce::String& name, juce::String& error);
+
     /** Filename for a user-supplied preset name. */
     static juce::String sanitiseName (const juce::String& name);
+
+    /** Progressions that ship with the plug-in: one per mode, plus the two
+        borrowings every songwriter reaches for. Not files, so they cannot be
+        renamed or deleted by accident. */
+    struct Factory
+    {
+        juce::String name;
+        Progression progression;
+    };
+    static std::vector<Factory> factories();
 
 private:
     juce::File fileFor (const juce::String& name) const;

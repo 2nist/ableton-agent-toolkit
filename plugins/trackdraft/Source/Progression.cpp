@@ -49,7 +49,8 @@ void Progression::seedFromScale (int keyPc, theory::Scale scale, std::size_t slo
         slots[i] = { ((keyPc + chord.rootOffset) % 12 + 12) % 12, chord.quality, 4.0 };
     }
 }
-std::vector<Progression::Borrowed> Progression::borrowedChords (theory::Scale scale)
+std::vector<Progression::Borrowed> Progression::borrowedChords (theory::Scale scale,
+                                                               bool includeEveryMode)
 {
     // Borrowing is chord-level, and at the triad: what a songwriter reaches for
     // is "the bIII", not "Ebmaj7 because Aeolian's third degree is a seventh".
@@ -69,10 +70,19 @@ std::vector<Progression::Borrowed> Progression::borrowedChords (theory::Scale sc
     std::vector<Borrowed> found;
     std::set<std::pair<int, int>> seen;
 
+    const auto parallel = parallelModeOf (scale);
+
     for (int mode = 0; mode <= (int) theory::Scale::locrian; ++mode)
     {
         const auto other = (theory::Scale) mode;
         if (other == scale)
+            continue;
+
+        // Mixture is borrowed from the parallel mode, not from whichever mode
+        // happens to share the tonic: every mode's chords would offer ~20
+        // exotic borrowings nobody asked for. The full set stays available for
+        // callers that want to browse it.
+        if (! includeEveryMode && other != parallel)
             continue;
 
         for (int degree = 0; degree < 7; ++degree)
@@ -119,6 +129,18 @@ void Progression::applyArticulationToAll (std::size_t source)
         slots[i].performance = articulation.performance;
         slots[i].param = articulation.param;
         slots[i].direction = articulation.direction;
+    }
+}
+theory::Scale Progression::parallelModeOf (theory::Scale scale)
+{
+    switch (scale)
+    {
+        case theory::Scale::ionian:
+        case theory::Scale::lydian:
+        case theory::Scale::mixolydian:
+            return theory::Scale::aeolian;
+        default:
+            return theory::Scale::ionian;
     }
 }
 } // namespace td

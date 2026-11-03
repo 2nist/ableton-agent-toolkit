@@ -78,7 +78,11 @@ strum spread, pulse accents, arp direction), the borrowed-chord set (derived,
 deduplicated, never a chord already in the key), reordering, applying
 articulation to the whole progression, the XML round-trip, presets (save, list,
 load, missing-preset failure, and that a hostile name cannot escape the preset
-directory), the progression cycle, and the scheduling rules — a stopped transport emits
+directory), preset rename/delete (including refusing to overwrite), the factory
+set, mixture-only borrowings against the wider every-mode list, Harte label
+parsing (including flats, slash bass and tensions), JAMS/plain-JSON import and
+MIDI import from a generated file, the progression cycle, and the scheduling
+rules — a stopped transport emits
 nothing, the downbeat sounds the first chord at MIDI 60, a boundary inside a block
 releases the previous chord first, a host loop restarts cleanly, the gate closes
 notes without a boundary, and disabling emission releases what is sounding.
@@ -98,7 +102,8 @@ notes without a boundary, and disabling emission releases what is sounding.
 | **Preview** | Plays the selected slot immediately, transport or not, so you can hear the voicing before committing to it |
 | **Drag a slot** | Click-drag reorders the progression; the drop target shows while dragging |
 | **Apply articulation to all** | Copies the selected slot's articulation onto every slot — one strum setting for the whole progression |
-| **Presets** | Save the progression under a name (one `.tdp.xml` per preset in `~/Library/Application Support/TrackDraft/Presets`), pick one to load it. Names are sanitised to a filename and never allowed to define a path |
+| **Presets** | Save / Rename / Delete the progression under a name (one `.tdp.xml` per preset in `~/Library/Application Support/TrackDraft/Presets`), pick one to load it. Names are sanitised to a filename and never allowed to define a path. Factory entries (one per mode, plus `bVI–bVII–I` and `i–iv–bVI–V`) are code, not files, and cannot be renamed or deleted |
+| **Import…** | Load a progression from a `.mid`, `.midi`, `.jams` or `.json` annotation file — see below |
 | **Detect MIDI / Use heard** | Arm listening to the notes the host sends in, then write the recognised chord into the selected slot. The readout names both what you played and what the slot says, so the difference is the decision |
 
 The walk row is a port of the app's honeycomb arithmetic, not an invented
@@ -113,6 +118,25 @@ Detection is the same scorer as the app's chord pad — the port in
 costs, its bass evidence and the "permitted vocabulary first, but only if it
 explains every note" rule, so the plug-in and the app agree on what a shape is
 called.
+
+## Importing a song's harmony
+
+Two sources, both MIR-standard rather than invented:
+
+- **MIDI** — notes are collected per bar and recognised with the same scorer the
+  rest of the plug-in uses (bar windows, previous-chord prior, repeats merged),
+  which is the app's `parsers/parseMidi.ts` approach. Tempo comes from the file's
+  tempo map; the result is one chord per change, four beats each.
+- **JSON** — a **JAMS** annotation (the container ChordMini and the
+  McGill/Isophonics exports use), a plain `{ chords: [...] }`, or a bare array of
+  `{ time, chord }` / `[time, label]`. Labels are parsed as **Harte** syntax —
+  `C:maj7`, `A:min/3`, `N` — which is what every MIR chord corpus writes.
+  Durations become beats through the file's `bpm`/`tempo` (120 when absent).
+
+What the slot model cannot hold is simplified rather than dropped — parenthesised
+tensions (`maj(9)`), slash bass (`maj/3`), `N` — and the count of what was kept
+and simplified is reported in the editor's message line. A progression is a loop,
+so an import keeps the first eight chord changes and says so when it truncates.
 
 ## How it plays
 
@@ -138,7 +162,8 @@ Source/Theory/ChordWalk.*      hex neighbours / the walk, ported
 Source/Theory/ChordRecognition.*  notes -> chord name, ported
 Source/Performance.*           strum / pulse / arp, ported
 Source/ProgressionXml.*        the one XML writer/reader for a progression
-Source/PresetStore.*           named progressions on disk
+Source/PresetStore.*           named progressions on disk, plus factory entries
+Source/Import/ChordImport.*    MIDI and JAMS/JSON chord import
 Source/Progression.*           slots, cycle length, diatonic seeding
 Source/ChordScheduler.*        transport → MIDI events (the testable core)
 Source/PluginProcessor.*       APVTS, state, bus/format declarations
