@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseTdpPresetXml, sanitisePresetName, toTdpPresetXml, toTdpSongXml } from "./tdpPreset";
-import type { BlueprintSong, Chord } from "../../types/blueprint";
+import type { BlueprintSection, BlueprintSong, Chord } from "../../types/blueprint";
 
 /**
  * The plug-in's own output, verbatim.
@@ -222,12 +222,14 @@ const APP_SONG_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <progression version="1" count="2">
       <slot root="9" quality="min" beats="4" performance="1" param="150" direction="2" inversion="1"/>
       <slot root="2" quality="maj" beats="4" performance="0" param="0" direction="2"/>
+      <bass octave="3" motion="root" rhythm="locked" velocity="100"/>
     </progression>
   </section>
   <section name="Chorus">
     <progression version="1" count="2">
       <slot root="5" quality="maj" beats="4" performance="0" param="0" direction="2"/>
       <slot root="7" quality="7" beats="4" performance="3" param="8" direction="1"/>
+      <bass octave="2" motion="walking" rhythm="eighth" velocity="88"/>
     </progression>
   </section>
   <arrangement>
@@ -238,7 +240,7 @@ const APP_SONG_XML = `<?xml version="1.0" encoding="UTF-8"?>
 `;
 
 function song(): BlueprintSong {
-  const section = (id: string, name: string, chords: Chord[]) => ({
+  const section = (id: string, name: string, chords: Chord[], bassProfile?: BlueprintSection["bassProfile"]) => ({
     id,
     name,
     role: "verse" as const,
@@ -248,6 +250,7 @@ function song(): BlueprintSong {
     velocity: "mf" as const,
     timeSignatureNumerator: 4,
     timeSignatureDenPower: 2,
+    ...(bassProfile ? { bassProfile } : {}),
   });
 
   return {
@@ -272,7 +275,7 @@ function song(): BlueprintSong {
       section("s2", "Chorus", [
         chord({ root: "F", quality: "maj", beats: 4 }),
         chord({ root: "G", quality: "7", beats: 4, performance: { style: "arp", params: { subdivision: 8, direction: 1 } } }),
-      ]),
+      ], { octave: 2, motion: "walking", rhythm: "eighth", velocity: 88 }),
     ],
     arrangement: [
       { sectionId: "s1", repeats: 1 },

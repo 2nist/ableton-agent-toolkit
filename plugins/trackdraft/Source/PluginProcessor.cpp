@@ -14,7 +14,6 @@ constexpr auto octaveParam = "octave";
 constexpr auto velocityParam = "velocity";
 constexpr auto gateParam = "gate";
 constexpr auto enabledParam = "enabled";
-constexpr auto bassOctaveParam = "bassOctave";
 
 juce::StringArray keyChoices()
 {
@@ -50,10 +49,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout TrackDraftAudioProcessor::ma
         juce::NormalisableRange<float> (0.05f, 1.0f, 0.01f), 0.9f));
     params.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { enabledParam, 1 }, "Generate", true));
-    // 0 is "no bass voice". Added after the first release, so its default keeps
-    // an existing session sounding exactly as it did.
-    params.push_back (std::make_unique<juce::AudioParameterInt> (
-        juce::ParameterID { bassOctaveParam, 1 }, "Bass octave", 0, 4, 0));
 
     return { params.begin(), params.end() };
 }
@@ -128,7 +123,6 @@ void TrackDraftAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     settings.velocity = (int) apvts.getRawParameterValue (velocityParam)->load();
     settings.gate = (double) apvts.getRawParameterValue (gateParam)->load();
     settings.enabled = apvts.getRawParameterValue (enabledParam)->load() > 0.5f;
-    settings.bassOctave = (int) apvts.getRawParameterValue (bassOctaveParam)->load();
 
     {
         // The cycle is read, not copied: it is only rewritten on the message

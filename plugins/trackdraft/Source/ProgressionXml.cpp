@@ -4,6 +4,48 @@
 
 namespace td
 {
+namespace
+{
+/** The app's `BassMotion` ids, as they appear in the file. */
+const char* idOf (BassMotion motion)
+{
+    switch (motion)
+    {
+        case BassMotion::root: return "root";
+        case BassMotion::rootFifth: return "root_fifth";
+        case BassMotion::walking: return "walking";
+    }
+
+    return "root";
+}
+
+BassMotion motionOf (const juce::String& id)
+{
+    if (id == "root_fifth") return BassMotion::rootFifth;
+    if (id == "walking") return BassMotion::walking;
+    return BassMotion::root;
+}
+
+const char* idOf (BassRhythm rhythm)
+{
+    switch (rhythm)
+    {
+        case BassRhythm::locked: return "locked";
+        case BassRhythm::half: return "half";
+        case BassRhythm::eighth: return "eighth";
+    }
+
+    return "locked";
+}
+
+BassRhythm rhythmOf (const juce::String& id)
+{
+    if (id == "half") return BassRhythm::half;
+    if (id == "eighth") return BassRhythm::eighth;
+    return BassRhythm::locked;
+}
+} // namespace
+
 juce::XmlElement toXml (const Progression& progression, const juce::String& tagName)
 {
     juce::XmlElement xml (tagName);
@@ -27,6 +69,17 @@ juce::XmlElement toXml (const Progression& progression, const juce::String& tagN
             element->setAttribute ("inversion", slot.voicing.inversion);
         if (slot.voicing.open)
             element->setAttribute ("spread", "open");
+    }
+
+    // A section with no bass voice writes nothing, so a progression from before
+    // the voice existed stays byte-identical to one written now.
+    if (progression.bass.enabled)
+    {
+        auto* element = xml.createNewChildElement ("bass");
+        element->setAttribute ("octave", progression.bass.octave);
+        element->setAttribute ("motion", idOf (progression.bass.motion));
+        element->setAttribute ("rhythm", idOf (progression.bass.rhythm));
+        element->setAttribute ("velocity", progression.bass.velocity);
     }
 
     return xml;
@@ -83,6 +136,17 @@ bool fromXml (const juce::XmlElement& xml, Progression& target)
 
     if (index == 0)
         return false;
+
+    // The bass voice is a section setting that rides inside the progression, so
+    // a preset carries it too.
+    if (const auto* bass = slots->getChildByName ("bass"))
+    {
+        loaded.bass.enabled = true;
+        loaded.bass.octave = juce::jlimit (0, 8, bass->getIntAttribute ("octave", 3));
+        loaded.bass.motion = motionOf (bass->getStringAttribute ("motion", "root"));
+        loaded.bass.rhythm = rhythmOf (bass->getStringAttribute ("rhythm", "locked"));
+        loaded.bass.velocity = juce::jlimit (1, 127, bass->getIntAttribute ("velocity", 100));
+    }
 
     target = loaded;
     return true;

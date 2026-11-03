@@ -42,7 +42,7 @@ namespace layout
 {
 constexpr int margin = 16;
 constexpr int width = 728;
-constexpr int height = 640;
+constexpr int height = 692;
 
 constexpr int songLabelY = 58;
 constexpr int sectionBarY = 74;
@@ -65,6 +65,8 @@ constexpr int arrangementLabelY = 546;
 constexpr int arrangementBarY = 562;
 constexpr int arrangementBarHeight = 28;
 constexpr int arrangementButtonY = 598;
+constexpr int bassLabelY = 640;
+constexpr int bassY = 656;
 } // namespace layout
 } // namespace
 
@@ -95,20 +97,14 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     performanceBox.addItemList (performanceNames(), 1);
     directionBox.addItemList ({ "Up", "Down", "Up-down" }, 1);
     spreadBox.addItemList ({ "Close", "Open" }, 1);
+    bassMotionBox.addItemList ({ "Root", "Root-fifth", "Walking" }, 1);
+    bassRhythmBox.addItemList ({ "Locked", "Half", "Eighth" }, 1);
     borrowedBox.setTextWhenNothingSelected ("Borrowed chord...");
     borrowedBox.setTextWhenNoChoicesAvailable ("None in this key");
 
     octaveSlider.setRange (0, 8, 1);
-    bassOctaveSlider.setRange (0, 4, 1);
-    bassOctaveSlider.setTooltip ("Off, or the bass note's register as an octave number "
-                                 "(3 = the standard bass octave, MIDI 36)");
-    // The value box names itself, so the row needs no label of its own.
-    bassOctaveSlider.textFromValueFunction = [] (double value)
-    {
-        return juce::String ("Bass ") + (value <= 0.0 ? juce::String ("off")
-                                                      : juce::String ((int) value));
-    };
-    bassOctaveSlider.updateText();
+    bassOctaveBox.addItemList ({ "Oct 1", "Oct 2", "Oct 3", "Oct 4" }, 1);
+    bassVelocitySlider.setRange (1, 127, 1);
     velocitySlider.setRange (1, 127, 1);
     gateSlider.setRange (0.05, 1.0, 0.01);
     paramSlider.setRange (1, 32, 1);
@@ -122,8 +118,36 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
         state, "gate", gateSlider);
     generateAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         state, "enabled", generateButton);
-    bassOctaveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
-        state, "bassOctave", bassOctaveSlider);
+    bassButton.setColour (juce::ToggleButton::textColourId, ink);
+    bassButton.setClickingTogglesState (true);
+    bassButton.onClick = [this] {
+        selectedProgression().bass.enabled = bassButton.getToggleState();
+        commit();
+        rebuildFromProcessor();
+    };
+
+    bassOctaveBox.onChange = [this] {
+        selectedProgression().bass.octave = juce::jlimit (1, 4, bassOctaveBox.getSelectedId());
+        commit();
+        rebuildFromProcessor();
+    };
+
+    bassMotionBox.onChange = [this] {
+        selectedProgression().bass.motion = (BassMotion) juce::jlimit (0, 2, bassMotionBox.getSelectedId() - 1);
+        commit();
+        rebuildFromProcessor();
+    };
+
+    bassRhythmBox.onChange = [this] {
+        selectedProgression().bass.rhythm = (BassRhythm) juce::jlimit (0, 2, bassRhythmBox.getSelectedId() - 1);
+        commit();
+        rebuildFromProcessor();
+    };
+
+    bassVelocitySlider.onValueChange = [this] {
+        selectedProgression().bass.velocity = (int) bassVelocitySlider.getValue();
+        commit();
+    };
 
     rootBox.onChange = [this] {
         if (selectedSlot < (int) selectedProgression().count)
@@ -430,7 +454,8 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
              &keyBox, &scaleBox, &rootBox, &qualityBox, &beatsSlider, &seedButton,
              &previewButton, &borrowedBox, &performanceBox, &paramSlider, &directionBox,
              &detectButton, &useHeardButton, &heardLabel, &octaveSlider, &velocitySlider,
-             &gateSlider, &generateButton, &bassOctaveSlider, &inversionBox, &spreadBox,
+             &gateSlider, &generateButton, &bassButton, &bassOctaveBox, &bassMotionBox,
+             &bassRhythmBox, &bassVelocitySlider, &inversionBox, &spreadBox,
              &strip, &presetBox, &presetNameEditor,
              &savePresetButton, &applyAllButton, &renamePresetButton, &deletePresetButton,
              &importButton, &sectionBar, &arrangementBar, &sectionNameEditor,
@@ -584,12 +609,13 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     };
 
     for (auto* box : { &keyBox, &scaleBox, &rootBox, &qualityBox, &borrowedBox,
-                       &performanceBox, &directionBox, &inversionBox, &spreadBox })
+                       &performanceBox, &directionBox, &inversionBox, &spreadBox,
+                       &bassOctaveBox, &bassMotionBox, &bassRhythmBox })
         box->setColour (juce::ComboBox::backgroundColourId, panel);
 
     generateButton.setColour (juce::ToggleButton::textColourId, ink);
     for (auto* slider : { &octaveSlider, &velocitySlider, &gateSlider, &paramSlider, &beatsSlider,
-                          &bassOctaveSlider })
+                          &bassVelocitySlider })
         slider->setColour (juce::Slider::textBoxTextColourId, ink);
     gateSlider.setColour (juce::Slider::trackColourId, accent);
     previewButton.setColour (juce::TextButton::textColourOnId, ink);
@@ -624,6 +650,19 @@ void TrackDraftAudioProcessorEditor::rebuildFromProcessor()
 
     sectionNameEditor.setText (working.sections[selectedSection].name,
                                juce::dontSendNotification);
+
+    const auto& bass = selectedProgression().bass;
+    bassButton.setToggleState (bass.enabled, juce::dontSendNotification);
+    bassOctaveBox.setSelectedId (juce::jlimit (1, 4, bass.octave), juce::dontSendNotification);
+    bassMotionBox.setSelectedId ((int) bass.motion + 1, juce::dontSendNotification);
+    bassRhythmBox.setSelectedId ((int) bass.rhythm + 1, juce::dontSendNotification);
+    bassVelocitySlider.setValue (juce::jlimit (1, 127, bass.velocity), juce::dontSendNotification);
+
+    // Off means off: the shape controls only matter once the voice is on.
+    for (auto* control : { (juce::Component*) &bassOctaveBox, (juce::Component*) &bassMotionBox,
+                           (juce::Component*) &bassRhythmBox,
+                           (juce::Component*) &bassVelocitySlider })
+        control->setEnabled (bass.enabled);
 
     if (selectedSlot < (int) selectedProgression().count)
     {
@@ -894,6 +933,8 @@ void TrackDraftAudioProcessorEditor::paint (juce::Graphics& g)
                 juce::Justification::centredLeft);
     g.drawText ("Arrangement", layout::margin, layout::arrangementLabelY, 120, 14,
                 juce::Justification::centredLeft);
+    g.drawText ("Bass line for this section", layout::margin, layout::bassLabelY, 300, 14,
+                juce::Justification::centredLeft);
 
     // What the arrangement adds up to, so the form can be read at a glance.
     g.setColour (accent.withAlpha (0.85f));
@@ -946,8 +987,13 @@ void TrackDraftAudioProcessorEditor::resized()
     octaveSlider.setBounds (layout::margin, layout::voiceY, 112, 26);
     velocitySlider.setBounds (132, layout::voiceY, 112, 26);
     gateSlider.setBounds (248, layout::voiceY, 170, 26);
-    bassOctaveSlider.setBounds (422, layout::voiceY, 112, 26);
-    generateButton.setBounds (538, layout::voiceY, 206, 26);
+    generateButton.setBounds (422, layout::voiceY, 322, 26);
+
+    bassButton.setBounds (layout::margin, layout::bassY, 96, 26);
+    bassOctaveBox.setBounds (118, layout::bassY, 74, 26);
+    bassMotionBox.setBounds (198, layout::bassY, 112, 26);
+    bassRhythmBox.setBounds (316, layout::bassY, 104, 26);
+    bassVelocitySlider.setBounds (426, layout::bassY, 90, 26);
 
     presetBox.setBounds (layout::margin, layout::presetsY, 190, 26);
     presetNameEditor.setBounds (214, layout::presetsY, 180, 26);

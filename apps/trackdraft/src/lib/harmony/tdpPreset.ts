@@ -23,10 +23,16 @@
  * Electron renderer, and a DOM dependency in a pure module buys nothing.
  */
 
+import { DEFAULT_BASS_PROFILE } from "@drum/library";
 import { CHORD_INTERVALS, noteName, pitchClass } from "@music-theory/core";
 import type { ChordQuality, NoteName } from "@music-theory/core";
 import { resolveArrangement } from "../../types/blueprint";
-import type { BlueprintSong, Chord, ChordPerformanceEffect } from "../../types/blueprint";
+import type {
+  BlueprintSection,
+  BlueprintSong,
+  Chord,
+  ChordPerformanceEffect,
+} from "../../types/blueprint";
 import { uuid } from "../uuid";
 
 export interface TdpPreset {
@@ -149,6 +155,23 @@ function slotLine(chord: Chord, indent: string): string {
   return `${indent}<slot ${attributes.join(" ")}/>`;
 }
 
+/**
+ * The section's bass voice.
+ *
+ * Written even when the section has no explicit profile, using the app's
+ * defaults: the app's `.mid` export has always carried a root line at octave 3,
+ * so a song sent to the plug-in has to have one too or it would play thinner in
+ * the DAW than it does in the app. (A *preset* stays chords-only — it is a
+ * chord set, and the section it lands in keeps its own bass.)
+ */
+function bassLine(profile: BlueprintSection["bassProfile"], indent: string): string {
+  const bass = { ...DEFAULT_BASS_PROFILE, ...(profile ?? {}) };
+  return (
+    `${indent}<bass octave="${bass.octave}" motion="${bass.motion}"` +
+    ` rhythm="${bass.rhythm}" velocity="${bass.velocity}"/>`
+  );
+}
+
 function xmlDocument(lines: readonly string[]): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n\n${lines.join("\n")}\n`;
 }
@@ -189,6 +212,7 @@ export function toTdpSongXml(song: BlueprintSong): string {
     lines.push(`  <section name="${escapeAttribute(section.name)}">`);
     lines.push(`    <progression version="1" count="${section.chords.length}">`);
     for (const chord of section.chords) lines.push(slotLine(chord, "      "));
+    lines.push(bassLine(section.bassProfile, "      "));
     lines.push("    </progression>");
     lines.push("  </section>");
   }

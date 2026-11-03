@@ -1,3 +1,4 @@
+#include "Bass.h"
 #include "ChordScheduler.h"
 
 #include <algorithm>
@@ -64,27 +65,30 @@ void ChordScheduler::scheduleChord (double atPpq, const ChordSlot& slot,
     for (const auto& event : events)
         pending.push_back ({ atPpq + event.offsetBeats, event.note, event.velocity,
                              event.durationBeats });
-
-    scheduleBass (atPpq, slot, settings);
 }
 
-void ChordScheduler::scheduleBass (double atPpq, const ChordSlot& slot,
-                                   const VoiceSettings& settings)
+void ChordScheduler::scheduleBass (double atPpq, const ChordCycle& cycle,
+                                   std::size_t slotIndex)
 {
-    if (settings.bassOctave <= 0 || settings.bassOctave > 8)
+    const auto& line = cycle.bassAt (slotIndex);
+    if (! line.enabled || cycle.slotCount() == 0)
         return;
 
-    // The bass plays the tone the inversion put there, so C/E is an E in the
-    // low end; it holds for the whole slot rather than following the articulation,
-    // which is what an arpeggiated chord needs underneath it.
-    const int pitchClass = theory::bassPitchClass (slot.rootPc, slot.quality, slot.voicing);
-    // The app's bass numbering (see VoiceSettings::bassOctave): octave 3 is 36.
-    const int note = settings.bassOctave * 12 + pitchClass;
-    if (note < 0 || note > 127)
-        return;
+    const auto& slot = cycle.slotAt (slotIndex);
+    const int bassPc = theory::bassPitchClass (slot.rootPc, slot.quality, slot.voicing);
 
-    const double duration = std::max (0.25, slot.beats) * std::clamp (settings.gate, 0.05, 1.0);
-    pending.push_back ({ atPpq, note, juce::jlimit (1, 127, settings.velocity), duration });
+    // A walking line leads into the next chord of the song — across a section
+    // change as readily as across a bar — and wraps at the end of the form.
+    int nextBassPc = -1;
+    if (cycle.slotCount() > 1)
+    {
+        const auto& next = cycle.slotAt ((slotIndex + 1) % cycle.slotCount());
+        nextBassPc = theory::bassPitchClass (next.rootPc, next.quality, next.voicing);
+    }
+
+    for (const auto& note : planBass (line, bassPc, nextBassPc, slot.beats))
+        pending.push_back ({ atPpq + note.offsetBeats, note.note, note.velocity,
+                             note.durationBeats });
 }
 
 void ChordScheduler::emitPending (juce::MidiBuffer& out, double upToPpqInclusive,
@@ -199,6 +203,7 @@ void ChordScheduler::process (juce::MidiBuffer& out,
         pending.clear();
 
         scheduleChord (boundary.ppq, cycle.slotAt (boundary.slot), settings);
+        scheduleBass (boundary.ppq, cycle, boundary.slot);
         emitPending (out, boundary.ppq, transport.ppqStart, transport.ppqEnd, numSamples);
         cursor = boundary.ppq;
     }

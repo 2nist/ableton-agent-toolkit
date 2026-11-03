@@ -27,6 +27,11 @@ const ChordSlot& Progression::slotAt (std::size_t index) const noexcept
     return slots[std::min (index, maxSlots - 1)];
 }
 
+const BassLine& Progression::bassAt (std::size_t) const noexcept
+{
+    return bass;
+}
+
 std::size_t Progression::slotAtBeat (double beat) const noexcept
 {
     if (count == 0)

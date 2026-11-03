@@ -224,7 +224,7 @@ void SongCycle::rebuild (const Song& song)
                     continue;
 
                 entries.push_back ({ cursor, index, slot, passIndex,
-                                     progression.slots[slot] });
+                                     progression.slots[slot], progression.bass });
                 cursor += beats;
             }
         }
@@ -242,6 +242,14 @@ const ChordSlot& SongCycle::slotAt (std::size_t index) const noexcept
 {
     static const ChordSlot empty;
     return index < entries.size() ? entries[index].slot : empty;
+}
+
+const BassLine& SongCycle::bassAt (std::size_t index) const noexcept
+{
+    // The section this slot belongs to, so a bass voice follows its own section
+    // across every pass of it.
+    static const BassLine none;
+    return index < entries.size() ? entries[index].bass : none;
 }
 
 SongCycle::Playing SongCycle::playingAt (double beat) const

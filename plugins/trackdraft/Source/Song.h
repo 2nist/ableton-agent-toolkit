@@ -132,6 +132,7 @@ public:
     std::size_t slotCount() const noexcept override { return entries.size(); }
     double startBeatOf (std::size_t index) const noexcept override;
     const ChordSlot& slotAt (std::size_t index) const noexcept override;
+    const BassLine& bassAt (std::size_t index) const noexcept override;
 
     /** What is playing at a song position (wraps): the section, the slot
         inside that section, and which arrangement pass it belongs to. */
@@ -152,6 +153,7 @@ private:
         std::size_t slotInSection = 0;
         std::size_t pass = 0;
         ChordSlot slot;
+        BassLine bass;
     };
 
     std::vector<Entry> entries;

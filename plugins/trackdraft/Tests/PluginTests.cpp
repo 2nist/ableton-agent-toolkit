@@ -1,3 +1,4 @@
+#include "Bass.h"
 #include "ChordScheduler.h"
 #include "Progression.h"
 #include "Song.h"
@@ -980,37 +981,112 @@ void testVoicingScheduler()
         check (collect (out) == std::vector<int> { 64, 67, 72 }, "the inversion is what sounds");
     }
 
-    // The bass voice is off unless it is asked for.
+    // A section with no bass voice emits none.
     {
         td::ChordScheduler scheduler;
         juce::MidiBuffer out;
         scheduler.process (out, { true, 0.0, 1.0 }, progression, settings, 512);
-        check (collect (out).front() == 64, "no bass note by default");
+        checkEqual ((int) collect (out).size(), 3, "no bass note unless the section asks");
     }
 
     // Asked for, it plays the inversion's tone in the app's bass register:
-    // E at octave 3 is MIDI 40.
+    // E at octave 3 is MIDI 40, held for the whole slot.
     {
-        auto withBass = settings;
-        withBass.bassOctave = 3;
+        auto withBass = progression;
+        withBass.bass = { true, 3, td::BassMotion::root, td::BassRhythm::locked, 100 };
+
         td::ChordScheduler scheduler;
         juce::MidiBuffer out;
-        scheduler.process (out, { true, 0.0, 1.0 }, progression, withBass, 512);
+        scheduler.process (out, { true, 0.0, 1.0 }, withBass, settings, 512);
         const auto notes = collect (out);
         checkEqual ((int) notes.size(), 4, "the bass adds one note");
         checkEqual (notes.front(), 40, "and it is E in the bass register");
     }
+}
 
-    // The bass follows the inversion, not the chord root: second inversion is G.
+void testBassPlanning()
+{
+    td::BassLine line;
+    line.enabled = true;
+    line.octave = 3;
+
+    auto pitches = [] (const std::vector<td::BassNote>& notes)
     {
-        auto withBass = settings;
-        withBass.bassOctave = 2;
-        auto secondInversion = progression;
-        secondInversion.slots[0].voicing = { 2, false };
-        td::ChordScheduler scheduler;
-        juce::MidiBuffer out;
-        scheduler.process (out, { true, 0.0, 1.0 }, secondInversion, withBass, 512);
-        checkEqual (collect (out).front(), 31, "second inversion basses G at octave 2");
+        juce::StringArray parts;
+        for (const auto& note : notes)
+            parts.add (juce::String (note.note));
+        return parts.joinIntoString (",");
+    };
+
+    // Locked: one note for the span, at the chord's bass tone (C here).
+    {
+        const auto notes = td::planBass (line, 0, 5, 4.0);
+        checkEqual ((int) notes.size(), 1, "locked is one note");
+        checkEqual (notes[0].note, 36, "C at octave 3 is 36");
+        check (std::abs (notes[0].durationBeats - 4.0) < 1e-9, "spanning the whole slot");
+    }
+
+    // Half: two notes, each half the span.
+    {
+        auto half = line;
+        half.rhythm = td::BassRhythm::half;
+        const auto notes = td::planBass (half, 0, 5, 4.0);
+        checkEqual ((int) notes.size(), 2, "half is two notes");
+        checkEqual (pitches (notes), "36,36", "both on the root");
+        check (std::abs (notes[1].offsetBeats - 2.0) < 1e-9, "the second lands at half time");
+    }
+
+    // Root-fifth: the odd subdivisions take the fifth.
+    {
+        auto fifths = line;
+        fifths.rhythm = td::BassRhythm::eighth;
+        fifths.motion = td::BassMotion::rootFifth;
+        const auto notes = td::planBass (fifths, 0, 5, 4.0);
+        checkEqual (pitches (notes), "36,43,36,43", "root, fifth, root, fifth");
+    }
+
+    // Walking: the last subdivision leads into the next chord, a semitone below.
+    {
+        auto walking = line;
+        walking.rhythm = td::BassRhythm::eighth;
+        walking.motion = td::BassMotion::walking;
+        const auto notes = td::planBass (walking, 0, 5, 4.0);
+        checkEqual (pitches (notes), "36,36,36,40", "F is approached from E below");
+    }
+
+    // ...but a walking line holds on the last chord, and holds on an unchanged
+    // root: there is nothing to walk into.
+    {
+        auto walking = line;
+        walking.rhythm = td::BassRhythm::eighth;
+        walking.motion = td::BassMotion::walking;
+        checkEqual (pitches (td::planBass (walking, 0, -1, 4.0)), "36,36,36,36",
+                    "no next chord, no approach");
+        checkEqual (pitches (td::planBass (walking, 0, 0, 4.0)), "36,36,36,36",
+                    "the same root does not walk to itself");
+    }
+
+    // A locked line has no subdivision to walk on, so it stays put.
+    {
+        auto walking = line;
+        walking.motion = td::BassMotion::walking;
+        checkEqual (pitches (td::planBass (walking, 0, 5, 4.0)), "36",
+                    "a locked walking line holds the root");
+    }
+
+    // Off means off, and a zero-length span makes nothing.
+    {
+        auto off = line;
+        off.enabled = false;
+        checkEqual ((int) td::planBass (off, 0, 5, 4.0).size(), 0, "a disabled voice is silent");
+        checkEqual ((int) td::planBass (line, 0, 5, 0.0).size(), 0, "a zero-length span is silent");
+    }
+
+    // The register follows the profile, in the app's numbering.
+    {
+        auto low = line;
+        low.octave = 2;
+        checkEqual (td::planBass (low, 9, 5, 4.0)[0].note, 33, "A at octave 2 is 33");
     }
 }
 
@@ -1046,6 +1122,50 @@ void testVoicingXml()
            "root position writes no inversion attribute");
     check (! plainXml.getChildByName ("slot")->hasAttribute ("spread"),
            "and no spread attribute");
+}
+
+void testBassXml()
+{
+    td::Progression progression;
+    progression.count = 1;
+    progression.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    progression.bass = { true, 2, td::BassMotion::walking, td::BassRhythm::eighth, 88 };
+
+    const auto xml = td::toXml (progression, "TrackDraftPreset");
+    const auto* bass = xml.getChildByName ("bass");
+    check (bass != nullptr, "the bass voice is written");
+    checkEqual (bass->getStringAttribute ("motion"), juce::String ("walking"), "with its motion");
+    checkEqual (bass->getStringAttribute ("rhythm"), juce::String ("eighth"), "its rhythm");
+    checkEqual (bass->getIntAttribute ("octave"), 2, "its register");
+    checkEqual (bass->getIntAttribute ("velocity"), 88, "and its velocity");
+
+    td::Progression loaded;
+    check (td::fromXml (xml, loaded), "the progression reads back");
+    check (loaded.bass.enabled, "the bass voice survives");
+    check (loaded.bass.motion == td::BassMotion::walking, "its motion survives");
+    check (loaded.bass.rhythm == td::BassRhythm::eighth, "its rhythm survives");
+    checkEqual (loaded.bass.octave, 2, "its register survives");
+    checkEqual (loaded.bass.velocity, 88, "its velocity survives");
+
+    // No voice, no element — a file from before it existed round-trips unchanged.
+    td::Progression plain;
+    plain.count = 1;
+    plain.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    check (td::toXml (plain, "TrackDraftPreset").getChildByName ("bass") == nullptr,
+           "a section with no bass writes no bass element");
+
+    td::Progression silent;
+    check (td::fromXml (td::toXml (plain, "TrackDraftPreset"), silent), "and reads back");
+    check (! silent.bass.enabled, "still with no bass voice");
+
+    // An unknown id falls back rather than failing the file.
+    const auto odd = juce::parseXML (juce::String (
+        "<TrackDraftPreset count=\"1\"><slot root=\"0\" quality=\"maj\" beats=\"4\"/>"
+        "<bass octave=\"3\" motion=\"somersault\" rhythm=\"swing\" velocity=\"100\"/></TrackDraftPreset>"));
+    td::Progression fallback;
+    check (odd != nullptr && td::fromXml (*odd, fallback), "an unknown motion still loads");
+    check (fallback.bass.motion == td::BassMotion::root, "falling back to the root");
+    check (fallback.bass.rhythm == td::BassRhythm::locked, "and to locked");
 }
 
 void testSongStructure()
@@ -1330,12 +1450,14 @@ void testSongXml()
     <progression version="1" count="2">
       <slot root="9" quality="min" beats="4" performance="1" param="150" direction="2" inversion="1"/>
       <slot root="2" quality="maj" beats="4" performance="0" param="0" direction="2"/>
+      <bass octave="3" motion="root" rhythm="locked" velocity="100"/>
     </progression>
   </section>
   <section name="Chorus">
     <progression version="1" count="2">
       <slot root="5" quality="maj" beats="4" performance="0" param="0" direction="2"/>
       <slot root="7" quality="7" beats="4" performance="3" param="8" direction="1"/>
+      <bass octave="2" motion="walking" rhythm="eighth" velocity="88"/>
     </progression>
   </section>
   <arrangement>
@@ -1358,6 +1480,15 @@ void testSongXml()
                 "and the inversion the app wrote");
     checkEqual (fromApp.arrangement[1].repeats, 2, "the chorus repeats twice");
     check (std::abs (fromApp.totalBeats() - 24.0) < 1e-9, "24 beats: 8 of verse, 16 of chorus");
+    check (fromApp.sections[0].progression.bass.enabled, "the app's bass voice arrives");
+    check (fromApp.sections[0].progression.bass.motion == td::BassMotion::root,
+           "the verse's bass is on the root");
+    check (fromApp.sections[1].progression.bass.motion == td::BassMotion::walking,
+           "the chorus walks");
+    check (fromApp.sections[1].progression.bass.rhythm == td::BassRhythm::eighth,
+           "in eighths");
+    checkEqual (fromApp.sections[1].progression.bass.octave, 2, "an octave down");
+    checkEqual (fromApp.sections[1].progression.bass.velocity, 88, "and softer");
 }
 
 } // namespace
@@ -1442,6 +1573,8 @@ int main (int argc, char** argv)
     testScheduler();
     testVoicing();
     testVoicingScheduler();
+    testBassPlanning();
+    testBassXml();
     testVoicingXml();
     testSongStructure();
     testSongEditing();

@@ -109,7 +109,11 @@ private:
     juce::Slider octaveSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
     juce::Slider velocitySlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
     juce::Slider gateSlider { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
-    juce::Slider bassOctaveSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
+    juce::ToggleButton bassButton { "Bass line" };
+    juce::ComboBox bassOctaveBox;
+    juce::ComboBox bassMotionBox;
+    juce::ComboBox bassRhythmBox;
+    juce::Slider bassVelocitySlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
     juce::ToggleButton generateButton { "Emit notes from the host clock" };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> keyAttachment;
@@ -117,7 +121,6 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> octaveAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> velocityAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gateAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> bassOctaveAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> generateAttachment;
 
     /** The eight slot buttons, drawn by hand so the sounding chord can pulse. */
