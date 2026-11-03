@@ -8,6 +8,7 @@ import {
   resolveEffectiveStyle,
   resolveNarrativeProfile,
   exportSectionVariant,
+  fitHitsToSection,
   sectionDrumInput,
   styleVelocityTarget,
   type DrumPattern,
@@ -120,12 +121,19 @@ export function planDrumClips(
   const plans = planSectionDrumNotes(inputs, fillData);
 
   return spans.map(({ section, startBeat, durationBeats }, i) => {
-    const notes: NoteDescription[] = plans[i].notes
+    // Clipped to the clip's own length, by the same rule the app's .mid uses —
+    // they used to disagree, and a hat on the last 16th bled into the next clip
+    // here while the .mid was cut.
+    const notes: NoteDescription[] = fitHitsToSection(
+      plans[i].notes,
+      durationBeats,
+      HIT_DURATION,
+    )
       .sort((a, b) => a.beat - b.beat || a.pitch - b.pitch)
       .map(({ beat, pitch, velocity, duration }) => ({
         pitch,
         startTime: beat,
-        duration: duration ?? HIT_DURATION,
+        duration,
         velocity,
       }));
 

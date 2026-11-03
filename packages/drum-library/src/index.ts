@@ -65,3 +65,4 @@ export type {
 } from "./drumImport/index.js";
 export * from "./timeDomain.js";
 export * from "./conduct.js";
+export * from "./spanFit.js";

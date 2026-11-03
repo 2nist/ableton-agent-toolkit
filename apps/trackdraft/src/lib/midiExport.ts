@@ -44,6 +44,7 @@ import {
   styleSpacing,
   styleVelocityTarget,
   drumPocket,
+  fitHitsToSection,
   glueToPocket,
   planLaneCc,
   type GrooveMap,
@@ -439,23 +440,18 @@ export function planDrumStem(
   const plans = planDrumSections(spans, song);
   for (let i = 0; i < spans.length; i++) {
     const span = spans[i];
-    for (const n of plans[i].notes) {
-      const startTime = span.startBeat + n.beat;
-      // A hit is a fixed gate unless a Drum Block authored one — and either way
-      // it may not ring past the section. The mapping clips notes it can see the
-      // length of, but a kit note's length is this caller's default, so the cut
-      // has to happen here (§P3.6/S2: a closed hat on the last 16th was ringing
-      // 0.05 beats into the next section).
-      const room = span.startBeat + span.durationBeats - startTime;
-      if (room <= 1e-6) {
-        // Exactly on the boundary: that hit belongs to the next section, which
-        // plans its own downbeat. A floored duration here rang 0.01 beat into it.
-        continue;
-      }
+    // A hit is a fixed gate unless a Drum Block authored one — and either way it
+    // may not ring past the section (§P3.6/S2). The rule is shared with the
+    // Ableton bridge now: two copies of it had already drifted.
+    for (const n of fitHitsToSection(
+      plans[i].notes,
+      span.durationBeats,
+      DRUM_HIT_DURATION,
+    )) {
       notes.push({
         pitch: n.pitch,
-        startTime,
-        duration: Math.min(n.duration ?? DRUM_HIT_DURATION, room),
+        startTime: span.startBeat + n.beat,
+        duration: n.duration,
         velocity: n.velocity,
       });
     }
