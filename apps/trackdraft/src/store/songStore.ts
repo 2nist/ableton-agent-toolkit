@@ -249,8 +249,16 @@ export const useSongStore = create<SongStoreState>((set, get) => ({
   },
 
   hydrate: async () => {
-    adopt(await repository.load());
-    set({ loadInfo: repository.lastLoad() });
+    try {
+      adopt(await repository.load());
+    } finally {
+      // `hydrated` was declared, read by two guards and **never set** — so the
+      // `!hydrated` branch of both was dead code and a song route that was not
+      // ready rendered `null` for as long as the page stayed open (§polish.2).
+      // Whatever the read did, it has now been attempted: a failed library is
+      // an empty one, not an eternally opening one.
+      set({ loadInfo: repository.lastLoad(), hydrated: true });
+    }
     return repository.kind;
   },
 

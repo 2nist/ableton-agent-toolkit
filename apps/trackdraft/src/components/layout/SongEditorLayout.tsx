@@ -1,4 +1,4 @@
-import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Outlet, useLocation, useParams } from "react-router-dom";
 import { useEffect } from "react";
 import { useSongStore } from "../../store/songStore";
 import { useDrumsDraftStore } from "../../store/drumsDraftStore";
@@ -8,11 +8,12 @@ import Spine from "../shell/Spine";
 import NavRail from "../shell/NavRail";
 import InspectorRail from "../shell/InspectorRail";
 import ErrorBoundary from "../common/ErrorBoundary";
+import SongOpening from "../shell/SongOpening";
+import { songOpeningState } from "../../lib/songOpening";
 
 export default function SongEditorLayout() {
   const { songId } = useParams<{ songId: string }>();
   const location = useLocation();
-  const navigate = useNavigate();
   const songs = useSongStore((s) => s.songs);
   const hydrated = useSongStore((s) => s.hydrated);
   const openSong = useSongStore((s) => s.openSong);
@@ -81,18 +82,17 @@ export default function SongEditorLayout() {
     if (routedSongExists && songId && currentSongId !== songId) openSong(songId);
   }, [songs, songId, currentSongId, openSong]);
 
-  if (!song) {
-    // The repository may still be reading the library — claiming the song is
-    // missing before that finishes is a lie the user sees flash by.
-    if (!hydrated) return null;
-    return (
-      <div className="p-4">
-        <p className="text-inkMuted">Song not found.</p>
-        <button className="text-accent text-sm mt-2" onClick={() => navigate("/")}>
-          ← Back to Dashboard
-        </button>
-      </div>
-    );
+  // Ready means three things at once: the library has been read, the route's
+  // song is in it, and the store has actually opened it. Drawing the outlet a
+  // commit earlier paints the previously open song under this route's title;
+  // drawing nothing at all is the blank first second of every deep link.
+  const opening = songOpeningState({
+    hydrated,
+    routedSongExists: song != null,
+    routedIsCurrent: songId != null && currentSongId === songId,
+  });
+  if (opening !== "ready" || !song) {
+    return <SongOpening state={opening === "missing" ? "missing" : "opening"} />;
   }
 
   return (

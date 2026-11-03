@@ -47,6 +47,7 @@ import SongSettingsStrip from "./SongSettingsStrip";
 import ArrangementTimeline from "../arrangement/ArrangementTimeline";
 import StudioConsole from "../arrangement/StudioConsole";
 import { STORAGE_KEYS } from "../../lib/persistence/keys";
+import SongOpening from "../shell/SongOpening";
 
 /** Canonical role order for the header's role menu (same list everywhere). */
 const ROLE_OPTIONS: SectionRole[] = ["intro", "verse", "pre_chorus", "chorus", "bridge", "solo", "breakdown", "outro", "custom"];
@@ -80,7 +81,6 @@ type Surface = (typeof SURFACES)[number]["id"];
 export default function WorkbenchView() {
   const currentSong = useSongStore((s) => s.currentSong());
   const hydrated = useSongStore((s) => s.hydrated);
-  const navigate = useNavigate();
   const selectedSectionId = useFocusedSectionStore((s) => s.selectedSectionId);
   const setSelectedSectionId = useFocusedSectionStore((s) => s.setSelectedSectionId);
   const [surface, setSurface] = useState<Surface>("section");
@@ -116,17 +116,10 @@ export default function WorkbenchView() {
   }, KEY_PRIORITY.shell);
 
   if (!song) {
-    // The repository may still be reading the library — claiming the song is
-    // missing before that finishes is a lie the user sees flash by.
-    if (!hydrated) return null;
-    return (
-      <div className="p-4">
-        <p className="text-inkMuted">Song not found.</p>
-        <button className="text-accent text-sm mt-2" onClick={() => navigate("/")}>
-          ← Back to Dashboard
-        </button>
-      </div>
-    );
+    // Only reachable if the open song vanished under a mounted route (deleted
+    // in another tab). The layout owns the deep-link wait; this keeps the
+    // canvas from going blank in the meantime.
+    return <SongOpening state={hydrated ? "missing" : "opening"} />;
   }
 
   const activeIndex = spans.length === 0 ? -1 : Math.max(0, spans.findIndex((sp) => sp.sectionId === selectedSectionId));
