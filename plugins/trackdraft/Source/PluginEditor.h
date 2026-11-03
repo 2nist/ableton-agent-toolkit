@@ -1,6 +1,9 @@
 #pragma once
 
 #include "Progression.h"
+#include "Theory/ChordWalk.h"
+
+#include <array>
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_extra/juce_gui_extra.h>
@@ -33,6 +36,10 @@ private:
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
     void timerCallback() override;
     void rebuildFromProcessor();
+    void rebuildNeighbours();
+    void refreshHeardLabel();
+    theory::Scale workingScale() const;
+    int workingDegree() const;
     void commit();
     void refreshGrid();
 
@@ -47,8 +54,15 @@ private:
     juce::Slider octaveSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
     juce::Slider velocitySlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
     juce::Slider gateSlider { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
+    juce::Slider beatsSlider { juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft };
     juce::ToggleButton generateButton { "Emit notes from the host clock" };
     juce::TextButton seedButton { "Seed from key" };
+
+    /** The six hex neighbours of the selected slot — the walk, one click away. */
+    std::array<juce::TextButton, 6> neighbourButtons;
+    juce::TextButton detectButton { "Detect MIDI" };
+    juce::TextButton useHeardButton { "Use heard" };
+    juce::Label heardLabel;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> keyAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> scaleAttachment;

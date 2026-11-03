@@ -152,6 +152,75 @@ const std::vector<int>& scaleIntervals(Scale scale)
     return ionian;
 }
 
+DiatonicChord diatonicChordAt(Scale scale, int degree)
+{
+    const auto& steps = scaleIntervals(scale);
+    const int size = (int) steps.size();
+    if (size == 0)
+        return {};
+
+    const auto at = [&steps, size](int step)
+    {
+        const int octave = (int) std::floor((double) step / (double) size);
+        const int index = ((step % size) + size) % size;
+        return steps[(size_t) index] + 12 * octave;
+    };
+
+    const auto normalisedDegree = ((degree % size) + size) % size;
+    const int base = steps[(size_t) normalisedDegree];
+    const int rootOffset = ((base % 12) + 12) % 12;
+
+    const int third = (at (degree + 2) - at (degree) + 12) % 12;
+    const int fifth = (at (degree + 4) - at (degree) + 12) % 12;
+    const int seventh = size >= 7 ? (at (degree + 6) - at (degree) + 12) % 12 : -1;
+
+    Quality quality;
+    if (third == 4 && fifth == 7)       quality = Quality::maj;
+    else if (third == 3 && fifth == 7)  quality = Quality::min;
+    else if (third == 3 && fifth == 6)  quality = Quality::dim;
+    else if (third == 4 && fifth == 8)  quality = Quality::aug;
+    else return { rootOffset, Quality::maj };
+
+    if (seventh >= 0)
+    {
+        if (quality == Quality::maj)
+            quality = seventh == 11 ? Quality::maj7 : seventh == 10 ? Quality::seven : Quality::maj;
+        else if (quality == Quality::min)
+            quality = seventh == 10 ? Quality::min7 : seventh == 11 ? Quality::mMaj7 : Quality::min;
+        else if (quality == Quality::dim)
+            quality = seventh == 10 ? Quality::m7b5 : seventh == 9 ? Quality::dim7 : Quality::dim;
+        else
+            quality = Quality::maj7Sharp5;
+    }
+
+    return { rootOffset, quality };
+}
+
+std::string romanNumeral(int degree, Quality quality)
+{
+    static const char* upper[] = { "I", "II", "III", "IV", "V", "VI", "VII" };
+    static const char* lower[] = { "i", "ii", "iii", "iv", "v", "vi", "vii" };
+
+    const int index = ((degree % 7) + 7) % 7;
+    // Quality decides the case, which is what makes "ii7" read as a minor
+    // seventh and "II7" as a secondary dominant at a glance.
+    const bool minorish = quality == Quality::min || quality == Quality::min7
+                          || quality == Quality::m7b5 || quality == Quality::dim
+                          || quality == Quality::dim7 || quality == Quality::min6
+                          || quality == Quality::min9 || quality == Quality::min11
+                          || quality == Quality::min13;
+
+    std::string numeral = minorish ? lower[index] : upper[index];
+    if (quality == Quality::dim || quality == Quality::dim7)
+        numeral += "\u00b0";
+
+    const auto& suffix = def (quality).suffix;
+    if (suffix[0] != '\0')
+        numeral += suffix;
+
+    return numeral;
+}
+
 std::vector<Quality> diatonicQualities(Scale scale)
 {
     const auto& steps = scaleIntervals(scale);

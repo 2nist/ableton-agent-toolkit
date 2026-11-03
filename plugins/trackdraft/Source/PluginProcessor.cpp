@@ -66,6 +66,8 @@ void TrackDraftAudioProcessor::prepareToPlay (double, int)
 {
     juce::MidiBuffer flush;
     scheduler.reset (flush);
+    heldNotes.fill (false);
+    heardRoot.store (-1);
 }
 
 void TrackDraftAudioProcessor::releaseResources()
@@ -91,6 +93,8 @@ void TrackDraftAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // replacement for the track's instrument.
     juce::MidiBuffer generated;
     generated.addEvents (midiMessages, 0, -1, 0);
+
+    updateDetection (midiMessages);
 
     TransportSlice transport;
     if (const auto* playHead = getPlayHead())
@@ -219,6 +223,109 @@ void TrackDraftAudioProcessor::setStateInformation (const void* data, int sizeIn
     }
 
     setProgression (loaded);
+}
+
+void TrackDraftAudioProcessor::setDetectionArmed (bool shouldListen)
+{
+    detectionArmed.store (shouldListen);
+
+    if (! shouldListen)
+    {
+        heldNotes.fill (false);
+        heardRoot.store (-1);
+    }
+}
+
+void TrackDraftAudioProcessor::updateDetection (const juce::MidiBuffer& incoming)
+{
+    if (! detectionArmed.load())
+    {
+        heldNotes.fill (false);
+        heardRoot.store (-1);
+        return;
+    }
+
+    for (const auto metadata : incoming)
+    {
+        const auto message = metadata.getMessage();
+        if (message.isNoteOn())
+            heldNotes[(size_t) juce::jlimit (0, 127, message.getNoteNumber())] = true;
+        else if (message.isNoteOff())
+            heldNotes[(size_t) juce::jlimit (0, 127, message.getNoteNumber())] = false;
+        else if (message.isAllNotesOff() || message.isAllSoundOff())
+            heldNotes.fill (false);
+    }
+
+    // A pitch-class set is what the recogniser wants; the lowest note decides
+    // the inversion, so the notes are collected in ascending order.
+    std::vector<int> sounding;
+    for (int note = 0; note < 128; ++note)
+        if (heldNotes[(size_t) note])
+            sounding.push_back (note);
+
+    if (sounding.size() < 2)
+    {
+        heardRoot.store (-1);
+        return;
+    }
+
+    RecognizeOptions options;
+    options.permitted = theory::diatonicQualities (
+        (theory::Scale) juce::jlimit (0, (int) theory::Scale::locrian,
+                                      (int) apvts.getRawParameterValue (scaleParam)->load()));
+
+    const int previousRoot = heardRoot.load();
+    if (previousRoot >= 0)
+    {
+        options.hasPrevious = true;
+        options.previousRootPc = previousRoot;
+        options.previousQuality = (theory::Quality) heardQuality.load();
+    }
+
+    const auto recognized = recognizeChordFromNotes (sounding, options);
+    if (recognized.valid)
+    {
+        heardRoot.store (recognized.rootPc);
+        heardQuality.store ((int) recognized.quality);
+    }
+    else
+    {
+        heardRoot.store (-1);
+    }
+}
+
+RecognizedChord TrackDraftAudioProcessor::getHeardChord() const
+{
+    const int root = heardRoot.load();
+    RecognizedChord heard;
+    if (root < 0)
+        return heard;
+
+    heard.valid = true;
+    heard.rootPc = root;
+    heard.quality = (theory::Quality) heardQuality.load();
+    return heard;
+}
+
+bool TrackDraftAudioProcessor::writeHeardChordToSlot (std::size_t slot)
+{
+    const auto heard = getHeardChord();
+    if (! heard.valid || slot >= Progression::maxSlots)
+        return false;
+
+    Progression next;
+    {
+        const juce::ScopedLock lock (progressionLock);
+        next = progression;
+    }
+
+    if (slot >= next.count)
+        next.count = slot + 1;
+
+    const double beats = next.slots[slot].beats;
+    next.slots[slot] = { heard.rootPc, heard.quality, beats > 0.0 ? beats : 4.0 };
+    setProgression (next);
+    return true;
 }
 
 juce::AudioProcessorEditor* TrackDraftAudioProcessor::createEditor()

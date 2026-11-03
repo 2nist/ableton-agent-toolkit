@@ -72,10 +72,37 @@ cmake --build build --target TrackDraftTests
 ```
 
 Covers: theory-table parity with `@music-theory/core`, diatonic vocabulary per
-mode, the progression cycle, and the scheduling rules — a stopped transport emits
+mode, the walk's neighbour and cycle properties, chord recognition (including
+the vocabulary rules and the borrowed-chord fallback), the progression cycle, and
+the scheduling rules — a stopped transport emits
 nothing, the downbeat sounds the first chord at MIDI 60, a boundary inside a block
 releases the previous chord first, a host loop restarts cleanly, the gate closes
 notes without a boundary, and disabling emission releases what is sounding.
+
+## Editing
+
+| Control | What it does |
+|---|---|
+| Key / Scale | Seeds nothing by itself; they are the context for seeding, the walk, and the vocabulary detection prefers |
+| **Seed from key** | Fills the slots with the mode's diatonic chords (I, ii, iii… with sevenths where the mode has them) |
+| Slot strip | Click a slot to select it; it shows the chord and the beat count, and the slot currently sounding is lit |
+| Root / Quality | Set the selected slot directly |
+| **Beats** | Length of the selected slot, 1-8. The cycle is the sum, so 4 × 4 beats is four bars of 4/4 |
+| **Walk row** | The six hex neighbours of the selected chord. A click writes that chord into the next slot and moves the selection there |
+| **Detect MIDI / Use heard** | Arm listening to the notes the host sends in, then write the recognised chord into the selected slot |
+
+The walk row is a port of the app's honeycomb arithmetic, not an invented
+"good next chord" list: with `degree = (3q + r) mod 7`, the six axial neighbours
+of a cell are the six *other* degrees — all of them, each once. Stepping the
+first direction is `+3 mod 7`, which cycles through all seven degrees before
+returning (`gcd(3, 7) = 1`), so a walk never dead-ends. The tests assert both
+properties.
+
+Detection is the same scorer as the app's chord pad — the port in
+`Source/Theory/ChordRecognition.cpp` keeps its constants, its optional-tone
+costs, its bass evidence and the "permitted vocabulary first, but only if it
+explains every note" rule, so the plug-in and the app agree on what a shape is
+called.
 
 ## How it plays
 
@@ -92,6 +119,8 @@ notes without a boundary, and disabling emission releases what is sounding.
 
 ```
 Source/Theory/ChordTheory.*    the app's chord + scale tables, ported
+Source/Theory/ChordWalk.*      hex neighbours / the walk, ported
+Source/Theory/ChordRecognition.*  notes -> chord name, ported
 Source/Progression.*           slots, cycle length, diatonic seeding
 Source/ChordScheduler.*        transport → MIDI events (the testable core)
 Source/PluginProcessor.*       APVTS, state, bus/format declarations

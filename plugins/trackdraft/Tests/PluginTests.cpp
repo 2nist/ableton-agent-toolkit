@@ -1,10 +1,14 @@
 #include "ChordScheduler.h"
 #include "Progression.h"
+#include "Theory/ChordRecognition.h"
 #include "Theory/ChordTheory.h"
+#include "Theory/ChordWalk.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
+#include <cmath>
 #include <iostream>
+#include <set>
 #include <vector>
 
 /**
@@ -104,6 +108,107 @@ void testDiatonicVocabulary()
         check (std::set<Quality> (qualities.begin(), qualities.end()).size() == qualities.size(),
                juce::String ("no duplicate qualities in ") + idOf ((Scale) i));
     }
+}
+
+void testWalk()
+{
+    using namespace td::theory;
+
+    // From the tonic of a major key, the six hex neighbours are the six other
+    // degrees — every one exactly once. That is the property the app's
+    // (3q + r) mod 7 grid gives, and the reason a walk never dead-ends.
+    const auto neighbours = td::neighboursOf (Scale::ionian, 0);
+
+    std::set<int> degrees;
+    for (const auto& neighbour : neighbours)
+        degrees.insert (neighbour.degree);
+
+    checkEqual ((int) degrees.size(), 6, "six distinct neighbour degrees");
+    check (degrees.find (0) == degrees.end(), "the tonic is not its own neighbour");
+
+    checkEqual (juce::String (neighbours[0].label), juce::String ("IVmaj7"), "first neighbour is IV");
+    checkEqual (juce::String (neighbours[1].label), juce::String ("V7"), "second neighbour is V");
+
+    // Every neighbour is a real, in-key chord: its root offset is in the scale.
+    const auto& steps = scaleIntervals (Scale::ionian);
+    for (const auto& neighbour : neighbours)
+        check (std::find (steps.begin(), steps.end(), neighbour.rootOffset) != steps.end(),
+               "neighbour root is in the key");
+
+    // Stepping +3 mod 7 visits every degree before returning: gcd(3, 7) = 1,
+    // so the walk is a full 7-cycle, which is why it never dead-ends.
+    std::set<int> visited;
+    int degree = 0;
+    for (int i = 0; i < 7; ++i)
+    {
+        visited.insert (degree);
+        degree = td::nextAlongWalk (Scale::ionian, degree).degree;
+    }
+    checkEqual ((int) visited.size(), 7, "the walk visits every degree");
+    checkEqual (degree, 0, "seven walk steps return to the start");
+}
+
+void testRecognition()
+{
+    using namespace td::theory;
+
+    // The same expectations as apps/trackdraft/src/lib/harmony/chordRecognition.test.ts.
+    const auto plain = td::recognizeChord ({ 0, 4, 7 });
+    check (plain.valid, "a plain triad is named");
+    checkEqual (plain.rootPc, 0, "plain triad root");
+    checkEqual (juce::String (idOf (plain.quality)), juce::String ("maj"), "plain triad quality");
+    check (std::abs (plain.score - 1.0) < 1e-9, "a complete triad scores 1");
+
+    checkEqual (juce::String (idOf (td::recognizeChord ({ 0, 4, 7, 11 }).quality)),
+                juce::String ("maj7"), "maj7 is named");
+    checkEqual (juce::String (idOf (td::recognizeChord ({ 0, 3, 7, 10 }).quality)),
+                juce::String ("min7"), "min7 is named");
+
+    // Root-3-7 only: the fifth is a tone the quality can do without.
+    const auto rootless = td::recognizeChord ({ 0, 4, 11 });
+    checkEqual (juce::String (idOf (rootless.quality)), juce::String ("maj7"),
+                "a maj7 without its fifth is still a maj7");
+    check (rootless.missing.size() == 1, "and it reports the omitted tone");
+
+    // A single note is not a chord.
+    check (! td::recognizeChord ({ 0 }).valid, "one pitch class is not a chord");
+
+    // Bass decides an inversion.
+    const auto inverted = td::recognizeChordFromNotes ({ 52, 55, 60 });
+    checkEqual (inverted.rootPc, 0, "E-G-C reads as C major");
+    checkEqual (juce::String (idOf (inverted.quality)), juce::String ("maj"), "and stays major");
+
+    // C E G A is both C6 and Am7; the vocabulary decides.
+    td::RecognizeOptions sixOnly;
+    sixOnly.permitted = { Quality::six };
+    checkEqual (juce::String (idOf (td::recognizeChord ({ 0, 4, 7, 9 }, sixOnly).quality)),
+                juce::String ("6"), "permitted 6 picks C6");
+
+    td::RecognizeOptions min7Only;
+    min7Only.permitted = { Quality::min7 };
+    const auto asAm7 = td::recognizeChord ({ 0, 4, 7, 9 }, min7Only);
+    checkEqual (asAm7.rootPc, 9, "permitted min7 picks Am7");
+    checkEqual (juce::String (idOf (asAm7.quality)), juce::String ("min7"), "and its quality");
+
+    // A borrowed chord the key cannot explain is still named.
+    td::RecognizeOptions inKey;
+    inKey.permitted = diatonicQualities (Scale::ionian);
+    const auto borrowed = td::recognizeChord ({ 8, 0, 3 }, inKey);
+    checkEqual (borrowed.rootPc, 8, "bVI is named against the key");
+    checkEqual (juce::String (idOf (borrowed.quality)), juce::String ("maj"), "bVI is major");
+
+    // An extension outside the key is still reachable.
+    checkEqual (juce::String (idOf (td::recognizeChord ({ 0, 4, 7, 10, 2, 9 }).quality)),
+                juce::String ("13"), "C13 is named");
+
+    // The previous chord is a prior, not a straitjacket.
+    td::RecognizeOptions prior;
+    prior.hasPrevious = true;
+    prior.previousRootPc = 0;
+    prior.previousQuality = Quality::maj7;
+    const auto primed = td::recognizeChord ({ 0, 4, 11 }, prior);
+    checkEqual (juce::String (idOf (primed.quality)), juce::String ("maj7"),
+                "the prior keeps a maj7 reading");
 }
 
 void testProgressionCycle()
@@ -253,6 +358,8 @@ int main()
 {
     testTheoryParity();
     testDiatonicVocabulary();
+    testWalk();
+    testRecognition();
     testProgressionCycle();
     testScheduler();
 

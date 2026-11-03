@@ -80,6 +80,57 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
             strip.repaint();
         }
     };
+    for (int i = 0; i < 6; ++i)
+    {
+        neighbourButtons[(size_t) i].setColour (juce::TextButton::buttonColourId,
+                                                juce::Colour (0xff232323));
+        neighbourButtons[(size_t) i].onClick = [this, i] {
+            // A neighbour seeds the slot after the selected one, then the
+            // selection moves there — the same "walk" the honeycomb performs.
+            const auto slotIndex = (std::size_t) juce::jlimit (0, (int) Progression::maxSlots - 1,
+                                                               selectedSlot + 1);
+            const auto neighbour = neighboursOf (workingScale(), workingDegree()).at ((size_t) i);
+
+            if (slotIndex >= working.count)
+                working.count = juce::jmin (Progression::maxSlots, slotIndex + 1);
+
+            const int keyPc = keyBox.getSelectedId() - 1;
+            working.slots[slotIndex] = { ((keyPc + neighbour.rootOffset) % 12 + 12) % 12,
+                                         neighbour.quality,
+                                         working.slots[slotIndex].beats > 0.0
+                                             ? working.slots[slotIndex].beats
+                                             : 4.0 };
+            selectedSlot = (int) slotIndex;
+            commit();
+            rebuildFromProcessor();
+        };
+    }
+
+    beatsSlider.setRange (1.0, 8.0, 1.0);
+    beatsSlider.onValueChange = [this] {
+        if (selectedSlot < (int) working.count)
+        {
+            working.slots[(std::size_t) selectedSlot].beats = beatsSlider.getValue();
+            commit();
+            rebuildFromProcessor();
+        }
+    };
+
+    detectButton.setClickingTogglesState (true);
+    detectButton.setColour (juce::TextButton::buttonColourId, panel);
+    detectButton.setColour (juce::TextButton::buttonOnColourId, accent);
+    detectButton.setColour (juce::TextButton::textColourOnId, juce::Colours::black);
+    detectButton.onClick = [this] { plugin.setDetectionArmed (detectButton.getToggleState()); };
+
+    useHeardButton.setColour (juce::TextButton::buttonColourId, panel);
+    useHeardButton.onClick = [this] {
+        if (plugin.writeHeardChordToSlot ((std::size_t) selectedSlot))
+            rebuildFromProcessor();
+    };
+
+    heardLabel.setColour (juce::Label::textColourId, inkMuted);
+    heardLabel.setFont (juce::Font (juce::FontOptions (13.0f)));
+
     seedButton.onClick = [this] {
         working.seedFromScale (keyBox.getSelectedId() - 1,
                                (theory::Scale) juce::jmax (0, scaleBox.getSelectedId() - 1),
@@ -91,8 +142,12 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
 
     for (auto* component : std::initializer_list<juce::Component*> {
              &keyBox, &scaleBox, &rootBox, &qualityBox, &octaveSlider, &velocitySlider,
-             &gateSlider, &generateButton, &seedButton, &strip })
+             &gateSlider, &beatsSlider, &generateButton, &seedButton, &strip, &detectButton,
+             &useHeardButton, &heardLabel })
         addAndMakeVisible (component);
+
+    for (auto& button : neighbourButtons)
+        addAndMakeVisible (button);
 
     generateButton.setColour (juce::ToggleButton::textColourId, ink);
     for (auto* box : { &keyBox, &scaleBox, &rootBox, &qualityBox })
@@ -108,7 +163,7 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     plugin.progressionChanged().addChangeListener (this);
     rebuildFromProcessor();
 
-    setSize (720, 320);
+    setSize (760, 430);
     startTimerHz (20);
 }
 
@@ -127,6 +182,7 @@ void TrackDraftAudioProcessorEditor::rebuildFromProcessor()
     if (selectedSlot < (int) working.count)
     {
         const auto& slot = working.slots[(std::size_t) selectedSlot];
+        beatsSlider.setValue (slot.beats, juce::dontSendNotification);
         rootBox.setSelectedId (slot.rootPc + 1, juce::dontSendNotification);
         for (int i = 0; i < (int) theory::qualities().size(); ++i)
             if (theory::qualities()[(std::size_t) i].quality == slot.quality)
@@ -136,7 +192,55 @@ void TrackDraftAudioProcessorEditor::rebuildFromProcessor()
             }
     }
 
+    rebuildNeighbours();
+    refreshHeardLabel();
     strip.repaint();
+}
+
+theory::Scale TrackDraftAudioProcessorEditor::workingScale() const
+{
+    return (theory::Scale) juce::jlimit (0, (int) theory::Scale::locrian,
+                                         juce::jmax (0, scaleBox.getSelectedId() - 1));
+}
+
+int TrackDraftAudioProcessorEditor::workingDegree() const
+{
+    if (selectedSlot >= (int) working.count)
+        return 0;
+
+    // The slot stores an absolute pitch class; the walk works in degrees, so
+    // map it back through the key. A borrowed chord has no degree and falls
+    // back to its position, which keeps the walk usable in a chromatic passage.
+    const int keyPc = keyBox.getSelectedId() - 1;
+    const int rootPc = working.slots[(std::size_t) selectedSlot].rootPc;
+    const auto& steps = theory::scaleIntervals (workingScale());
+    for (int degree = 0; degree < (int) steps.size(); ++degree)
+        if (((keyPc + steps[(size_t) degree]) % 12 + 12) % 12 == rootPc)
+            return degree;
+
+    return selectedSlot % 7;
+}
+
+void TrackDraftAudioProcessorEditor::rebuildNeighbours()
+{
+    const auto neighbours = neighboursOf (workingScale(), workingDegree());
+    for (int i = 0; i < 6; ++i)
+    {
+        const auto& neighbour = neighbours[(size_t) i];
+        neighbourButtons[(size_t) i].setButtonText (
+            juce::String (neighbour.label) + "  "
+            + theory::chordName (neighbour.rootOffset, neighbour.quality));
+    }
+}
+
+void TrackDraftAudioProcessorEditor::refreshHeardLabel()
+{
+    const auto heard = plugin.getHeardChord();
+    heardLabel.setText (heard.valid
+                            ? "Heard: " + juce::String (theory::chordName (heard.rootPc, heard.quality))
+                            : juce::String ("Heard: -"),
+                        juce::dontSendNotification);
+    useHeardButton.setEnabled (heard.valid);
 }
 
 void TrackDraftAudioProcessorEditor::commit()
@@ -151,6 +255,7 @@ void TrackDraftAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadca
 
 void TrackDraftAudioProcessorEditor::timerCallback()
 {
+    refreshHeardLabel();
     strip.repaint();
 }
 
@@ -167,11 +272,15 @@ void TrackDraftAudioProcessorEditor::paint (juce::Graphics& g)
     g.drawText ("MIDI generator - notes go to the track's own instrument",
                 16, 38, 520, 16, juce::Justification::centredLeft);
 
-    auto labels = juce::Rectangle<int> (16, 66, 688, 16);
+    auto labels = juce::Rectangle<int> (16, 66, 728, 16);
     g.drawText ("Key", labels.removeFromLeft (128), juce::Justification::centredLeft);
     g.drawText ("Scale", labels.removeFromLeft (216), juce::Justification::centredLeft);
     g.drawText ("Slot", labels.removeFromLeft (96), juce::Justification::centredLeft);
     g.drawText ("Quality", labels.removeFromLeft (200), juce::Justification::centredLeft);
+
+    g.setColour (inkMuted);
+    g.drawText ("Walk from the selected chord (hex neighbours)", 16, 226, 420, 16,
+                juce::Justification::centredLeft);
 }
 
 void TrackDraftAudioProcessorEditor::resized()
@@ -181,17 +290,27 @@ void TrackDraftAudioProcessorEditor::resized()
     rootBox.setBounds (360, 84, 88, 26);
     qualityBox.setBounds (456, 84, 192, 26);
     seedButton.setBounds (656, 84, 48, 26);
+    beatsSlider.setBounds (716, 84, 28, 26);
 
-    strip.setBounds (16, 126, 688, 92);
+    strip.setBounds (16, 126, 728, 92);
 
-    auto row = juce::Rectangle<int> (16, 232, 688, 28);
+    const int neighbourWidth = (728 - 5 * 6) / 6;
+    for (int i = 0; i < 6; ++i)
+        neighbourButtons[(size_t) i].setBounds (16 + i * (neighbourWidth + 6), 246,
+                                                neighbourWidth, 30);
+
+    detectButton.setBounds (16, 288, 120, 28);
+    useHeardButton.setBounds (144, 288, 110, 28);
+    heardLabel.setBounds (262, 288, 240, 28);
+
+    auto row = juce::Rectangle<int> (16, 332, 728, 28);
     octaveSlider.setBounds (row.removeFromLeft (150));
     row.removeFromLeft (12);
     velocitySlider.setBounds (row.removeFromLeft (170));
     row.removeFromLeft (12);
     gateSlider.setBounds (row.removeFromLeft (200));
     row.removeFromLeft (12);
-    generateButton.setBounds (row.removeFromLeft (330));
+    generateButton.setBounds (row.removeFromLeft (300));
 }
 
 juce::Rectangle<int> TrackDraftAudioProcessorEditor::SlotStrip::boundsFor (int index) const

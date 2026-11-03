@@ -2,8 +2,11 @@
 
 #include "ChordScheduler.h"
 #include "Progression.h"
+#include "Theory/ChordRecognition.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
+
+#include <array>
 
 namespace td
 {
@@ -62,8 +65,21 @@ public:
 
     juce::ChangeBroadcaster& progressionChanged() noexcept { return progressionBroadcaster; }
 
+    //==== MIDI detection ===================================================
+    /** Arm/disarm listening to the notes the host sends this plug-in. */
+    void setDetectionArmed (bool shouldListen);
+    bool isDetectionArmed() const noexcept { return detectionArmed.load(); }
+
+    /** The chord under the player's fingers, as last recognised. */
+    RecognizedChord getHeardChord() const;
+
+    /** Writes the currently heard chord into `slot`; false when nothing is heard. */
+    bool writeHeardChordToSlot (std::size_t slot);
+
     /** Called by the editor to repaint when the transport moves the chord on. */
     std::atomic<int> playingSlot { -1 };
+
+    std::atomic<bool> detectionArmed { false };
 
 private:
     juce::AudioProcessorValueTreeState::ParameterLayout makeLayout();
@@ -76,6 +92,13 @@ private:
 
     ChordScheduler scheduler;
     juce::MidiBuffer passThrough;
+
+    // Detection state. Fixed size and allocation-free: processBlock may not
+    // allocate, and a note number is 0-127.
+    std::array<bool, 128> heldNotes {};
+    std::atomic<int> heardRoot { -1 };
+    std::atomic<int> heardQuality { 0 };
+    void updateDetection (const juce::MidiBuffer& incoming);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TrackDraftAudioProcessor)
 };

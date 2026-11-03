@@ -104,4 +104,17 @@ const std::vector<int>& scaleIntervals(Scale scale);
     classify. Used to seed an in-key progression.
 */
 std::vector<Quality> diatonicQualities(Scale scale);
+
+/** One degree of a mode: how far its root sits above the tonic, and its quality. */
+struct DiatonicChord
+{
+    int rootOffset = 0;
+    Quality quality = Quality::maj;
+};
+
+/** The chord on `degree` (0-based, may run past the end) of a mode. */
+DiatonicChord diatonicChordAt(Scale scale, int degree);
+
+/** Roman numeral for a diatonic chord, cased by quality: "IV", "ii7", "vii°5". */
+std::string romanNumeral(int degree, Quality quality);
 } // namespace td::theory
