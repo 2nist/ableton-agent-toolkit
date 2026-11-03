@@ -24,6 +24,9 @@ export default tseslint.config(
       "**/.whisper-venv/**",
       "**/__pycache__/**",
       "**/e-gmd-v1.0.0/**",
+      // The native plug-in's CMake build holds the fetched JUCE tree, which
+      // ships its own JavaScript examples. Not our source, and not lint-able.
+      "plugins/**/build/**",
       "archive/**",
     ],
   },

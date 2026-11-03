@@ -21,7 +21,9 @@
     "cli": "node packages/cli/dist/cli.js",
     "bridge": "npm run start -w packages/osc-bridge",
     "lint": "eslint .",
-    "prepare": "git config core.hooksPath .githooks || true"
+    "prepare": "git config core.hooksPath .githooks || true",
+    "plugin:build": "cmake -B plugins/trackdraft/build -DCMAKE_BUILD_TYPE=Release && cmake --build plugins/trackdraft/build -j8",
+    "plugin:test": "cmake --build plugins/trackdraft/build --target TrackDraftTests && plugins/trackdraft/build/TrackDraftTests_artefacts/Release/TrackDraftTests"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
