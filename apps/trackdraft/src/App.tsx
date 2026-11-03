@@ -11,6 +11,7 @@ import DrumsTab from "./components/drums/DrumsTab";
 import LyricsView from "./components/lyrics/LyricsView";
 import MelodyView from "./components/melody/MelodyView";
 import WorkbenchView from "./components/workspace/WorkbenchView";
+import { useUndoKeys } from "./hooks/useUndoKeys";
 import LibraryView from "./components/library/LibraryView";
 import SettingsView from "./components/settings/SettingsView";
 import LyricChordPopout from "./components/popout/LyricChordPopout";
@@ -57,6 +58,10 @@ function App() {
   }, [hydrate]);
 
   // Start listening for ATOM SQ User-mode MIDI messages once on mount.
+  // One undo shortcut for every surface (§polish): the HUD button was the only
+  // way back, on a canvas where every edit is already one history step.
+  useUndoKeys();
+
   useEffect(() => {
     startAtomSqUserMidi();
     return () => stopAtomSqUserMidi();

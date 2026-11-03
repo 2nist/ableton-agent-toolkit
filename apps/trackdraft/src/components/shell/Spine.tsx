@@ -37,6 +37,7 @@ import { beatsPerBarOf } from "../../lib/timeline/beatMap";
 import { barAtBeat } from "../../types/blueprint";
 import { usePalette } from "../../theme/palette";
 import { SectionBlock } from "../arrangement/SectionBlock";
+import { undoShortcutLabel } from "../../lib/undoShortcut";
 
 /** Zoom presets in px per BAR. Bar-linear on purpose: every bar is the
  *  same width — 7/8 bars included — because the bars are the axis (a
@@ -152,6 +153,7 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
     escape: () => void;
   } | null>(null);
   const canUndo = useSongStore((s) => s.canUndo());
+  const undoLabels = undoShortcutLabel();
   const canRedo = useSongStore((s) => s.canRedo());
   const undo = useSongStore((s) => s.undo);
   const redo = useSongStore((s) => s.redo);
@@ -748,8 +750,18 @@ export default function Spine({ song, hint }: { song: BlueprintSong; hint?: stri
           </>
         )}
         <span className="w-px h-3.5 bg-edge/80 mx-1" />
-        <IconBtn title="Undo" disabled={!canUndo} onClick={() => undo()} icon="undo" />
-        <IconBtn title="Redo" disabled={!canRedo} onClick={() => redo()} icon="redo" />
+        <IconBtn
+          title={`Undo · ${undoLabels.undo}`}
+          disabled={!canUndo}
+          onClick={() => undo()}
+          icon="undo"
+        />
+        <IconBtn
+          title={`Redo · ${undoLabels.redo}`}
+          disabled={!canRedo}
+          onClick={() => redo()}
+          icon="redo"
+        />
         <span className="w-px h-3.5 bg-edge/80 mx-1" />
         <IconBtn
           title="Add a section at the end — it arrives selected with its ≣ form open (right-click any block to insert after it instead)"
