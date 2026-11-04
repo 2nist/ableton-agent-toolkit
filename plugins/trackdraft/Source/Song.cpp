@@ -252,6 +252,7 @@ void SongCycle::rebuild (const Song& song)
                 entry.pass = passIndex;
                 entry.slot = progression.slots[slot];
                 entry.bass = progression.bass;
+                entry.barBeats = progression.barBeatsAtSlot (slot);
 
                 if (region != nullptr)
                 {
@@ -286,6 +287,11 @@ const ChordSlot& SongCycle::slotAt (std::size_t index) const noexcept
 {
     static const ChordSlot empty;
     return index < entries.size() ? entries[index].slot : empty;
+}
+
+double SongCycle::barBeatsAt (std::size_t index) const noexcept
+{
+    return index < entries.size() ? entries[index].barBeats : 4.0;
 }
 
 bool SongCycle::hasKeyAt (std::size_t index) const noexcept
@@ -333,6 +339,7 @@ SongCycle::Playing SongCycle::playingAt (double beat) const
             playing.slot = entries[i].slotInSection;
             playing.pass = entries[i].pass;
             playing.beatInSlot = position - entries[i].startBeat;
+            playing.barBeats = entries[i].barBeats;
             return playing;
         }
     }
@@ -340,6 +347,7 @@ SongCycle::Playing SongCycle::playingAt (double beat) const
     playing.section = entries.back().section;
     playing.slot = entries.back().slotInSection;
     playing.pass = entries.back().pass;
+    playing.barBeats = entries.back().barBeats;
     return playing;
 }
 } // namespace td

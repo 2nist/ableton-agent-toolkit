@@ -91,7 +91,13 @@ reason, so the tests can assert that no two controls overlap, that no label sits
 on a control, and that the design still fits a laptop screen. The cycle pool is
 checked under two real threads: a writer edits the song continuously while a
 reader does what the callback does, and every cycle it sees must be one whole
-song — never a half-rebuilt list, never an empty one.
+song — never a half-rebuilt list, never an empty one. The meter is checked three
+ways: against the app's own formulas (`numerator × 4 / denominator`, so 6/8 is
+three beats), through the scheduler (a twelve-step grid in a 3/4 bar sounds four
+hits once and eight twice, where a sixteen-step cycle would have drifted), and
+through the file. A grid's digit count is pinned from both sides against
+`--dump-meter-xml`, and a grid of twelve digits is read as a bar of 3/4 by both
+implementations.
 
 ## Editing
 
@@ -117,8 +123,8 @@ read them, so a control and its label cannot drift apart.
 | **Beats** | Length of the selected slot, 1-8. The cycle is the sum, so 4 × 4 beats is four bars of 4/4 |
 | **Walk row** | The six hex neighbours of the selected chord. A click writes that chord into the next slot and moves the selection there |
 | **Borrowed chord…** | Chords the *other* modes on this tonic would give the key — bIII, iv, bVI, bVII in a major key — derived at the triad, written into the selected slot |
-| **Rhythm grid** | Sixteen sixteenths for the selected slot: click a step to cycle off → normal → accent → ghost. The grid is *when* and the articulation is *how*, so a strummed grid and an arpeggiated grid are one idea. One bar long, tiled over a longer slot; a grid with no hits is silence, which is different from having no pattern. The cursor follows the transport |
-| **Seed…** | Fills the grid from the same Euclidean rule the drum engine uses: `step_i = round(i · n / k)`, mapped onto the bar. Straight eighths, quarters, three/five/six/seven over the bar, and one rotated three. Hits are normal, with the downbeat and half-bar accented when the loop hits them |
+| **Rhythm grid** | One bar of sixteenths for the selected slot — sixteen of them in 4/4, twelve in 3/4 — clicked to cycle off → normal → accent → ghost. The grid is *when* and the articulation is *how*, so a strummed grid and an arpeggiated grid are one idea. It tiles over a longer slot, and a shorter slot uses the steps that fit; a grid with no hits is silence, which is different from having no pattern. The cursor follows the transport, and a 3/4 section's cursor wraps after twelve steps rather than sixteen |
+| **Seed…** | Fills the grid from the same Euclidean rule the drum engine uses: `step_i = round(i · n / k)`, mapped onto the bar in front of you — twelve sixteenths in a 3/4 section, sixteen in 4/4. Straight eighths, quarters, three/five/six/seven over the bar, and one rotated three. Hits are normal, with the downbeat and half-bar accented when the loop hits them |
 | **Clear rhythm** | Gives the slot back to its articulation |
 | **Articulation** (Block / Strum / Pulse / Arp) | Per slot. Strum uses the app's millisecond spread, Pulse re-strikes on a subdivision with a triangle accent, Arp walks the tones up, down or up-down |
 | **Inversion / spread** | Which chord tone is in the bass (root, 1st, 2nd … — the list is the chord's own tones, so a 13th offers six) and whether the upper voices stack close or open. The slot strip names the result as a slash chord, `C/E` |
@@ -173,10 +179,31 @@ A slot also carries `inversion` and `spread="open"` when the chord is voiced,
 omitted when it is in root position and close — so a file written before
 voicings existed is byte-identical to one written now. A section carries its
 bass voice as `<bass octave motion rhythm velocity/>`, written only when the
-voice is on, and its rhythm as `rhythm="3001200030002000"` — sixteen digits, one
-per sixteenth, written only when the slot has a grid of its own; a song exported from the app always has one, because the app's
+voice is on, and its rhythm as `rhythm="3001200030002000"` — one digit per
+sixteenth, written only when the slot has a grid of its own; a song exported from the app always has one, because the app's
 `.mid` export always has, and a *preset* never does — a preset is a chord set,
 and the section it lands in keeps its own bass.
+
+**The digit count is the bar.** Sixteen digits is a bar of 4/4, twelve a bar of
+3/4, fourteen a bar of 7/8 — so a grid carries its own meter without a second
+attribute, and every grid written before meters existed still means exactly what
+it did. A section's meter changes ride beside the slots:
+
+```xml
+<progression version="1" count="4" meter="3/4">
+  <meterChange bar="3" meter="7/8"/>
+  <slot root="0" quality="maj" beats="3.0" performance="0" param="0"
+        direction="2" rhythm="300200300200"/>
+  …
+</progression>
+```
+
+`meter` is the section's opening bar and is written only when it is not 4/4, so a
+section that was never in an odd meter adds nothing to the file. `bar` is
+0-based and section-relative; the meter in force at a bar is the last change at
+or before it. Because the plug-in's chords carry their own beat lengths, a meter
+never changes *what* is played — it decides how long a bar is, which is what a
+grid is drawn against and where its cursor falls.
 
 Presets use the same XML the TrackDraft app reads and writes
 (`apps/trackdraft/src/lib/harmony/tdpPreset.ts`), so a progression moves between
@@ -233,9 +260,16 @@ rather than against each side's assumptions.
   formula would land where the chord already is.
 - A slot's **rhythm grid** decides which sixteenths sound and how hard; the
   slot's articulation decides what each hit is (a block, a strum, an arpeggio
-  across that sixteenth). A grid is one bar of 4/4 and tiles over a longer slot,
-  a shorter slot uses the steps that fit, and the last hit is trimmed so it never
-  hangs into the next chord.
+  across that sixteenth). A grid is one bar *of the section's meter* and tiles
+  over a longer slot, a shorter slot uses the steps that fit, and the last hit is
+  trimmed so it never hangs into the next chord.
+
+  That is the difference a fixed sixteen-step cycle made: in a 3/4 section the
+  grid was sixteen sixteenths against a twelve-sixteenth bar, so every repeat
+  started a beat further from the barline and the groove drifted through the
+  form. The bar now comes from the grid's own digit count, so a twelve-step
+  groove repeats on the barline of a 3/4 section and a sixteen-step one still
+  repeats every four beats.
 - Seeds are generated, not a library: `Source/Rhythm.*` ports the app's
   `euclidOnsetSteps`, including its *rounding* form (`k=3, n=8` gives
   {0, 3, 5}, where Bjorklund gives {0, 3, 6}). Ported as it is, because a grid

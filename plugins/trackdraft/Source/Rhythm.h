@@ -34,13 +34,18 @@ struct RhythmSeed
 const std::vector<RhythmSeed>& rhythmSeeds();
 
 /**
-    Fills a grid from `k` of `n` over a 16-step bar: the loop is mapped onto the
-    bar proportionally, so an eight-step seed lands on the eighths and a
+    Fills a grid from `k` of `n` over one bar: the loop is mapped onto the bar
+    proportionally, so an eight-step seed lands on the eighths and a
     sixteen-step one on the sixteenths.
 
-    Hits are normal; the downbeat and the half-bar are accented when they are hit,
-    which is the one piece of taste involved and is spelled out here rather than
-    hidden in the UI.
+    The bar is `target`'s own length — a bar of 3/4 is twelve sixteenths — so a
+    seeded groove agrees with the section's meter rather than the plug-in's
+    assumption. The length is read from `target` and then rewritten, which is how
+    a grid drawn against a 3/4 bar keeps its twelve steps.
+
+    Hits are normal; the downbeat and the middle of the bar are accented when the
+    loop hits them, which is the one piece of taste involved and is spelled out
+    here rather than hidden in the UI.
 */
 void seedPattern (RhythmPattern& target, int k, int n, int rotation);
 } // namespace td

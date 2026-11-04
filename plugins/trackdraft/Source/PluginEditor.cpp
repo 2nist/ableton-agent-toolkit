@@ -666,8 +666,14 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
             return;
 
         const auto& seed = rhythmSeeds()[(std::size_t) (id - 1)];
-        seedPattern (selectedProgression().slots[(std::size_t) selectedSlot].rhythm,
-                     seed.k, seed.n, seed.rotation);
+        auto& rhythm = selectedProgression().slots[(std::size_t) selectedSlot].rhythm;
+
+        // A seed fills the bar in front of you: twelve sixteenths in a section
+        // in 3/4, sixteen in 4/4. Length first, then the seed onto it.
+        if (! rhythm.enabled)
+            rhythm.length = (std::size_t) rhythmGrid.barSteps();
+
+        seedPattern (rhythm, seed.k, seed.n, seed.rotation);
         commit();
         rebuildFromProcessor();
     };
@@ -1222,12 +1228,28 @@ void TrackDraftAudioProcessorEditor::layoutCanvas()
     place (bassVelocitySlider, layout::bassVelocity);
 }
 
+int TrackDraftAudioProcessorEditor::RhythmGrid::barSteps() const
+{
+    const auto& slot = owner.selectedProgression().slots[(std::size_t) owner.selectedSlot];
+
+    // A pattern says how long its bar is. With no pattern the grid is drawn
+    // against the bar the slot starts in, so the cells a click would fill are
+    // the cells of *that* bar rather than an assumed 4/4.
+    const int steps = slot.rhythm.enabled
+                          ? (int) slot.rhythm.length
+                          : (int) std::lround (owner.selectedProgression().barBeatsAtSlot (
+                                                   (std::size_t) owner.selectedSlot)
+                                               * (double) RhythmPattern::stepsPerBeat);
+
+    return juce::jlimit (1, (int) RhythmPattern::maxSteps, steps);
+}
+
 juce::Rectangle<int> TrackDraftAudioProcessorEditor::RhythmGrid::boundsFor (int step) const
 {
     const int gap = 3;
     const int beatGap = 4;
-    const int total = (int) RhythmPattern::steps;
-    const int beats = total / RhythmPattern::stepsPerBeat - 1;
+    const int total = barSteps();
+    const int beats = (total - 1) / RhythmPattern::stepsPerBeat;
 
     // The beat gaps come out of the width before the cells are divided, so the
     // last cell ends inside the control. Dividing first and adding the gaps
@@ -1241,7 +1263,7 @@ juce::Rectangle<int> TrackDraftAudioProcessorEditor::RhythmGrid::boundsFor (int 
 
 int TrackDraftAudioProcessorEditor::RhythmGrid::stepAt (juce::Point<int> position) const
 {
-    for (int step = 0; step < (int) RhythmPattern::steps; ++step)
+    for (int step = 0; step < barSteps(); ++step)
         if (boundsFor (step).contains (position))
             return step;
 
@@ -1262,7 +1284,7 @@ void TrackDraftAudioProcessorEditor::RhythmGrid::paint (juce::Graphics& g)
     const auto& slot = owner.selectedProgression().slots[(std::size_t) owner.selectedSlot];
     const bool hasPattern = slot.rhythm.enabled;
 
-    for (int step = 0; step < (int) RhythmPattern::steps; ++step)
+    for (int step = 0; step < barSteps(); ++step)
     {
         const auto area = boundsFor (step).toFloat().reduced (0.5f);
         const int level = (int) slot.rhythm.level[(std::size_t) step];
@@ -1316,10 +1338,13 @@ void TrackDraftAudioProcessorEditor::RhythmGrid::mouseDown (const juce::MouseEve
     auto& pattern = slot.rhythm;
 
     // A first click turns the grid on at "normal", so one click already makes a
-    // rhythm; after that it cycles off → normal → accent → ghost.
+    // rhythm; after that it cycles off → normal → accent → ghost. The new
+    // pattern takes its length from the bar it was drawn in, which is what
+    // makes the next twelve clicks a 3/4 groove rather than a truncated 4/4 one.
     if (! pattern.enabled)
     {
         pattern = {};
+        pattern.length = (std::size_t) barSteps();
         pattern.enabled = true;
         pattern.level[(std::size_t) step] = RhythmPattern::normal;
     }

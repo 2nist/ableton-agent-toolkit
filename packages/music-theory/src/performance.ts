@@ -248,9 +248,14 @@ export function applyPerformanceEffect<T extends ChordPerformanceNote>(
 // Whole-chord note planning (block → effect)
 // ---------------------------------------------------------------------------
 
-/** Sixteenths in a rhythm grid: one bar of 4/4, matching the plug-in. */
+/** The longest rhythm grid: a bar of 8/4, matching the plug-in's capacity. */
+export const RHYTHM_GRID_MAX_STEPS = 32;
+/**
+ * Sixteenths in a bar of 4/4 — the length a grid has when nothing says
+ * otherwise, and what every grid written before meters existed is.
+ */
 export const RHYTHM_GRID_STEPS = 16;
-/** Sixteenths in a beat, which is what makes the grid a bar of 4/4. */
+/** Sixteenths in a beat, which is what turns a digit count into a bar length. */
 export const RHYTHM_STEPS_PER_BEAT = 4;
 
 /** Level of each grid step: 0 silent, 1 ghost, 2 normal, 3 accent. */
@@ -259,13 +264,24 @@ export type RhythmLevel = 0 | 1 | 2 | 3;
 /**
  * A rhythm grid as levels, or null when the value is not one.
  *
- * The grid is the plug-in's wire format — sixteen digits, one per sixteenth —
- * because that is what it writes into a preset. Validated in one place so the
- * file reader and the note planner cannot disagree about what a grid is.
+ * The grid is the plug-in's wire format — one digit per sixteenth — because that
+ * is what it writes into a preset. **The digit count is the bar**: sixteen
+ * digits is a bar of 4/4, twelve a bar of 3/4, fourteen a bar of 7/8. That is
+ * how a grid carries its meter without a second attribute, and why every grid
+ * written before meters existed still means what it did.
+ *
+ * Validated in one place so the file reader and the note planner cannot disagree
+ * about what a grid is.
  */
 export function parseRhythmGrid(value: string | undefined | null): RhythmLevel[] | null {
-  if (typeof value !== "string" || !/^[0-3]{16}$/.test(value)) return null;
+  if (typeof value !== "string" || !/^[0-3]+$/.test(value)) return null;
+  if (value.length > RHYTHM_GRID_MAX_STEPS) return null;
   return Array.from(value, (digit) => Number(digit) as RhythmLevel);
+}
+
+/** Beats one pass of a grid covers — its bar, read from its own length. */
+export function rhythmGridBarBeats(grid: readonly RhythmLevel[]): number {
+  return grid.length / RHYTHM_STEPS_PER_BEAT;
 }
 
 /** Whether a value is a rhythm grid, for callers that only need the test. */
@@ -333,11 +349,14 @@ export function planChordNotes(
   // block of its own, with the effect applied across it. One bar long, tiled
   // over a longer chord, and trimmed so the last hit never runs into the next.
   const stepBeats = 1 / RHYTHM_STEPS_PER_BEAT;
-  const barBeats = RHYTHM_GRID_STEPS * stepBeats;
+  // One pass of the grid is one bar, and the grid's own length says how long
+  // that bar is — so a 3/4 grid repeats on the barline instead of drifting a
+  // sixteenth further from it every bar.
+  const barBeats = rhythmGridBarBeats(grid);
   const notes: PlannedChordNote[] = [];
 
   for (let bar = 0; bar < durationBeats - 1e-9; bar += barBeats) {
-    for (let step = 0; step < RHYTHM_GRID_STEPS; step++) {
+    for (let step = 0; step < grid.length; step++) {
       const offset = bar + step * stepBeats;
       if (offset >= durationBeats - 1e-9) break;
 

@@ -19,6 +19,34 @@ const char* idOf (BassMotion motion)
     return "root";
 }
 
+/** A meter as a musician writes it: "7/8". The one place the pair becomes text,
+    so the reader and the writer cannot disagree about the spelling. */
+juce::String meterText (const Meter& meter)
+{
+    return juce::String (meter.numerator) + "/" + juce::String (meter.denominator);
+}
+
+/** Reads "7/8" back. False for anything else, so a typo leaves the default. */
+bool parseMeter (const juce::String& text, Meter& target)
+{
+    const auto numerator = text.upToFirstOccurrenceOf ("/", false, false).trim();
+    const auto denominator = text.fromFirstOccurrenceOf ("/", false, false).trim();
+
+    if (numerator.isEmpty() || denominator.isEmpty())
+        return false;
+
+    const int n = numerator.getIntValue();
+    const int d = denominator.getIntValue();
+
+    // A denominators that is not a note value is not a meter: 4/3 would be a
+    // third of a whole note, which no notation uses as a bar.
+    if (n < 1 || n > 64 || d < 1 || (d & (d - 1)) != 0)
+        return false;
+
+    target = { n, d };
+    return true;
+}
+
 BassMotion motionOf (const juce::String& id)
 {
     if (id == "root_fifth") return BassMotion::rootFifth;
@@ -51,6 +79,20 @@ juce::XmlElement toXml (const Progression& progression, const juce::String& tagN
     juce::XmlElement xml (tagName);
     xml.setAttribute ("version", 1);
     xml.setAttribute ("count", (int) progression.count);
+
+    // A bar whose meter is 4/4 is the default and stays unspoken, so a section
+    // written before meters existed is byte-identical to one written now. The
+    // changes come before the slots because they are how the slot lengths are
+    // to be read — a bar grid only means something against its meter.
+    if (! progression.meter.isDefault())
+        xml.setAttribute ("meter", meterText (progression.meter));
+
+    for (const auto& change : progression.meterMap)
+    {
+        auto* element = xml.createNewChildElement ("meterChange");
+        element->setAttribute ("bar", change.bar);
+        element->setAttribute ("meter", meterText (change.meter));
+    }
 
     for (std::size_t i = 0; i < progression.count && i < Progression::maxSlots; ++i)
     {
@@ -183,6 +225,30 @@ bool fromXml (const juce::XmlElement& xml, Progression& target)
     std::sort (loaded.regions.begin(), loaded.regions.end(),
                [] (const TonicRegion& a, const TonicRegion& b)
                { return a.startBeat < b.startBeat; });
+
+    // The meter, and any changes inside the section. A malformed value leaves
+    // the section in 4/4 rather than half-read.
+    {
+        Meter parsed;
+        if (parseMeter (slots->getStringAttribute ("meter", "4/4"), parsed))
+            loaded.meter = parsed;
+
+        for (auto* element : slots->getChildIterator())
+        {
+            if (! element->hasTagName ("meterChange"))
+                continue;
+
+            MeterChange change;
+            change.bar = juce::jmax (0, element->getIntAttribute ("bar", 0));
+            if (! parseMeter (element->getStringAttribute ("meter", "4/4"), change.meter))
+                continue;
+
+            loaded.meterMap.push_back (change);
+        }
+
+        std::sort (loaded.meterMap.begin(), loaded.meterMap.end(),
+                   [] (const MeterChange& a, const MeterChange& b) { return a.bar < b.bar; });
+    }
 
     // The bass voice is a section setting that rides inside the progression, so
     // a preset carries it too.

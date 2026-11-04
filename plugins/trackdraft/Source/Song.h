@@ -162,6 +162,10 @@ public:
     bool hasScaleAt (std::size_t index) const noexcept override;
     theory::Scale scaleAt (std::size_t index) const noexcept override;
 
+    /** Quarter-note beats in the bar `index` starts in, from the section's meter
+        map. What a rhythm grid is drawn against and where its cursor falls. */
+    double barBeatsAt (std::size_t index) const noexcept override;
+
     /** What is playing at a song position (wraps): the section, the slot
         inside that section, and which arrangement pass it belongs to. */
     struct Playing
@@ -171,6 +175,8 @@ public:
         std::size_t pass = 0;
         /** Beat position inside that slot, for a UI cursor. */
         double beatInSlot = 0.0;
+        /** The bar the slot starts in, for a grid cursor. */
+        double barBeats = 4.0;
     };
 
     Playing playingAt (double beat) const;
@@ -189,6 +195,8 @@ private:
         int keyPc = 0;
         bool hasScale = false;
         theory::Scale scale = theory::Scale::ionian;
+        /** The bar this slot starts in, resolved from the section's meter map. */
+        double barBeats = 4.0;
     };
 
     std::vector<Entry> entries;

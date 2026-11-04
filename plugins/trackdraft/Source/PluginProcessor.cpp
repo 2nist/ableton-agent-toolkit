@@ -147,9 +147,20 @@ void TrackDraftAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             playingSlot.store ((int) playing.slot);
             playingPass.store ((int) playing.pass);
 
+            // The cursor belongs to the grid: one pass of the pattern is one
+            // bar, and the pattern's own length says how many sixteenths that
+            // is. A slot with no grid has no sixteenths to point at, so the
+            // metrical bar is the best that can be said.
+            const auto& sounding = cycle.slotAt (playing.slot);
+            const bool gridded = sounding.rhythm.enabled;
+            const double barBeats = gridded ? sounding.rhythm.barBeats() : playing.barBeats;
+            const int steps = gridded
+                                  ? (int) std::clamp<std::size_t> (sounding.rhythm.length, 1,
+                                                                   RhythmPattern::maxSteps)
+                                  : RhythmPattern::defaultSteps;
             const double stepBeats = 1.0 / (double) RhythmPattern::stepsPerBeat;
-            const int step = (int) std::floor (std::fmod (playing.beatInSlot, 4.0) / stepBeats);
-            playingStep.store (juce::jlimit (0, (int) RhythmPattern::steps - 1, step));
+            const int step = (int) std::floor (std::fmod (playing.beatInSlot, barBeats) / stepBeats);
+            playingStep.store (juce::jlimit (0, steps - 1, step));
         }
         else
         {

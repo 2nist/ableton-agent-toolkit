@@ -196,6 +196,9 @@ private:
 
         juce::Rectangle<int> boundsFor (int step) const;
         int stepAt (juce::Point<int> position) const;
+        /** Sixteenths in the bar being edited: the pattern's own length, or the
+            bar the slot starts in when the slot has no pattern yet. */
+        int barSteps() const;
 
         /** The step the transport is sounding, or -1. Drawn, not stored. */
         void setCursor (int step);

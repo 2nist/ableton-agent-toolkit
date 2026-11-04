@@ -1033,13 +1033,29 @@ void testRhythmPattern()
 
     // Malformed input is refused rather than half-read.
     td::RhythmPattern untouched;
-    check (! td::RhythmPattern::fromDigits ("3002", untouched), "a short grid is refused");
+    check (! td::RhythmPattern::fromDigits ("", untouched), "an empty grid is refused");
     check (! td::RhythmPattern::fromDigits ("3002000030020004", untouched), "a digit out of range is refused");
+    check (! td::RhythmPattern::fromDigits (std::string (41, '2'), untouched),
+           "a grid longer than the capacity is refused");
     check (! untouched.enabled, "and nothing was stored");
 
-    // Sixteen sixteenths are one bar of 4/4.
-    checkEqual ((int) td::RhythmPattern::steps, 16, "sixteen steps");
-    checkEqual (td::RhythmPattern::stepsPerBeat, 4, "four to the beat");
+    // The digit count is the bar, so the length needs no attribute of its own.
+    checkEqual ((int) td::RhythmPattern::defaultSteps, 16, "a new pattern is a bar of 4/4");
+    checkEqual (pattern.length, 16, "sixteen digits are sixteen sixteenths");
+
+    auto threeFour = grid ("300200003002");
+    checkEqual ((int) threeFour.length, 12, "twelve digits are a bar of 3/4");
+    check (std::abs (threeFour.barBeats() - 3.0) < 1e-9, "which is three beats");
+    checkEqual (juce::String (threeFour.toDigits()), juce::String ("300200003002"),
+                "and it writes back the twelve digits it came from");
+    checkEqual (juce::String (pattern.toDigits()), juce::String ("3002000030020000"),
+                "a bar of 4/4 still writes sixteen");
+
+    auto fiveFour = grid ("30020000300200003002");
+    checkEqual ((int) fiveFour.length, 20, "a bar of 5/4 is twenty sixteenths");
+    check (std::abs (fiveFour.barBeats() - 5.0) < 1e-9, "which is five beats");
+
+    checkEqual (td::RhythmPattern::stepsPerBeat, 4, "four sixteenths to the beat");
 }
 
 void testRhythmSeeds()
@@ -1953,6 +1969,210 @@ void testSongXml()
 }
 
 /**
+    The meter decides how long a bar is, and a grid is drawn against it.
+
+    The plug-in's chords carry their own beat lengths, so a meter never changes
+    what is *played* — it decides where the barlines are, which is what a rhythm
+    grid is one of. These check the arithmetic against the app's own formulas
+    (`beatsPerBar`/`barLengths`/`barAtBeat` in `@song-blueprint`), and then that
+    the scheduler and the grid actually use it.
+*/
+void testMeter()
+{
+    // The app's rule: a bar is numerator * 4 / denominator quarter-note beats,
+    // so 6/8 is three beats, not six.
+    check (std::abs (td::Meter { 4, 4 }.barBeats() - 4.0) < 1e-9, "4/4 is four beats");
+    check (std::abs (td::Meter { 3, 4 }.barBeats() - 3.0) < 1e-9, "3/4 is three");
+    check (std::abs (td::Meter { 7, 8 }.barBeats() - 3.5) < 1e-9, "7/8 is three and a half");
+    check (std::abs (td::Meter { 6, 8 }.barBeats() - 3.0) < 1e-9, "6/8 is three, not six");
+    check (td::Meter {}.isDefault(), "the default is 4/4");
+    check (! td::Meter { 3, 4 }.isDefault(), "3/4 is not");
+
+    // A section in 3/4 that moves to 7/8 for its last bar.
+    td::Progression progression;
+    progression.count = 4;
+    progression.meter = { 3, 4 };
+    progression.meterMap.push_back ({ 3, { 7, 8 } });
+    for (auto& slot : progression.slots)
+        slot.beats = 3.0;
+    progression.slots[3].beats = 3.5;
+
+    checkEqual ((int) progression.meterAtBar (0).numerator, 3, "bar 0 is 3/4");
+    checkEqual ((int) progression.meterAtBar (2).numerator, 3, "so is the bar before the change");
+    checkEqual ((int) progression.meterAtBar (3).numerator, 7, "bar 3 is 7/8");
+    checkEqual ((int) progression.meterAtBar (9).numerator, 7, "and it holds to the end");
+
+    check (std::abs (progression.beatAtBar (0)) < 1e-9, "bar 0 starts at beat 0");
+    check (std::abs (progression.beatAtBar (1) - 3.0) < 1e-9, "bar 1 starts at 3");
+    check (std::abs (progression.beatAtBar (3) - 9.0) < 1e-9, "bar 3 starts at 9");
+    check (std::abs (progression.beatAtBar (4) - 12.5) < 1e-9, "bar 4 starts at 9 + 3.5");
+
+    const auto inBar = progression.positionAtBeat (4.0);
+    checkEqual (inBar.bar, 1, "beat 4 is in bar 1");
+    check (std::abs (inBar.beatInBar - 1.0) < 1e-9, "one beat into it");
+
+    const auto last = progression.positionAtBeat (12.0);
+    checkEqual (last.bar, 3, "beat 12 is in the 7/8 bar");
+    check (std::abs (last.beatInBar - 3.0) < 1e-9, "three beats into it");
+
+    // Far past the last change the bars are all the same length, so this must
+    // stay exact rather than drifting or looping.
+    const auto far = progression.positionAtBeat (9.0 + 3.5 * 1000.0 + 0.25);
+    checkEqual (far.bar, 1003, "a thousand bars past the change");
+    check (std::abs (far.beatInBar - 0.25) < 1e-9, "and a quarter beat into it");
+
+    // A map listed out of order still resolves the way the app does.
+    td::Progression shuffled;
+    shuffled.count = 4;
+    shuffled.meterMap.push_back ({ 3, { 7, 8 } });
+    shuffled.meterMap.push_back ({ 1, { 5, 4 } });
+    checkEqual ((int) shuffled.meterAtBar (0).numerator, 4, "before the first change: the opening meter");
+    checkEqual ((int) shuffled.meterAtBar (2).numerator, 5, "the later change wins");
+    checkEqual ((int) shuffled.meterAtBar (3).numerator, 7, "and then 7/8");
+
+    // A slot asks for the bar it starts in, which is what the grid is drawn on.
+    check (std::abs (progression.barBeatsAtSlot (0) - 3.0) < 1e-9, "slot 0 sits in a 3/4 bar");
+    check (std::abs (progression.barBeatsAtSlot (3) - 3.5) < 1e-9, "slot 3 sits in the 7/8 bar");
+
+    // A file that says `bar="1000000"` describes a long section, not a request
+    // to loop a million times while the song loads. The bar maths walks the
+    // meter's segments rather than counting bars, so this is instant — and it
+    // has to stay that way, because `setSong` calls it on the message thread.
+    td::Progression longSection;
+    longSection.count = 1;
+    longSection.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    longSection.meterMap.push_back ({ 1000000, { 7, 8 } });
+
+    // The opening meter here is the default 4/4, so a million bars is four
+    // million beats and the change sits at exactly that beat.
+    const auto started = juce::Time::getMillisecondCounterHiRes();
+    const auto farBar = longSection.beatAtBar (1000000);
+    const auto atFar = longSection.positionAtBeat (1000000.0 * 4.0 - 2.0);
+    const auto elapsed = juce::Time::getMillisecondCounterHiRes() - started;
+
+    check (std::abs (farBar - 4000000.0) < 1e-6, "a far-off meter change still lands on its bar");
+    checkEqual (atFar.bar, 999999, "and two beats before it is in the bar before");
+    check (std::abs (atFar.beatInBar - 2.0) < 1e-9, "two beats into that bar");
+    check (elapsed < 50.0, "the bar maths does not walk one bar at a time ("
+                               + juce::String (elapsed, 2) + " ms)");
+}
+
+void testMeterScheduling()
+{
+    // A grid of twelve sixteenths is a bar of 3/4, so a three-beat slot tiles
+    // exactly once and a six-beat slot twice.
+    td::Progression progression;
+    progression.count = 2;
+    progression.meter = { 3, 4 };
+    progression.slots[0] = { 0, td::theory::Quality::maj, 3.0 };
+    progression.slots[1] = { 5, td::theory::Quality::maj, 6.0 };
+    td::RhythmPattern::fromDigits ("300200300200", progression.slots[0].rhythm);
+    td::RhythmPattern::fromDigits ("300200300200", progression.slots[1].rhythm);
+
+    // Hits, not notes: a chord sounds several notes at one instant, so the
+    // question "how often does the grid fire" is a question about distinct
+    // sample positions.
+    const auto hits = [] (const td::ChordCycle& cycle, double fromBeat, double toBeat)
+    {
+        td::ChordScheduler scheduler;
+        juce::MidiBuffer out;
+        td::TransportSlice transport;
+        transport.playing = true;
+        transport.ppqStart = fromBeat;
+        transport.ppqEnd = toBeat;
+
+        td::VoiceSettings local;
+        local.octave = 4;
+        local.velocity = 100;
+        local.gate = 0.9;
+        local.enabled = true;
+
+        scheduler.process (out, transport, cycle, local, 44100);
+
+        std::set<int> positions;
+        for (const auto metadata : out)
+            if (metadata.getMessage().isNoteOn())
+                positions.insert (metadata.samplePosition);
+
+        return (int) positions.size();
+    };
+
+    // Slot 0 is 3 beats = one bar of 3/4. The grid "300200300200" hits four
+    // sixteenths (0, 3, 6 and 9), and all four fit in the twelve-step bar — so
+    // one bar plays four hits and nothing is left over.
+    checkEqual (hits (progression, 0.0, 3.0), 4, "a 3/4 bar plays the four hits it has");
+
+    // Slot 1 is 6 beats = two bars of 3/4 at 3 beats each, so the same pattern
+    // sounds exactly twice. Under the old fixed sixteen-step cycle, 6 beats
+    // would have held 1.5 passes and the hits would have drifted off the
+    // barline for the rest of the section.
+    checkEqual (hits (progression, 3.0, 9.0), 8, "and a two-bar slot repeats it on the barline");
+
+    // The same grid in a 4/4 section of the same length would already have been
+    // wrong: 16 sixteenths against a 12-sixteenth bar drifts a beat per bar.
+    td::Progression fourFour;
+    fourFour.count = 1;
+    fourFour.slots[0] = { 0, td::theory::Quality::maj, 3.0 };
+    td::RhythmPattern::fromDigits ("300200300200", fourFour.slots[0].rhythm);
+    check (std::abs (fourFour.slots[0].rhythm.barBeats() - 3.0) < 1e-9,
+           "the grid's bar comes from its own digits, not from the section");
+}
+
+void testMeterXml()
+{
+    td::Progression original;
+    original.count = 4;
+    original.meter = { 3, 4 };
+    original.meterMap.push_back ({ 3, { 7, 8 } });
+    for (std::size_t i = 0; i < 4; ++i)
+        original.slots[i] = { (int) i, td::theory::Quality::maj, i == 3 ? 3.5 : 3.0 };
+    td::RhythmPattern::fromDigits ("300200300200", original.slots[0].rhythm);
+
+    const auto xml = td::toXml (original, "TrackDraftPreset").toString();
+    check (xml.contains ("meter=\"3/4\""), "the opening meter is written");
+    check (xml.contains ("<meterChange bar=\"3\" meter=\"7/8\"/>"), "and the change inside it");
+
+    const auto document = juce::XmlDocument::parse (xml);
+    check (document != nullptr, "the written file parses");
+
+    if (document != nullptr)
+    {
+        td::Progression reloaded;
+        check (td::fromXml (*document, reloaded), "a meter round-trips");
+        checkEqual ((int) reloaded.meter.numerator, 3, "3/4 reads back");
+        checkEqual ((int) reloaded.meter.denominator, 4, "with its denominator");
+        checkEqual ((int) reloaded.meterMap.size(), 1, "and its one change");
+        checkEqual (reloaded.meterMap[0].bar, 3, "at bar 3");
+        checkEqual ((int) reloaded.meterMap[0].meter.numerator, 7, "as 7/8");
+        checkEqual (juce::String (reloaded.slots[0].rhythm.toDigits()),
+                    juce::String ("300200300200"),
+                    "and the twelve-digit grid survives with it");
+    }
+
+    // The default writes nothing: a section from before meters existed is
+    // byte-identical.
+    td::Progression plain;
+    plain.count = 2;
+    plain.slots[0] = { 0, td::theory::Quality::maj, 4.0 };
+    plain.slots[1] = { 5, td::theory::Quality::maj, 4.0 };
+    const auto plainXml = td::toXml (plain, "TrackDraftPreset").toString();
+    check (! plainXml.contains ("meter"), "4/4 writes no meter attribute");
+    check (! plainXml.contains ("meterChange"), "and no change elements");
+
+    // A malformed meter leaves the default rather than half-reading it.
+    const auto broken = juce::XmlDocument::parse (
+        "<TrackDraftPreset count=\"1\" meter=\"4/3\"><slot root=\"0\" quality=\"maj\" beats=\"4\"/></TrackDraftPreset>");
+    check (broken != nullptr, "the hand-written file parses");
+
+    if (broken != nullptr)
+    {
+        td::Progression fromBroken;
+        check (td::fromXml (*broken, fromBroken), "a nonsense meter still loads its chords");
+        checkEqual ((int) fromBroken.meter.numerator, 4, "and leaves the section in 4/4");
+    }
+}
+
+/**
     The audio thread reads a published cycle without a lock.
 
     Two things could go wrong and neither is visible from one thread: a callback
@@ -2171,6 +2391,23 @@ int main (int argc, char** argv)
         return 0;
     }
 
+    // `--dump-meter-xml` prints a section in 3/4 with a change to 7/8, so the
+    // meter attributes and the twelve-digit grid are pinned from both sides too.
+    if (argc > 1 && juce::String (argv[1]) == "--dump-meter-xml")
+    {
+        td::Progression sample;
+        sample.count = 4;
+        sample.meter = { 3, 4 };
+        sample.meterMap.push_back ({ 3, { 7, 8 } });
+        sample.slots[0] = { 0, td::theory::Quality::maj, 3.0 };
+        sample.slots[1] = { 9, td::theory::Quality::min, 3.0 };
+        sample.slots[2] = { 5, td::theory::Quality::maj, 3.0 };
+        sample.slots[3] = { 7, td::theory::Quality::seven, 3.5 };
+        td::RhythmPattern::fromDigits ("300200300200", sample.slots[0].rhythm);
+        std::cout << td::toXml (sample, "TrackDraftPreset").toString() << std::endl;
+        return 0;
+    }
+
     // `--dump-song-xml` prints a whole song in the plug-in's on-disk shape, and
     // the app's `tdpPreset` tests paste that exact output as a fixture.
     if (argc > 1 && juce::String (argv[1]) == "--dump-song-xml")
@@ -2252,6 +2489,9 @@ int main (int argc, char** argv)
     testSongPresets();
     testEditorLayout();
     testCycleBuffers();
+    testMeter();
+    testMeterScheduling();
+    testMeterXml();
 
     if (failures == 0)
     {

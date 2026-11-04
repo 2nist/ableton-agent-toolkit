@@ -2,8 +2,14 @@ import { RHYTHM_SEEDS, seedRhythmGrid } from "@drum/library";
 import { isRhythmGrid, parseRhythmGrid } from "@music-theory/core";
 
 interface RhythmGridEditorProps {
-  /** The chord's grid — sixteen digits, or absent for "the articulation plays it". */
+  /** The chord's grid — one digit per sixteenth, or absent for "the articulation plays it". */
   rhythm?: string;
+  /**
+   * Sixteenths in the bar this chord sits in, for a grid that does not exist
+   * yet. A grid that does exist says its own length, so this is only the size a
+   * *new* one starts at — twelve in a bar of 3/4.
+   */
+  steps?: number;
   onChange: (rhythm: string | undefined) => void;
 }
 
@@ -14,7 +20,7 @@ const LEVEL_LABEL = ["off", "ghost", "normal", "accent"];
 const LEVEL_HEIGHT = ["0%", "36%", "66%", "100%"];
 
 /**
- * A chord's rhythm, sixteen sixteenths to a bar.
+ * A chord's rhythm, one bar of sixteenths.
  *
  * Deliberately the same grid the plug-in shows: click a step to cycle off →
  * normal → accent → ghost, seed it from the Euclidean rule the drum engine
@@ -22,17 +28,23 @@ const LEVEL_HEIGHT = ["0%", "36%", "66%", "100%"];
  * beats. The digits it writes are the plug-in's wire format, so a rhythm
  * authored here is the rhythm the DAW plays.
  *
+ * The bar is the grid's own digit count — sixteen in 4/4, twelve in 3/4 — which
+ * is why this draws `levels.length` cells rather than an assumed sixteen: a
+ * twelve-step groove drawn against sixteen would grow four steps of silence the
+ * first time it was edited.
+ *
  * Seeds produce plain digits rather than a pattern id: nothing in the file has
  * to keep pointing at a table that may change later.
  */
-export default function RhythmGridEditor({ rhythm, onChange }: RhythmGridEditorProps) {
+export default function RhythmGridEditor({ rhythm, steps = 16, onChange }: RhythmGridEditorProps) {
   const levels = parseRhythmGrid(rhythm);
   const active = levels !== null;
+  const barSteps = active ? levels.length : Math.max(1, Math.min(32, Math.round(steps)));
 
   function cycle(step: number) {
     // A first click turns the grid on at "normal", so one click already makes a
     // rhythm; after that the step cycles through the levels.
-    const next = levels ? [...levels] : new Array<number>(16).fill(0);
+    const next = levels ? [...levels] : new Array<number>(barSteps).fill(0);
     const current = next[step] as (typeof CYCLE)[number];
     const index = CYCLE.indexOf(current);
     next[step] = CYCLE[(index + 1) % CYCLE.length];
@@ -78,7 +90,7 @@ export default function RhythmGridEditor({ rhythm, onChange }: RhythmGridEditorP
       </div>
 
       <div className="flex items-end gap-[3px] h-8">
-        {Array.from({ length: 16 }, (_, step) => {
+        {Array.from({ length: barSteps }, (_, step) => {
           const level = levels?.[step] ?? 0;
           const isBeat = step % 4 === 0;
           return (

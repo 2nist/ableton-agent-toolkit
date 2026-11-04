@@ -3,6 +3,7 @@
 #include "Performance.h"
 #include "Theory/ChordTheory.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 
@@ -14,14 +15,18 @@
 namespace td
 {
 /**
-    A slot's own rhythm: sixteen steps on a sixteenth-note grid, each one silent
-    or a hit at one of three levels.
+    A slot's own rhythm: a bar of sixteenths, each one silent or a hit at one of
+    three levels.
 
     This is the "when" of a chord part, where `Performance` is the "how" of each
     hit: the grid decides which sixteenths sound, and the articulation decides
-    whether a hit is a block, a strum or an arpeggio. The grid is one bar long
-    (16 sixteenths = 4 beats) and tiles over a longer slot; a shorter slot simply
-    uses its first steps.
+    whether a hit is a block, a strum or an arpeggio. The grid is **one bar of
+    the meter it sits in** — 16 sixteenths in 4/4, 12 in 3/4, 14 in 7/8 — and
+    tiles over a longer slot; a shorter slot uses the steps that fit.
+
+    The bar is the pattern's own `length`, so a pattern says how long its bar is:
+    that is why the file's digit count *is* the length, and why a grid written
+    before meters existed (sixteen digits) still means a bar of 4/4.
 
     `enabled` with every level at zero is silence, which is a real choice for a
     slot; no pattern at all (`enabled` false) means "play the articulation as
@@ -29,8 +34,12 @@ namespace td
 */
 struct RhythmPattern
 {
-    static constexpr std::size_t steps = 16;
-    /** Sixteenths in a beat, which is what makes the grid a bar of 4/4. */
+    /** Capacity, not length: a bar of 8/4 is 32 sixteenths, the widest a bar
+        gets before it is really two bars. */
+    static constexpr std::size_t maxSteps = 32;
+    /** The length of a bar of 4/4, and the length a new pattern starts at. */
+    static constexpr std::size_t defaultSteps = 16;
+    /** Sixteenths in a beat. */
     static constexpr int stepsPerBeat = 4;
 
     /** 0 silent, 1 ghost, 2 normal, 3 accent. */
@@ -43,26 +52,36 @@ struct RhythmPattern
     };
 
     bool enabled = false;
-    std::array<std::uint8_t, steps> level {};
+    /** Sixteenths in the bar this pattern covers: 16 in 4/4, 12 in 3/4. */
+    std::size_t length = defaultSteps;
+    std::array<std::uint8_t, maxSteps> level {};
+
+    /** Beats one pass of the pattern covers — one bar. */
+    double barBeats() const noexcept
+    {
+        return (double) std::clamp<std::size_t> (length, 1, maxSteps) / (double) stepsPerBeat;
+    }
 
     bool anyHit() const noexcept
     {
-        for (auto value : level)
-            if (value != off)
+        for (std::size_t i = 0; i < length; ++i)
+            if (level[i] != off)
                 return true;
 
         return false;
     }
 
-    /** The 16 digits the file holds, e.g. "3002000030020000". */
+    /** The digits the file holds — one per sixteenth, so their count is the
+        length: "3002000030020000" is a bar of 4/4. */
     std::string toDigits() const;
 
-    /** Reads exactly 16 digits of 0-3; false leaves `target` untouched. */
+    /** Reads 1-32 digits of 0-3, taking the length from the count; false leaves
+        `target` untouched. */
     static bool fromDigits (const std::string& digits, RhythmPattern& target);
 
     bool operator== (const RhythmPattern& other) const noexcept
     {
-        return enabled == other.enabled && level == other.level;
+        return enabled == other.enabled && length == other.length && level == other.level;
     }
 };
 
@@ -167,6 +186,48 @@ struct BassLine
 };
 
 /**
+    A written meter: how many of what note value fill a bar — 4/4, 3/4, 7/8.
+
+    `denominator` is the note value itself (4, 8), not its power of two, which is
+    what the app's `MeterChange` carries and what a musician writes. A bar of
+    `numerator * 4 / denominator` quarter-note beats follows from it: 6/8 is
+    three beats, not six.
+*/
+struct Meter
+{
+    int numerator = 4;
+    int denominator = 4;
+
+    /** Quarter-note beats in one bar. */
+    double barBeats() const noexcept
+    {
+        if (numerator <= 0 || denominator <= 0)
+            return 4.0;
+
+        return (double) numerator * 4.0 / (double) denominator;
+    }
+
+    bool isDefault() const noexcept { return numerator == 4 && denominator == 4; }
+
+    bool operator== (const Meter& other) const noexcept
+    {
+        return numerator == other.numerator && denominator == other.denominator;
+    }
+};
+
+/** A meter change at a 0-based bar of the section — the app's `MeterChange`. */
+struct MeterChange
+{
+    int bar = 0;
+    Meter meter;
+
+    bool operator== (const MeterChange& other) const noexcept
+    {
+        return bar == other.bar && meter == other.meter;
+    }
+};
+
+/**
     What the scheduler needs from whatever it plays: a length to loop on, and a
     flat list of slots with the beat each one starts at.
 
@@ -200,6 +261,14 @@ public:
     virtual int keyAt (std::size_t index) const = 0;
     virtual bool hasScaleAt (std::size_t index) const = 0;
     virtual theory::Scale scaleAt (std::size_t index) const = 0;
+
+    /** Quarter-note beats in the bar `index` starts in. 4 unless the material
+        carries a meter — a rhythm grid is drawn against this. */
+    virtual double barBeatsAt (std::size_t index) const noexcept
+    {
+        (void) index;
+        return 4.0;
+    }
 };
 
 /**
@@ -222,6 +291,66 @@ struct Progression : public ChordCycle
 
     /** Modulations inside this section, by section-relative beat. */
     std::vector<TonicRegion> regions;
+
+    /**
+        The meter the section opens in, and any changes after it.
+
+        The plug-in's chords carry their own beat lengths, so the meter does not
+        change what it plays — it decides how long a *bar* is, which is what a
+        rhythm grid is drawn against and where the grid's cursor falls. Absent
+        (4/4, and no changes) is the default and writes nothing into the file,
+        so a section written before meters existed round-trips byte-identically.
+
+        Changes are by 0-based bar, section-relative, sorted by bar: the meter in
+        force at bar N is the last change at or before N, and bars before the
+        first change use `meter`.
+    */
+    Meter meter;
+    std::vector<MeterChange> meterMap;
+
+    /** The meter in force at `bar`. */
+    Meter meterAtBar (int bar) const noexcept;
+
+    /** Quarter-note beats in bar `bar` — 4 in 4/4, 3.5 in a bar of 7/8. */
+    double barLengthAt (int bar) const noexcept { return meterAtBar (bar).barBeats(); }
+
+    /** Section-relative beat where bar `bar` starts: the sum of the bars before
+        it. Bar 0 starts at 0 whatever the meter is. */
+    double beatAtBar (int bar) const noexcept;
+
+    /** Which bar a section-relative beat falls in, and how far into it. */
+    struct BarPosition
+    {
+        int bar = 0;
+        double beatInBar = 0.0;
+    };
+    BarPosition positionAtBeat (double beat) const noexcept;
+
+    /** Quarter-note beats in the bar the slot `index` starts in. */
+    double barBeatsAtSlot (std::size_t index) const noexcept
+    {
+        return barLengthAt (positionAtBeat (startBeatOf (index)).bar);
+    }
+
+private:
+    /**
+        The meter map as runs of equal-length bars, in bar order, starting at
+        bar 0.
+
+        `beatAtBar` and `positionAtBeat` walk these rather than counting bars
+        one at a time: a file that says `bar="100000"` describes a long section,
+        not a request to loop a hundred thousand times while the song loads.
+    */
+    struct MeterSegment
+    {
+        int fromBar = 0;
+        Meter meter;
+    };
+    std::vector<MeterSegment> meterSegments() const;
+
+public:
+
+    double barBeatsAt (std::size_t index) const noexcept override { return barBeatsAtSlot (index); }
 
     /** The region in force at `beat`, or nullptr when the section has one home. */
     const TonicRegion* regionAtBeat (double beat) const noexcept;

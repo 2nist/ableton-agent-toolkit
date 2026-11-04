@@ -1,6 +1,7 @@
 #include "Progression.h"
 
 #include <algorithm>
+#include <limits>
 #include <set>
 #include <utility>
 
@@ -8,22 +9,27 @@ namespace td
 {
 std::string RhythmPattern::toDigits() const
 {
-    std::string digits;
-    digits.reserve (steps);
+    const auto count = std::clamp<std::size_t> (length, 1, maxSteps);
 
-    for (auto value : level)
-        digits.push_back ((char) ('0' + (value > accent ? accent : value)));
+    std::string digits;
+    digits.reserve (count);
+
+    for (std::size_t i = 0; i < count; ++i)
+        digits.push_back ((char) ('0' + (level[i] > accent ? accent : level[i])));
 
     return digits;
 }
 
 bool RhythmPattern::fromDigits (const std::string& digits, RhythmPattern& target)
 {
-    if (digits.size() != steps)
+    // The count is the bar: sixteen digits is a bar of 4/4, twelve a bar of 3/4.
+    // A file written before meters existed is sixteen, and reads as it always
+    // did, so the length needs no attribute of its own.
+    if (digits.empty() || digits.size() > maxSteps)
         return false;
 
     RhythmPattern pattern;
-    for (std::size_t i = 0; i < steps; ++i)
+    for (std::size_t i = 0; i < digits.size(); ++i)
     {
         if (digits[i] < '0' || digits[i] > '3')
             return false;
@@ -31,9 +37,99 @@ bool RhythmPattern::fromDigits (const std::string& digits, RhythmPattern& target
         pattern.level[i] = (std::uint8_t) (digits[i] - '0');
     }
 
+    pattern.length = digits.size();
     pattern.enabled = true;
     target = pattern;
     return true;
+}
+
+Meter Progression::meterAtBar (int bar) const noexcept
+{
+    // Scanned rather than indexed so a hand-edited file that lists its changes
+    // out of order still resolves the way the app does.
+    const MeterChange* best = nullptr;
+    for (const auto& change : meterMap)
+        if (change.bar <= bar && (best == nullptr || change.bar > best->bar))
+            best = &change;
+
+    return best != nullptr ? best->meter : meter;
+}
+
+std::vector<Progression::MeterSegment> Progression::meterSegments() const
+{
+    std::vector<MeterSegment> segments { { 0, meter } };
+
+    std::vector<MeterChange> sorted = meterMap;
+    std::sort (sorted.begin(), sorted.end(),
+               [] (const MeterChange& a, const MeterChange& b) { return a.bar < b.bar; });
+
+    for (const auto& change : sorted)
+    {
+        // A change at bar 0 is the opening meter, not a second segment: the
+        // last one listed wins, which is what `meterAtBar(0)` returns.
+        if (change.bar <= 0)
+        {
+            segments[0].meter = change.meter;
+            continue;
+        }
+
+        segments.push_back ({ change.bar, change.meter });
+    }
+
+    return segments;
+}
+
+double Progression::beatAtBar (int bar) const noexcept
+{
+    double total = 0.0;
+    const auto segments = meterSegments();
+
+    for (std::size_t i = 0; i < segments.size(); ++i)
+    {
+        const int from = segments[i].fromBar;
+        if (bar <= from)
+            break;
+
+        const int next = i + 1 < segments.size() ? segments[i + 1].fromBar : bar;
+        const int end = std::min (next, bar);
+        total += (double) (end - from) * segments[i].meter.barBeats();
+
+        if (bar <= next)
+            break;
+    }
+
+    return total;
+}
+
+Progression::BarPosition Progression::positionAtBeat (double beat) const noexcept
+{
+    double remaining = std::max (0.0, beat);
+    const auto segments = meterSegments();
+
+    for (std::size_t i = 0; i < segments.size(); ++i)
+    {
+        const int from = segments[i].fromBar;
+        const double length = std::max (1e-9, segments[i].meter.barBeats());
+
+        const bool lastSegment = i + 1 >= segments.size();
+        if (! lastSegment)
+        {
+            const double run = (double) (segments[i + 1].fromBar - from) * length;
+            if (remaining >= run)
+            {
+                remaining -= run;
+                continue;
+            }
+        }
+
+        // Guarded so an absurd transport position cannot overflow the bar index.
+        const double wholeBars = std::floor (remaining / length);
+        const int whole = (int) std::min (wholeBars, (double) std::numeric_limits<int>::max() / 2);
+        return { from + whole, remaining - (double) whole * length };
+    }
+
+    // Unreachable: there is always a segment at bar 0, and the last one returns.
+    return { 0, 0.0 };
 }
 
 double Progression::lengthInBeats() const noexcept

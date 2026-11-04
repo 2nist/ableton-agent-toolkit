@@ -49,7 +49,11 @@ void seedPattern (RhythmPattern& target, int k, int n, int rotation)
     pattern.enabled = true;
 
     const auto loop = euclidSteps (k, n, rotation);
-    const int bar = (int) RhythmPattern::steps;
+
+    // The bar is the meter's, not sixteen by assumption: a seed in 3/4 fills
+    // twelve sixteenths, so the groove lands on that section's barlines.
+    const int bar = (int) std::clamp<std::size_t> (target.length, 1, RhythmPattern::maxSteps);
+    pattern.length = (std::size_t) bar;
 
     for (int step : loop)
     {
@@ -62,7 +66,8 @@ void seedPattern (RhythmPattern& target, int k, int n, int rotation)
         pattern.level[(std::size_t) placed] = RhythmPattern::normal;
     }
 
-    // Accent the two places a listener anchors to, when the loop hits them.
+    // Accent the places a listener anchors to — the downbeat and the middle of
+    // the bar — when the loop hits them.
     for (int anchor : { 0, bar / 2 })
         if (pattern.level[(std::size_t) anchor] != RhythmPattern::off)
             pattern.level[(std::size_t) anchor] = RhythmPattern::accent;

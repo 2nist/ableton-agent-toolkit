@@ -2,6 +2,8 @@ import { useState } from "react";
 import { NOTE_TO_PC } from "@music-theory/core";
 import type { ScaleType, NoteName } from "@music-theory/core";
 import type { Chord, MeterOutline } from "../../types/blueprint";
+import { barAtBeat, barLengths, beatsPerBar } from "../../types/blueprint";
+
 import { buildEuclideanOutline, resolveChordOccurrences, twoThreeCellCounts, numerator as outlineNumerator } from "@drum/library";
 import { chordHomes } from "../../lib/harmony/modeInference";
 import { effectiveTonicRegions } from "../../lib/harmony/tonic";
@@ -83,6 +85,19 @@ export function HarmonyTools() {
     updateCurrentSong((s) => updateSection(s, activeSection!.id, (sec) => ({ ...sec, chords })));
   }
 
+  // A chord set that carries a meter brings it along: its grids say how long a
+  // bar is, and a section still in 4/4 would draw its barlines somewhere else.
+  function updateMeter(meter: { numerator: number; denominator: number }, meterMap?: { bar: number; numerator: number; denominator: number }[]) {
+    updateCurrentSong((s) =>
+      updateSection(s, activeSection!.id, (sec) => ({
+        ...sec,
+        timeSignatureNumerator: meter.numerator,
+        timeSignatureDenPower: Math.round(Math.log2(meter.denominator)),
+        ...(meterMap && meterMap.length > 0 ? { meterMap } : { meterMap: undefined }),
+      })),
+    );
+  }
+
   // Euclidean harmony — how the chord progression advances: per-chord beats
   // (default), on a `harmonyMeterOutline`'s onsets, or following the section's
   // drum meter (the drums literally drive the harmony).
@@ -131,6 +146,19 @@ export function HarmonyTools() {
   }
 
   const editorChord = selectedChordId ? activeSection.chords.find((c) => c.id === selectedChordId) ?? null : null;
+
+  /** Sixteenths in the bar the selected chord starts in: a new rhythm grid is
+   *  that wide, so a 3/4 section gets twelve steps rather than sixteen. */
+  const editorBarSteps = (() => {
+    if (!editorChord) return 16;
+    const start = activeSection.chords
+      .slice(0, activeSection.chords.indexOf(editorChord))
+      .reduce((sum, c) => sum + c.beats, 0);
+    const lengths = barLengths(activeSection);
+    const bar = barAtBeat(activeSection, start).bar;
+    const barBeats = lengths[bar] ?? beatsPerBar(activeSection);
+    return Math.max(1, Math.round(barBeats * 4));
+  })();
 
   /** The selected chord's own home, when the section modulates. Its editor
    *  offers substitutions relative to that home — the menu was built from the
@@ -197,6 +225,7 @@ export function HarmonyTools() {
               setSelectedChordId(null);
             }}
             onDeselect={() => setSelectedChordId(null)}
+            barSteps={editorBarSteps}
           />
         </div>
       )}
@@ -323,6 +352,7 @@ export function HarmonyTools() {
           hasChords={activeSection.chords.length > 0}
           sectionName={activeSection.name}
           onApply={updateChords}
+          onApplyMeter={updateMeter}
         />
       </div>
 

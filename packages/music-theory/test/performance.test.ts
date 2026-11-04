@@ -12,9 +12,14 @@ import {
   isRhythmGrid,
   parseRhythmGrid,
   planChordNotes,
+  rhythmGridBarBeats,
 } from "../src/performance";
 
 const MAJ = [0, 4, 7]; // C major triad, semitone offsets
+
+/** The distinct instants a chord plan sounds at, in order. */
+const onsets = (notes: { startTime: number }[]) =>
+  [...new Set(notes.map((n) => n.startTime))].sort((a, b) => a - b);
 
 describe("planChordNotes", () => {
   it("returns a plain block chord when no performance effect is set", () => {
@@ -71,9 +76,6 @@ describe("planChordNotes", () => {
   it("plays a rhythm grid on its own sixteenths, tiled and trimmed", () => {
     const grid = "3001200030002000";
 
-    const onsets = (notes: { startTime: number }[]) =>
-      [...new Set(notes.map((n) => n.startTime))].sort((a, b) => a - b);
-
     // Steps 0, 3, 4, 8 and 12 of a sixteenth grid.
     expect(onsets(planChordNotes(60, MAJ, 0, 4, 100, undefined, grid))).toEqual([
       0, 0.75, 1, 2, 3,
@@ -111,14 +113,34 @@ describe("planChordNotes", () => {
     );
   });
 
-  it("refuses anything that is not sixteen digits of 0-3", () => {
+  it("refuses anything that is not a bar of digits between 0 and 3", () => {
     expect(parseRhythmGrid("3001200030002000")).toHaveLength(16);
-    expect(parseRhythmGrid("3001")).toBeNull();
     expect(parseRhythmGrid("3001200030002004")).toBeNull();
+    expect(parseRhythmGrid("3".repeat(33))).toBeNull();
     expect(parseRhythmGrid(undefined)).toBeNull();
     expect(isRhythmGrid("3001200030002000")).toBe(true);
 
     // A bad grid is not a grid: the chord plays as one block, not silence.
-    expect(planChordNotes(60, MAJ, 0, 4, 100, undefined, "3001")).toHaveLength(3);
+    expect(planChordNotes(60, MAJ, 0, 4, 100, undefined, "300x")).toHaveLength(3);
+  });
+
+  it("reads the bar from the grid's own digit count", () => {
+    // Twelve digits is a bar of 3/4, so the grid repeats every three beats
+    // instead of every four. "300200300200" hits sixteenths 0, 3, 6 and 9.
+    const threeFour = "300200300200";
+    expect(parseRhythmGrid(threeFour)).toHaveLength(12);
+    expect(rhythmGridBarBeats(parseRhythmGrid(threeFour)!)).toBe(3);
+
+    expect(onsets(planChordNotes(60, MAJ, 0, 3, 100, undefined, threeFour))).toEqual([0, 0.75, 1.5, 2.25]);
+
+    // Two bars of 3/4 — the same four hits twice, on the barline, rather than
+    // one and a half passes of a sixteen-step loop.
+    expect(onsets(planChordNotes(60, MAJ, 0, 6, 100, undefined, threeFour))).toEqual([
+      0, 0.75, 1.5, 2.25, 3, 3.75, 4.5, 5.25,
+    ]);
+
+    // Sixteen digits still means 4/4, so nothing written before meters existed
+    // changes: the same digits tile every four beats.
+    expect(rhythmGridBarBeats(parseRhythmGrid("3001200030002000")!)).toBe(4);
   });
 });

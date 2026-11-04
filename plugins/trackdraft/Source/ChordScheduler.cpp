@@ -88,13 +88,17 @@ void ChordScheduler::scheduleChord (double atPpq, const ChordSlot& slot,
 
     // A pattern: the grid decides *when*, the slot's articulation decides *how*
     // each hit is played, so a strummed grid and an arpeggiated grid stay one
-    // idea rather than two features.
+    // idea rather than two features. One pass of the pattern is one bar, and the
+    // pattern's own length says how long that bar is — 3 beats in 3/4, 3.5 in
+    // 7/8 — so a grid repeats on the barline whatever the meter.
     const double stepBeats = 1.0 / (double) RhythmPattern::stepsPerBeat;
-    const double patternBeats = (double) RhythmPattern::steps * stepBeats;
+    const double patternBeats = slot.rhythm.barBeats();
+    const auto patternSteps = std::clamp<std::size_t> (slot.rhythm.length, 1,
+                                                       RhythmPattern::maxSteps);
 
     for (double base = 0.0; base < slot.beats - 1e-9; base += patternBeats)
     {
-        for (std::size_t step = 0; step < RhythmPattern::steps; ++step)
+        for (std::size_t step = 0; step < patternSteps; ++step)
         {
             const double offset = base + (double) step * stepBeats;
             if (offset >= slot.beats - 1e-9)

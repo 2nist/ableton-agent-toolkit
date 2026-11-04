@@ -23,6 +23,28 @@ const PLUGIN_DUMP = `<?xml version="1.0" encoding="UTF-8"?>
 </TrackDraftPreset>
 `;
 
+/**
+ * The plug-in's output for a section in 3/4 that changes to 7/8, verbatim.
+ *
+ * Produced by `TrackDraftTests --dump-meter-xml`: three bars of 3/4 then one of
+ * 7/8, with the first chord carrying a twelve-digit grid. Pinned so the meter
+ * attribute, the `<meterChange/>` spelling and the twelve-digit grid are all
+ * agreed by both sides rather than each side's own idea of them.
+ */
+const PLUGIN_METER_DUMP = `<?xml version="1.0" encoding="UTF-8"?>
+
+<TrackDraftPreset version="1" count="4" meter="3/4">
+  <meterChange bar="3" meter="7/8"/>
+  <slot root="0" quality="maj" beats="3.0" performance="0" param="0"
+        direction="2" rhythm="300200300200"/>
+  <slot root="9" quality="min" beats="3.0" performance="0" param="0"
+        direction="2"/>
+  <slot root="5" quality="maj" beats="3.0" performance="0" param="0"
+        direction="2"/>
+  <slot root="7" quality="7" beats="3.5" performance="0" param="0" direction="2"/>
+</TrackDraftPreset>
+`;
+
 function chord(overrides: Partial<Chord>): Chord {
   return {
     id: "c1",
@@ -179,11 +201,57 @@ describe("toTdpPresetXml", () => {
   });
 
   it("drops an unreadable grid and says so", () => {
-    const xml = `<TrackDraftPreset count="1"><slot root="0" quality="maj" beats="4" rhythm="3002"/></TrackDraftPreset>`;
+    // "3002" used to be unreadable because a grid had to be sixteen digits. The
+    // digit count is now the bar, so four digits is a bar of 2/4 and a real
+    // grid; what is unreadable is a digit outside 0-3 or a grid longer than a
+    // bar can be.
+    const malformed = `<TrackDraftPreset count="1"><slot root="0" quality="maj" beats="4" rhythm="30024"/></TrackDraftPreset>`;
+    const tooLong = `<TrackDraftPreset count="1"><slot root="0" quality="maj" beats="4" rhythm="${"2".repeat(33)}"/></TrackDraftPreset>`;
+
+    const preset = parseTdpPresetXml(malformed, "C");
+    expect(preset.chords[0].rhythm).toBeUndefined();
+    expect(preset.warnings.join(" ")).toContain("30024");
+
+    expect(parseTdpPresetXml(tooLong, "C").chords[0].rhythm).toBeUndefined();
+  });
+
+  it("reads a grid whose digit count is the bar", () => {
+    const threeFour = "300200300200";
+    const xml = toTdpPresetXml([chord({ rhythm: threeFour })]);
+
+    // Twelve digits is a bar of 3/4, and it is carried through untouched: the
+    // grid is its own meter, so nothing else has to state it.
+    expect(parseTdpPresetXml(xml, "C").chords[0].rhythm).toBe(threeFour);
+  });
+
+  it("reads the meter the plug-in wrote, and the change inside it", () => {
+    const preset = parseTdpPresetXml(PLUGIN_METER_DUMP, "C");
+
+    expect(preset.meter).toEqual({ numerator: 3, denominator: 4 });
+    expect(preset.meterMap).toEqual([{ bar: 3, numerator: 7, denominator: 8 }]);
+    expect(preset.chords).toHaveLength(4);
+    expect(preset.chords[0].rhythm).toBe("300200300200");
+    expect(preset.warnings).toHaveLength(0);
+  });
+
+  it("leaves a file without a meter alone", () => {
+    // Absent means "the section's own meter", so loading a preset from before
+    // meters existed cannot reset the section it lands in.
+    const preset = parseTdpPresetXml(PLUGIN_DUMP, "C");
+    expect(preset.meter).toBeUndefined();
+    expect(preset.meterMap).toBeUndefined();
+  });
+
+  it("drops an unreadable meter and says so", () => {
+    const xml = `<TrackDraftPreset count="1" meter="4/3"><slot root="0" quality="maj" beats="4"/></TrackDraftPreset>`;
     const preset = parseTdpPresetXml(xml, "C");
 
-    expect(preset.chords[0].rhythm).toBeUndefined();
-    expect(preset.warnings.join(" ")).toContain("3002");
+    expect(preset.meter).toBeUndefined();
+
+    const badChange = `<TrackDraftPreset count="1" meter="3/4"><meterChange bar="1" meter="x"/><slot root="0" quality="maj" beats="3"/></TrackDraftPreset>`;
+    const withChange = parseTdpPresetXml(badChange, "C");
+    expect(withChange.meterMap).toBeUndefined();
+    expect(withChange.warnings.join(" ")).toContain("x");
   });
 
   it("warns about an impossible inversion instead of trusting it", () => {

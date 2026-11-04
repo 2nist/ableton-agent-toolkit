@@ -23,6 +23,9 @@ interface ChordEditorPopoverProps {
   onRemove: () => void;
   /** Deselects the chord — the dock falls back to song/section controls. */
   onDeselect: () => void;
+  /** Sixteenths in the section's bar, so a new rhythm grid starts at the
+      section's meter rather than at an assumed bar of 4/4. */
+  barSteps?: number;
 }
 
 /** The selected chord's editor — the dock's "tools" content whenever a chord
@@ -38,6 +41,7 @@ export default function ChordEditorPopover({
   onChange,
   onRemove,
   onDeselect,
+  barSteps = 16,
 }: ChordEditorPopoverProps) {
   const keyPc = pitchClass(keyName);
   const rootPc = pitchClass(chord.root);
@@ -251,6 +255,7 @@ export default function ChordEditorPopover({
       <div className="shrink-0 border-t border-edge pt-2">
         <RhythmGridEditor
           rhythm={chord.rhythm}
+          steps={barSteps}
           onChange={(rhythm) => {
             const next = { ...chord };
             if (rhythm) next.rhythm = rhythm;

@@ -35,10 +35,31 @@ import type {
 } from "../../types/blueprint";
 import { uuid } from "../uuid";
 
+/** A meter as the file spells it: `numerator/denominator`. */
+export interface TdpMeter {
+  numerator: number;
+  denominator: number;
+}
+
+/** A meter change at a 0-based bar — the plug-in's `<meterChange/>`. */
+export interface TdpMeterChange extends TdpMeter {
+  bar: number;
+}
+
 export interface TdpPreset {
   chords: Chord[];
   /** Everything that had to be simplified, in the order it was found. */
   warnings: string[];
+  /**
+   * The meter the file was drawn in, when it says.
+   *
+   * A grid's digit count *is* its bar, so a chord set can be read without this —
+   * but a section that keeps its own meter would then draw its bars at 4/4 while
+   * its grids repeat at 3. Present only when the file carries one, so a file
+   * written before meters existed leaves the section's own meter alone.
+   */
+  meter?: TdpMeter;
+  meterMap?: TdpMeterChange[];
 }
 
 interface SlotXml {
@@ -221,7 +242,20 @@ export function toTdpSongXml(song: BlueprintSong): string {
     if (section.scale) attributes.push(`scale="${escapeAttribute(section.scale)}"`);
 
     lines.push(`  <section ${attributes.join(" ")}>`);
-    lines.push(`    <progression version="1" count="${section.chords.length}">`);
+
+    // The meter travels with the progression, exactly where the plug-in writes
+    // it: a 4/4 bar is the default and stays unspoken, so a song from before
+    // meters existed writes the bytes it always did.
+    const meter = { numerator: section.timeSignatureNumerator, denominator: 2 ** section.timeSignatureDenPower };
+    const changes = section.meterMap ?? [];
+    const meterAttribute =
+      meter.numerator === 4 && meter.denominator === 4 ? "" : ` meter="${meterText(meter)}"`;
+
+    lines.push(`    <progression version="1" count="${section.chords.length}"${meterAttribute}>`);
+    for (const change of changes) {
+      const changed = meterText({ numerator: change.numerator, denominator: change.denominator });
+      lines.push(`      <meterChange bar="${change.bar}" meter="${changed}"/>`);
+    }
     for (const chord of section.chords) lines.push(slotLine(chord, "      "));
 
     // Modulations inside the section: section-relative beats, and a whole home
@@ -245,6 +279,23 @@ export function toTdpSongXml(song: BlueprintSong): string {
   lines.push("</TrackDraftSong>");
 
   return xmlDocument(lines);
+}
+
+/** A meter as a musician writes it, or null when it is not one. */
+function readMeter(value: string | undefined): TdpMeter | null {
+  if (!value) return null;
+  const [numeratorText, denominatorText] = value.split("/");
+  const numerator = Number(numeratorText);
+  const denominator = Number(denominatorText);
+  // A denominator that is not a note value is not a meter: 4/3 would be a third
+  // of a whole note, which no notation uses as a bar.
+  if (!Number.isInteger(numerator) || numerator < 1 || numerator > 64) return null;
+  if (!Number.isInteger(denominator) || denominator < 1 || (denominator & (denominator - 1)) !== 0) return null;
+  return { numerator, denominator };
+}
+
+function meterText(meter: TdpMeter): string {
+  return `${meter.numerator}/${meter.denominator}`;
 }
 
 function readAttributes(element: string): Record<string, string> {
@@ -271,6 +322,27 @@ function isQuality(value: string): value is ChordQuality {
 export function parseTdpPresetXml(xml: string, keyName: NoteName = "C"): TdpPreset {
   const warnings: string[] = [];
   const slots: SlotXml[] = [];
+
+  // The meter, when the file states one. Read before the slots because it is how
+  // their grid lengths are meant to be understood.
+  const progressionMatch = /<progression\b([^>]*)>/.exec(xml) ?? /<(?:TrackDraftPreset|TrackDraftHarmony|progression)\b([^>]*)>/.exec(xml);
+  const progressionAttributes = progressionMatch ? readAttributes(progressionMatch[1]) : {};
+  const meter = readMeter(progressionAttributes.meter) ?? undefined;
+
+  const meterMap: TdpMeterChange[] = [];
+  const changePattern = /<meterChange\b([^>]*?)\/?>/g;
+  let changeMatch: RegExpExecArray | null;
+  while ((changeMatch = changePattern.exec(xml)) !== null) {
+    const attributes = readAttributes(changeMatch[1]);
+    const bar = Math.floor(Number(attributes.bar));
+    const changed = readMeter(attributes.meter);
+    if (!Number.isFinite(bar) || bar < 0 || !changed) {
+      warnings.push(`Dropped an unreadable meter change "${attributes.meter ?? ""}"`);
+      continue;
+    }
+    meterMap.push({ bar, ...changed });
+  }
+  meterMap.sort((a, b) => a.bar - b.bar);
 
   const slotPattern = /<slot\b([^>]*?)\/?>/g;
   let match: RegExpExecArray | null;
@@ -347,5 +419,8 @@ export function parseTdpPresetXml(xml: string, keyName: NoteName = "C"): TdpPres
     return chord;
   });
 
-  return { chords, warnings };
+  const preset: TdpPreset = { chords, warnings };
+  if (meter) preset.meter = meter;
+  if (meterMap.length > 0) preset.meterMap = meterMap;
+  return preset;
 }

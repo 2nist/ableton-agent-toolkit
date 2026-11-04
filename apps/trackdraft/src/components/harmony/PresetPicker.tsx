@@ -5,6 +5,7 @@ import type { Chord } from "../../types/blueprint";
 import { askConfirm } from "../../lib/confirm";
 import { STORAGE_KEYS } from "../../lib/persistence/keys";
 import { parseTdpPresetXml, toTdpPresetXml } from "../../lib/harmony/tdpPreset";
+import type { TdpMeter, TdpMeterChange } from "../../lib/harmony/tdpPreset";
 import { getHost } from "../../lib/host";
 
 interface PresetPickerProps {
@@ -13,6 +14,9 @@ interface PresetPickerProps {
   hasChords: boolean;
   sectionName: string;
   onApply: (chords: Chord[]) => void;
+  /** Applied with the chords when the file states a meter, so a 3/4 chord set
+      does not land in a section whose bars are still 4/4. */
+  onApplyMeter?: (meter: TdpMeter, meterMap: TdpMeterChange[] | undefined) => void;
   currentChords?: Chord[];
 }
 
@@ -103,6 +107,7 @@ export default function PresetPicker({
   hasChords,
   sectionName,
   onApply,
+  onApplyMeter,
   currentChords,
 }: PresetPickerProps) {
   const [selected, setSelected] = useState(PRESET_ENTRIES[0][0]);
@@ -191,6 +196,7 @@ export default function PresetPicker({
       }
 
       onApply(preset.chords);
+      if (preset.meter && onApplyMeter) onApplyMeter(preset.meter, preset.meterMap);
       setPluginMessage(
         preset.warnings.length > 0
           ? `Loaded ${label}: ${preset.warnings.join("; ")}`
