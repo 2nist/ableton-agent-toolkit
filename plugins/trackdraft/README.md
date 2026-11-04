@@ -88,7 +88,10 @@ releases the previous chord first, a host loop restarts cleanly, the gate closes
 notes without a boundary, and disabling emission releases what is sounding. The
 editor's geometry is checked too: `Source/EditorLayout.h` is JUCE-free for that
 reason, so the tests can assert that no two controls overlap, that no label sits
-on a control, and that the design still fits a laptop screen.
+on a control, and that the design still fits a laptop screen. The cycle pool is
+checked under two real threads: a writer edits the song continuously while a
+reader does what the callback does, and every cycle it sees must be one whole
+song — never a half-rebuilt list, never an empty one.
 
 ## Editing
 
@@ -258,6 +261,11 @@ rather than against each side's assumptions.
 - Songs are written and read as `<TrackDraftSong>`: `<section>` elements in
   authoring order plus an `<arrangement>` list of passes. A session from before
   songs existed — one bare progression — loads as a one-section song.
+- A song edit does not stop the audio thread: the flattened cycle the callback
+  reads is built on the message thread into a buffer nothing is reading, and
+  handed over through an atomic pointer (`Source/CycleBuffers.h`), so
+  `processBlock` takes no lock. A cycle is always published whole, so an edit
+  lands on the next block rather than part-way through one.
 - Every note switched on is switched off — on a slot change, at the gate, on
   transport stop, and on a backwards playhead jump.
 - The key/scale/octave/velocity/gate controls are APVTS parameters, so they
@@ -272,6 +280,8 @@ Source/Theory/ChordWalk.*      hex neighbours / the walk, ported
 Source/Theory/ChordRecognition.*  notes -> chord name, ported
 Source/Performance.*           strum / pulse / arp, ported
 Source/Song.*                  sections, arrangement, song position, flattened cycle
+Source/CycleBuffers.h          the pool of cycles the audio thread reads without a lock
+Source/EditorLayout.h          every rectangle the editor draws, checked by the tests
 Source/Bass.*                  the bass voice: root/fifth/walking on a rhythm
 Source/ProgressionXml.*        the one XML writer/reader for a progression or a song
 Source/PresetStore.*           named progressions and songs on disk, plus factory entries

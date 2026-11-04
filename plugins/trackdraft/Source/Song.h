@@ -143,7 +143,8 @@ private:
 
     Built when the song changes — not once per audio block — so the audio thread
     only reads a finished list. `entries` keeps its capacity across rebuilds,
-    which is why this is a member of the processor rather than a temporary.
+    which is why the processor keeps a pool of these (`CycleBuffers`) rather than
+    building a temporary each time.
 */
 class SongCycle final : public ChordCycle
 {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ChordScheduler.h"
+#include "CycleBuffers.h"
 #include "Song.h"
 #include "Theory/ChordRecognition.h"
 
@@ -102,10 +103,15 @@ private:
     juce::AudioProcessorValueTreeState apvts;
     juce::ChangeBroadcaster progressionBroadcaster;
 
+    /** Guards `song` between the threads that edit, copy and save it. The audio
+        thread does not take it: it reads a published cycle instead. */
     mutable juce::CriticalSection progressionLock;
     Song song;
-    /** The song flattened for the audio thread; rebuilt when the song changes. */
-    SongCycle cycle;
+
+    /** The song flattened for the audio thread. The message thread rebuilds an
+        unused buffer and publishes it; the callback reads the published one
+        without a lock. */
+    CycleBuffers cycles;
 
     ChordScheduler scheduler;
     juce::MidiBuffer passThrough;

@@ -1,6 +1,7 @@
 #include "Bass.h"
 #include "Rhythm.h"
 #include "ChordScheduler.h"
+#include "CycleBuffers.h"
 #include "EditorLayout.h"
 #include "Progression.h"
 #include "Song.h"
@@ -14,9 +15,11 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
+#include <atomic>
 #include <cmath>
 #include <iostream>
 #include <set>
+#include <thread>
 #include <vector>
 
 /**
@@ -1950,6 +1953,132 @@ void testSongXml()
 }
 
 /**
+    The audio thread reads a published cycle without a lock.
+
+    Two things could go wrong and neither is visible from one thread: a callback
+    could read a buffer while the message thread is rebuilding it (a torn cycle,
+    which would play the wrong chords for a block), or it could find nothing
+    published (dropped notes). So this test runs a writer thread that edits the
+    song continuously against a reader that does what `processBlock` does, and
+    asserts every cycle it saw was one of the two whole songs.
+
+    The two songs differ in length *and* in chords, so a half-written cycle has
+    nowhere to hide: its length will not match its slot count, or it will hold
+    both songs' chords.
+*/
+void testCycleBuffers()
+{
+    const auto makeSong = [] (int slots, int rootPc)
+    {
+        td::Song song;
+        const auto section = song.addSection ("Verse");
+        auto& progression = song.sections[section].progression;
+        progression.count = (std::size_t) slots;
+        for (int i = 0; i < slots; ++i)
+            progression.slots[(std::size_t) i] = { rootPc, td::theory::Quality::maj, 4.0 };
+        return song;
+    };
+
+    const auto four = makeSong (4, 0);    // 16 beats, four entries, C
+    const auto eight = makeSong (8, 5);   // 32 beats, eight entries, F
+
+    const auto whole = [] (const td::SongCycle& cycle)
+    {
+        const auto length = cycle.lengthInBeats();
+        const auto count = (int) cycle.slotCount();
+
+        if (length == 16.0 && count == 4)
+            return cycle.slotAt (0).rootPc == 0 && cycle.slotAt (3).rootPc == 0;
+
+        if (length == 32.0 && count == 8)
+            return cycle.slotAt (0).rootPc == 5 && cycle.slotAt (7).rootPc == 5;
+
+        return false;
+    };
+
+    td::CycleBuffers cycles;
+    cycles.rebuildFrom (four);
+
+    // The protocol on one thread first: what each side is promised.
+    checkEqual ((int) cycles.read().slotCount(), 4, "the rebuilt cycle is the one that plays");
+
+    // The audio thread is inside the cycle it read; an edit must not touch it.
+    const auto* playing = &cycles.read();
+
+    if (auto* next = cycles.take())
+    {
+        check (next != playing, "an edit is never written into the cycle being read");
+        next->rebuild (eight);
+        cycles.publish (*next);
+    }
+
+    checkEqual ((int) playing->slotCount(), 4,
+                "an edit leaves the cycle the callback is reading alone");
+
+    const auto& edited = cycles.read();
+    checkEqual ((int) edited.slotCount(), 8, "the edit becomes the cycle that plays next");
+    check (edited.lengthInBeats() == 32.0, "and it plays the whole edited song");
+
+    // The buffer just retired is only reused once the callback has let go of it.
+    if (auto* reused = cycles.take())
+        check (reused != &edited, "the published buffer is not handed out again");
+
+    // Then both at once, for a quarter of a second, as fast as each can go.
+    std::atomic<bool> writerFinished { false };
+    std::atomic<int> reads { 0 };
+    std::atomic<int> torn { 0 };
+    std::atomic<int> empty { 0 };
+    std::atomic<int> sawFour { 0 };
+    std::atomic<int> sawEight { 0 };
+
+    std::thread writer ([&]
+    {
+        const auto deadline = juce::Time::getMillisecondCounterHiRes() + 250.0;
+        bool useEight = false;
+
+        while (juce::Time::getMillisecondCounterHiRes() < deadline)
+        {
+            if (auto* next = cycles.take())
+            {
+                next->rebuild (useEight ? eight : four);
+                cycles.publish (*next);
+            }
+
+            useEight = ! useEight;
+        }
+
+        writerFinished.store (true);
+    });
+
+    while (! writerFinished.load (std::memory_order_relaxed))
+    {
+        const auto& cycle = cycles.read();
+
+        if (cycle.slotCount() == 0)
+            ++empty;
+        else if (! whole (cycle))
+            ++torn;
+
+        if (cycle.lengthInBeats() == 16.0)
+            ++sawFour;
+        else if (cycle.lengthInBeats() == 32.0)
+            ++sawEight;
+
+        ++reads;
+    }
+
+    writer.join();
+
+    checkEqual (torn.load(), 0, "an edit during playback never exposes a torn cycle");
+    checkEqual (empty.load(), 0, "an edit during playback never exposes an empty cycle");
+    check (reads.load() > 1000,
+           "the reader and the writer overlapped (" + juce::String (reads.load()) + " reads)");
+    check (sawFour.load() > 0 && sawEight.load() > 0,
+           "the reader saw both songs (" + juce::String (sawFour.load()) + " old, "
+               + juce::String (sawEight.load()) + " new)");
+}
+
+/**
     The editor's geometry, checked without a GUI.
 
     `Source/EditorLayout.h` is the editor's one table of rectangles: `paint()`
@@ -2122,6 +2251,7 @@ int main (int argc, char** argv)
     testSongXml();
     testSongPresets();
     testEditorLayout();
+    testCycleBuffers();
 
     if (failures == 0)
     {

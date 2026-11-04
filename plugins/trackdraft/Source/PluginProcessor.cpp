@@ -60,7 +60,7 @@ TrackDraftAudioProcessor::TrackDraftAudioProcessor()
 {
     const auto first = song.addSection ("Section");
     song.sections[first].progression.seedFromScale (0, theory::Scale::ionian, 4);
-    cycle.rebuild (song);
+    cycles.rebuildFrom (song);
 }
 
 TrackDraftAudioProcessor::~TrackDraftAudioProcessor() = default;
@@ -124,9 +124,11 @@ void TrackDraftAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     theory::Scale detectionScale;
     {
-        // The cycle is read, not copied: it is only rewritten on the message
-        // thread, under this lock, when the song changes.
-        const juce::ScopedLock lock (progressionLock);
+        // No lock: the message thread builds into a buffer nobody is reading and
+        // hands it over, so a song edit can land mid-block without the callback
+        // ever waiting for the edit (or the edit for the callback).
+        const auto& cycle = cycles.read();
+
         scheduler.process (generated, transport, cycle, settings, buffer.getNumSamples());
 
         // Detection names what the player plays in the key of the slot the
@@ -186,7 +188,14 @@ void TrackDraftAudioProcessor::setSong (const Song& next)
     {
         const juce::ScopedLock lock (progressionLock);
         song = next;
-        cycle.rebuild (song);
+
+        // Rebuilding allocates, so it happens here, on the message thread, and
+        // the audio thread only ever sees a finished cycle.
+        if (auto* buffer = cycles.take())
+        {
+            buffer->rebuild (song);
+            cycles.publish (*buffer);
+        }
     }
     progressionBroadcaster.sendChangeMessage();
 }
