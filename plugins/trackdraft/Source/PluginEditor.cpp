@@ -17,6 +17,10 @@ const juce::Colour inkMuted { 0xffb4b4b4 };
 const juce::Colour accent { 0xffffa500 };
 const juce::Colour well { 0xff232323 };
 
+/** The shortest editor the layout makes sense at: the section bar and the slot
+    strip, which is where an edit starts. A host is free to be taller. */
+constexpr int minimumHeight = 380;
+
 juce::StringArray keyNames()
 {
     juce::StringArray names;
@@ -38,40 +42,8 @@ juce::StringArray performanceNames()
     return { "Block", "Strum", "Pulse", "Arp" };
 }
 
-/** One place for the vertical rhythm: paint() and resized() both read these. */
-namespace layout
-{
-constexpr int margin = 16;
-constexpr int width = 728;
-constexpr int height = 756;
-
-constexpr int songLabelY = 58;
-constexpr int sectionBarY = 74;
-constexpr int sectionBarHeight = 30;
-constexpr int sectionButtonY = 110;
-constexpr int keysLabelY = 148;
-constexpr int keysY = 164;
-constexpr int stripY = 200;
-constexpr int stripHeight = 88;
-constexpr int rhythmLabelY = 300;
-constexpr int rhythmY = 316;
-constexpr int rhythmHeight = 30;
-constexpr int walkLabelY = 364;
-constexpr int walkY = 382;
-constexpr int detectY = 420;
-constexpr int heardY = 450;
-constexpr int articulationLabelY = 476;
-constexpr int articulationY = 492;
-constexpr int voiceY = 524;
-constexpr int presetsLabelY = 560;
-constexpr int presetsY = 576;
-constexpr int arrangementLabelY = 610;
-constexpr int arrangementBarY = 626;
-constexpr int arrangementBarHeight = 28;
-constexpr int arrangementButtonY = 662;
-constexpr int bassLabelY = 698;
-constexpr int bassY = 714;
-} // namespace layout
+/** One place for the geometry: paint() and resized() both read EditorLayout.h,
+    and TrackDraftTests checks that table. */
 } // namespace
 
 TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioProcessor& p)
@@ -113,6 +85,16 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     gateSlider.setRange (0.05, 1.0, 0.01);
     paramSlider.setRange (1, 32, 1);
     beatsSlider.setRange (1.0, 8.0, 1.0);
+
+    // A value box sized for its widest value, so the increment buttons beside it
+    // keep their width. The default 80-point box left them about ten points
+    // each, and the "+" was clipped away.
+    octaveSlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 34, 22);
+    velocitySlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 34, 22);
+    beatsSlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 34, 22);
+    paramSlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 30, 22);
+    bassVelocitySlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 34, 22);
+    gateSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 22);
 
     octaveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         state, "octave", octaveSlider);
@@ -468,10 +450,10 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
              &moveSectionLeftButton, &moveSectionRightButton, &addPassButton,
              &moreRepeatsButton, &fewerRepeatsButton, &removePassButton, &saveSongButton,
              &sectionKeyBox, &sectionScaleBox })
-        addAndMakeVisible (component);
+        canvas.addAndMakeVisible (component);
 
     for (auto& button : neighbourButtons)
-        addAndMakeVisible (button);
+        canvas.addAndMakeVisible (button);
 
     //==== The song ========================================================
     sectionNameEditor.setTextToShowWhenEmpty ("Section name", inkMuted);
@@ -716,7 +698,28 @@ TrackDraftAudioProcessorEditor::TrackDraftAudioProcessorEditor (TrackDraftAudioP
     rebuildFromProcessor();
 
     rebuildPresets();
-    setSize (760, layout::height);
+
+    // Everything lives on the canvas; the editor is only the window onto it.
+    viewport.setViewedComponent (&canvas, false);
+    viewport.setScrollBarsShown (true, false);
+    addAndMakeVisible (viewport);
+    canvas.setSize (layout::editorWidth, layout::height);
+
+    // The width is the design's and the height is capped by it, so a host that
+    // remembers a taller window cannot leave empty space around the layout.
+    setResizeLimits (layout::editorWidth, minimumHeight, layout::editorWidth, layout::height);
+    setResizable (true, false);
+
+    // Open at the design height when the screen can show it, and at what the
+    // screen can show otherwise — the viewport scrolls the rest. The chrome
+    // allowance is the standalone's own header and title bar; a host adds its
+    // own, which is why the constrainer, not this number, is the real limit.
+    int usableHeight = layout::height;
+
+    if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+        usableHeight = juce::jmin (usableHeight, (int) display->userBounds.getHeight() - 40);
+
+    setSize (layout::editorWidth, juce::jmax (minimumHeight, usableHeight));
     startTimerHz (20);
 }
 
@@ -815,7 +818,12 @@ void TrackDraftAudioProcessorEditor::rebuildFromProcessor()
     rebuildNeighbours();
     rebuildBorrowed();
     refreshHeardLabel();
-    strip.repaint();
+
+    // One repaint for the whole canvas: the strip lights the selected slot, the
+    // grid draws its pattern, and the articulation's label says what its number
+    // counts. All three read state that has just changed, and the two custom
+    // components do not repaint themselves when it does.
+    canvas.repaint();
 
     // The grid follows the transport while the section it belongs to is the one
     // on screen; elsewhere the cursor is meaningless.
@@ -1044,134 +1052,191 @@ void TrackDraftAudioProcessorEditor::timerCallback()
     arrangementBar.repaint();
 }
 
+void TrackDraftAudioProcessorEditor::Canvas::paint (juce::Graphics& g)
+{
+    owner.paintCanvas (g);
+}
+
 void TrackDraftAudioProcessorEditor::paint (juce::Graphics& g)
+{
+    // The canvas covers this whenever the host gives the editor its design
+    // height; this only shows in the strip a taller host leaves behind.
+    g.fillAll (background);
+}
+
+void TrackDraftAudioProcessorEditor::Canvas::resized()
+{
+    owner.layoutCanvas();
+}
+
+namespace
+{
+juce::Rectangle<int> toJuce (layout::Rect r)
+{
+    return { r.x, r.y, r.width, r.height };
+}
+} // namespace
+
+void TrackDraftAudioProcessorEditor::paintCanvas (juce::Graphics& g)
 {
     g.fillAll (background);
 
     g.setColour (accent);
     g.setFont (juce::Font (juce::FontOptions (20.0f)).boldened());
-    g.drawText ("TrackDraft Harmony", 16, 10, 320, 26, juce::Justification::centredLeft);
+    g.drawText ("TrackDraft Harmony", toJuce (layout::title), juce::Justification::centredLeft);
 
     g.setColour (inkMuted);
     g.setFont (juce::Font (juce::FontOptions (12.0f)));
     g.drawText ("MIDI generator - notes go to the track's own instrument",
-                16, 34, 520, 16, juce::Justification::centredLeft);
+                toJuce (layout::subtitle), juce::Justification::centredLeft);
 
-    auto row = juce::Rectangle<int> (layout::margin, layout::keysLabelY, layout::width, 14);
-    g.drawText ("Key", row.removeFromLeft (120), juce::Justification::centredLeft);
-    g.drawText ("Scale", row.removeFromLeft (180), juce::Justification::centredLeft);
-    g.drawText ("Root", row.removeFromLeft (80), juce::Justification::centredLeft);
-    g.drawText ("Quality", row.removeFromLeft (190), juce::Justification::centredLeft);
+    g.drawText ("Sections (" + juce::String ((int) working.sections.size()) + ")",
+                toJuce (layout::sectionsLabel), juce::Justification::centredLeft);
 
-    g.drawText ("Sections  (" + juce::String ((int) working.sections.size()) + ")",
-                layout::margin, layout::songLabelY, 420, 14, juce::Justification::centredLeft);
-    g.drawText ("Rhythm - click a step: off, normal, accent, ghost. "
-                "The articulation plays each hit.",
-                layout::margin, layout::rhythmLabelY, 600, 14, juce::Justification::centredLeft);
-    g.drawText ("Walk from the selected chord (hex neighbours)", layout::margin, layout::walkLabelY,
-                420, 14, juce::Justification::centredLeft);
-    g.drawText ("Articulation", layout::margin, layout::articulationLabelY, 120, 14,
-                juce::Justification::centredLeft);
-    g.drawText ("Inversion / spread", 356, layout::articulationLabelY, 210, 14,
-                juce::Justification::centredLeft);
-    g.drawText ("Presets", layout::margin, layout::presetsLabelY, 120, 14,
-                juce::Justification::centredLeft);
-    g.drawText ("Arrangement", layout::margin, layout::arrangementLabelY, 120, 14,
-                juce::Justification::centredLeft);
-    g.drawText ("Bass line for this section", layout::margin, layout::bassLabelY, 300, 14,
-                juce::Justification::centredLeft);
+    // Every column says what its control is: the numbers in the voice row own
+    // nothing else that would tell you whether they are octaves or velocities.
+    const auto label = [&g] (const char* text, layout::Rect area, juce::Justification just)
+    { g.drawText (text, toJuce (area), just); };
+
+    label ("Key", layout::keyLabel, juce::Justification::centredLeft);
+    label ("Scale", layout::scaleLabel, juce::Justification::centredLeft);
+    label ("Root", layout::rootLabel, juce::Justification::centredLeft);
+    label ("Quality", layout::qualityLabel, juce::Justification::centredLeft);
+    label ("Beats", layout::beatsLabel, juce::Justification::centredLeft);
+
+    label ("Rhythm - click a step: off, normal, accent, ghost. "
+           "The articulation plays each hit.",
+           layout::rhythmLabel, juce::Justification::centredLeft);
+    label ("Walk from the selected chord (hex neighbours)", layout::walkLabel,
+           juce::Justification::centredLeft);
+
+    label ("Articulation", layout::articulationLabel, juce::Justification::centredLeft);
+    label ("Inversion / spread", layout::inversionLabel, juce::Justification::centredLeft);
+    label ("Presets", layout::presetsLabel, juce::Justification::centredLeft);
+    label ("Arrangement", layout::arrangementLabel, juce::Justification::centredLeft);
+    label ("Bass line for this section", layout::bassLabel, juce::Justification::centredLeft);
+
+    // The voice row's own column headings, in line with their controls.
+    label ("Octave", layout::octaveLabel, juce::Justification::centredLeft);
+    label ("Velocity", layout::velocityLabel, juce::Justification::centredLeft);
+    label ("Gate", layout::gateLabel, juce::Justification::centredLeft);
+    label ("Velocity", layout::bassVelocityLabel, juce::Justification::centredLeft);
+
+    // What the articulation's number means: a strum counts milliseconds, a pulse
+    // hits, an arp steps, and a block has nothing to count. "4" on its own says
+    // none of that.
+    static const char* amountNames[] = { "n/a", "Spread ms", "Hits", "Steps" };
+    const auto& slot = selectedProgression().slots[(std::size_t) selectedSlot];
+    label (amountNames[(int) slot.performance], layout::amountLabel,
+           juce::Justification::centredLeft);
 
     // What the arrangement adds up to, so the form can be read at a glance.
     g.setColour (accent.withAlpha (0.85f));
-    g.drawText (juce::String (working.totalBeats() / 4.0, 1) + " bars",
-                layout::margin + 400, layout::arrangementLabelY, layout::width - 400, 14,
-                juce::Justification::centredRight);
+    const auto songBars = working.totalBeats() / 4.0;
+    const bool wholeBars = std::abs (songBars - std::round (songBars)) < 1e-6;
+    g.drawText (juce::String (songBars, wholeBars ? 0 : 1) + " bars",
+                toJuce (layout::arrangementLength), juce::Justification::centredRight);
 }
 
 void TrackDraftAudioProcessorEditor::resized()
 {
-    sectionBar.setBounds (layout::margin, layout::sectionBarY, layout::width,
-                          layout::sectionBarHeight);
+    viewport.setBounds (getLocalBounds());
 
-    // Name, then the five structural buttons: the row is where sections are
-    // made and moved, the bar above is where they are chosen.
-    sectionNameEditor.setBounds (layout::margin, layout::sectionButtonY, 240, 26);
-    addSectionButton.setBounds (264, layout::sectionButtonY, 30, 26);
-    duplicateSectionButton.setBounds (298, layout::sectionButtonY, 52, 26);
-    deleteSectionButton.setBounds (354, layout::sectionButtonY, 52, 26);
-    moveSectionLeftButton.setBounds (410, layout::sectionButtonY, 30, 26);
-    moveSectionRightButton.setBounds (444, layout::sectionButtonY, 30, 26);
-    ownKeyButton.setBounds (486, layout::sectionButtonY, 88, 26);
-    sectionKeyBox.setBounds (578, layout::sectionButtonY, 66, 26);
-    sectionScaleBox.setBounds (648, layout::sectionButtonY, 96, 26);
+    // The canvas keeps its design size whatever the host gives us: the viewport
+    // is what absorbs a window that is shorter than the design.
+    if (canvas.getWidth() != layout::editorWidth || canvas.getHeight() != layout::height)
+        canvas.setSize (layout::editorWidth, layout::height);
+}
 
-    keyBox.setBounds (layout::margin, layout::keysY, 112, 26);
-    scaleBox.setBounds (136, layout::keysY, 172, 26);
-    rootBox.setBounds (316, layout::keysY, 72, 26);
-    qualityBox.setBounds (396, layout::keysY, 182, 26);
-    seedButton.setBounds (586, layout::keysY, 100, 26);
-    beatsSlider.setBounds (694, layout::keysY, 50, 26);
+void TrackDraftAudioProcessorEditor::layoutCanvas()
+{
+    const auto place = [] (juce::Component& component, layout::Rect area)
+    {
+        component.setBounds (area.x, area.y, area.width, area.height);
+    };
 
-    strip.setBounds (layout::margin, layout::stripY, layout::width, layout::stripHeight);
-    rhythmGrid.setBounds (layout::margin, layout::rhythmY, layout::width - 216,
-                          layout::rhythmHeight);
-    rhythmSeedBox.setBounds (layout::margin + layout::width - 210, layout::rhythmY, 100, 30);
-    clearRhythmButton.setBounds (layout::margin + layout::width - 104, layout::rhythmY, 104, 30);
+    // The song: the bar chooses a section, the row under it names and moves one.
+    place (sectionBar, layout::sectionBar);
+    place (sectionNameEditor, layout::sectionName);
+    place (addSectionButton, layout::addSection);
+    place (duplicateSectionButton, layout::duplicateSection);
+    place (deleteSectionButton, layout::deleteSection);
+    place (moveSectionLeftButton, layout::moveSectionLeft);
+    place (moveSectionRightButton, layout::moveSectionRight);
+    place (ownKeyButton, layout::ownKey);
+    place (sectionKeyBox, layout::sectionKey);
+    place (sectionScaleBox, layout::sectionScale);
 
-    const int neighbourWidth = (layout::width - 5 * 6) / 6;
+    place (keyBox, layout::key);
+    place (scaleBox, layout::scale);
+    place (rootBox, layout::root);
+    place (qualityBox, layout::quality);
+    place (seedButton, layout::seedFromKey);
+    place (beatsSlider, layout::beats);
+
+    place (strip, layout::strip);
+
+    place (rhythmGrid, layout::rhythmGrid);
+    place (rhythmSeedBox, layout::rhythmSeed);
+    place (clearRhythmButton, layout::clearRhythm);
+
     for (int i = 0; i < 6; ++i)
-        neighbourButtons[(size_t) i].setBounds (layout::margin + i * (neighbourWidth + 6),
-                                                layout::walkY, neighbourWidth, 30);
+        place (neighbourButtons[(std::size_t) i], layout::neighbourButton (i));
 
-    borrowedBox.setBounds (layout::margin, layout::detectY, 300, 26);
-    detectButton.setBounds (324, layout::detectY, 110, 26);
-    useHeardButton.setBounds (440, layout::detectY, 100, 26);
-    heardLabel.setBounds (layout::margin, layout::heardY, layout::width, 18);
+    place (borrowedBox, layout::borrowed);
+    place (detectButton, layout::detectMidi);
+    place (useHeardButton, layout::useHeard);
+    place (heardLabel, layout::status);
 
-    performanceBox.setBounds (layout::margin, layout::articulationY, 96, 26);
-    paramSlider.setBounds (116, layout::articulationY, 62, 26);
-    directionBox.setBounds (182, layout::articulationY, 84, 26);
-    previewButton.setBounds (270, layout::articulationY, 80, 26);
-    inversionBox.setBounds (356, layout::articulationY, 118, 26);
-    spreadBox.setBounds (478, layout::articulationY, 84, 26);
-    applyAllButton.setBounds (566, layout::articulationY, 142, 26);
+    place (performanceBox, layout::performance);
+    place (paramSlider, layout::amount);
+    place (directionBox, layout::direction);
+    place (previewButton, layout::preview);
+    place (inversionBox, layout::inversion);
+    place (spreadBox, layout::spread);
+    place (applyAllButton, layout::applyFeel);
 
-    octaveSlider.setBounds (layout::margin, layout::voiceY, 112, 26);
-    velocitySlider.setBounds (132, layout::voiceY, 112, 26);
-    gateSlider.setBounds (248, layout::voiceY, 170, 26);
-    generateButton.setBounds (422, layout::voiceY, 322, 26);
+    place (octaveSlider, layout::octave);
+    place (velocitySlider, layout::velocity);
+    place (gateSlider, layout::gate);
+    place (generateButton, layout::emitNotes);
 
-    bassButton.setBounds (layout::margin, layout::bassY, 96, 26);
-    bassOctaveBox.setBounds (118, layout::bassY, 74, 26);
-    bassMotionBox.setBounds (198, layout::bassY, 112, 26);
-    bassRhythmBox.setBounds (316, layout::bassY, 104, 26);
-    bassVelocitySlider.setBounds (426, layout::bassY, 90, 26);
+    place (presetBox, layout::presetBox);
+    place (presetNameEditor, layout::presetName);
+    place (savePresetButton, layout::savePreset);
+    place (renamePresetButton, layout::renamePreset);
+    place (deletePresetButton, layout::deletePreset);
+    place (importButton, layout::importPreset);
 
-    presetBox.setBounds (layout::margin, layout::presetsY, 190, 26);
-    presetNameEditor.setBounds (214, layout::presetsY, 180, 26);
-    savePresetButton.setBounds (402, layout::presetsY, 64, 26);
-    renamePresetButton.setBounds (472, layout::presetsY, 76, 26);
-    deletePresetButton.setBounds (554, layout::presetsY, 70, 26);
-    importButton.setBounds (630, layout::presetsY, 106, 26);
+    place (arrangementBar, layout::arrangementBar);
+    place (addPassButton, layout::addPass);
+    place (moreRepeatsButton, layout::moreRepeats);
+    place (fewerRepeatsButton, layout::fewerRepeats);
+    place (removePassButton, layout::removePass);
+    place (saveSongButton, layout::saveSong);
 
-    arrangementBar.setBounds (layout::margin, layout::arrangementBarY, layout::width,
-                              layout::arrangementBarHeight);
-    addPassButton.setBounds (layout::margin, layout::arrangementButtonY, 80, 26);
-    moreRepeatsButton.setBounds (104, layout::arrangementButtonY, 80, 26);
-    fewerRepeatsButton.setBounds (188, layout::arrangementButtonY, 80, 26);
-    removePassButton.setBounds (272, layout::arrangementButtonY, 80, 26);
-    saveSongButton.setBounds (410, layout::arrangementButtonY, 120, 26);
+    place (bassButton, layout::bassToggle);
+    place (bassOctaveBox, layout::bassOctave);
+    place (bassMotionBox, layout::bassMotion);
+    place (bassRhythmBox, layout::bassRhythm);
+    place (bassVelocitySlider, layout::bassVelocity);
 }
 
 juce::Rectangle<int> TrackDraftAudioProcessorEditor::RhythmGrid::boundsFor (int step) const
 {
     const int gap = 3;
+    const int beatGap = 4;
     const int total = (int) RhythmPattern::steps;
-    const int width = juce::jmax (8, (getWidth() - gap * (total - 1)) / total);
+    const int beats = total / RhythmPattern::stepsPerBeat - 1;
+
+    // The beat gaps come out of the width before the cells are divided, so the
+    // last cell ends inside the control. Dividing first and adding the gaps
+    // afterwards pushed it past the right edge, where it was clipped.
+    const int width = juce::jmax (8, (getWidth() - gap * (total - 1) - beatGap * beats) / total);
 
     // Every fourth cell is a beat, so the gaps there are visible.
     const int beatsBefore = step / RhythmPattern::stepsPerBeat;
-    return { step * (width + gap) + beatsBefore * 4, 0, width, getHeight() };
+    return { step * (width + gap) + beatsBefore * beatGap, 0, width, getHeight() };
 }
 
 int TrackDraftAudioProcessorEditor::RhythmGrid::stepAt (juce::Point<int> position) const

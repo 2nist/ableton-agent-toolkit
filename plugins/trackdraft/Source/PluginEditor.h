@@ -1,5 +1,6 @@
 #pragma once
 
+#include "EditorLayout.h"
 #include "PresetStore.h"
 #include "Song.h"
 #include "Theory/ChordWalk.h"
@@ -35,6 +36,8 @@ public:
     void resized() override;
 
 private:
+    void paintCanvas (juce::Graphics&);
+    void layoutCanvas();
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
     void timerCallback() override;
     void rebuildFromProcessor();
@@ -202,6 +205,26 @@ private:
         TrackDraftAudioProcessorEditor& owner;
         int cursorStep = -1;
     };
+
+    /** The fixed-size design, inside a viewport.
+
+        The editor itself is only the window onto it: a host — or a laptop
+        screen — that cannot give the editor its design height scrolls it
+        instead of silently losing the bottom row. */
+    class Canvas final : public juce::Component
+    {
+    public:
+        explicit Canvas (TrackDraftAudioProcessorEditor& ownerToUse) : owner (ownerToUse) {}
+
+        void paint (juce::Graphics&) override;
+        void resized() override;
+
+    private:
+        TrackDraftAudioProcessorEditor& owner;
+    };
+
+    juce::Viewport viewport;
+    Canvas canvas { *this };
 
     SlotStrip strip { *this };
     RhythmGrid rhythmGrid { *this };

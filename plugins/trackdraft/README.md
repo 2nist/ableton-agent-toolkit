@@ -85,9 +85,19 @@ MIDI import from a generated file, the progression cycle, and the scheduling
 rules — a stopped transport emits
 nothing, the downbeat sounds the first chord at MIDI 60, a boundary inside a block
 releases the previous chord first, a host loop restarts cleanly, the gate closes
-notes without a boundary, and disabling emission releases what is sounding.
+notes without a boundary, and disabling emission releases what is sounding. The
+editor's geometry is checked too: `Source/EditorLayout.h` is JUCE-free for that
+reason, so the tests can assert that no two controls overlap, that no label sits
+on a control, and that the design still fits a laptop screen.
 
 ## Editing
+
+The editor is one 774-point column at a design height of 632 points — short
+enough for a 1280×800 screen, which the first version was not: at 756 points it
+opened with its bottom rows off the screen and no way to reach them. A host (or
+a display) that gives it less height scrolls it rather than clipping it. The
+rectangles come from `Source/EditorLayout.h`, and `paint()` and `resized()` both
+read them, so a control and its label cannot drift apart.
 
 | Control | What it does |
 |---|---|
@@ -109,6 +119,7 @@ notes without a boundary, and disabling emission releases what is sounding.
 | **Clear rhythm** | Gives the slot back to its articulation |
 | **Articulation** (Block / Strum / Pulse / Arp) | Per slot. Strum uses the app's millisecond spread, Pulse re-strikes on a subdivision with a triangle accent, Arp walks the tones up, down or up-down |
 | **Inversion / spread** | Which chord tone is in the bass (root, 1st, 2nd … — the list is the chord's own tones, so a 13th offers six) and whether the upper voices stack close or open. The slot strip names the result as a slash chord, `C/E` |
+| **Octave / Velocity / Gate / Emit notes** | The host-facing voice, as labelled above each control. Octave is the chord register (`(octave + 1) * 12`, so 4 is middle C); Velocity is the accent level that a rhythm's normal and ghost hits scale; Gate shortens every note; untick *Emit notes* to leave the incoming MIDI untouched and hear nothing from the plug-in |
 | **Bass line** (off / octave / motion / rhythm / velocity) | The section's own bass voice. Off unless it is asked for. `Root` holds the chord's bass tone, `Root-fifth` alternates with the fifth, `Walking` ends each chord on a leading tone into the next one; `Locked` sounds once per chord, `Half` twice, `Eighth` four times. It plays the tone the inversion put in the bass, so `C/E` is an E in the low end |
 | **Preview** | Plays the selected slot immediately, transport or not, so you can hear the voicing before committing to it |
 | **Drag a slot** | Click-drag reorders the progression; the drop target shows while dragging |

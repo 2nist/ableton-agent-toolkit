@@ -1,6 +1,7 @@
 #include "Bass.h"
 #include "Rhythm.h"
 #include "ChordScheduler.h"
+#include "EditorLayout.h"
 #include "Progression.h"
 #include "Song.h"
 #include "Theory/ChordRecognition.h"
@@ -1948,6 +1949,78 @@ void testSongXml()
                 juce::String ("3001200030002000"), "digit for digit");
 }
 
+/**
+    The editor's geometry, checked without a GUI.
+
+    `Source/EditorLayout.h` is the editor's one table of rectangles: `paint()`
+    and `resized()` both read it. This test is what makes the layout's claims
+    measurable — the numbers in the commit messages used to come from a script
+    that lived only in a session.
+
+    It cannot tell you that a label is unreadable or a control is in the wrong
+    place; that is what looking at the editor is for. It can tell you that
+    nothing overlaps, nothing is off the canvas, and the design still fits the
+    smallest screen the editor targets.
+*/
+void testEditorLayout()
+{
+    const auto controls = td::layout::controlRects();
+    const auto labels = td::layout::labelRects();
+
+    const auto inside = [] (td::layout::Rect r)
+    {
+        return r.x >= 0 && r.y >= 0 && r.width > 0 && r.height > 0
+               && r.right() <= td::layout::editorWidth && r.bottom() <= td::layout::height;
+    };
+
+    check (controls.size() >= 50, "layout: the table lists every control");
+
+    int offCanvas = 0;
+    int tooSmall = 0;
+
+    for (const auto& control : controls)
+    {
+        if (! inside (control))
+            ++offCanvas;
+        if (control.height < 20 || control.width < 24)
+            ++tooSmall;
+    }
+
+    checkEqual (offCanvas, 0, "layout: every control is inside the canvas");
+    checkEqual (tooSmall, 0, "layout: every control is big enough to hit and to read");
+
+    int controlOverlaps = 0;
+    for (std::size_t i = 0; i < controls.size(); ++i)
+        for (std::size_t j = i + 1; j < controls.size(); ++j)
+            if (controls[i].intersects (controls[j]))
+                ++controlOverlaps;
+
+    checkEqual (controlOverlaps, 0, "layout: no two controls overlap");
+
+    int labelProblems = 0;
+    for (std::size_t i = 0; i < labels.size(); ++i)
+    {
+        if (! inside (labels[i]))
+            ++labelProblems;
+
+        for (std::size_t j = i + 1; j < labels.size(); ++j)
+            if (labels[i].intersects (labels[j]))
+                ++labelProblems;
+
+        for (const auto& control : controls)
+            if (labels[i].intersects (control))
+                ++labelProblems;
+    }
+
+    checkEqual (labelProblems, 0, "layout: no label sits on a control or on another label");
+
+    // A 1280x720 screen leaves about 695 points of work area, of which a host's
+    // window chrome takes 30-60. The design was 756 tall and could not be
+    // reached on that screen; anything above this fails rather than growing back.
+    check (td::layout::height <= 640, "layout: the design fits a 720-point screen");
+    check (td::layout::editorWidth <= 780, "layout: the editor fits beside a 1280-point screen");
+}
+
 } // namespace
 
 int main (int argc, char** argv)
@@ -2048,6 +2121,7 @@ int main (int argc, char** argv)
     testSongScheduler();
     testSongXml();
     testSongPresets();
+    testEditorLayout();
 
     if (failures == 0)
     {
