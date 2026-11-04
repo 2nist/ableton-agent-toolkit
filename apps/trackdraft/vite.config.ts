@@ -570,14 +570,17 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // One vendor chunk + framework chunk: the app chunk changes on every
-        // edit, the vendor chunks do not, so a reload re-downloads less.
+        // ONE vendor chunk, deliberately. Splitting React into its own chunk
+        // split a cycle in half: `react-router-dom` went to `react` while its
+        // dependency `@remix-run/router` stayed in `vendor`, and `vendor` also
+        // imports React — so the two chunks imported each other. Which side
+        // evaluated first came down to module order, and when `vendor` won, a
+        // library that reads `React.useState` at module scope got `undefined`
+        // and the app booted to a blank page. Keeping every dependency in one
+        // chunk removes the cycle by construction; the app chunk still changes
+        // only on edit, which was the point of splitting in the first place.
         manualChunks(id: string) {
-          if (!id.includes("node_modules")) return undefined;
-          if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) {
-            return "react";
-          }
-          return "vendor";
+          return id.includes("node_modules") ? "vendor" : undefined;
         },
       },
     },
