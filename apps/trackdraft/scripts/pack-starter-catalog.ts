@@ -155,6 +155,23 @@ if (!fs.existsSync(args.manifestPath)) {
 }
 
 const manifest = JSON.parse(fs.readFileSync(args.manifestPath, "utf8")) as CatalogManifest;
+
+/* The manifest is a snapshot of an ingest run, and nothing downstream can tell
+ * a fresh one from a week-old one — the pack copies whatever the manifest
+ * describes. A build once shipped a catalogue ingested three days earlier,
+ * before the drum, velocity and lyric planner work, and nothing said so. Age
+ * is the only signal available without shelling out to git, so say it loudly. */
+const manifestAgeHours = (Date.now() - Date.parse(manifest.generatedAt)) / 36e5;
+if (manifestAgeHours > 24) {
+  console.warn(
+    `[catalog] the source manifest is ${(manifestAgeHours / 24).toFixed(1)} days old ` +
+      `(generated ${manifest.generatedAt}, git ${manifest.gitSha ?? "unknown"}).\n` +
+      `          Songs packed from it will not include planner changes made since.\n` +
+      `          Re-ingest and rebuild it before shipping: ` +
+      `npm run catalog:ingest:<source> && npm run catalog:manifest`,
+  );
+}
+
 const allowlist = readAllowlist(args.allowlistPath);
 const selection = selectForPack(manifest, allowlist, {
   profile: args.profile,

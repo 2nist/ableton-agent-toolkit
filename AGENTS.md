@@ -123,3 +123,12 @@ ever published whole. Keep it that way — a lock here stalls the callback.
   on macOS is `~/Library` — so the folder is `~/Library/TrackDraft/Presets`, not
   the `~/Library/Application Support/...` the README and the app's preset writer
   assume. Unfixed as of this writing.
+- A packaged build ships `scripts/output/catalog-internal`, which is packed from
+  `scripts/output/catalog.manifest.json` — a gitignored snapshot of the last
+  ingest run. `electron:test-build` never re-ingests, so a build can silently
+  ship songs generated before the planner changes. `catalog:pack:starter` now
+  warns past 24 h; before shipping, run `npm run catalog:ingest:beatles` then
+  `npm run catalog:manifest`.
+- The desktop app seeds the bundled catalogue only into an **empty** library and
+  never overwrites (`seedLibraryIfEmpty`). A machine that has run an older build
+  keeps that build's song data — the bundle's newer catalogue is ignored.
